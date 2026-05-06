@@ -29,6 +29,7 @@ jobs:
       - run: python scripts/fetch_play_cricket.py
         env:
           PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
+          PLAY_CRICKET_SITE_ID: ${{ secrets.PLAY_CRICKET_SITE_ID }}
 
       - run: python scripts/build.py
 
