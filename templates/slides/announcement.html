@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ slide.title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #1a3d1a;
+            font-family: Georgia, 'Times New Roman', serif;
+            color: #ffffff;
+        }
+        .slide {
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 6rem;
+        }
+        .title {
+            font-size: 5rem;
+            font-weight: bold;
+            line-height: 1.2;
+            margin-bottom: 2.5rem;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        }
+        .body {
+            font-size: 2.5rem;
+            line-height: 1.6;
+            opacity: 0.9;
+            max-width: 80%;
+        }
+        .branding {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.35);
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 1.4rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide">
+        <div class="title">{{ slide.title }}</div>
+        {% if slide.body is defined %}
+        <div class="body">{{ slide.body }}</div>
+        {% endif %}
+    </div>
+    <div class="branding">Wendover Cricket Club</div>
+</body>
+</html>

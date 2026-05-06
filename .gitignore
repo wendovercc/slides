@@ -164,8 +164,11 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
-/site
+# Generated output — built by GitHub Actions, not committed
+site/
+
+# Python virtual environment
+.venv/
 
 # mypy
 .mypy_cache/

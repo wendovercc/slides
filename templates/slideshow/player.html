@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ show.title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+        iframe {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border: none;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        iframe.active { opacity: 1; }
+    </style>
+</head>
+<body>
+    {% for slide in show.slides %}
+    <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
+    {% endfor %}
+
+    <script>
+        const slides = {{ show.slides | tojson }};
+        let current = 0;
+
+        function showSlide(index) {
+            document.querySelectorAll('iframe').forEach((f, i) => {
+                f.classList.toggle('active', i === index);
+            });
+        }
+
+        function advance() {
+            current = (current + 1) % slides.length;
+            showSlide(current);
+            setTimeout(advance, slides[current].duration * 1000);
+        }
+
+        showSlide(0);
+        setTimeout(advance, slides[0].duration * 1000);
+
+        // Reload the player every 6 hours to pick up weekly updates
+        setTimeout(() => location.reload(), 6 * 60 * 60 * 1000);
+    </script>
+</body>
+</html>
