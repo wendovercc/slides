@@ -1,0 +1,11 @@
+{
+  "teams": [
+    {
+      "id": "1st-xi",
+      "name": "1st XI",
+      "play_cricket_league_id": 135855,
+      "play_cricket_team_id": 171199,
+      "league_table_name": "Wendover CC"
+    }
+  ]
+}

@@ -26,6 +26,10 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - run: python scripts/fetch_play_cricket.py
+        env:
+          PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
+
       - run: python scripts/build.py
 
       - uses: actions/upload-pages-artifact@v3

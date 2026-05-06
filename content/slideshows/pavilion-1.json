@@ -4,6 +4,7 @@
     "slides": [
         { "slug": "hello-world", "duration": 10 },
         { "slug": "club-photo",  "duration": 10 },
-        { "slug": "sponsors",    "duration": 15 }
+        { "slug": "sponsors",           "duration": 15 },
+        { "slug": "league-table-tvpl", "duration": 20 }
     ]
 }
