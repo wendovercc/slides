@@ -6,6 +6,16 @@
       "play_cricket_league_id": 135855,
       "play_cricket_team_id": 171199,
       "league_table_name": "Wendover CC"
+    },
+    {
+      "id": "2nd-xi",
+      "name": "2nd XI",
+      "play_cricket_team_id": 171200
+    },
+    {
+      "id": "friendly-xi",
+      "name": "Friendly XI",
+      "play_cricket_team_id": 267849
     }
   ]
 }

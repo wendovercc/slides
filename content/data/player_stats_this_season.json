@@ -1,0 +1,1840 @@
+{
+  "generated_at": "2026-05-06T20:03:12.834006+00:00",
+  "season": 2026,
+  "competitions": {},
+  "players": {
+    "6397335": {
+      "id": "6397335",
+      "name": "Nathaniel Clark",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 0,
+            "runs": 10,
+            "balls": 9,
+            "high_score": 10,
+            "high_score_not_out": false,
+            "fours": 2,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 5.0,
+            "strike_rate": 111.11
+          },
+          "bowling": {
+            "balls": 78,
+            "maidens": 3,
+            "runs": 51,
+            "wickets": 3,
+            "best": {
+              "wickets": 2,
+              "runs": 8
+            },
+            "average": 17.0,
+            "economy": 3.92
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 10,
+                "balls": 9,
+                "high_score": 10,
+                "high_score_not_out": false,
+                "fours": 2,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 10.0,
+                "strike_rate": 111.11
+              },
+              "bowling": {
+                "balls": 30,
+                "maidens": 3,
+                "runs": 8,
+                "wickets": 2,
+                "best": {
+                  "wickets": 2,
+                  "runs": 8
+                },
+                "average": 4.0,
+                "economy": 1.6
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 48,
+                "maidens": 0,
+                "runs": 43,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 43
+                },
+                "average": 43.0,
+                "economy": 5.38
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "6435142": {
+      "id": "6435142",
+      "name": "Jefin Mukkolil",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 3,
+          "batting": {
+            "innings": 3,
+            "not_outs": 0,
+            "runs": 31,
+            "balls": 21,
+            "high_score": 31,
+            "high_score_not_out": false,
+            "fours": 4,
+            "sixes": 1,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 10.33,
+            "strike_rate": 147.62
+          },
+          "bowling": {
+            "balls": 132,
+            "maidens": 7,
+            "runs": 71,
+            "wickets": 2,
+            "best": {
+              "wickets": 1,
+              "runs": 11
+            },
+            "average": 35.5,
+            "economy": 3.23
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 2,
+              "batting": {
+                "innings": 2,
+                "not_outs": 0,
+                "runs": 31,
+                "balls": 21,
+                "high_score": 31,
+                "high_score_not_out": false,
+                "fours": 4,
+                "sixes": 1,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 15.5,
+                "strike_rate": 147.62
+              },
+              "bowling": {
+                "balls": 84,
+                "maidens": 6,
+                "runs": 30,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 11
+                },
+                "average": 30.0,
+                "economy": 2.14
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 48,
+                "maidens": 1,
+                "runs": 41,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 41
+                },
+                "average": 41.0,
+                "economy": 5.12
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "5902950": {
+      "id": "5902950",
+      "name": "George Greer",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 1,
+            "runs": 4,
+            "balls": 11,
+            "high_score": 4,
+            "high_score_not_out": true,
+            "fours": 1,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 4.0,
+            "strike_rate": 36.36
+          },
+          "bowling": {
+            "balls": 96,
+            "maidens": 4,
+            "runs": 70,
+            "wickets": 4,
+            "best": {
+              "wickets": 3,
+              "runs": 41
+            },
+            "average": 17.5,
+            "economy": 4.38
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 48,
+                "maidens": 2,
+                "runs": 29,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 29
+                },
+                "average": 29.0,
+                "economy": 3.62
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 4,
+                "balls": 11,
+                "high_score": 4,
+                "high_score_not_out": true,
+                "fours": 1,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 36.36
+              },
+              "bowling": {
+                "balls": 48,
+                "maidens": 2,
+                "runs": 41,
+                "wickets": 3,
+                "best": {
+                  "wickets": 3,
+                  "runs": 41
+                },
+                "average": 13.67,
+                "economy": 5.12
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "6748093": {
+      "id": "6748093",
+      "name": "Salman Khan",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 0,
+            "runs": 0,
+            "balls": 0,
+            "high_score": 0,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 0.0,
+            "strike_rate": null
+          },
+          "bowling": {
+            "balls": 90,
+            "maidens": 3,
+            "runs": 79,
+            "wickets": 3,
+            "best": {
+              "wickets": 2,
+              "runs": 30
+            },
+            "average": 26.33,
+            "economy": 5.27
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 2,
+                "runs": 30,
+                "wickets": 2,
+                "best": {
+                  "wickets": 2,
+                  "runs": 30
+                },
+                "average": 15.0,
+                "economy": 4.29
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 48,
+                "maidens": 1,
+                "runs": 49,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 49
+                },
+                "average": 49.0,
+                "economy": 6.12
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4951528": {
+      "id": "4951528",
+      "name": "Harry Godden",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 2,
+            "runs": 38,
+            "balls": 48,
+            "high_score": 38,
+            "high_score_not_out": true,
+            "fours": 8,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": null,
+            "strike_rate": 79.17
+          },
+          "bowling": {
+            "balls": 25,
+            "maidens": 0,
+            "runs": 18,
+            "wickets": 3,
+            "best": {
+              "wickets": 3,
+              "runs": 18
+            },
+            "average": 6.0,
+            "economy": 4.32
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 38,
+                "balls": 48,
+                "high_score": 38,
+                "high_score_not_out": true,
+                "fours": 8,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 79.17
+              },
+              "bowling": {
+                "balls": 25,
+                "maidens": 0,
+                "runs": 18,
+                "wickets": 3,
+                "best": {
+                  "wickets": 3,
+                  "runs": 18
+                },
+                "average": 6.0,
+                "economy": 4.32
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": true,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4106458": {
+      "id": "4106458",
+      "name": "Anshuman Pandit",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 1,
+            "runs": 47,
+            "balls": 82,
+            "high_score": 33,
+            "high_score_not_out": true,
+            "fours": 7,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 47.0,
+            "strike_rate": 57.32
+          },
+          "bowling": {
+            "balls": 18,
+            "maidens": 0,
+            "runs": 18,
+            "wickets": 1,
+            "best": {
+              "wickets": 1,
+              "runs": 18
+            },
+            "average": 18.0,
+            "economy": 6.0
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 33,
+                "balls": 50,
+                "high_score": 33,
+                "high_score_not_out": true,
+                "fours": 6,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 66.0
+              },
+              "bowling": {
+                "balls": 18,
+                "maidens": 0,
+                "runs": 18,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 18
+                },
+                "average": 18.0,
+                "economy": 6.0
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 14,
+                "balls": 32,
+                "high_score": 14,
+                "high_score_not_out": false,
+                "fours": 1,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 14.0,
+                "strike_rate": 43.75
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4928434": {
+      "id": "4928434",
+      "name": "David Cleary",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 0,
+            "runs": 14,
+            "balls": 27,
+            "high_score": 14,
+            "high_score_not_out": false,
+            "fours": 2,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 7.0,
+            "strike_rate": 51.85
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 14,
+                "balls": 27,
+                "high_score": 14,
+                "high_score_not_out": false,
+                "fours": 2,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 14.0,
+                "strike_rate": 51.85
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4951952": {
+      "id": "4951952",
+      "name": "Zachary Cleary",
+      "teams": [
+        "friendly-xi",
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 0,
+            "runs": 50,
+            "balls": 69,
+            "high_score": 32,
+            "high_score_not_out": false,
+            "fours": 10,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 25.0,
+            "strike_rate": 72.46
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 32,
+                "balls": 43,
+                "high_score": 32,
+                "high_score_not_out": false,
+                "fours": 6,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 32.0,
+                "strike_rate": 74.42
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          },
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 18,
+                "balls": 26,
+                "high_score": 18,
+                "high_score_not_out": false,
+                "fours": 4,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 18.0,
+                "strike_rate": 69.23
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4170649": {
+      "id": "4170649",
+      "name": "Marc Weltenius",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 0,
+            "balls": 1,
+            "high_score": 0,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 0.0,
+            "strike_rate": 0.0
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 1,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": 0.0
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4308768": {
+      "id": "4308768",
+      "name": "Tony Fish",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 5,
+            "balls": 10,
+            "high_score": 5,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 5.0,
+            "strike_rate": 50.0
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 5,
+                "balls": 10,
+                "high_score": 5,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 5.0,
+                "strike_rate": 50.0
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "3789075": {
+      "id": "3789075",
+      "name": "Andrew Glazebrook",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 0,
+            "balls": 0,
+            "high_score": 0,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 0.0,
+            "strike_rate": null
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "3861222": {
+      "id": "3861222",
+      "name": "Jonathan Seabrook",
+      "teams": [
+        "1st-xi",
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 1,
+            "runs": 0,
+            "balls": 1,
+            "high_score": 0,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 0.0,
+            "strike_rate": 0.0
+          },
+          "bowling": {
+            "balls": 84,
+            "maidens": 3,
+            "runs": 55,
+            "wickets": 5,
+            "best": {
+              "wickets": 3,
+              "runs": 33
+            },
+            "average": 11.0,
+            "economy": 3.93
+          }
+        },
+        "by_team": {
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 3,
+                "runs": 22,
+                "wickets": 2,
+                "best": {
+                  "wickets": 2,
+                  "runs": 22
+                },
+                "average": 11.0,
+                "economy": 3.14
+              }
+            },
+            "by_competition": {}
+          },
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 0,
+                "balls": 1,
+                "high_score": 0,
+                "high_score_not_out": true,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 0.0
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 0,
+                "runs": 33,
+                "wickets": 3,
+                "best": {
+                  "wickets": 3,
+                  "runs": 33
+                },
+                "average": 11.0,
+                "economy": 4.71
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "5544591": {
+      "id": "5544591",
+      "name": "Danny Nelson",
+      "teams": [
+        "1st-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 0,
+            "balls": 0,
+            "high_score": 0,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 0.0,
+            "strike_rate": null
+          },
+          "bowling": {
+            "balls": 6,
+            "maidens": 0,
+            "runs": 8,
+            "wickets": 0,
+            "best": {
+              "wickets": 0,
+              "runs": 8
+            },
+            "average": null,
+            "economy": 8.0
+          }
+        },
+        "by_team": {
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 0,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": null
+              },
+              "bowling": {
+                "balls": 6,
+                "maidens": 0,
+                "runs": 8,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 8
+                },
+                "average": null,
+                "economy": 8.0
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "5732291": {
+      "id": "5732291",
+      "name": "James Harrington",
+      "teams": [
+        "1st-xi",
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 2,
+          "batting": {
+            "innings": 2,
+            "not_outs": 0,
+            "runs": 67,
+            "balls": 78,
+            "high_score": 38,
+            "high_score_not_out": false,
+            "fours": 12,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 33.5,
+            "strike_rate": 85.9
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "1st-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 38,
+                "balls": 52,
+                "high_score": 38,
+                "high_score_not_out": false,
+                "fours": 7,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 38.0,
+                "strike_rate": 73.08
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          },
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 29,
+                "balls": 26,
+                "high_score": 29,
+                "high_score_not_out": false,
+                "fours": 5,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 29.0,
+                "strike_rate": 111.54
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "1808153": {
+      "id": "1808153",
+      "name": "Joel Heritage",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 0,
+            "balls": 1,
+            "high_score": 0,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 0.0,
+            "strike_rate": 0.0
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 0,
+                "balls": 1,
+                "high_score": 0,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 0.0,
+                "strike_rate": 0.0
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "6649167": {
+      "id": "6649167",
+      "name": "Rob Cooke",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 39,
+            "balls": 27,
+            "high_score": 39,
+            "high_score_not_out": false,
+            "fours": 9,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 39.0,
+            "strike_rate": 144.44
+          },
+          "bowling": {
+            "balls": 42,
+            "maidens": 0,
+            "runs": 45,
+            "wickets": 3,
+            "best": {
+              "wickets": 3,
+              "runs": 45
+            },
+            "average": 15.0,
+            "economy": 6.43
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 39,
+                "balls": 27,
+                "high_score": 39,
+                "high_score_not_out": false,
+                "fours": 9,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 39.0,
+                "strike_rate": 144.44
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 0,
+                "runs": 45,
+                "wickets": 3,
+                "best": {
+                  "wickets": 3,
+                  "runs": 45
+                },
+                "average": 15.0,
+                "economy": 6.43
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "7008196": {
+      "id": "7008196",
+      "name": "Blesson Babu",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 51,
+            "balls": 77,
+            "high_score": 51,
+            "high_score_not_out": true,
+            "fours": 9,
+            "sixes": 0,
+            "fifties": 1,
+            "hundreds": 0,
+            "average": null,
+            "strike_rate": 66.23
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 51,
+                "balls": 77,
+                "high_score": 51,
+                "high_score_not_out": true,
+                "fours": 9,
+                "sixes": 0,
+                "fifties": 1,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 66.23
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "7005170": {
+      "id": "7005170",
+      "name": "Ishank Arora",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 16,
+            "balls": 12,
+            "high_score": 16,
+            "high_score_not_out": false,
+            "fours": 3,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 16.0,
+            "strike_rate": 133.33
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 16,
+                "balls": 12,
+                "high_score": 16,
+                "high_score_not_out": false,
+                "fours": 3,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 16.0,
+                "strike_rate": 133.33
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "4929132": {
+      "id": "4929132",
+      "name": "Charlie McGrail",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 43,
+            "balls": 32,
+            "high_score": 43,
+            "high_score_not_out": false,
+            "fours": 8,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 43.0,
+            "strike_rate": 134.38
+          },
+          "bowling": {
+            "balls": 42,
+            "maidens": 1,
+            "runs": 33,
+            "wickets": 0,
+            "best": {
+              "wickets": 0,
+              "runs": 33
+            },
+            "average": null,
+            "economy": 4.71
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 43,
+                "balls": 32,
+                "high_score": 43,
+                "high_score_not_out": false,
+                "fours": 8,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 43.0,
+                "strike_rate": 134.38
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 1,
+                "runs": 33,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 33
+                },
+                "average": null,
+                "economy": 4.71
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "5853401": {
+      "id": "5853401",
+      "name": "Sundar Sambandam",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 8,
+            "balls": 9,
+            "high_score": 8,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 8.0,
+            "strike_rate": 88.89
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 8,
+                "balls": 9,
+                "high_score": 8,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 8.0,
+                "strike_rate": 88.89
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "5450929": {
+      "id": "5450929",
+      "name": "Puneet Kapoor",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 1,
+            "balls": 3,
+            "high_score": 1,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 1.0,
+            "strike_rate": 33.33
+          },
+          "bowling": {
+            "balls": 42,
+            "maidens": 1,
+            "runs": 35,
+            "wickets": 2,
+            "best": {
+              "wickets": 2,
+              "runs": 35
+            },
+            "average": 17.5,
+            "economy": 5.0
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 1,
+                "balls": 3,
+                "high_score": 1,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 1.0,
+                "strike_rate": 33.33
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 1,
+                "runs": 35,
+                "wickets": 2,
+                "best": {
+                  "wickets": 2,
+                  "runs": 35
+                },
+                "average": 17.5,
+                "economy": 5.0
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    },
+    "5000179": {
+      "id": "5000179",
+      "name": "Ruban Arulanandam",
+      "teams": [
+        "friendly-xi"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 1,
+            "balls": 1,
+            "high_score": 1,
+            "high_score_not_out": true,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": null,
+            "strike_rate": 100.0
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "friendly-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 1,
+                "balls": 1,
+                "high_score": 1,
+                "high_score_not_out": true,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 100.0
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {}
+          }
+        }
+      }
+    }
+  }
+}

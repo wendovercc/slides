@@ -17,6 +17,133 @@ ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
 
 LEAGUE_TABLE_EXCLUDED = {"ave+", "batp", "bowlp", "offbp", "pen", "t"}
+LEADERBOARD_TEMPLATES = {"batting-leaderboard", "bowling-leaderboard"}
+
+
+def load_config():
+    path = CONTENT / "config.json"
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
+def balls_to_overs(balls):
+    return f"{balls // 6}.{balls % 6}"
+
+
+def fmt_hs(batting):
+    if batting["high_score"] is None:
+        return "-"
+    suffix = "*" if batting["high_score_not_out"] else ""
+    return f"{batting['high_score']}{suffix}"
+
+
+def fmt_best(bowling):
+    if not bowling.get("best"):
+        return "-"
+    return f"{bowling['best']['wickets']}-{bowling['best']['runs']}"
+
+
+def get_leaderboard_block(player, team_filter, comp_filter):
+    if team_filter and comp_filter:
+        return (
+            player["stats"]["by_team"]
+            .get(team_filter, {})
+            .get("by_competition", {})
+            .get(comp_filter)
+        )
+    if team_filter:
+        return player["stats"]["by_team"].get(team_filter, {}).get("all")
+    return player["stats"]["all"]
+
+
+def build_batting_leaderboard(slide, stats_data, lb_config):
+    team_filter = slide.get("team")
+    comp_filter = slide.get("competition")
+    rows = lb_config.get("rows", 8)
+    min_innings = lb_config.get("min_innings", 2)
+
+    entries = []
+    for p in stats_data["players"].values():
+        block = get_leaderboard_block(p, team_filter, comp_filter)
+        if block and block["matches"] > 0:
+            entries.append({"name": p["name"], "block": block})
+
+    def fmt(e):
+        b = e["block"]["batting"]
+        avg = b.get("average")
+        return {
+            "name": e["name"],
+            "matches": e["block"]["matches"],
+            "innings": b["innings"],
+            "not_outs": b["not_outs"],
+            "runs": b["runs"],
+            "high_score_num": str(b["high_score"]) if b["high_score"] is not None else "-",
+            "high_score_not_out": bool(b.get("high_score_not_out")),
+            "average": f"{avg:.1f}" if avg is not None else "-",
+        }
+
+    runs_rows = sorted(
+        [e for e in entries if e["block"]["batting"]["innings"] > 0],
+        key=lambda e: e["block"]["batting"]["runs"],
+        reverse=True,
+    )[:rows]
+
+    avg_rows = sorted(
+        [
+            e for e in entries
+            if e["block"]["batting"]["innings"] >= min_innings
+            and e["block"]["batting"].get("average") is not None
+        ],
+        key=lambda e: e["block"]["batting"]["average"],
+        reverse=True,
+    )[:rows]
+
+    slide["_runs_rows"] = [fmt(e) for e in runs_rows]
+    slide["_avg_rows"] = [fmt(e) for e in avg_rows]
+    slide["_min_innings"] = min_innings
+
+
+def build_bowling_leaderboard(slide, stats_data, lb_config):
+    team_filter = slide.get("team")
+    comp_filter = slide.get("competition")
+    rows = lb_config.get("rows", 8)
+    min_balls = lb_config.get("min_overs", 2) * 6
+
+    entries = []
+    for p in stats_data["players"].values():
+        block = get_leaderboard_block(p, team_filter, comp_filter)
+        if block and block["matches"] > 0:
+            entries.append({"name": p["name"], "block": block})
+
+    def fmt(e):
+        b = e["block"]["bowling"]
+        avg = b.get("average")
+        return {
+            "name": e["name"],
+            "matches": e["block"]["matches"],
+            "overs": balls_to_overs(b["balls"]),
+            "wickets": b["wickets"],
+            "best": fmt_best(b),
+            "average": f"{avg:.1f}" if avg is not None else "-",
+        }
+
+    wkts_rows = sorted(
+        [e for e in entries if e["block"]["bowling"]["wickets"] > 0],
+        key=lambda e: e["block"]["bowling"]["wickets"],
+        reverse=True,
+    )[:rows]
+
+    avg_rows = sorted(
+        [
+            e for e in entries
+            if e["block"]["bowling"]["balls"] >= min_balls
+            and e["block"]["bowling"].get("average") is not None
+        ],
+        key=lambda e: e["block"]["bowling"]["average"],
+    )[:rows]
+
+    slide["_wkts_rows"] = [fmt(e) for e in wkts_rows]
+    slide["_avg_rows"] = [fmt(e) for e in avg_rows]
+    slide["_min_overs"] = lb_config.get("min_overs", 2)
 
 
 def generate_qr_data_url(url: str) -> str:
@@ -58,6 +185,16 @@ def load_teams():
 
 def build_slides(env):
     teams_by_id = load_teams()
+    config = load_config()
+    lb_config = config.get("leaderboards", {})
+
+    _stats_cache = {}
+
+    def load_stats(label):
+        if label not in _stats_cache:
+            path = CONTENT / "data" / f"player_stats_{label}.json"
+            _stats_cache[label] = json.loads(path.read_text()) if path.exists() else None
+        return _stats_cache[label]
 
     for slide_path in sorted((CONTENT / "slides").glob("*.json")):
         slide = json.loads(slide_path.read_text())
@@ -75,6 +212,14 @@ def build_slides(env):
 
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
+
+        if slide.get("template") in LEADERBOARD_TEMPLATES:
+            stats = load_stats("this_season")
+            if stats:
+                if slide["template"] == "batting-leaderboard":
+                    build_batting_leaderboard(slide, stats, lb_config)
+                else:
+                    build_bowling_leaderboard(slide, stats, lb_config)
 
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:

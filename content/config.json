@@ -1,0 +1,11 @@
+{
+  "play_cricket_club_id": "6744",
+  "seasons": {
+    "this_season": 2026
+  },
+  "leaderboards": {
+    "min_innings": 2,
+    "min_overs": 2,
+    "rows": 8
+  }
+}
