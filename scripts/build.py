@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Build pipeline: content/ + templates/ + assets/ → site/"""
 
+import base64
+import io
 import json
 import shutil
 from pathlib import Path
+
+import qrcode
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 ROOT = Path(__file__).parent.parent
@@ -13,6 +17,14 @@ ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
 
 LEAGUE_TABLE_EXCLUDED = {"ave+", "batp", "bowlp", "offbp", "pen", "t"}
+
+
+def generate_qr_data_url(url: str) -> str:
+    img = qrcode.make(url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    data = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/png;base64,{data}"
 
 
 def clean():
@@ -60,6 +72,9 @@ def build_slides(env):
         elif "data" in slide:
             data_path = ROOT / slide["data"]
             slide["_data"] = json.loads(data_path.read_text())
+
+        if slide.get("template") == "cta" and "qr_url" in slide:
+            slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
 
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:
