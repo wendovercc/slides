@@ -155,6 +155,8 @@ Each pavilion TV runs a Raspberry Pi booting into Chromium kiosk mode, pointed a
 
 Multiple pavilions are supported by creating a slideshow config per display. Displays can show different content (e.g. different team results).
 
+See [docs/raspberry-pi.md](docs/raspberry-pi.md) for step-by-step setup instructions.
+
 ---
 
 ## Data sources
