@@ -1,0 +1,39 @@
+{
+  "sponsors": [
+    {
+      "id": "double-glazing-direct",
+      "name": "Double Glazing Direct",
+      "tagline": "Installing Quality Windows and Doors since 2010",
+      "website": "https://doubleglazing-direct.com",
+      "logo": "assets/images/sponsors/double-glazing-direct.jpg"
+    },
+    {
+      "id": "squirrel-storage",
+      "name": "Squirrel Storage",
+      "tagline": "Modern, secure, and convenient storage solutions",
+      "website": "https://www.squirrelselfstorage.co.uk",
+      "logo": "assets/images/sponsors/squirrel-storage.png"
+    },
+    {
+      "id": "print-minds",
+      "name": "Print Minds",
+      "tagline": "Custom DTF & Embroidery Apparel",
+      "website": "https://printminds.co.uk",
+      "logo": "assets/images/sponsors/print-minds.png"
+    },
+    {
+      "id": "dayla",
+      "name": "Dayla",
+      "tagline": "The Difference in Drinks",
+      "website": "https://www.dayladrinks.co.uk",
+      "logo": "assets/images/sponsors/dayla.png"
+    },
+    {
+      "id": "kings-farm",
+      "name": "Kings Farm",
+      "tagline": "So much more than a local butchers!",
+      "website": "https://www.kingsfarmshop.co.uk",
+      "logo": "assets/images/sponsors/kings-farm.png"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
     "refresh_interval_seconds": 300,
     "slides": [
         { "slug": "hello-world", "duration": 10 },
-        { "slug": "club-photo",  "duration": 10 }
+        { "slug": "club-photo",  "duration": 10 },
+        { "slug": "sponsors",    "duration": 15 }
     ]
 }
