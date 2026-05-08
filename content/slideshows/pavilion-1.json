@@ -8,6 +8,6 @@
         { "slug": "league-table-1st-xi",    "duration": 20 },
         { "slug": "batting-leaderboard",    "duration": 20 },
         { "slug": "bowling-leaderboard",    "duration": 20 },
-        { "slug": "junior-camp",            "duration": 15 }
+        { "slug": "junior-camp",            "duration": 15, "expires": "2026-08-08" }
     ]
 }

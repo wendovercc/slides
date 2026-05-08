@@ -23,12 +23,16 @@
     {% endfor %}
 
     <script>
-        const slides = {{ show.slides | tojson }};
+        const today = new Date().toISOString().slice(0, 10);
+        const slides = {{ show.slides | tojson }}
+            .map((s, i) => ({ ...s, _i: i }))
+            .filter(s => !s.expires || s.expires >= today);
+
         let current = 0;
 
         function showSlide(index) {
             document.querySelectorAll('iframe').forEach((f, i) => {
-                f.classList.toggle('active', i === index);
+                f.classList.toggle('active', i === slides[index]._i);
             });
         }
 
@@ -38,8 +42,10 @@
             setTimeout(advance, slides[current].duration * 1000);
         }
 
-        showSlide(0);
-        setTimeout(advance, slides[0].duration * 1000);
+        if (slides.length > 0) {
+            showSlide(0);
+            setTimeout(advance, slides[0].duration * 1000);
+        }
 
         // Reload the player every 6 hours to pick up weekly updates
         setTimeout(() => location.reload(), 6 * 60 * 60 * 1000);
