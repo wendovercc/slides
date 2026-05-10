@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-10T07:58:02.056571+00:00",
+  "generated_at": "2026-05-10T08:33:22.072919+00:00",
   "season": 2026,
   "competitions": {
     "136958": "U15 Central",
@@ -4583,7 +4583,7 @@
       "id": "6736369",
       "name": "Ava Dwight",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -4616,7 +4616,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -4655,7 +4655,7 @@
       "id": "6420037",
       "name": "Florence Tindall",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -4688,7 +4688,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -4727,7 +4727,7 @@
       "id": "6736368",
       "name": "Vivienne Hicks",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -4760,7 +4760,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -4799,7 +4799,7 @@
       "id": "5509080",
       "name": "Rosie Britton",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -4832,7 +4832,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -4871,7 +4871,7 @@
       "id": "6748130",
       "name": "Sharmistha Rendla",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -4904,7 +4904,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -4943,7 +4943,7 @@
       "id": "5581854",
       "name": "Riaa Salins",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -4976,7 +4976,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -5015,7 +5015,7 @@
       "id": "6750119",
       "name": "Samanvitha Rendla",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -5048,7 +5048,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -5087,7 +5087,7 @@
       "id": "5509077",
       "name": "Tilly Britton",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -5120,7 +5120,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -5159,7 +5159,7 @@
       "id": "6736364",
       "name": "Eira Lloyd",
       "teams": [
-        "girls-u13"
+        "u13-girls"
       ],
       "stats": {
         "all": {
@@ -5189,7 +5189,7 @@
           }
         },
         "by_team": {
-          "girls-u13": {
+          "u13-girls": {
             "all": {
               "matches": 1,
               "batting": {
@@ -11053,7 +11053,7 @@
       "A",
       "W"
     ],
-    "girls-u13": [
+    "u13-girls": [
       "W"
     ],
     "u15-hurricanes": [
