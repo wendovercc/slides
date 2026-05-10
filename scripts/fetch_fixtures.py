@@ -294,8 +294,10 @@ def main():
 
     today = date.today()
 
-    # Find the earliest upcoming match per team
+    # Find the earliest upcoming match per team (for next-match slides)
+    # and collect all upcoming matches per team (for schedule slides)
     upcoming = {}
+    all_upcoming = {}  # team_id → list of slim match dicts, sorted by date
     for match in all_matches:
         home_id = str(match.get("home_team_id", ""))
         away_id = str(match.get("away_team_id", ""))
@@ -306,9 +308,26 @@ def main():
             if our_pc_id not in (home_id, away_id):
                 continue
             tid = team["id"]
+            is_home = our_pc_id == home_id
             existing_date = parse_date((upcoming.get(tid) or {}).get("match_date", ""))
             if existing_date is None or match_date < existing_date:
                 upcoming[tid] = match
+            all_upcoming.setdefault(tid, []).append({
+                "match_date": match.get("match_date", ""),
+                "match_time": match.get("match_time") or None,
+                "ground_name": match.get("ground_name") or None,
+                "competition_name": match.get("competition_name", ""),
+                "is_home": is_home,
+                "opposition_club_name": (
+                    match.get("away_club_name", "") if is_home else match.get("home_club_name", "")
+                ) or "",
+                "opposition_team_name": (
+                    match.get("away_team_name", "") if is_home else match.get("home_team_name", "")
+                ) or "",
+            })
+
+    for tid in all_upcoming:
+        all_upcoming[tid].sort(key=lambda m: parse_date(m["match_date"]) or date.max)
 
     print(f"  {len(upcoming)} team(s) with upcoming fixtures")
 
@@ -366,6 +385,7 @@ def main():
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "season": season_year,
         "fixtures": fixtures,
+        "all_fixtures": all_upcoming,
     }
     data_dir = CONTENT / "data"
     data_dir.mkdir(exist_ok=True)

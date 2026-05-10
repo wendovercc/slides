@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Schedule · {{ slide.title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #1a3d1a;
+            font-family: Georgia, 'Times New Roman', serif;
+            color: #ffffff;
+        }
+        .slide {
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 4rem 5rem;
+        }
+
+        .header {
+            flex-shrink: 0;
+            margin-bottom: 1.2rem;
+        }
+        .title {
+            font-size: 3rem;
+            font-weight: bold;
+            line-height: 1.2;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        }
+        .subtitle {
+            font-size: 1.1rem;
+            font-family: Arial, sans-serif;
+            opacity: 0.5;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            margin-top: 0.2rem;
+        }
+
+        .no-events {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            opacity: 0.4;
+            letter-spacing: 0.06em;
+        }
+
+        /* Column headings */
+        .col-heads {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0 0 0.4rem;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            margin-bottom: 0.3rem;
+            flex-shrink: 0;
+            font-size: 0.75rem;
+            font-family: Arial, sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            opacity: 0.45;
+        }
+        .ch-date   { flex: 0 0 9em; }
+        .ch-type   { flex: 0 0 6.5em; }
+        .ch-title  { flex: 1; }
+        .ch-time   { flex: 0 0 5em; text-align: right; }
+        .ch-ctx    { flex: 0 0 16em; text-align: right; }
+
+        /* Event rows */
+        .events { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+        .event-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.55rem 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            flex-shrink: 0;
+        }
+        .event-row:nth-child(odd) {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .ev-date {
+            flex: 0 0 9em;
+            font-family: Arial, sans-serif;
+            font-size: 1rem;
+            opacity: 0.75;
+        }
+
+        .ev-type {
+            flex: 0 0 6.5em;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.15em 0.6em;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+        .badge-match    { background: rgba(180,120,30,0.35); border: 1px solid rgba(220,160,50,0.5); color: #ffd070; }
+        .badge-training { background: rgba(30,100,180,0.35); border: 1px solid rgba(60,140,220,0.5); color: #80c0ff; }
+
+        .ev-title {
+            flex: 1;
+            font-size: 1.1rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .ev-competition {
+            font-size: 0.8rem;
+            font-family: Arial, sans-serif;
+            opacity: 0.5;
+            margin-left: 0.5em;
+        }
+
+        .ev-time {
+            flex: 0 0 5em;
+            text-align: right;
+            font-family: Arial, sans-serif;
+            font-size: 1rem;
+            opacity: 0.7;
+        }
+
+        .ev-ctx {
+            flex: 0 0 16em;
+            text-align: right;
+            font-family: Arial, sans-serif;
+            font-size: 0.9rem;
+            opacity: 0.7;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .home-pill {
+            display: inline-block;
+            padding: 0.1em 0.5em;
+            background: rgba(60,180,80,0.25);
+            border: 1px solid rgba(60,180,80,0.4);
+            border-radius: 3px;
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #80e890;
+        }
+        .away-pill {
+            display: inline-block;
+            padding: 0.1em 0.5em;
+            background: rgba(180,80,30,0.25);
+            border: 1px solid rgba(180,80,30,0.4);
+            border-radius: 3px;
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #e89060;
+        }
+
+        .footer {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.4);
+            padding: 0.8rem 2rem;
+        }
+        .branding {
+            text-align: center;
+            font-size: 1.2rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide">
+
+        <div class="header">
+            <div class="title">Schedule · {{ slide.title }}</div>
+            <div class="subtitle">Upcoming fixtures &amp; training</div>
+        </div>
+
+        {% if not events %}
+        <div class="no-events">No upcoming events</div>
+        {% else %}
+
+        <div class="col-heads">
+            <div class="ch-date">Date</div>
+            <div class="ch-type">Type</div>
+            <div class="ch-title">Event</div>
+            <div class="ch-time">Time</div>
+            <div class="ch-ctx">{% if slide.mode == 'location' %}Teams{% else %}Venue{% endif %}</div>
+        </div>
+
+        <div class="events">
+        {% for e in events %}
+        <div class="event-row">
+            <div class="ev-date">{{ e.date_display }}</div>
+            <div class="ev-type">
+                <span class="badge badge-{{ e.type }}">{{ e.type }}</span>
+            </div>
+            <div class="ev-title">
+                {{ e.title }}
+                {% if e.type == 'match' and e.competition %}
+                <span class="ev-competition">{{ e.competition }}</span>
+                {% endif %}
+            </div>
+            <div class="ev-time">{{ e.time or '—' }}</div>
+            <div class="ev-ctx">
+                {% if slide.mode == 'location' %}
+                    {{ e.team_names | join(', ') }}
+                {% elif e.type == 'match' %}
+                    {% if e.is_home %}<span class="home-pill">Home</span>
+                    {% else %}<span class="away-pill">Away</span>{% endif %}
+                    {% if e.location %}&nbsp;{{ e.location }}{% endif %}
+                {% else %}
+                    {{ e.location }}
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        </div>
+
+        {% endif %}
+
+    </div>
+    <div class="footer">
+        <div class="branding">Wendover Cricket Club</div>
+    </div>
+</body>
+</html>

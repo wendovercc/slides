@@ -3,6 +3,7 @@
     {
       "id": "the-witchell",
       "name": "The Witchell",
+      "screen": true,
       "aliases": [
         "The Witchell",
         "Witchell",
@@ -58,6 +59,7 @@
     {
       "id": "tring-road",
       "name": "Tring Road",
+      "screen": true,
       "aliases": [
         "Tring Road"
       ]
