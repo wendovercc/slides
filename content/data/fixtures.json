@@ -1,0 +1,863 @@
+{
+  "generated_at": "2026-05-10T13:13:28.673782+00:00",
+  "season": 2026,
+  "fixtures": {
+    "u11-incredibles": {
+      "match_date": "11/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Witchell Ground",
+      "competition_id": "",
+      "competition_name": "",
+      "is_home": true,
+      "opposition_name": "Under 11",
+      "opposition_club_name": "Widmer End St Margarets CC",
+      "opposition_team_id": "301256",
+      "opposition_site_id": "6916",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u15-spitfires": {
+      "match_date": "11/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Wendover Road",
+      "competition_id": "136958",
+      "competition_name": "U15 Central",
+      "is_home": true,
+      "opposition_name": "Under 15",
+      "opposition_club_name": "Chearsley CC",
+      "opposition_team_id": "70467",
+      "opposition_site_id": "1779",
+      "opposition_form": [
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Himank Tripathy",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 59,
+            "average": null,
+            "high_score": 59,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Pradyun Reddy",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 7,
+            "average": 7.0,
+            "high_score": 7,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Rudre Trivedi",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 4,
+            "average": null,
+            "high_score": 4,
+            "high_score_not_out": true
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Siddharth Rao",
+            "wickets": 1,
+            "average": 21.0,
+            "economy": 7.0,
+            "best": {
+              "wickets": 1,
+              "runs": 21
+            }
+          },
+          {
+            "name": "Nathan Daouza",
+            "wickets": 1,
+            "average": 27.0,
+            "economy": 9.0,
+            "best": {
+              "wickets": 1,
+              "runs": 27
+            }
+          }
+        ]
+      }
+    },
+    "u13-hurricanes": {
+      "match_date": "12/05/2026",
+      "match_time": "18:00",
+      "ground_name": "The Meadow",
+      "competition_id": "136933",
+      "competition_name": "U13 South Premier League",
+      "is_home": false,
+      "opposition_name": "U13 Knights",
+      "opposition_club_name": "Chesham CC",
+      "opposition_team_id": "377866",
+      "opposition_site_id": "7440",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u15-hurricanes": {
+      "match_date": "12/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Misfits Ground",
+      "competition_id": "136959",
+      "competition_name": "U15 South Premier League",
+      "is_home": true,
+      "opposition_name": "Under 15",
+      "opposition_club_name": "Beaconsfield CC",
+      "opposition_team_id": "826",
+      "opposition_site_id": "1004",
+      "opposition_form": [
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Logan Gaskell",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 42,
+            "average": null,
+            "high_score": 42,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Harry Watts",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 30,
+            "average": null,
+            "high_score": 30,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Fraser Fyfe",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 26,
+            "average": null,
+            "high_score": 26,
+            "high_score_not_out": true
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Joseph Hiscox",
+            "wickets": 2,
+            "average": 14.0,
+            "economy": 9.33,
+            "best": {
+              "wickets": 2,
+              "runs": 28
+            }
+          },
+          {
+            "name": "Tom Holohan",
+            "wickets": 2,
+            "average": 10.5,
+            "economy": 7.0,
+            "best": {
+              "wickets": 2,
+              "runs": 21
+            }
+          },
+          {
+            "name": "Harry Watts",
+            "wickets": 1,
+            "average": 17.0,
+            "economy": 8.5,
+            "best": {
+              "wickets": 1,
+              "runs": 17
+            }
+          }
+        ]
+      }
+    },
+    "u13-girls": {
+      "match_date": "12/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Witchell Ground",
+      "competition_id": "136974",
+      "competition_name": "Girls U13 Central",
+      "is_home": true,
+      "opposition_name": "Girls Under 13",
+      "opposition_club_name": "Winchmore Hill CC (Penn)",
+      "opposition_team_id": "406193",
+      "opposition_site_id": "7885",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u10-thunder": {
+      "match_date": "12/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Chalfont St. Peter Cricket Club",
+      "competition_id": "136885",
+      "competition_name": "U10 South IB Division 1",
+      "is_home": false,
+      "opposition_name": "Under 10",
+      "opposition_club_name": "Chalfont St Peter CC",
+      "opposition_team_id": "173853",
+      "opposition_site_id": "1742",
+      "opposition_form": [
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u11-invincibles": {
+      "match_date": "13/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Witchell Ground",
+      "competition_id": "136916",
+      "competition_name": "U11 South Division 3C",
+      "is_home": true,
+      "opposition_name": "Girls Under 13",
+      "opposition_club_name": "Chenies & Latimer CC",
+      "opposition_team_id": "262379",
+      "opposition_site_id": "7791",
+      "opposition_form": [
+        "W",
+        "W",
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Annabelle Brier",
+            "innings": 3,
+            "not_outs": 1,
+            "runs": 37,
+            "average": 18.5,
+            "high_score": 26,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Mary Savage",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 34,
+            "average": 34.0,
+            "high_score": 34,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Venessa Hargreaves",
+            "innings": 3,
+            "not_outs": 1,
+            "runs": 27,
+            "average": 13.5,
+            "high_score": 16,
+            "high_score_not_out": false
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Meher Paul",
+            "wickets": 3,
+            "average": 6.0,
+            "economy": 2.57,
+            "best": {
+              "wickets": 2,
+              "runs": 6
+            }
+          },
+          {
+            "name": "Sophie Bertin",
+            "wickets": 2,
+            "average": 3.5,
+            "economy": 2.33,
+            "best": {
+              "wickets": 2,
+              "runs": 7
+            }
+          },
+          {
+            "name": "Lara Alibhai",
+            "wickets": 2,
+            "average": 1.5,
+            "economy": 1.0,
+            "best": {
+              "wickets": 2,
+              "runs": 3
+            }
+          }
+        ]
+      }
+    },
+    "u11-girls": {
+      "match_date": "13/05/2026",
+      "match_time": "18:00",
+      "ground_name": null,
+      "competition_id": "136968",
+      "competition_name": "Girls U11 South WB",
+      "is_home": true,
+      "opposition_name": "Girls Under 11",
+      "opposition_club_name": "Dinton CC, Bucks",
+      "opposition_team_id": "334855",
+      "opposition_site_id": "7",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u9": {
+      "match_date": "14/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Downley Cricket Club",
+      "competition_id": "136875",
+      "competition_name": "U9 Central WB Division 1A",
+      "is_home": false,
+      "opposition_name": "Under 9 Dragons",
+      "opposition_club_name": "High Wycombe CC",
+      "opposition_team_id": "406065",
+      "opposition_site_id": "3370",
+      "opposition_form": [
+        "L"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Jack Ryan",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 19,
+            "average": 19.0,
+            "high_score": 19,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Max Ryan",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 18,
+            "average": 18.0,
+            "high_score": 18,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Artie Coker",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 12,
+            "average": 12.0,
+            "high_score": 12,
+            "high_score_not_out": false
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Max Ryan",
+            "wickets": 2,
+            "average": 3.0,
+            "economy": 3.0,
+            "best": {
+              "wickets": 2,
+              "runs": 6
+            }
+          },
+          {
+            "name": "Franklin Samek",
+            "wickets": 1,
+            "average": 9.0,
+            "economy": 4.5,
+            "best": {
+              "wickets": 1,
+              "runs": 9
+            }
+          },
+          {
+            "name": "Jack Ryan",
+            "wickets": 1,
+            "average": 5.0,
+            "economy": 2.5,
+            "best": {
+              "wickets": 1,
+              "runs": 5
+            }
+          }
+        ]
+      }
+    },
+    "u13-spitfires": {
+      "match_date": "15/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Elmbrook/Marsh HP17 8SR",
+      "competition_id": "136937",
+      "competition_name": "U13 South Division 3B",
+      "is_home": true,
+      "opposition_name": "Under 13",
+      "opposition_club_name": "The Lee CC",
+      "opposition_team_id": "242865",
+      "opposition_site_id": "7879",
+      "opposition_form": [
+        "L",
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Harvey Skrabski",
+            "innings": 2,
+            "not_outs": 2,
+            "runs": 41,
+            "average": null,
+            "high_score": 22,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Haydn Blackburn",
+            "innings": 2,
+            "not_outs": 1,
+            "runs": 25,
+            "average": 25.0,
+            "high_score": 25,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Archie Andrievschi",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 17,
+            "average": 17.0,
+            "high_score": 17,
+            "high_score_not_out": false
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Harvey Skrabski",
+            "wickets": 2,
+            "average": 22.0,
+            "economy": 7.33,
+            "best": {
+              "wickets": 1,
+              "runs": 16
+            }
+          },
+          {
+            "name": "Haydn Blackburn",
+            "wickets": 2,
+            "average": 12.5,
+            "economy": 4.69,
+            "best": {
+              "wickets": 2,
+              "runs": 6
+            }
+          },
+          {
+            "name": "Henry Horsfield",
+            "wickets": 1,
+            "average": 46.0,
+            "economy": 6.57,
+            "best": {
+              "wickets": 1,
+              "runs": 29
+            }
+          }
+        ]
+      }
+    },
+    "u12-hurricanes": {
+      "match_date": "15/05/2026",
+      "match_time": "18:00",
+      "ground_name": "West Wycombe Cricket Club",
+      "competition_id": "136925",
+      "competition_name": "U12 South Division 2",
+      "is_home": false,
+      "opposition_name": "Under 12 Dragons",
+      "opposition_club_name": "High Wycombe CC",
+      "opposition_team_id": "355910",
+      "opposition_site_id": "3370",
+      "opposition_form": [
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Max Keating",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 13,
+            "average": 13.0,
+            "high_score": 13,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Aaryan Samanta",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 12,
+            "average": 12.0,
+            "high_score": 12,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Vivek Kanna",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 10,
+            "average": 10.0,
+            "high_score": 10,
+            "high_score_not_out": false
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Shivansh Singh",
+            "wickets": 2,
+            "average": 1.5,
+            "economy": 1.5,
+            "best": {
+              "wickets": 2,
+              "runs": 3
+            }
+          },
+          {
+            "name": "Toby Maddern",
+            "wickets": 1,
+            "average": 4.0,
+            "economy": 2.0,
+            "best": {
+              "wickets": 1,
+              "runs": 4
+            }
+          },
+          {
+            "name": "Harry Hitchen",
+            "wickets": 1,
+            "average": 5.0,
+            "economy": 2.5,
+            "best": {
+              "wickets": 1,
+              "runs": 5
+            }
+          }
+        ]
+      }
+    },
+    "2nd-xi": {
+      "match_date": "16/05/2026",
+      "match_time": "12:30",
+      "ground_name": "Whiteleaf",
+      "competition_id": "135870",
+      "competition_name": "Division 9E",
+      "is_home": true,
+      "opposition_name": "6th XI",
+      "opposition_club_name": "High Wycombe CC",
+      "opposition_team_id": "359617",
+      "opposition_site_id": "3370",
+      "opposition_form": [
+        "A",
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Ayaan Ahmed",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 51,
+            "average": null,
+            "high_score": 51,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Aarav Bhardwaj",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 50,
+            "average": null,
+            "high_score": 50,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Rehan Ahmed",
+            "innings": 2,
+            "not_outs": 1,
+            "runs": 44,
+            "average": 44.0,
+            "high_score": 28,
+            "high_score_not_out": true
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Michael Lapham",
+            "wickets": 4,
+            "average": 1.5,
+            "economy": 1.24,
+            "best": {
+              "wickets": 4,
+              "runs": 6
+            }
+          },
+          {
+            "name": "James Evans",
+            "wickets": 4,
+            "average": 9.5,
+            "economy": 4.75,
+            "best": {
+              "wickets": 4,
+              "runs": 38
+            }
+          },
+          {
+            "name": "Lucas Hughes",
+            "wickets": 3,
+            "average": 6.33,
+            "economy": 6.33,
+            "best": {
+              "wickets": 3,
+              "runs": 19
+            }
+          }
+        ]
+      }
+    },
+    "1st-xi": {
+      "match_date": "16/05/2026",
+      "match_time": "12:30",
+      "ground_name": "Kimble CC",
+      "competition_id": "135855",
+      "competition_name": "Division 6C",
+      "is_home": true,
+      "opposition_name": "4th XI",
+      "opposition_club_name": "High Wycombe CC",
+      "opposition_team_id": "91926",
+      "opposition_site_id": "3370",
+      "opposition_form": [
+        "L",
+        "L",
+        "W",
+        "A",
+        "W"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Vinod Gooneratne",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 135,
+            "average": 135.0,
+            "high_score": 135,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Haris Arshad",
+            "innings": 3,
+            "not_outs": 0,
+            "runs": 109,
+            "average": 36.33,
+            "high_score": 61,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Senira Manikgamage",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 103,
+            "average": 103.0,
+            "high_score": 103,
+            "high_score_not_out": false
+          }
+        ],
+        "bowling": [
+          {
+            "name": "Hugo Lapham",
+            "wickets": 5,
+            "average": 5.0,
+            "economy": 4.17,
+            "best": {
+              "wickets": 5,
+              "runs": 25
+            }
+          },
+          {
+            "name": "Freddie Randall",
+            "wickets": 4,
+            "average": 16.25,
+            "economy": 3.82,
+            "best": {
+              "wickets": 2,
+              "runs": 27
+            }
+          },
+          {
+            "name": "Josh Field",
+            "wickets": 3,
+            "average": 24.0,
+            "economy": 4.5,
+            "best": {
+              "wickets": 2,
+              "runs": 16
+            }
+          }
+        ]
+      }
+    },
+    "u10-lightning": {
+      "match_date": "17/05/2026",
+      "match_time": "10:00",
+      "ground_name": "Ballinger Waggoners CC",
+      "competition_id": "136883",
+      "competition_name": "U10 Central IB",
+      "is_home": false,
+      "opposition_name": "Under 10",
+      "opposition_club_name": "Ballinger Waggoners CC",
+      "opposition_team_id": "57495",
+      "opposition_site_id": "894",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u14-hurricanes": {
+      "match_date": "18/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Woodways Playing Field",
+      "competition_id": "136940",
+      "competition_name": "U14 Central",
+      "is_home": false,
+      "opposition_name": "Under 14",
+      "opposition_club_name": "Haddenham CC, Bucks",
+      "opposition_team_id": "406148",
+      "opposition_site_id": "8321",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "u12-spitfires": {
+      "match_date": "20/05/2026",
+      "match_time": "18:00",
+      "ground_name": "Witchell Ground",
+      "competition_id": "136924",
+      "competition_name": "U12 Central",
+      "is_home": true,
+      "opposition_name": "Under 12",
+      "opposition_club_name": "The Lee CC",
+      "opposition_team_id": "242904",
+      "opposition_site_id": "7879",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    },
+    "friendly-xi": {
+      "match_date": "31/05/2026",
+      "match_time": "13:30",
+      "ground_name": "The Cricket Ground",
+      "competition_id": "",
+      "competition_name": "",
+      "is_home": false,
+      "opposition_name": "Friendly XI",
+      "opposition_club_name": "West Wycombe CC",
+      "opposition_team_id": "98050",
+      "opposition_site_id": "6798",
+      "opposition_form": [
+        "W",
+        "L",
+        "C"
+      ],
+      "opposition_players": {
+        "batting": [
+          {
+            "name": "Ryan Parrett",
+            "innings": 2,
+            "not_outs": 1,
+            "runs": 98,
+            "average": 98.0,
+            "high_score": 60,
+            "high_score_not_out": false
+          },
+          {
+            "name": "Paul Cheshire",
+            "innings": 1,
+            "not_outs": 1,
+            "runs": 43,
+            "average": null,
+            "high_score": 43,
+            "high_score_not_out": true
+          },
+          {
+            "name": "Oscar Scott",
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 36,
+            "average": 36.0,
+            "high_score": 36,
+            "high_score_not_out": false
+          }
+        ],
+        "bowling": [
+          {
+            "name": "B Sizeland",
+            "wickets": 4,
+            "average": 7.5,
+            "economy": 5.0,
+            "best": {
+              "wickets": 4,
+              "runs": 30
+            }
+          },
+          {
+            "name": "- Ibra",
+            "wickets": 3,
+            "average": 23.0,
+            "economy": 4.31,
+            "best": {
+              "wickets": 2,
+              "runs": 10
+            }
+          },
+          {
+            "name": "Azam -",
+            "wickets": 2,
+            "average": 24.5,
+            "economy": 4.08,
+            "best": {
+              "wickets": 2,
+              "runs": 23
+            }
+          }
+        ]
+      }
+    },
+    "u17-spitfires": {
+      "match_date": "24/06/2026",
+      "match_time": "18:00",
+      "ground_name": "Coleshill CC",
+      "competition_id": "136964",
+      "competition_name": "U17 Division 1",
+      "is_home": false,
+      "opposition_name": "Under 17",
+      "opposition_club_name": "Chesham CC",
+      "opposition_team_id": "262124",
+      "opposition_site_id": "7440",
+      "opposition_form": [],
+      "opposition_players": {
+        "batting": [],
+        "bowling": []
+      }
+    }
+  }
+}

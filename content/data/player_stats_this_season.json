@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-10T09:00:43.687996+00:00",
+  "generated_at": "2026-05-10T12:20:32.589892+00:00",
   "season": 2026,
   "competitions": {
     "136958": "U15 Central",
@@ -9212,24 +9212,25 @@
       "id": "6669735",
       "name": "George Smith",
       "teams": [
-        "u10-thunder"
+        "u10-thunder",
+        "u10-lightning"
       ],
       "stats": {
         "all": {
-          "matches": 1,
+          "matches": 2,
           "batting": {
-            "innings": 1,
+            "innings": 2,
             "not_outs": 0,
-            "runs": 2,
-            "balls": 12,
-            "high_score": 2,
+            "runs": 6,
+            "balls": 21,
+            "high_score": 4,
             "high_score_not_out": false,
             "fours": 0,
             "sixes": 0,
             "fifties": 0,
             "hundreds": 0,
-            "average": 2.0,
-            "strike_rate": 16.67
+            "average": 3.0,
+            "strike_rate": 28.57
           },
           "bowling": {
             "balls": 12,
@@ -9303,6 +9304,62 @@
                   },
                   "average": 13.0,
                   "economy": 6.5
+                }
+              }
+            }
+          },
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 4,
+                "balls": 9,
+                "high_score": 4,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 4.0,
+                "strike_rate": 44.44
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 4,
+                  "balls": 9,
+                  "high_score": 4,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 4.0,
+                  "strike_rate": 44.44
+                },
+                "bowling": {
+                  "balls": 0,
+                  "maidens": 0,
+                  "runs": 0,
+                  "wickets": 0,
+                  "best": null,
+                  "average": null,
+                  "economy": null
                 }
               }
             }
@@ -9518,36 +9575,37 @@
       "id": "6730709",
       "name": "Shayan Patel",
       "teams": [
-        "u10-thunder"
+        "u10-thunder",
+        "u10-lightning"
       ],
       "stats": {
         "all": {
-          "matches": 1,
+          "matches": 2,
           "batting": {
-            "innings": 1,
+            "innings": 2,
             "not_outs": 0,
-            "runs": 1,
-            "balls": 13,
-            "high_score": 1,
+            "runs": 4,
+            "balls": 27,
+            "high_score": 3,
             "high_score_not_out": false,
             "fours": 0,
             "sixes": 0,
             "fifties": 0,
             "hundreds": 0,
-            "average": 1.0,
-            "strike_rate": 7.69
+            "average": 2.0,
+            "strike_rate": 14.81
           },
           "bowling": {
-            "balls": 12,
+            "balls": 24,
             "maidens": 0,
-            "runs": 7,
+            "runs": 20,
             "wickets": 1,
             "best": {
               "wickets": 1,
               "runs": 7
             },
-            "average": 7.0,
-            "economy": 3.5
+            "average": 20.0,
+            "economy": 5.0
           }
         },
         "by_team": {
@@ -9612,6 +9670,68 @@
                 }
               }
             }
+          },
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 3,
+                "balls": 14,
+                "high_score": 3,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 3.0,
+                "strike_rate": 21.43
+              },
+              "bowling": {
+                "balls": 12,
+                "maidens": 0,
+                "runs": 13,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 13
+                },
+                "average": null,
+                "economy": 6.5
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 3,
+                  "balls": 14,
+                  "high_score": 3,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 3.0,
+                  "strike_rate": 21.43
+                },
+                "bowling": {
+                  "balls": 12,
+                  "maidens": 0,
+                  "runs": 13,
+                  "wickets": 0,
+                  "best": {
+                    "wickets": 0,
+                    "runs": 13
+                  },
+                  "average": null,
+                  "economy": 6.5
+                }
+              }
+            }
           }
         }
       }
@@ -9620,35 +9740,36 @@
       "id": "6730710",
       "name": "Reggie Horn",
       "teams": [
-        "u10-thunder"
+        "u10-thunder",
+        "u10-lightning"
       ],
       "stats": {
         "all": {
-          "matches": 1,
+          "matches": 2,
           "batting": {
-            "innings": 1,
+            "innings": 2,
             "not_outs": 0,
-            "runs": 2,
-            "balls": 16,
-            "high_score": 2,
+            "runs": 6,
+            "balls": 27,
+            "high_score": 4,
             "high_score_not_out": false,
             "fours": 0,
             "sixes": 0,
             "fifties": 0,
             "hundreds": 0,
-            "average": 2.0,
-            "strike_rate": 12.5
+            "average": 3.0,
+            "strike_rate": 22.22
           },
           "bowling": {
-            "balls": 12,
+            "balls": 24,
             "maidens": 0,
-            "runs": 9,
-            "wickets": 0,
+            "runs": 18,
+            "wickets": 1,
             "best": {
-              "wickets": 0,
+              "wickets": 1,
               "runs": 9
             },
-            "average": null,
+            "average": 18.0,
             "economy": 4.5
           }
         },
@@ -9714,6 +9835,68 @@
                 }
               }
             }
+          },
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 4,
+                "balls": 11,
+                "high_score": 4,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 4.0,
+                "strike_rate": 36.36
+              },
+              "bowling": {
+                "balls": 12,
+                "maidens": 0,
+                "runs": 9,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 9
+                },
+                "average": 9.0,
+                "economy": 4.5
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 4,
+                  "balls": 11,
+                  "high_score": 4,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 4.0,
+                  "strike_rate": 36.36
+                },
+                "bowling": {
+                  "balls": 12,
+                  "maidens": 0,
+                  "runs": 9,
+                  "wickets": 1,
+                  "best": {
+                    "wickets": 1,
+                    "runs": 9
+                  },
+                  "average": 9.0,
+                  "economy": 4.5
+                }
+              }
+            }
           }
         }
       }
@@ -9722,36 +9905,37 @@
       "id": "6095810",
       "name": "Sam Hooper",
       "teams": [
-        "u10-thunder"
+        "u10-thunder",
+        "u10-lightning"
       ],
       "stats": {
         "all": {
-          "matches": 1,
+          "matches": 2,
           "batting": {
-            "innings": 1,
+            "innings": 2,
             "not_outs": 0,
-            "runs": 7,
-            "balls": 9,
+            "runs": 11,
+            "balls": 22,
             "high_score": 7,
             "high_score_not_out": false,
             "fours": 0,
             "sixes": 0,
             "fifties": 0,
             "hundreds": 0,
-            "average": 7.0,
-            "strike_rate": 77.78
+            "average": 5.5,
+            "strike_rate": 50.0
           },
           "bowling": {
-            "balls": 12,
+            "balls": 24,
             "maidens": 0,
-            "runs": 6,
+            "runs": 11,
             "wickets": 1,
             "best": {
               "wickets": 1,
               "runs": 6
             },
-            "average": 6.0,
-            "economy": 3.0
+            "average": 11.0,
+            "economy": 2.75
           }
         },
         "by_team": {
@@ -9813,6 +9997,68 @@
                   },
                   "average": 6.0,
                   "economy": 3.0
+                }
+              }
+            }
+          },
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 4,
+                "balls": 13,
+                "high_score": 4,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 4.0,
+                "strike_rate": 30.77
+              },
+              "bowling": {
+                "balls": 12,
+                "maidens": 0,
+                "runs": 5,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 5
+                },
+                "average": null,
+                "economy": 2.5
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 4,
+                  "balls": 13,
+                  "high_score": 4,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 4.0,
+                  "strike_rate": 30.77
+                },
+                "bowling": {
+                  "balls": 12,
+                  "maidens": 0,
+                  "runs": 5,
+                  "wickets": 0,
+                  "best": {
+                    "wickets": 0,
+                    "runs": 5
+                  },
+                  "average": null,
+                  "economy": 2.5
                 }
               }
             }
@@ -9926,16 +10172,17 @@
       "id": "6187522",
       "name": "Ayaan Patel",
       "teams": [
-        "u10-thunder"
+        "u10-thunder",
+        "u10-lightning"
       ],
       "stats": {
         "all": {
-          "matches": 1,
+          "matches": 2,
           "batting": {
-            "innings": 1,
+            "innings": 2,
             "not_outs": 0,
-            "runs": 1,
-            "balls": 12,
+            "runs": 2,
+            "balls": 24,
             "high_score": 1,
             "high_score_not_out": false,
             "fours": 0,
@@ -10017,6 +10264,62 @@
                   },
                   "average": null,
                   "economy": 4.0
+                }
+              }
+            }
+          },
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 1,
+                "balls": 12,
+                "high_score": 1,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 1.0,
+                "strike_rate": 8.33
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 1,
+                  "balls": 12,
+                  "high_score": 1,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 1.0,
+                  "strike_rate": 8.33
+                },
+                "bowling": {
+                  "balls": 0,
+                  "maidens": 0,
+                  "runs": 0,
+                  "wickets": 0,
+                  "best": null,
+                  "average": null,
+                  "economy": null
                 }
               }
             }
@@ -11019,6 +11322,489 @@
                   "hundreds": 0,
                   "average": null,
                   "strike_rate": 140.0
+                },
+                "bowling": {
+                  "balls": 0,
+                  "maidens": 0,
+                  "runs": 0,
+                  "wickets": 0,
+                  "best": null,
+                  "average": null,
+                  "economy": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "6187518": {
+      "id": "6187518",
+      "name": "Daniel Mercer",
+      "teams": [
+        "u10-lightning"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 2,
+            "balls": 10,
+            "high_score": 2,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 2.0,
+            "strike_rate": 20.0
+          },
+          "bowling": {
+            "balls": 12,
+            "maidens": 0,
+            "runs": 11,
+            "wickets": 0,
+            "best": {
+              "wickets": 0,
+              "runs": 11
+            },
+            "average": null,
+            "economy": 5.5
+          }
+        },
+        "by_team": {
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 2,
+                "balls": 10,
+                "high_score": 2,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 2.0,
+                "strike_rate": 20.0
+              },
+              "bowling": {
+                "balls": 12,
+                "maidens": 0,
+                "runs": 11,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 11
+                },
+                "average": null,
+                "economy": 5.5
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 2,
+                  "balls": 10,
+                  "high_score": 2,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 2.0,
+                  "strike_rate": 20.0
+                },
+                "bowling": {
+                  "balls": 12,
+                  "maidens": 0,
+                  "runs": 11,
+                  "wickets": 0,
+                  "best": {
+                    "wickets": 0,
+                    "runs": 11
+                  },
+                  "average": null,
+                  "economy": 5.5
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "6730712": {
+      "id": "6730712",
+      "name": "Leo Avent",
+      "teams": [
+        "u10-lightning"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 1,
+            "balls": 7,
+            "high_score": 1,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 1.0,
+            "strike_rate": 14.29
+          },
+          "bowling": {
+            "balls": 6,
+            "maidens": 0,
+            "runs": 3,
+            "wickets": 1,
+            "best": {
+              "wickets": 1,
+              "runs": 3
+            },
+            "average": 3.0,
+            "economy": 3.0
+          }
+        },
+        "by_team": {
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 1,
+                "balls": 7,
+                "high_score": 1,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 1.0,
+                "strike_rate": 14.29
+              },
+              "bowling": {
+                "balls": 6,
+                "maidens": 0,
+                "runs": 3,
+                "wickets": 1,
+                "best": {
+                  "wickets": 1,
+                  "runs": 3
+                },
+                "average": 3.0,
+                "economy": 3.0
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 1,
+                  "balls": 7,
+                  "high_score": 1,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 1.0,
+                  "strike_rate": 14.29
+                },
+                "bowling": {
+                  "balls": 6,
+                  "maidens": 0,
+                  "runs": 3,
+                  "wickets": 1,
+                  "best": {
+                    "wickets": 1,
+                    "runs": 3
+                  },
+                  "average": 3.0,
+                  "economy": 3.0
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "7019792": {
+      "id": "7019792",
+      "name": "Shyam Vadia",
+      "teams": [
+        "u10-lightning"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 2,
+            "balls": 17,
+            "high_score": 2,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 2.0,
+            "strike_rate": 11.76
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 2,
+                "balls": 17,
+                "high_score": 2,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 2.0,
+                "strike_rate": 11.76
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 2,
+                  "balls": 17,
+                  "high_score": 2,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 2.0,
+                  "strike_rate": 11.76
+                },
+                "bowling": {
+                  "balls": 0,
+                  "maidens": 0,
+                  "runs": 0,
+                  "wickets": 0,
+                  "best": null,
+                  "average": null,
+                  "economy": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "7019789": {
+      "id": "7019789",
+      "name": "Dhruvan Makela",
+      "teams": [
+        "u10-lightning"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 7,
+            "balls": 15,
+            "high_score": 7,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 7.0,
+            "strike_rate": 46.67
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 7,
+                "balls": 15,
+                "high_score": 7,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 7.0,
+                "strike_rate": 46.67
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 7,
+                  "balls": 15,
+                  "high_score": 7,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 7.0,
+                  "strike_rate": 46.67
+                },
+                "bowling": {
+                  "balls": 0,
+                  "maidens": 0,
+                  "runs": 0,
+                  "wickets": 0,
+                  "best": null,
+                  "average": null,
+                  "economy": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "6669736": {
+      "id": "6669736",
+      "name": "Henry Marsh",
+      "teams": [
+        "u10-lightning"
+      ],
+      "stats": {
+        "all": {
+          "matches": 1,
+          "batting": {
+            "innings": 1,
+            "not_outs": 0,
+            "runs": 4,
+            "balls": 12,
+            "high_score": 4,
+            "high_score_not_out": false,
+            "fours": 0,
+            "sixes": 0,
+            "fifties": 0,
+            "hundreds": 0,
+            "average": 4.0,
+            "strike_rate": 33.33
+          },
+          "bowling": {
+            "balls": 0,
+            "maidens": 0,
+            "runs": 0,
+            "wickets": 0,
+            "best": null,
+            "average": null,
+            "economy": null
+          }
+        },
+        "by_team": {
+          "u10-lightning": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 4,
+                "balls": 12,
+                "high_score": 4,
+                "high_score_not_out": false,
+                "fours": 0,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 4.0,
+                "strike_rate": 33.33
+              },
+              "bowling": {
+                "balls": 0,
+                "maidens": 0,
+                "runs": 0,
+                "wickets": 0,
+                "best": null,
+                "average": null,
+                "economy": null
+              }
+            },
+            "by_competition": {
+              "136883": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 4,
+                  "balls": 12,
+                  "high_score": 4,
+                  "high_score_not_out": false,
+                  "fours": 0,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 4.0,
+                  "strike_rate": 33.33
                 },
                 "bowling": {
                   "balls": 0,
