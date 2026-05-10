@@ -90,15 +90,20 @@ def login(page, username, password):
     print("  Logged in.")
 
 
-def extract_table(page):
+def extract_table(page, root_selector=None):
     """Extract table data, handling Ant Design's split header/body table pattern.
 
     Ant Design renders the column headers in one <table> and the data rows in a
     second <table> inside a scrollable container. We gather headers from whichever
     table has a <thead> and rows from whichever table has non-hidden <tbody> rows.
+
+    root_selector: optional CSS selector to scope the search (e.g. active tab pane).
     """
-    return page.evaluate("""() => {
-        const tables = [...document.querySelectorAll('table')];
+    return page.evaluate("""(rootSelector) => {
+        const root = rootSelector ? document.querySelector(rootSelector) : document;
+        if (!root) return null;
+
+        const tables = [...root.querySelectorAll('table')];
         if (!tables.length) return null;
 
         // Headers come from the table that has a thead
@@ -123,7 +128,7 @@ def extract_table(page):
             .filter(row => row.some(cell => cell !== ''));
 
         return { headers, rows };
-    }""")
+    }""", root_selector)
 
 
 def extract_page_title(page):
@@ -201,13 +206,19 @@ def scrape_player_standings(page):
         if not label:
             continue
         page.get_by_role("tab", name=label).click()
+        # Wait for the active tab pane to contain real rows. Ant Design sets
+        # aria-hidden="true" on inactive panes, so scope to the visible pane to
+        # avoid picking up rows from other tabs that remain in the DOM.
+        active_pane_sel = '[role="tabpanel"]:not([aria-hidden="true"])'
         try:
-            page.wait_for_selector("tbody tr:not([aria-hidden])", timeout=10_000)
+            page.wait_for_selector(
+                f'{active_pane_sel} tbody tr:not([aria-hidden])', timeout=10_000
+            )
         except PlaywrightTimeout:
             print(f"    WARNING: no rows in tab '{label}'", file=sys.stderr)
             continue
 
-        data = extract_table(page) or {"headers": [], "rows": []}
+        data = extract_table(page, root_selector=active_pane_sel) or {"headers": [], "rows": []}
         if not headers and data["headers"]:
             headers = data["headers"]
 

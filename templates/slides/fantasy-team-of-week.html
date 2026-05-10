@@ -24,11 +24,6 @@
             line-height: 1.2;
             text-shadow: 0 3px 6px rgba(0,0,0,0.4);
         }
-        .subtitle {
-            font-size: 1.6rem;
-            opacity: 0.75;
-            margin-top: 0.4rem;
-        }
 
         .cards {
             flex: 1;
@@ -100,11 +95,7 @@
     <div class="slide">
         <div class="header">
             <div class="title">{{ slide.title }}</div>
-            {% if slide._data.page_title %}
-            <div class="subtitle">{{ slide._data.page_title }}</div>
-            {% elif slide.subtitle is defined %}
-            <div class="subtitle">{{ slide.subtitle }}</div>
-            {% endif %}
+
         </div>
 
         {% set rows = slide._data.rows %}
