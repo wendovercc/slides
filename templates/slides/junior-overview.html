@@ -52,19 +52,15 @@
         tbody tr:nth-child(even) {
             background: rgba(255,255,255,0.04);
         }
-        tbody tr.top {
-            background: rgba(212,175,55,0.2);
-            color: #ffd966;
-            font-weight: bold;
-        }
         td {
             padding: 0.28rem 0.7rem;
             font-size: 1.3rem;
         }
         .col-team      { text-align: left; }
-        .col-standing  { width: 11rem; }
         .col-stat      { width: 3.5rem; text-align: center; }
+        .col-winpct    { width: 4.5rem; text-align: center; }
         .col-form      { width: 9rem; text-align: left; white-space: nowrap; }
+        .col-standing  { width: 11rem; }
 
         /* Standing cell: bar + gap label */
         .standing-cell {
@@ -83,10 +79,6 @@
             height: 100%;
             border-radius: 2px;
             background: rgba(60, 180, 80, 0.75);
-            transition: none;
-        }
-        tr.top .bar-fill {
-            background: rgba(212, 175, 55, 0.85);
         }
         .gap-label {
             width: 2.8rem;
@@ -138,21 +130,30 @@
                 <thead>
                     <tr>
                         <th class="col-team">Team</th>
-                        <th class="col-standing">Standing</th>
-                        <th class="col-stat">P</th>
                         <th class="col-stat">W</th>
                         <th class="col-stat">L</th>
                         <th class="col-stat">C</th>
                         <th class="col-stat">A</th>
                         <th class="col-form">Form</th>
+                        <th class="col-winpct">Win%</th>
+                        <th class="col-standing">Standing</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in slide._rows %}
-                    <tr{% if row.is_top %} class="top"{% endif %}>
+                    {% set played = row.played | int %}
+                    {% set won    = row.won    | int %}
+                    {% set lost   = row.lost   | int %}
+                    <tr>
                         <td class="col-team">{{ row.name }}</td>
+                        <td class="col-stat">{{ row.won }}</td>
+                        <td class="col-stat">{{ row.lost }}</td>
+                        <td class="col-stat">{{ row.cancelled }}</td>
+                        <td class="col-stat">{{ row.abandoned }}</td>
+                        <td class="col-form">{% for r in row.form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}</td>
+                        <td class="col-winpct">{% if played > 0 %}{{ (won / played * 100) | round | int }}%{% endif %}</td>
                         <td class="col-standing">
-                            {% if row.played != "0" and row.leader_pts > 0 %}
+                            {% if (won > 0 or lost > 0) and row.leader_pts > 0 %}
                             <div class="standing-cell">
                                 <div class="bar-track">
                                     <div class="bar-fill" style="width:{{ row.pts_pct }}%"></div>
@@ -161,12 +162,6 @@
                             </div>
                             {% endif %}
                         </td>
-                        <td class="col-stat">{{ row.played }}</td>
-                        <td class="col-stat">{{ row.won }}</td>
-                        <td class="col-stat">{{ row.lost }}</td>
-                        <td class="col-stat">{{ row.cancelled }}</td>
-                        <td class="col-stat">{{ row.abandoned }}</td>
-                        <td class="col-form">{% for r in row.form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
