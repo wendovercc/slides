@@ -61,10 +61,43 @@
             padding: 0.28rem 0.7rem;
             font-size: 1.3rem;
         }
-        .col-team { text-align: left; }
-        .col-pos  { width: 5rem;  text-align: center; }
-        .col-stat { width: 3.5rem; text-align: center; }
-        .col-form { width: 9rem; text-align: left; white-space: nowrap; }
+        .col-team      { text-align: left; }
+        .col-standing  { width: 11rem; }
+        .col-stat      { width: 3.5rem; text-align: center; }
+        .col-form      { width: 9rem; text-align: left; white-space: nowrap; }
+
+        /* Standing cell: bar + gap label */
+        .standing-cell {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .bar-track {
+            flex: 1;
+            height: 0.7rem;
+            background: rgba(255,255,255,0.12);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: rgba(60, 180, 80, 0.75);
+            transition: none;
+        }
+        tr.top .bar-fill {
+            background: rgba(212, 175, 55, 0.85);
+        }
+        .gap-label {
+            width: 2.8rem;
+            text-align: right;
+            font-size: 1.1rem;
+            font-family: Arial, sans-serif;
+            opacity: 0.9;
+            flex-shrink: 0;
+        }
+
+        /* Form badges */
         .badge {
             display: inline-block;
             width: 1.5rem; height: 1.5rem; line-height: 1.5rem;
@@ -81,6 +114,7 @@
         .badge-A { background: #7a5c00; color: #ffe; }
         .badge-D { background: #444;    color: #ccc; }
         .badge-T { background: #1a5c7a; color: #fff; }
+
         .footer {
             position: absolute;
             bottom: 0; left: 0; right: 0;
@@ -104,7 +138,7 @@
                 <thead>
                     <tr>
                         <th class="col-team">Team</th>
-                        <th class="col-pos">Pos</th>
+                        <th class="col-standing">Standing</th>
                         <th class="col-stat">P</th>
                         <th class="col-stat">W</th>
                         <th class="col-stat">L</th>
@@ -117,7 +151,16 @@
                     {% for row in slide._rows %}
                     <tr{% if row.is_top %} class="top"{% endif %}>
                         <td class="col-team">{{ row.name }}</td>
-                        <td class="col-pos">{% if row.played != "0" %}{{ row.position }}/{{ row.total }}{% endif %}</td>
+                        <td class="col-standing">
+                            {% if row.played != "0" and row.leader_pts > 0 %}
+                            <div class="standing-cell">
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width:{{ row.pts_pct }}%"></div>
+                                </div>
+                                <span class="gap-label">{% if row.pts_gap == 0 %}&equals;{% else %}&minus;{{ row.pts_gap }}{% endif %}</span>
+                            </div>
+                            {% endif %}
+                        </td>
                         <td class="col-stat">{{ row.played }}</td>
                         <td class="col-stat">{{ row.won }}</td>
                         <td class="col-stat">{{ row.lost }}</td>

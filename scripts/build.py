@@ -257,23 +257,35 @@ def build_junior_overview(slide, teams_by_id, stats_data):
         if not data_path.exists():
             continue
         data = json.loads(data_path.read_text())
-        values = data.get("league_table", [{}])[0].get("values", [])
-        total = len(values)
+        table = data.get("league_table", [{}])[0]
+        values = table.get("values", [])
+        headings = table.get("headings", {})
+        pts_col = next((k for k, v in headings.items() if v.lower() == "pts"), None)
+
+        leader_pts = 0
+        if pts_col and values:
+            leader_pts = max(int(r.get(pts_col) or 0) for r in values)
+
         team_row = next((r for r in values if str(r.get("team_id")) == str(team["play_cricket_team_id"])), None)
         if not team_row:
             continue
-        position = int(team_row.get("position", 0))
+
+        team_pts = int(team_row.get(pts_col) or 0) if pts_col else 0
+        pts_gap = leader_pts - team_pts
+        pts_pct = round(team_pts / leader_pts * 100) if leader_pts > 0 else 0
+
         rows.append({
             "name": team["name"],
-            "position": position,
-            "total": total,
             "played": team_row.get("column_2", "0"),
             "won": team_row.get("column_3", "0"),
             "lost": team_row.get("column_4", "0"),
             "cancelled": team_row.get("column_5", "0"),
             "abandoned": team_row.get("column_6", "0"),
-            "is_top": position == 1,
+            "is_top": pts_gap == 0 and leader_pts > 0,
             "form": form.get(team["id"], []),
+            "pts_gap": pts_gap,
+            "pts_pct": pts_pct,
+            "leader_pts": leader_pts,
         })
     slide["_rows"] = rows
 
