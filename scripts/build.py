@@ -4,7 +4,6 @@
 import base64
 import io
 import json
-import re
 import shutil
 from pathlib import Path
 
@@ -238,21 +237,13 @@ def load_teams():
     return {t["id"]: t for t in teams}
 
 
-def _junior_sort_key(team):
-    m = re.search(r"(\d+)", team["id"])
-    age = int(m.group(1)) if m else 99
-    is_girls = team["id"].startswith("girls")
-    return (age, is_girls, team["id"])
-
-
-def build_junior_overview(slide, teams_by_id, stats_data):
+def build_team_positions(slide, teams_by_id, stats_data):
     form = stats_data.get("form", {}) if stats_data else {}
-    junior_teams = sorted(
-        [t for t in teams_by_id.values() if "game_type" in t and "play_cricket_league_id" in t],
-        key=_junior_sort_key,
-    )
     rows = []
-    for team in junior_teams:
+    for team_id in slide.get("teams", []):
+        team = teams_by_id.get(team_id)
+        if not team or "play_cricket_league_id" not in team:
+            continue
         data_path = CONTENT / "data" / f"league_table_{team['play_cricket_league_id']}.json"
         if not data_path.exists():
             continue
@@ -282,7 +273,7 @@ def build_junior_overview(slide, teams_by_id, stats_data):
             "cancelled": team_row.get("column_5", "0"),
             "abandoned": team_row.get("column_6", "0"),
             "is_top": pts_gap == 0 and leader_pts > 0,
-            "form": form.get(team["id"], []),
+            "form": form.get(team_id, []),
             "pts_gap": pts_gap,
             "pts_pct": pts_pct,
             "leader_pts": leader_pts,
@@ -325,8 +316,8 @@ def build_slides(env):
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
 
-        if slide.get("template") == "junior-overview":
-            build_junior_overview(slide, teams_by_id, load_stats("this_season"))
+        if slide.get("template") == "team-positions":
+            build_team_positions(slide, teams_by_id, load_stats("this_season"))
 
         if slide.get("template") in LEADERBOARD_TEMPLATES:
             if slide.get("competition") == "league" and slide.get("team"):
