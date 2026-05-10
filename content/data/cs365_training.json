@@ -1,0 +1,539 @@
+{
+  "fetched_at": "2026-05-10T14:21:38.676890+00:00",
+  "sessions": [
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 08 May 2026",
+      "location": "The Witchell",
+      "session_id": "7146CC2725A88035",
+      "date": "2026-05-08",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Outdoor Training",
+      "teams_raw": "Under 9",
+      "date_str": "Friday, 08 May 2026",
+      "location": "Witchell, HP22 6EG",
+      "session_id": "414D83E60FB910B7",
+      "date": "2026-05-08",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u9"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Fri Night Training",
+      "teams_raw": "U12 squad",
+      "date_str": "Friday, 08 May 2026",
+      "location": "Little Missenden CC",
+      "session_id": "BD0ABC289A8C72D7",
+      "date": "2026-05-08",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [],
+      "location_id": "little-missenden"
+    },
+    {
+      "title": "Under 11s Outdoor training",
+      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
+      "date_str": "Friday, 08 May 2026",
+      "location": "Witchell Ground, Wendover",
+      "session_id": "09004A60800C39F8",
+      "date": "2026-05-08",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u11-invincibles",
+        "u11-incredibles"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 09 May 2026",
+      "location": "The Witchell",
+      "session_id": "25F2D1A873B4FF02",
+      "date": "2026-05-09",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 09 May 2026",
+      "location": "Witchell",
+      "session_id": "8477DDD10AC05531",
+      "date": "2026-05-09",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 15 May 2026",
+      "location": "The Witchell",
+      "session_id": "2DB7AE43174522D8",
+      "date": "2026-05-15",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Outdoor Training",
+      "teams_raw": "Under 9",
+      "date_str": "Friday, 15 May 2026",
+      "location": "Witchell, HP22 6EG",
+      "session_id": "088298851C115618",
+      "date": "2026-05-15",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u9"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Fri Night Training",
+      "teams_raw": "U12 squad",
+      "date_str": "Friday, 15 May 2026",
+      "location": "Little Missenden CC",
+      "session_id": "12430DC45E9AFE74",
+      "date": "2026-05-15",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [],
+      "location_id": "little-missenden"
+    },
+    {
+      "title": "Under 11s Outdoor training",
+      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
+      "date_str": "Friday, 15 May 2026",
+      "location": "Witchell Ground, Wendover",
+      "session_id": "B9DBAF462EEF5B0B",
+      "date": "2026-05-15",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u11-invincibles",
+        "u11-incredibles"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 16 May 2026",
+      "location": "The Witchell",
+      "session_id": "1D950BC86C9AB470",
+      "date": "2026-05-16",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 16 May 2026",
+      "location": "Witchell",
+      "session_id": "BEB1169604B11F27",
+      "date": "2026-05-16",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 22 May 2026",
+      "location": "The Witchell",
+      "session_id": "2CCD3957CD73F8F2",
+      "date": "2026-05-22",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Outdoor Training",
+      "teams_raw": "Under 9",
+      "date_str": "Friday, 22 May 2026",
+      "location": "Witchell, HP22 6EG",
+      "session_id": "32903A2410C14FAD",
+      "date": "2026-05-22",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u9"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Fri Night Training",
+      "teams_raw": "U12 squad",
+      "date_str": "Friday, 22 May 2026",
+      "location": "Little Missenden CC",
+      "session_id": "ACBEF85436806F22",
+      "date": "2026-05-22",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [],
+      "location_id": "little-missenden"
+    },
+    {
+      "title": "Under 11s Outdoor training",
+      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
+      "date_str": "Friday, 22 May 2026",
+      "location": "Witchell Ground, Wendover",
+      "session_id": "5C2E521F768ABF44",
+      "date": "2026-05-22",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u11-invincibles",
+        "u11-incredibles"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 23 May 2026",
+      "location": "The Witchell",
+      "session_id": "119EC1C91E7F5C98",
+      "date": "2026-05-23",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 23 May 2026",
+      "location": "Witchell",
+      "session_id": "38D09B746156C33A",
+      "date": "2026-05-23",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 29 May 2026",
+      "location": "The Witchell",
+      "session_id": "CCFAF0C7B71C8C18",
+      "date": "2026-05-29",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Outdoor Training",
+      "teams_raw": "Under 9",
+      "date_str": "Friday, 29 May 2026",
+      "location": "Witchell, HP22 6EG",
+      "session_id": "9FED33F70B809A67",
+      "date": "2026-05-29",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u9"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 30 May 2026",
+      "location": "The Witchell",
+      "session_id": "AAE64D70F0E9F7A8",
+      "date": "2026-05-30",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 30 May 2026",
+      "location": "Witchell",
+      "session_id": "8CC419BDF08A7938",
+      "date": "2026-05-30",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 05 June 2026",
+      "location": "The Witchell",
+      "session_id": "D398197CF2551ECB",
+      "date": "2026-06-05",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Outdoor Training",
+      "teams_raw": "Under 9",
+      "date_str": "Friday, 05 June 2026",
+      "location": "Witchell, HP22 6EG",
+      "session_id": "86473ACC8E77C6E9",
+      "date": "2026-06-05",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u9"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 06 June 2026",
+      "location": "The Witchell",
+      "session_id": "58758ECE3B138A07",
+      "date": "2026-06-06",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 06 June 2026",
+      "location": "Witchell",
+      "session_id": "C33EB1A7BE4B8F6D",
+      "date": "2026-06-06",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 12 June 2026",
+      "location": "The Witchell",
+      "session_id": "E0A05DD6398D8D14",
+      "date": "2026-06-12",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Outdoor Training",
+      "teams_raw": "Under 9",
+      "date_str": "Friday, 12 June 2026",
+      "location": "Witchell, HP22 6EG",
+      "session_id": "FF236C31016F3A97",
+      "date": "2026-06-12",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u9"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 13 June 2026",
+      "location": "The Witchell",
+      "session_id": "68C0E9653FB45FD0",
+      "date": "2026-06-13",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 13 June 2026",
+      "location": "Witchell",
+      "session_id": "DED89E9A33D5F5C1",
+      "date": "2026-06-13",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 19 June 2026",
+      "location": "The Witchell",
+      "session_id": "E69A09D9368E5F03",
+      "date": "2026-06-19",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 20 June 2026",
+      "location": "The Witchell",
+      "session_id": "152B5A1E83F1B72B",
+      "date": "2026-06-20",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 20 June 2026",
+      "location": "Witchell",
+      "session_id": "6EBC9A7AF25EA16E",
+      "date": "2026-06-20",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 26 June 2026",
+      "location": "The Witchell",
+      "session_id": "D63D0482CB73D82A",
+      "date": "2026-06-26",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 27 June 2026",
+      "location": "The Witchell",
+      "session_id": "88C5659672682487",
+      "date": "2026-06-27",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 27 June 2026",
+      "location": "Witchell",
+      "session_id": "F67BD3FEABEEF830",
+      "date": "2026-06-27",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 10's training",
+      "teams_raw": "U10 Thunder, U10 Lightning, U10",
+      "date_str": "Friday, 03 July 2026",
+      "location": "The Witchell",
+      "session_id": "9AAC80F0D3C5D6AF",
+      "date": "2026-07-03",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u10-thunder",
+        "u10-lightning"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U14 Training",
+      "teams_raw": "U14 Hurricanes, U14 squad",
+      "date_str": "Saturday, 04 July 2026",
+      "location": "The Witchell",
+      "session_id": "A6BA82A386C2CF75",
+      "date": "2026-07-04",
+      "time_start": "09:00",
+      "time_end": "10:30",
+      "team_ids": [
+        "u14-hurricanes"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "U13 training",
+      "teams_raw": "U13 squad",
+      "date_str": "Saturday, 04 July 2026",
+      "location": "Witchell",
+      "session_id": "C07558DB3A31C371",
+      "date": "2026-07-04",
+      "time_start": "10:30",
+      "time_end": "12:00",
+      "team_ids": [],
+      "location_id": "the-witchell"
+    }
+  ]
+}

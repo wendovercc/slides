@@ -1,0 +1,66 @@
+{
+  "locations": [
+    {
+      "id": "the-witchell",
+      "name": "The Witchell",
+      "aliases": [
+        "The Witchell",
+        "Witchell",
+        "Witchell Ground",
+        "Witchell, HP22 6EG",
+        "Witchell Ground, Wendover"
+      ]
+    },
+    {
+      "id": "kimble",
+      "name": "Kimble",
+      "aliases": [
+        "Kimble",
+        "Kimble CC"
+      ]
+    },
+    {
+      "id": "monks-risborough",
+      "name": "Monks Risborough",
+      "aliases": [
+        "Monks Risborough",
+        "Whiteleaf",
+        "Whiteleaf Cricket Club"
+      ]
+    },
+    {
+      "id": "little-missenden",
+      "name": "Little Missenden CC",
+      "aliases": [
+        "Little Missenden CC",
+        "Little Missenden",
+        "Lt Missenden Misfits CC",
+        "Misfits Ground"
+      ]
+    },
+    {
+      "id": "elmbrook",
+      "name": "Elmbrook",
+      "aliases": [
+        "Elmbrook",
+        "Elmbrook, Marsh",
+        "Elmbrook/Marsh HP17 8SR"
+      ]
+    },
+    {
+      "id": "aylesbury",
+      "name": "Aylesbury CC",
+      "aliases": [
+        "Aylesbury CC",
+        "Wendover Road"
+      ]
+    },
+    {
+      "id": "tring-road",
+      "name": "Tring Road",
+      "aliases": [
+        "Tring Road"
+      ]
+    }
+  ]
+}

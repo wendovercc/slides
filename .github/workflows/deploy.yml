@@ -50,6 +50,11 @@ jobs:
           PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
           PLAY_CRICKET_SITE_ID: ${{ secrets.PLAY_CRICKET_SITE_ID }}
 
+      - run: python scripts/fetch_cs365_training.py
+        env:
+          CS365_USERNAME: ${{ secrets.CS365_USERNAME }}
+          CS365_PASSWORD: ${{ secrets.CS365_PASSWORD }}
+
       - run: python scripts/build.py
 
       - uses: actions/upload-pages-artifact@v3
