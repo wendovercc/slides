@@ -63,9 +63,9 @@
             opacity: 0.45;
         }
         .ch-date   { flex: 0 0 9em; }
+        .ch-time   { flex: 0 0 5em; }
         .ch-type   { flex: 0 0 6.5em; }
         .ch-title  { flex: 1; }
-        .ch-time   { flex: 0 0 5em; text-align: right; }
         .ch-ctx    { flex: 0 0 16em; text-align: right; }
 
         /* Event rows */
@@ -87,6 +87,14 @@
             font-family: Arial, sans-serif;
             font-size: 1rem;
             opacity: 0.75;
+        }
+        .ev-date-hidden { opacity: 0; }
+
+        .ev-time {
+            flex: 0 0 5em;
+            font-family: Arial, sans-serif;
+            font-size: 1rem;
+            opacity: 0.7;
         }
 
         .ev-type {
@@ -117,14 +125,6 @@
             font-family: Arial, sans-serif;
             opacity: 0.5;
             margin-left: 0.5em;
-        }
-
-        .ev-time {
-            flex: 0 0 5em;
-            text-align: right;
-            font-family: Arial, sans-serif;
-            font-size: 1rem;
-            opacity: 0.7;
         }
 
         .ev-ctx {
@@ -189,16 +189,18 @@
 
         <div class="col-heads">
             <div class="ch-date">Date</div>
+            <div class="ch-time">Time</div>
             <div class="ch-type">Type</div>
             <div class="ch-title">Event</div>
-            <div class="ch-time">Time</div>
             <div class="ch-ctx">{% if slide.mode == 'location' %}Teams{% else %}Venue{% endif %}</div>
         </div>
 
         <div class="events">
+        {% set ns = namespace(prev_date='') %}
         {% for e in events %}
         <div class="event-row">
-            <div class="ev-date">{{ e.date_display }}</div>
+            <div class="ev-date{% if e.date == ns.prev_date %} ev-date-hidden{% endif %}">{{ e.date_display }}</div>
+            <div class="ev-time">{{ e.time or '—' }}</div>
             <div class="ev-type">
                 <span class="badge badge-{{ e.type }}">{{ e.type }}</span>
             </div>
@@ -208,7 +210,7 @@
                 <span class="ev-competition">{{ e.competition }}</span>
                 {% endif %}
             </div>
-            <div class="ev-time">{{ e.time or '—' }}</div>
+            {% set ns.prev_date = e.date %}
             <div class="ev-ctx">
                 {% if slide.mode == 'location' %}
                     {{ e.team_names | join(', ') }}
