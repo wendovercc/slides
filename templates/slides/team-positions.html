@@ -151,7 +151,7 @@
                         <td class="col-stat">{{ row.cancelled }}</td>
                         <td class="col-stat">{{ row.abandoned }}</td>
                         <td class="col-form">{% for r in row.form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}</td>
-                        <td class="col-winpct">{% if played > 0 %}{{ (won / played * 100) | round | int }}%{% endif %}</td>
+                        <td class="col-winpct">{% if won > 0 or lost > 0 %}{{ (won / played * 100) | round | int }}%{% endif %}</td>
                         <td class="col-standing">
                             {% if (won > 0 or lost > 0) and row.leader_pts > 0 %}
                             <div class="standing-cell">
