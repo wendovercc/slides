@@ -52,7 +52,7 @@
             display: flex;
             align-items: center;
             gap: 1rem;
-            padding: 0 0 0.4rem;
+            padding: 0 0.5rem 0.4rem;
             border-bottom: 1px solid rgba(255,255,255,0.2);
             margin-bottom: 0.3rem;
             flex-shrink: 0;
@@ -62,11 +62,11 @@
             letter-spacing: 0.1em;
             opacity: 0.45;
         }
-        .ch-date   { flex: 0 0 9em; }
-        .ch-time   { flex: 0 0 5em; }
-        .ch-type   { flex: 0 0 6.5em; }
-        .ch-title  { flex: 1; }
-        .ch-ctx    { flex: 0 0 16em; text-align: right; }
+        .ch-date   { flex: 0 0 9rem; }
+        .ch-time   { flex: 0 0 5rem; }
+        .ch-type   { flex: 0 0 6.5rem; }
+        .ch-ctx    { flex: 0 0 20rem; }
+        .ch-desc  { flex: 1; }
 
         /* Event rows */
         .events { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
@@ -78,12 +78,15 @@
             border-bottom: 1px solid rgba(255,255,255,0.07);
             flex-shrink: 0;
         }
+        .week-break {
+            border-top: 1px solid rgba(255,255,255,0.28);
+        }
         .event-row:nth-child(odd) {
             background: rgba(255,255,255,0.03);
         }
 
         .ev-date {
-            flex: 0 0 9em;
+            flex: 0 0 9rem;
             font-family: Arial, sans-serif;
             font-size: 1rem;
             opacity: 0.75;
@@ -91,14 +94,14 @@
         .ev-date-hidden { opacity: 0; }
 
         .ev-time {
-            flex: 0 0 5em;
+            flex: 0 0 5rem;
             font-family: Arial, sans-serif;
             font-size: 1rem;
             opacity: 0.7;
         }
 
         .ev-type {
-            flex: 0 0 6.5em;
+            flex: 0 0 6.5rem;
         }
         .badge {
             display: inline-block;
@@ -113,26 +116,21 @@
         .badge-match    { background: rgba(180,120,30,0.35); border: 1px solid rgba(220,160,50,0.5); color: #ffd070; }
         .badge-training { background: rgba(30,100,180,0.35); border: 1px solid rgba(60,140,220,0.5); color: #80c0ff; }
 
-        .ev-title {
+        .ev-desc {
             flex: 1;
-            font-size: 1.1rem;
+            font-family: Arial, sans-serif;
+            font-size: 1rem;
+            opacity: 0.75;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .ev-competition {
-            font-size: 0.8rem;
-            font-family: Arial, sans-serif;
-            opacity: 0.5;
-            margin-left: 0.5em;
-        }
 
         .ev-ctx {
-            flex: 0 0 16em;
-            text-align: right;
+            flex: 0 0 20rem;
             font-family: Arial, sans-serif;
-            font-size: 0.9rem;
-            opacity: 0.7;
+            font-size: 1rem;
+            opacity: 0.75;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -148,6 +146,16 @@
             text-transform: uppercase;
             color: #80e890;
         }
+        .team-pill {
+            display: inline-block;
+            padding: 0.1em 0.5em;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 3px;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.55);
+        }
         .away-pill {
             display: inline-block;
             padding: 0.1em 0.5em;
@@ -158,6 +166,15 @@
             letter-spacing: 0.08em;
             text-transform: uppercase;
             color: #e89060;
+        }
+
+        .more-row {
+            font-family: Arial, sans-serif;
+            font-size: 0.9rem;
+            opacity: 0.4;
+            font-style: italic;
+            justify-content: center;
+            border-bottom: none;
         }
 
         .footer {
@@ -180,10 +197,9 @@
 
         <div class="header">
             <div class="title">Schedule · {{ slide.title }}</div>
-            <div class="subtitle">Upcoming fixtures &amp; training</div>
         </div>
 
-        {% if not events %}
+        {% if not slide._events %}
         <div class="no-events">No upcoming events</div>
         {% else %}
 
@@ -191,28 +207,23 @@
             <div class="ch-date">Date</div>
             <div class="ch-time">Time</div>
             <div class="ch-type">Type</div>
-            <div class="ch-title">Event</div>
-            <div class="ch-ctx">{% if slide.mode == 'location' %}Teams{% else %}Venue{% endif %}</div>
+            <div class="ch-ctx">{% if slide._mode == 'location' %}Teams{% else %}Venue{% endif %}</div>
+            <div class="ch-desc">Description</div>
         </div>
 
         <div class="events">
-        {% set ns = namespace(prev_date='') %}
-        {% for e in events %}
-        <div class="event-row">
+        {% set ns = namespace(prev_date='', prev_week='') %}
+        {% for e in slide._events %}
+        <div class="event-row{% if ns.prev_week and e.week != ns.prev_week %} week-break{% endif %}">
             <div class="ev-date{% if e.date == ns.prev_date %} ev-date-hidden{% endif %}">{{ e.date_display }}</div>
             <div class="ev-time">{{ e.time or '—' }}</div>
             <div class="ev-type">
                 <span class="badge badge-{{ e.type }}">{{ e.type }}</span>
             </div>
-            <div class="ev-title">
-                {{ e.title }}
-                {% if e.type == 'match' and e.competition %}
-                <span class="ev-competition">{{ e.competition }}</span>
-                {% endif %}
-            </div>
             {% set ns.prev_date = e.date %}
+            {% set ns.prev_week = e.week %}
             <div class="ev-ctx">
-                {% if slide.mode == 'location' %}
+                {% if slide._mode == 'location' %}
                     {{ e.team_names | join(', ') }}
                 {% elif e.type == 'match' %}
                     {% if e.is_home %}<span class="home-pill">Home</span>
@@ -222,8 +233,14 @@
                     {{ e.location }}
                 {% endif %}
             </div>
+            <div class="ev-desc">{% if slide._multi_team and e.team_names %}<span class="team-pill">{{ e.team_names | join(', ') }}</span>&nbsp;{% endif %}{{ e.title }}</div>
         </div>
         {% endfor %}
+        {% if slide._more_count %}
+        <div class="event-row more-row">
+            <span>… and more to follow …</span>
+        </div>
+        {% endif %}
         </div>
 
         {% endif %}

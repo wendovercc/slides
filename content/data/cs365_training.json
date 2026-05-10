@@ -1,5 +1,5 @@
 {
-  "fetched_at": "2026-05-10T14:21:38.676890+00:00",
+  "fetched_at": "2026-05-10T16:05:53.371984+00:00",
   "sessions": [
     {
       "title": "Under 10's training",
@@ -84,6 +84,37 @@
       "location_id": "the-witchell"
     },
     {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 14 May 2026",
+      "location": "The Witchell",
+      "session_id": "37FDD86079927B32",
+      "date": "2026-05-14",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 11s Outdoor training",
+      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
+      "date_str": "Friday, 15 May 2026",
+      "location": "Witchell Ground, Wendover",
+      "session_id": "B9DBAF462EEF5B0B",
+      "date": "2026-05-15",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u11-invincibles",
+        "u11-incredibles"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
       "title": "Under 10's training",
       "teams_raw": "U10 Thunder, U10 Lightning, U10",
       "date_str": "Friday, 15 May 2026",
@@ -125,21 +156,6 @@
       "location_id": "little-missenden"
     },
     {
-      "title": "Under 11s Outdoor training",
-      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
-      "date_str": "Friday, 15 May 2026",
-      "location": "Witchell Ground, Wendover",
-      "session_id": "B9DBAF462EEF5B0B",
-      "date": "2026-05-15",
-      "time_start": "18:00",
-      "time_end": "19:30",
-      "team_ids": [
-        "u11-invincibles",
-        "u11-incredibles"
-      ],
-      "location_id": "the-witchell"
-    },
-    {
       "title": "U14 Training",
       "teams_raw": "U14 Hurricanes, U14 squad",
       "date_str": "Saturday, 16 May 2026",
@@ -163,6 +179,37 @@
       "time_start": "10:30",
       "time_end": "12:00",
       "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 21 May 2026",
+      "location": "The Witchell",
+      "session_id": "7F2F1BA8131D2E80",
+      "date": "2026-05-21",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Under 11s Outdoor training",
+      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
+      "date_str": "Friday, 22 May 2026",
+      "location": "Witchell Ground, Wendover",
+      "session_id": "5C2E521F768ABF44",
+      "date": "2026-05-22",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "team_ids": [
+        "u11-invincibles",
+        "u11-incredibles"
+      ],
       "location_id": "the-witchell"
     },
     {
@@ -207,21 +254,6 @@
       "location_id": "little-missenden"
     },
     {
-      "title": "Under 11s Outdoor training",
-      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
-      "date_str": "Friday, 22 May 2026",
-      "location": "Witchell Ground, Wendover",
-      "session_id": "5C2E521F768ABF44",
-      "date": "2026-05-22",
-      "time_start": "18:00",
-      "time_end": "19:30",
-      "team_ids": [
-        "u11-invincibles",
-        "u11-incredibles"
-      ],
-      "location_id": "the-witchell"
-    },
-    {
       "title": "U14 Training",
       "teams_raw": "U14 Hurricanes, U14 squad",
       "date_str": "Saturday, 23 May 2026",
@@ -245,6 +277,22 @@
       "time_start": "10:30",
       "time_end": "12:00",
       "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 28 May 2026",
+      "location": "The Witchell",
+      "session_id": "72043211A2F27F8F",
+      "date": "2026-05-28",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
       "location_id": "the-witchell"
     },
     {
@@ -303,6 +351,22 @@
       "location_id": "the-witchell"
     },
     {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 04 June 2026",
+      "location": "The Witchell",
+      "session_id": "DED8F0F0FF97EFFA",
+      "date": "2026-06-04",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
       "title": "Under 10's training",
       "teams_raw": "U10 Thunder, U10 Lightning, U10",
       "date_str": "Friday, 05 June 2026",
@@ -355,6 +419,22 @@
       "time_start": "10:30",
       "time_end": "12:00",
       "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 11 June 2026",
+      "location": "The Witchell",
+      "session_id": "F2976C2CC39821BA",
+      "date": "2026-06-11",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
       "location_id": "the-witchell"
     },
     {
@@ -413,6 +493,22 @@
       "location_id": "the-witchell"
     },
     {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 18 June 2026",
+      "location": "The Witchell",
+      "session_id": "330E4D0154418364",
+      "date": "2026-06-18",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
       "title": "Under 10's training",
       "teams_raw": "U10 Thunder, U10 Lightning, U10",
       "date_str": "Friday, 19 June 2026",
@@ -454,6 +550,22 @@
       "location_id": "the-witchell"
     },
     {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 25 June 2026",
+      "location": "The Witchell",
+      "session_id": "FBADD91148C69145",
+      "date": "2026-06-25",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
+      "location_id": "the-witchell"
+    },
+    {
       "title": "Under 10's training",
       "teams_raw": "U10 Thunder, U10 Lightning, U10",
       "date_str": "Friday, 26 June 2026",
@@ -492,6 +604,22 @@
       "time_start": "10:30",
       "time_end": "12:00",
       "team_ids": [],
+      "location_id": "the-witchell"
+    },
+    {
+      "title": "Senior Nets",
+      "teams_raw": "1st XI, 2nd XI, Friendly XI",
+      "date_str": "Thursday, 02 July 2026",
+      "location": "The Witchell",
+      "session_id": "E1DD6482DF1EB27D",
+      "date": "2026-07-02",
+      "time_start": "17:30",
+      "time_end": "19:30",
+      "team_ids": [
+        "1st-xi",
+        "2nd-xi",
+        "friendly-xi"
+      ],
       "location_id": "the-witchell"
     },
     {

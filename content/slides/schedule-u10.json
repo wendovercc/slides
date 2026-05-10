@@ -1,0 +1,5 @@
+{
+  "template": "schedule",
+  "title": "U10",
+  "teams": ["u10-lightning", "u10-thunder"]
+}

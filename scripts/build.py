@@ -292,6 +292,138 @@ def fmt_match_date(date_str):
         return date_str
 
 
+def build_schedule(slide, teams_by_id, training_sessions, all_fixtures, location_lookup, location_names):
+    today_iso = date.today().isoformat()
+
+    def fmt_date(iso_date):
+        try:
+            d = datetime.strptime(iso_date, "%Y-%m-%d")
+            return d.strftime(f"%a {d.day} %b")
+        except (ValueError, TypeError):
+            return iso_date or ""
+
+    def week_key(iso_date):
+        if not iso_date:
+            return ""
+        try:
+            d = datetime.strptime(iso_date, "%Y-%m-%d").date()
+            cal = d.isocalendar()
+            return f"{cal[0]}-W{cal[1]:02d}"
+        except (ValueError, TypeError):
+            return ""
+
+    def match_iso_date(match_date_str):
+        try:
+            return datetime.strptime(match_date_str, "%d/%m/%Y").date().isoformat()
+        except (ValueError, TypeError):
+            return None
+
+    def make_match_event(match, team_id):
+        iso_date = match_iso_date(match.get("match_date", ""))
+        is_home = match.get("is_home", True)
+        club = match.get("opposition_club_name", "")
+        team_desig = match.get("opposition_team_name", "")
+        opp_display = club or team_desig
+        ground = match.get("ground_name") or ""
+        loc_id = location_lookup.get(ground.lower())
+        team = teams_by_id.get(team_id, {})
+        return {
+            "date": iso_date,
+            "date_display": fmt_date(iso_date),
+            "week": week_key(iso_date),
+            "time": match.get("match_time") or None,
+            "type": "match",
+            "title": f"vs {opp_display}",
+            "team_ids": [team_id],
+            "team_names": [team.get("name", team_id)],
+            "location": location_names.get(loc_id, ground),
+            "location_id": loc_id,
+            "is_home": is_home,
+            "competition": match.get("competition_name", ""),
+        }
+
+    def make_training_event(session):
+        loc_id = session.get("location_id")
+        return {
+            "date": session.get("date"),
+            "date_display": fmt_date(session.get("date")),
+            "week": week_key(session.get("date")),
+            "time": session.get("time_start"),
+            "type": "training",
+            "title": session.get("title", "Training"),
+            "team_ids": session.get("team_ids", []),
+            "team_names": [
+                teams_by_id[tid]["name"] for tid in session.get("team_ids", [])
+                if tid in teams_by_id
+            ],
+            "location": location_names.get(loc_id, session.get("location", "")),
+            "location_id": loc_id,
+            "is_home": None,
+            "competition": "",
+        }
+
+    def build_events(raw, limit=12, max_rows=15):
+        future = [e for e in raw if e.get("date") and e["date"] >= today_iso]
+        future.sort(key=lambda e: (e["date"], e.get("time") or ""))
+        shown = future[:limit]
+        if shown and len(future) > limit:
+            last_date = shown[-1]["date"]
+            for e in future[limit:max_rows]:
+                if e["date"] == last_date:
+                    shown.append(e)
+                else:
+                    break
+        return shown, max(0, len(future) - len(shown))
+
+    teams_raw = slide.get("teams") or slide.get("team")
+    if isinstance(teams_raw, str):
+        team_ids_list = [teams_raw]
+    elif isinstance(teams_raw, list):
+        team_ids_list = teams_raw
+    else:
+        team_ids_list = []
+    loc_id = slide.get("location")
+
+    slide["_multi_team"] = len(team_ids_list) > 1
+
+    if team_ids_list:
+        slide["_mode"] = "team"
+        raw = []
+        seen_sessions = set()
+        for s in training_sessions:
+            if any(tid in s.get("team_ids", []) for tid in team_ids_list):
+                sid = s.get("session_id")
+                if sid in seen_sessions:
+                    continue
+                seen_sessions.add(sid)
+                raw.append(make_training_event(s))
+        for team_id in team_ids_list:
+            for m in all_fixtures.get(team_id, []):
+                raw.append(make_match_event(m, team_id))
+    elif loc_id:
+        slide["_mode"] = "location"
+        slide["_multi_team"] = False
+        raw = []
+        for s in training_sessions:
+            if s.get("location_id") == loc_id:
+                raw.append(make_training_event(s))
+        for tid, matches in all_fixtures.items():
+            for m in matches:
+                if not m.get("is_home"):
+                    continue
+                if location_lookup.get((m.get("ground_name") or "").lower()) != loc_id:
+                    continue
+                raw.append(make_match_event(m, tid))
+    else:
+        slide["_mode"] = "team"
+        slide["_multi_team"] = False
+        raw = []
+
+    events, more_count = build_events(raw)
+    slide["_events"] = events
+    slide["_more_count"] = more_count
+
+
 def build_next_match(slide, teams_by_id, fixtures_data, stats_data):
     team_id = slide.get("team")
     fixture = (fixtures_data or {}).get("fixtures", {}).get(team_id)
@@ -418,6 +550,24 @@ def build_slides(env):
             _fixtures_cache["data"] = json.loads(path.read_text()) if path.exists() else None
         return _fixtures_cache["data"]
 
+    _schedule_cache = {}
+
+    def load_schedule_data():
+        if "data" not in _schedule_cache:
+            locs_path = CONTENT / "locations.json"
+            locs = json.loads(locs_path.read_text())["locations"] if locs_path.exists() else []
+            loc_names = {loc["id"]: loc["name"] for loc in locs}
+            loc_lookup = {}
+            for loc in locs:
+                for alias in loc["aliases"]:
+                    loc_lookup[alias.lower()] = loc["id"]
+            training_path = CONTENT / "data" / "cs365_training.json"
+            training = json.loads(training_path.read_text())["sessions"] if training_path.exists() else []
+            fixtures_data = load_fixtures()
+            all_fixtures = (fixtures_data or {}).get("all_fixtures", {})
+            _schedule_cache["data"] = (training, all_fixtures, loc_lookup, loc_names)
+        return _schedule_cache["data"]
+
     for slide_path in sorted((CONTENT / "slides").glob("*.json")):
         slide = json.loads(slide_path.read_text())
         slug = slide_path.stem
@@ -445,6 +595,10 @@ def build_slides(env):
 
         if slide.get("template") == "next-match":
             build_next_match(slide, teams_by_id, load_fixtures(), load_stats("this_season"))
+
+        if slide.get("template") == "schedule":
+            training, all_fixtures, loc_lookup, loc_names = load_schedule_data()
+            build_schedule(slide, teams_by_id, training, all_fixtures, loc_lookup, loc_names)
 
         if slide.get("template") in LEADERBOARD_TEMPLATES:
             if slide.get("competition") == "league" and slide.get("team"):
@@ -483,131 +637,6 @@ def build_slides(env):
         print(f"  slide/{slug}")
 
 
-def build_schedule_slides(env):
-    teams_by_id = load_teams()
-
-    locations_path = CONTENT / "locations.json"
-    locations = json.loads(locations_path.read_text())["locations"] if locations_path.exists() else []
-    location_names = {loc["id"]: loc["name"] for loc in locations}
-    location_lookup = {}
-    for loc in locations:
-        for alias in loc["aliases"]:
-            location_lookup[alias.lower()] = loc["id"]
-    screen_locations = [loc for loc in locations if loc.get("screen")]
-
-    training_path = CONTENT / "data" / "cs365_training.json"
-    training_sessions = json.loads(training_path.read_text())["sessions"] if training_path.exists() else []
-
-    fixtures_path = CONTENT / "data" / "fixtures.json"
-    all_fixtures = {}
-    if fixtures_path.exists():
-        all_fixtures = json.loads(fixtures_path.read_text()).get("all_fixtures", {})
-
-    today_iso = date.today().isoformat()
-
-    def fmt_date(iso_date):
-        try:
-            d = datetime.strptime(iso_date, "%Y-%m-%d")
-            return d.strftime(f"%a {d.day} %b")
-        except (ValueError, TypeError):
-            return iso_date or ""
-
-    def match_iso_date(match_date_str):
-        try:
-            return datetime.strptime(match_date_str, "%d/%m/%Y").date().isoformat()
-        except (ValueError, TypeError):
-            return None
-
-    def make_match_event(match, team_id):
-        iso_date = match_iso_date(match.get("match_date", ""))
-        is_home = match.get("is_home", True)
-        club = match.get("opposition_club_name", "")
-        team_desig = match.get("opposition_team_name", "")
-        # Strip our own club name if it leaked through
-        opp_display = club or team_desig
-        title = f"vs {opp_display}" if is_home else f"@ {opp_display}"
-        ground = match.get("ground_name") or ""
-        loc_id = location_lookup.get(ground.lower())
-        team = teams_by_id.get(team_id, {})
-        return {
-            "date": iso_date,
-            "date_display": fmt_date(iso_date),
-            "time": match.get("match_time") or None,
-            "type": "match",
-            "title": title,
-            "team_ids": [team_id],
-            "team_names": [team.get("name", team_id)],
-            "location": location_names.get(loc_id, ground),
-            "location_id": loc_id,
-            "is_home": is_home,
-            "competition": match.get("competition_name", ""),
-        }
-
-    def make_training_event(session):
-        loc_id = session.get("location_id")
-        return {
-            "date": session.get("date"),
-            "date_display": fmt_date(session.get("date")),
-            "time": session.get("time_start"),
-            "type": "training",
-            "title": session.get("title", "Training"),
-            "team_ids": session.get("team_ids", []),
-            "team_names": [
-                teams_by_id[tid]["name"] for tid in session.get("team_ids", [])
-                if tid in teams_by_id
-            ],
-            "location": location_names.get(loc_id, session.get("location", "")),
-            "location_id": loc_id,
-            "is_home": None,
-            "competition": "",
-        }
-
-    def build_events(raw, limit=10):
-        future = [e for e in raw if e.get("date") and e["date"] >= today_iso]
-        future.sort(key=lambda e: (e["date"], e.get("time") or ""))
-        return future[:limit]
-
-    template = env.get_template("slides/schedule.html")
-
-    # One slide per team
-    for team in teams_by_id.values():
-        tid = team["id"]
-        raw = []
-        for s in training_sessions:
-            if tid in s.get("team_ids", []):
-                raw.append(make_training_event(s))
-        for m in all_fixtures.get(tid, []):
-            raw.append(make_match_event(m, tid))
-        events = build_events(raw)
-        slug = f"schedule-{tid}"
-        html = template.render(slide={"title": team["name"], "mode": "team"}, events=events)
-        out_dir = SITE / "slide" / slug
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "index.html").write_text(html)
-        print(f"  slide/{slug}")
-
-    # One slide per screen location
-    for loc in screen_locations:
-        loc_id = loc["id"]
-        raw = []
-        for s in training_sessions:
-            if s.get("location_id") == loc_id:
-                raw.append(make_training_event(s))
-        for tid, matches in all_fixtures.items():
-            for m in matches:
-                if not m.get("is_home"):
-                    continue
-                if location_lookup.get((m.get("ground_name") or "").lower()) != loc_id:
-                    continue
-                raw.append(make_match_event(m, tid))
-        events = build_events(raw)
-        slug = f"schedule-{loc_id}"
-        html = template.render(slide={"title": loc["name"], "mode": "location"}, events=events)
-        out_dir = SITE / "slide" / slug
-        out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "index.html").write_text(html)
-        print(f"  slide/{slug}")
-
 
 def build_slideshows(env):
     for show_path in sorted((CONTENT / "slideshows").glob("*.json")):
@@ -634,9 +663,6 @@ if __name__ == "__main__":
 
     print("Building slides...")
     build_slides(env)
-
-    print("Building schedule slides...")
-    build_schedule_slides(env)
 
     print("Building slideshows...")
     build_slideshows(env)
