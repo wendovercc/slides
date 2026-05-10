@@ -51,7 +51,7 @@ def overs_to_balls(overs_str):
 
 
 def is_not_out(how_out):
-    s = how_out.strip().lower()
+    s = (how_out or "").strip().lower()
     return s == "not out" or s.startswith("retired")
 
 
@@ -196,7 +196,7 @@ def process_match(detail, our_teams_by_pc_id, players, competitions):
         if our_batting:
             for bat in innings.get("bat", []):
                 how_out = bat.get("how_out", "")
-                if how_out.strip().lower() == "dnb":
+                if (how_out or "").strip().lower() == "dnb":
                     continue
                 player_id = str(bat.get("batsman_id", ""))
                 if not player_id or player_id == "0":
