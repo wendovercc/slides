@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-10T07:27:19.302515+00:00",
+  "generated_at": "2026-05-10T07:58:02.056571+00:00",
   "season": 2026,
   "competitions": {
     "136958": "U15 Central",
@@ -5894,36 +5894,37 @@
       "id": "5371777",
       "name": "Kaynu Samaradiwakara",
       "teams": [
-        "u15-hurricanes"
+        "u15-hurricanes",
+        "2nd-xi"
       ],
       "stats": {
         "all": {
-          "matches": 1,
+          "matches": 2,
           "batting": {
-            "innings": 1,
+            "innings": 2,
             "not_outs": 0,
-            "runs": 15,
-            "balls": 18,
-            "high_score": 15,
+            "runs": 37,
+            "balls": 56,
+            "high_score": 22,
             "high_score_not_out": false,
-            "fours": 3,
+            "fours": 6,
             "sixes": 0,
             "fifties": 0,
             "hundreds": 0,
-            "average": 15.0,
-            "strike_rate": 83.33
+            "average": 18.5,
+            "strike_rate": 66.07
           },
           "bowling": {
-            "balls": 12,
+            "balls": 54,
             "maidens": 0,
-            "runs": 23,
+            "runs": 59,
             "wickets": 1,
             "best": {
               "wickets": 1,
               "runs": 23
             },
-            "average": 23.0,
-            "economy": 11.5
+            "average": 59.0,
+            "economy": 6.56
           }
         },
         "by_team": {
@@ -5988,6 +5989,68 @@
                 }
               }
             }
+          },
+          "2nd-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 0,
+                "runs": 22,
+                "balls": 38,
+                "high_score": 22,
+                "high_score_not_out": false,
+                "fours": 3,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": 22.0,
+                "strike_rate": 57.89
+              },
+              "bowling": {
+                "balls": 42,
+                "maidens": 0,
+                "runs": 36,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 36
+                },
+                "average": null,
+                "economy": 5.14
+              }
+            },
+            "by_competition": {
+              "135870": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 0,
+                  "runs": 22,
+                  "balls": 38,
+                  "high_score": 22,
+                  "high_score_not_out": false,
+                  "fours": 3,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": 22.0,
+                  "strike_rate": 57.89
+                },
+                "bowling": {
+                  "balls": 42,
+                  "maidens": 0,
+                  "runs": 36,
+                  "wickets": 0,
+                  "best": {
+                    "wickets": 0,
+                    "runs": 36
+                  },
+                  "average": null,
+                  "economy": 5.14
+                }
+              }
+            }
           }
         }
       }
@@ -5997,36 +6060,37 @@
       "name": "Surya Inuguru",
       "teams": [
         "u15-hurricanes",
-        "u15-spitfires"
+        "u15-spitfires",
+        "2nd-xi"
       ],
       "stats": {
         "all": {
-          "matches": 2,
+          "matches": 3,
           "batting": {
-            "innings": 2,
-            "not_outs": 0,
-            "runs": 45,
-            "balls": 38,
+            "innings": 3,
+            "not_outs": 1,
+            "runs": 52,
+            "balls": 42,
             "high_score": 30,
             "high_score_not_out": false,
-            "fours": 3,
+            "fours": 4,
             "sixes": 2,
             "fifties": 0,
             "hundreds": 0,
-            "average": 22.5,
-            "strike_rate": 118.42
+            "average": 26.0,
+            "strike_rate": 123.81
           },
           "bowling": {
-            "balls": 18,
+            "balls": 30,
             "maidens": 0,
-            "runs": 24,
+            "runs": 33,
             "wickets": 1,
             "best": {
               "wickets": 1,
               "runs": 15
             },
-            "average": 24.0,
-            "economy": 8.0
+            "average": 33.0,
+            "economy": 6.6
           }
         },
         "by_team": {
@@ -6150,6 +6214,68 @@
                   },
                   "average": 15.0,
                   "economy": 7.5
+                }
+              }
+            }
+          },
+          "2nd-xi": {
+            "all": {
+              "matches": 1,
+              "batting": {
+                "innings": 1,
+                "not_outs": 1,
+                "runs": 7,
+                "balls": 4,
+                "high_score": 7,
+                "high_score_not_out": true,
+                "fours": 1,
+                "sixes": 0,
+                "fifties": 0,
+                "hundreds": 0,
+                "average": null,
+                "strike_rate": 175.0
+              },
+              "bowling": {
+                "balls": 12,
+                "maidens": 0,
+                "runs": 9,
+                "wickets": 0,
+                "best": {
+                  "wickets": 0,
+                  "runs": 9
+                },
+                "average": null,
+                "economy": 4.5
+              }
+            },
+            "by_competition": {
+              "135870": {
+                "matches": 1,
+                "batting": {
+                  "innings": 1,
+                  "not_outs": 1,
+                  "runs": 7,
+                  "balls": 4,
+                  "high_score": 7,
+                  "high_score_not_out": true,
+                  "fours": 1,
+                  "sixes": 0,
+                  "fifties": 0,
+                  "hundreds": 0,
+                  "average": null,
+                  "strike_rate": 175.0
+                },
+                "bowling": {
+                  "balls": 12,
+                  "maidens": 0,
+                  "runs": 9,
+                  "wickets": 0,
+                  "best": {
+                    "wickets": 0,
+                    "runs": 9
+                  },
+                  "average": null,
+                  "economy": 4.5
                 }
               }
             }
@@ -10909,5 +11035,44 @@
         }
       }
     }
+  },
+  "form": {
+    "friendly-xi": [
+      "W",
+      "W"
+    ],
+    "u15-spitfires": [
+      "W",
+      "W"
+    ],
+    "u13-hurricanes": [
+      "W",
+      "W"
+    ],
+    "1st-xi": [
+      "A",
+      "W"
+    ],
+    "girls-u13": [
+      "W"
+    ],
+    "u15-hurricanes": [
+      "L"
+    ],
+    "u14-hurricanes": [
+      "W"
+    ],
+    "u12-hurricanes": [
+      "W"
+    ],
+    "u9": [
+      "C"
+    ],
+    "u10-thunder": [
+      "L"
+    ],
+    "2nd-xi": [
+      "W"
+    ]
   }
 }

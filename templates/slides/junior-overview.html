@@ -64,6 +64,23 @@
         .col-team { text-align: left; }
         .col-pos  { width: 5rem;  text-align: center; }
         .col-stat { width: 3.5rem; text-align: center; }
+        .col-form { width: 9rem; text-align: left; white-space: nowrap; }
+        .badge {
+            display: inline-block;
+            width: 1.5rem; height: 1.5rem; line-height: 1.5rem;
+            text-align: center;
+            border-radius: 3px;
+            font-size: 0.95rem;
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+            margin-right: 2px;
+        }
+        .badge-W { background: #2d7a2d; color: #fff; }
+        .badge-L { background: #8b1a1a; color: #fff; }
+        .badge-C { background: #555;    color: #ccc; }
+        .badge-A { background: #7a5c00; color: #ffe; }
+        .badge-D { background: #444;    color: #ccc; }
+        .badge-T { background: #1a5c7a; color: #fff; }
         .footer {
             position: absolute;
             bottom: 0; left: 0; right: 0;
@@ -93,18 +110,20 @@
                         <th class="col-stat">L</th>
                         <th class="col-stat">C</th>
                         <th class="col-stat">A</th>
+                        <th class="col-form">Form</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in slide._rows %}
                     <tr{% if row.is_top %} class="top"{% endif %}>
                         <td class="col-team">{{ row.name }}</td>
-                        <td class="col-pos">{{ row.position }}/{{ row.total }}</td>
+                        <td class="col-pos">{% if row.played != "0" %}{{ row.position }}/{{ row.total }}{% endif %}</td>
                         <td class="col-stat">{{ row.played }}</td>
                         <td class="col-stat">{{ row.won }}</td>
                         <td class="col-stat">{{ row.lost }}</td>
                         <td class="col-stat">{{ row.cancelled }}</td>
                         <td class="col-stat">{{ row.abandoned }}</td>
+                        <td class="col-form">{% for r in row.form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

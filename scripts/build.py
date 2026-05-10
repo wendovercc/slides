@@ -245,7 +245,8 @@ def _junior_sort_key(team):
     return (age, is_girls, team["id"])
 
 
-def build_junior_overview(slide, teams_by_id):
+def build_junior_overview(slide, teams_by_id, stats_data):
+    form = stats_data.get("form", {}) if stats_data else {}
     junior_teams = sorted(
         [t for t in teams_by_id.values() if "game_type" in t and "play_cricket_league_id" in t],
         key=_junior_sort_key,
@@ -272,6 +273,7 @@ def build_junior_overview(slide, teams_by_id):
             "cancelled": team_row.get("column_5", "0"),
             "abandoned": team_row.get("column_6", "0"),
             "is_top": position == 1,
+            "form": form.get(team["id"], []),
         })
     slide["_rows"] = rows
 
@@ -312,7 +314,7 @@ def build_slides(env):
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
 
         if slide.get("template") == "junior-overview":
-            build_junior_overview(slide, teams_by_id)
+            build_junior_overview(slide, teams_by_id, load_stats("this_season"))
 
         if slide.get("template") in LEADERBOARD_TEMPLATES:
             if slide.get("competition") == "league" and slide.get("team"):

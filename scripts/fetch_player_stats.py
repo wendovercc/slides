@@ -161,7 +161,24 @@ def ensure_competition_stats(team_stats, competition_id):
     return team_stats["by_competition"][competition_id]
 
 
-def process_match(detail, our_teams_by_pc_id, players, competitions):
+def determine_result(detail, our_pc_team_id):
+    """Return the match result from our team's perspective: W/L/D/T/A/C or None."""
+    result = (detail.get("result") or "").strip().upper()
+    if result in ("A", "C", "D", "T", "NR"):
+        return result
+    if result == "W":
+        home_team_id = str(detail.get("home_team_id", ""))
+        our_name = (
+            detail.get("home_team_name", "")
+            if our_pc_team_id == home_team_id
+            else detail.get("away_team_name", "")
+        )
+        result_desc = detail.get("result_description", "")
+        return "W" if (our_name and our_name in result_desc) else "L"
+    return None
+
+
+def process_match(detail, our_teams_by_pc_id, players, competitions, form, match_date_str=""):
     competition_id = str(detail.get("competition_id", ""))
     competition_name = detail.get("competition_name", "")
     if competition_id and competition_name:
@@ -178,6 +195,10 @@ def process_match(detail, our_teams_by_pc_id, players, competitions):
     else:
         return
     our_team_id = our_teams_by_pc_id[our_pc_team_id]
+
+    result_char = determine_result(detail, our_pc_team_id)
+    if result_char and match_date_str:
+        form.setdefault(our_team_id, []).append((match_date_str, result_char))
 
     innings_list = detail.get("innings", [])
     if not innings_list:
@@ -283,24 +304,35 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
 
     players = {}
     competitions = {}
+    form = {}
 
-    for match in our_matches:
+    our_matches_sorted = sorted(our_matches, key=lambda m: match_date(m) or date.min)
+
+    for match in our_matches_sorted:
         match_id = match["id"]
+        match_date_str = match.get("match_date", "")
         try:
             result = api_get("match_detail.json", api_token, match_id=match_id)
             details = result.get("match_details", [])
             if details:
-                process_match(details[0], our_teams_by_pc_id, players, competitions)
+                process_match(details[0], our_teams_by_pc_id, players, competitions, form, match_date_str)
         except Exception as e:
             print(f"    WARNING: failed to process match {match_id}: {e}", file=sys.stderr)
 
     compute_all_derived(players)
+
+    # Sort by date (already sorted) and keep only the result characters, last 5
+    form_trimmed = {
+        team_id: [r for _, r in sorted(entries, key=lambda x: x[0])][-5:]
+        for team_id, entries in form.items()
+    }
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "season": season_year,
         "competitions": competitions,
         "players": players,
+        "form": form_trimmed,
     }
 
 
