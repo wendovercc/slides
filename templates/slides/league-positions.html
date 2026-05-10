@@ -57,6 +57,7 @@
             font-size: 1.3rem;
         }
         .col-team      { text-align: left; }
+        .league-name   { opacity: 0.6; font-size: 1.1rem; }
         .col-stat      { width: 3.5rem; text-align: center; }
         .col-winpct    { width: 4.5rem; text-align: right; }
         .col-form      { width: 9rem; text-align: left; white-space: nowrap; }
@@ -145,7 +146,7 @@
                     {% set won    = row.won    | int %}
                     {% set lost   = row.lost   | int %}
                     <tr>
-                        <td class="col-team">{{ row.name }}</td>
+                        <td class="col-team">{{ row.name }}{% if row.league_name %}<span class="league-name"> · {{ row.league_name }}</span>{% endif %}</td>
                         <td class="col-stat">{{ row.won }}</td>
                         <td class="col-stat">{{ row.lost }}</td>
                         <td class="col-stat">{{ row.cancelled }}</td>

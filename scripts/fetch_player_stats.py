@@ -198,7 +198,7 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
 
     result_char = determine_result(detail, our_pc_team_id)
     if result_char and match_date_str:
-        form.setdefault(our_team_id, []).append((match_date_str, result_char))
+        form.setdefault(our_team_id, []).append((match_date_str, result_char, competition_id))
 
     innings_list = detail.get("innings", [])
     if not innings_list:
@@ -321,11 +321,20 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
 
     compute_all_derived(players)
 
-    # Sort by date (already sorted) and keep only the result characters, last 5
-    form_trimmed = {
-        team_id: [r for _, r in sorted(entries, key=lambda x: x[0])][-5:]
-        for team_id, entries in form.items()
-    }
+    # Build per-competition and all-match form, sorted by date, last 5 results each
+    form_trimmed = {}
+    for team_id, entries in form.items():
+        sorted_entries = sorted(entries, key=lambda x: x[0])
+        by_comp = {}
+        for _, result_char, comp_id in sorted_entries:
+            if comp_id:
+                by_comp.setdefault(comp_id, []).append(result_char)
+        for comp_id in by_comp:
+            by_comp[comp_id] = by_comp[comp_id][-5:]
+        form_trimmed[team_id] = {
+            "all": [r for _, r, _ in sorted_entries][-5:],
+            **by_comp,
+        }
 
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
