@@ -48,7 +48,55 @@ def fmt_best(bowling):
     return f"{bowling['best']['wickets']}-{bowling['best']['runs']}"
 
 
+def merge_blocks(blocks):
+    """Merge a list of stats blocks into one, recalculating derived stats."""
+    result = {
+        "matches": 0,
+        "batting": {
+            "innings": 0, "not_outs": 0, "runs": 0, "balls": 0,
+            "high_score": None, "high_score_not_out": None,
+            "fours": 0, "sixes": 0, "fifties": 0, "hundreds": 0,
+        },
+        "bowling": {"balls": 0, "maidens": 0, "runs": 0, "wickets": 0, "best": None},
+    }
+    for block in blocks:
+        result["matches"] += block["matches"]
+        b, rb = block["batting"], result["batting"]
+        for key in ("innings", "not_outs", "runs", "balls", "fours", "sixes", "fifties", "hundreds"):
+            rb[key] += b[key]
+        if b["high_score"] is not None:
+            if rb["high_score"] is None or b["high_score"] > rb["high_score"]:
+                rb["high_score"] = b["high_score"]
+                rb["high_score_not_out"] = b["high_score_not_out"]
+        bl, rbl = block["bowling"], result["bowling"]
+        for key in ("balls", "maidens", "runs", "wickets"):
+            rbl[key] += bl[key]
+        if bl.get("best"):
+            cur = rbl["best"]
+            new = bl["best"]
+            if cur is None or new["wickets"] > cur["wickets"] or (
+                new["wickets"] == cur["wickets"] and new["runs"] < cur["runs"]
+            ):
+                rbl["best"] = new
+    rb = result["batting"]
+    outs = rb["innings"] - rb["not_outs"]
+    rb["average"] = round(rb["runs"] / outs, 2) if outs > 0 else None
+    rb["strike_rate"] = round(rb["runs"] / rb["balls"] * 100, 2) if rb["balls"] > 0 else None
+    rbl = result["bowling"]
+    rbl["average"] = round(rbl["runs"] / rbl["wickets"], 2) if rbl["wickets"] > 0 else None
+    rbl["economy"] = round(rbl["runs"] / rbl["balls"] * 6, 2) if rbl["balls"] > 0 else None
+    return result
+
+
 def get_leaderboard_block(player, team_filter, comp_filter):
+    if isinstance(team_filter, list):
+        blocks = []
+        for tid in team_filter:
+            team_entry = player["stats"]["by_team"].get(tid, {})
+            block = team_entry.get("by_competition", {}).get(comp_filter) if comp_filter else team_entry.get("all")
+            if block and block["matches"] > 0:
+                blocks.append(block)
+        return merge_blocks(blocks) if blocks else None
     if team_filter and comp_filter:
         return (
             player["stats"]["by_team"]
@@ -62,7 +110,7 @@ def get_leaderboard_block(player, team_filter, comp_filter):
 
 
 def build_batting_leaderboard(slide, stats_data, lb_config):
-    team_filter = slide.get("team")
+    team_filter = slide.get("teams") or slide.get("team")
     comp_filter = slide.get("competition")
     rows = lb_config.get("rows", 8)
     min_innings = lb_config.get("min_innings", 2)
@@ -109,7 +157,7 @@ def build_batting_leaderboard(slide, stats_data, lb_config):
 
 
 def build_bowling_leaderboard(slide, stats_data, lb_config):
-    team_filter = slide.get("team")
+    team_filter = slide.get("teams") or slide.get("team")
     comp_filter = slide.get("competition")
     rows = lb_config.get("rows", 8)
     min_balls = lb_config.get("min_overs", 2) * 6
