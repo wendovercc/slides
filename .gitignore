@@ -167,6 +167,9 @@ venv.bak/
 # Generated output — built by GitHub Actions, not committed
 site/
 
+# Playwright debug snapshots (saved on scraper failure)
+debug/
+
 # Python virtual environment
 .venv/
 

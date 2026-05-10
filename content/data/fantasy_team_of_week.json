@@ -1,0 +1,77 @@
+{
+  "headers": [
+    "Name",
+    "Value",
+    "Week Points"
+  ],
+  "rows": [
+    [
+      "Batter",
+      "James Harrington",
+      "£7.5m",
+      "48"
+    ],
+    [
+      "Batter",
+      "Anshuman Pandit",
+      "£6m",
+      "78"
+    ],
+    [
+      "Batter",
+      "David Cleary",
+      "£5.5m",
+      "113"
+    ],
+    [
+      "Batter",
+      "Marc Weltenius",
+      "£4.5m",
+      "34"
+    ],
+    [
+      "Batter",
+      "Kush Bhargava",
+      "£4m",
+      "60"
+    ],
+    [
+      "All Rounder",
+      "Thomas Duff",
+      "£8m",
+      "71"
+    ],
+    [
+      "Keeper",
+      "Harry Godden",
+      "£5m",
+      "35"
+    ],
+    [
+      "Bowler",
+      "Jonathan Seabrook",
+      "£8m",
+      "143"
+    ],
+    [
+      "Bowler",
+      "James Roan",
+      "£5.5m",
+      "70"
+    ],
+    [
+      "Bowler",
+      "Bonnie Matthew",
+      "£4.5m",
+      "33"
+    ],
+    [
+      "Bowler",
+      "Salman Khan",
+      "£3.5m",
+      "18"
+    ]
+  ],
+  "page_title": "Welcome to the Wendover Cricket Club Fantasy League",
+  "fetched_at": "2026-05-10T06:27:28.085381+00:00"
+}

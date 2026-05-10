@@ -26,6 +26,13 @@ jobs:
 
       - run: pip install -r requirements.txt
 
+      - run: playwright install --with-deps chromium
+
+      - run: python scripts/fetch_fantasy_cricket.py
+        env:
+          FANTASY_USERNAME: ${{ secrets.FANTASY_USERNAME }}
+          FANTASY_PASSWORD: ${{ secrets.FANTASY_PASSWORD }}
+
       - run: python scripts/fetch_play_cricket.py
         env:
           PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}

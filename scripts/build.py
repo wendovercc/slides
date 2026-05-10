@@ -18,6 +18,12 @@ SITE = ROOT / "site"
 
 LEAGUE_TABLE_EXCLUDED = {"ave+", "batp", "bowlp", "offbp", "pen", "t"}
 LEADERBOARD_TEMPLATES = {"batting-leaderboard", "bowling-leaderboard"}
+FANTASY_TEMPLATES = {
+    "fantasy-team-standings": "fantasy_team_standings",
+    "fantasy-player-standings": "fantasy_player_standings",
+    "fantasy-team-of-week": "fantasy_team_of_week",
+}
+FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fetched_at": None}
 
 
 def load_config():
@@ -209,6 +215,11 @@ def build_slides(env):
         elif "data" in slide:
             data_path = ROOT / slide["data"]
             slide["_data"] = json.loads(data_path.read_text())
+
+        if slide.get("template") in FANTASY_TEMPLATES:
+            key = FANTASY_TEMPLATES[slide["template"]]
+            data_path = CONTENT / "data" / f"{key}.json"
+            slide["_data"] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
 
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
