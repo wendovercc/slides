@@ -225,6 +225,10 @@ def build_slides(env):
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
 
         if slide.get("template") in LEADERBOARD_TEMPLATES:
+            if slide.get("competition") == "league" and slide.get("team"):
+                team = teams_by_id.get(slide["team"])
+                if team and "play_cricket_league_id" in team:
+                    slide["competition"] = str(team["play_cricket_league_id"])
             stats = load_stats("this_season")
             if stats:
                 if slide["template"] == "batting-leaderboard":
