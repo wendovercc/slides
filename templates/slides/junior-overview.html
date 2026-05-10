@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ slide.title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #1a3d1a;
+            font-family: Georgia, 'Times New Roman', serif;
+            color: #ffffff;
+        }
+        .slide {
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 2.5rem 5rem 6rem;
+        }
+        .title {
+            font-size: 2.2rem;
+            font-weight: bold;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0.9;
+            margin-bottom: 1.4rem;
+            flex-shrink: 0;
+        }
+        .table-wrap {
+            flex: 1;
+            overflow: hidden;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead tr {
+            background: rgba(255,255,255,0.15);
+            border-bottom: 2px solid rgba(255,255,255,0.3);
+        }
+        th {
+            padding: 0.35rem 0.7rem;
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            font-weight: bold;
+            opacity: 0.75;
+        }
+        tbody tr {
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        tbody tr:nth-child(even) {
+            background: rgba(255,255,255,0.04);
+        }
+        tbody tr.top {
+            background: rgba(212,175,55,0.2);
+            color: #ffd966;
+            font-weight: bold;
+        }
+        td {
+            padding: 0.28rem 0.7rem;
+            font-size: 1.3rem;
+        }
+        .col-team { text-align: left; }
+        .col-pos  { width: 5rem;  text-align: center; }
+        .col-stat { width: 3.5rem; text-align: center; }
+        .footer {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.4);
+            padding: 1rem 2rem;
+        }
+        .branding {
+            text-align: center;
+            font-size: 1.3rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide">
+        <div class="title">{{ slide.title }}</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="col-team">Team</th>
+                        <th class="col-pos">Pos</th>
+                        <th class="col-stat">P</th>
+                        <th class="col-stat">W</th>
+                        <th class="col-stat">L</th>
+                        <th class="col-stat">C</th>
+                        <th class="col-stat">A</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in slide._rows %}
+                    <tr{% if row.is_top %} class="top"{% endif %}>
+                        <td class="col-team">{{ row.name }}</td>
+                        <td class="col-pos">{{ row.position }}/{{ row.total }}</td>
+                        <td class="col-stat">{{ row.played }}</td>
+                        <td class="col-stat">{{ row.won }}</td>
+                        <td class="col-stat">{{ row.lost }}</td>
+                        <td class="col-stat">{{ row.cancelled }}</td>
+                        <td class="col-stat">{{ row.abandoned }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="footer">
+        <div class="branding">Wendover Cricket Club</div>
+    </div>
+</body>
+</html>

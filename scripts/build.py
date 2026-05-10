@@ -4,6 +4,7 @@
 import base64
 import io
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -237,6 +238,44 @@ def load_teams():
     return {t["id"]: t for t in teams}
 
 
+def _junior_sort_key(team):
+    m = re.search(r"(\d+)", team["id"])
+    age = int(m.group(1)) if m else 99
+    is_girls = team["id"].startswith("girls")
+    return (age, is_girls, team["id"])
+
+
+def build_junior_overview(slide, teams_by_id):
+    junior_teams = sorted(
+        [t for t in teams_by_id.values() if "game_type" in t and "play_cricket_league_id" in t],
+        key=_junior_sort_key,
+    )
+    rows = []
+    for team in junior_teams:
+        data_path = CONTENT / "data" / f"league_table_{team['play_cricket_league_id']}.json"
+        if not data_path.exists():
+            continue
+        data = json.loads(data_path.read_text())
+        values = data.get("league_table", [{}])[0].get("values", [])
+        total = len(values)
+        team_row = next((r for r in values if str(r.get("team_id")) == str(team["play_cricket_team_id"])), None)
+        if not team_row:
+            continue
+        position = int(team_row.get("position", 0))
+        rows.append({
+            "name": team["name"],
+            "position": position,
+            "total": total,
+            "played": team_row.get("column_2", "0"),
+            "won": team_row.get("column_3", "0"),
+            "lost": team_row.get("column_4", "0"),
+            "cancelled": team_row.get("column_5", "0"),
+            "abandoned": team_row.get("column_6", "0"),
+            "is_top": position == 1,
+        })
+    slide["_rows"] = rows
+
+
 def build_slides(env):
     teams_by_id = load_teams()
     config = load_config()
@@ -271,6 +310,9 @@ def build_slides(env):
 
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
+
+        if slide.get("template") == "junior-overview":
+            build_junior_overview(slide, teams_by_id)
 
         if slide.get("template") in LEADERBOARD_TEMPLATES:
             if slide.get("competition") == "league" and slide.get("team"):
