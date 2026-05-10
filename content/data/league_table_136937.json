@@ -1,0 +1,99 @@
+{
+  "league_table": [
+    {
+      "id": 136937,
+      "name": "U13 South Division 3B",
+      "headings": {
+        "column_1": "Team",
+        "column_2": "p",
+        "column_3": "w",
+        "column_4": "l",
+        "column_5": "c",
+        "column_6": "a",
+        "column_7": "lcn",
+        "column_8": "wcn",
+        "column_9": "t",
+        "column_10": "Pen",
+        "column_11": "Pts"
+      },
+      "values": [
+        {
+          "position": "1",
+          "team_id": "313143",
+          "column_1": "Haddenham CC, Bucks - Under 13",
+          "column_2": "1",
+          "column_3": "1",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "15"
+        },
+        {
+          "position": "2",
+          "team_id": "242865",
+          "column_1": "The Lee CC - Under 13",
+          "column_2": "1",
+          "column_3": "0",
+          "column_4": "1",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "5"
+        },
+        {
+          "position": "3",
+          "team_id": "231511",
+          "column_1": "Bledlow Ridge CC - Under 13",
+          "column_2": "0",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        },
+        {
+          "position": "4",
+          "team_id": "241663",
+          "column_1": "Ley Hill CC - Under 13",
+          "column_2": "0",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        },
+        {
+          "position": "5",
+          "team_id": "327045",
+          "column_1": "Wendover CC - U13 Spitfires",
+          "column_2": "0",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        }
+      ],
+      "key": "p - Played,&nbsp;w - Won (15),&nbsp;l - Lost (0),&nbsp;c - Cancelled (0),&nbsp;a - Abandoned (7),&nbsp;lcn - Team Conceded (0),&nbsp;wcn - Opposition Conceded (15),&nbsp;t - Tied (10),&nbsp;Pen - Penalty Points,&nbsp;Pts - Points"
+    }
+  ]
+}

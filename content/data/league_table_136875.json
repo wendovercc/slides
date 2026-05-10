@@ -1,0 +1,99 @@
+{
+  "league_table": [
+    {
+      "id": 136875,
+      "name": "U9 Central WB Division 1A",
+      "headings": {
+        "column_1": "Team",
+        "column_2": "p",
+        "column_3": "w",
+        "column_4": "l",
+        "column_5": "c",
+        "column_6": "a",
+        "column_7": "lcn",
+        "column_8": "wcn",
+        "column_9": "t",
+        "column_10": "Pen",
+        "column_11": "Pts"
+      },
+      "values": [
+        {
+          "position": "1",
+          "team_id": "327075",
+          "column_1": "Great Kingshill CC - Under 9",
+          "column_2": "1",
+          "column_3": "1",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "1"
+        },
+        {
+          "position": "2",
+          "team_id": "406065",
+          "column_1": "High Wycombe CC - Under 9 Dragons",
+          "column_2": "1",
+          "column_3": "0",
+          "column_4": "1",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "1"
+        },
+        {
+          "position": "3",
+          "team_id": "300864",
+          "column_1": "Thame Town CC - Under 9",
+          "column_2": "0",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        },
+        {
+          "position": "4",
+          "team_id": "242970",
+          "column_1": "The Lee CC - Under 9",
+          "column_2": "1",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "1",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        },
+        {
+          "position": "5",
+          "team_id": "82829",
+          "column_1": "Wendover CC - Under 9",
+          "column_2": "1",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "1",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        }
+      ],
+      "key": "p - Played,&nbsp;w - Won (1),&nbsp;l - Lost (1),&nbsp;c - Cancelled (0),&nbsp;a - Abandoned (1),&nbsp;lcn - Team Conceded (0),&nbsp;wcn - Opposition Conceded (1),&nbsp;t - Tied (1),&nbsp;Pen - Penalty Points,&nbsp;Pts - Points"
+    }
+  ]
+}

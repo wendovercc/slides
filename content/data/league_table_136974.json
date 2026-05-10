@@ -1,0 +1,84 @@
+{
+  "league_table": [
+    {
+      "id": 136974,
+      "name": "Girls U13 Central",
+      "headings": {
+        "column_1": "Team",
+        "column_2": "p",
+        "column_3": "w",
+        "column_4": "l",
+        "column_5": "c",
+        "column_6": "a",
+        "column_7": "lcn",
+        "column_8": "wcn",
+        "column_9": "t",
+        "column_10": "Pen",
+        "column_11": "Pts"
+      },
+      "values": [
+        {
+          "position": "1",
+          "team_id": "302483",
+          "column_1": "Dinton CC, Bucks - Girls Under 13",
+          "column_2": "1",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "1",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "15"
+        },
+        {
+          "position": "2",
+          "team_id": "382510",
+          "column_1": "Thame Town CC - Girls Under 13",
+          "column_2": "0",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        },
+        {
+          "position": "3",
+          "team_id": "355798",
+          "column_1": "Wendover CC - Ballinger Wendover Girls U13 (HB)",
+          "column_2": "1",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "1",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        },
+        {
+          "position": "4",
+          "team_id": "406193",
+          "column_1": "Winchmore Hill CC (Penn) - Girls Under 13",
+          "column_2": "0",
+          "column_3": "0",
+          "column_4": "0",
+          "column_5": "0",
+          "column_6": "0",
+          "column_7": "0",
+          "column_8": "0",
+          "column_9": "0",
+          "column_10": "0",
+          "column_11": "0"
+        }
+      ],
+      "key": "p - Played,&nbsp;w - Won (15),&nbsp;l - Lost (0),&nbsp;c - Cancelled (0),&nbsp;a - Abandoned (7),&nbsp;lcn - Team Conceded (0),&nbsp;wcn - Opposition Conceded (15),&nbsp;t - Tied (10),&nbsp;Pen - Penalty Points,&nbsp;Pts - Points"
+    }
+  ]
+}

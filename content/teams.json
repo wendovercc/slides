@@ -18,6 +18,111 @@
       "id": "friendly-xi",
       "name": "Friendly XI",
       "play_cricket_team_id": 267849
+    },
+    {
+      "id": "u9",
+      "name": "Under 9",
+      "play_cricket_league_id": 136875,
+      "play_cricket_team_id": 82829,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u10-lightning",
+      "name": "U10 Lightning",
+      "play_cricket_league_id": 136883,
+      "play_cricket_team_id": 403812,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u10-thunder",
+      "name": "U10 Thunder",
+      "play_cricket_league_id": 136885,
+      "play_cricket_team_id": 403811,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u11-incredibles",
+      "name": "U11 Incredibles",
+      "play_cricket_league_id": 136896,
+      "play_cricket_team_id": 403810,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u11-invincibles",
+      "name": "U11 Invincibles",
+      "play_cricket_league_id": 136916,
+      "play_cricket_team_id": 403809,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u12-hurricanes",
+      "name": "Under 12 Hurricanes",
+      "play_cricket_league_id": 136925,
+      "play_cricket_team_id": 82827,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u12-spitfires",
+      "name": "Under 12 Spitfires",
+      "play_cricket_league_id": 136924,
+      "play_cricket_team_id": 378133,
+      "game_type": "pairs"
+    },
+    {
+      "id": "u13-hurricanes",
+      "name": "U13 Hurricanes",
+      "play_cricket_league_id": 136933,
+      "play_cricket_team_id": 352516,
+      "game_type": "standard"
+    },
+    {
+      "id": "u13-spitfires",
+      "name": "U13 Spitfires",
+      "play_cricket_league_id": 136937,
+      "play_cricket_team_id": 327045,
+      "game_type": "standard"
+    },
+    {
+      "id": "u14-hurricanes",
+      "name": "U14 Hurricanes",
+      "play_cricket_league_id": 136940,
+      "play_cricket_team_id": 352513,
+      "game_type": "standard"
+    },
+    {
+      "id": "u15-hurricanes",
+      "name": "Under 15 Hurricanes",
+      "play_cricket_league_id": 136959,
+      "play_cricket_team_id": 301948,
+      "game_type": "standard"
+    },
+    {
+      "id": "u15-spitfires",
+      "name": "Under 15 Spitfires",
+      "play_cricket_league_id": 136958,
+      "play_cricket_team_id": 378134,
+      "game_type": "standard"
+    },
+    {
+      "id": "u17-spitfires",
+      "name": "Under 17 Spitfires",
+      "play_cricket_league_id": 136964,
+      "play_cricket_team_id": 378135,
+      "game_type": "standard"
+    },
+    {
+      "id": "girls-u11",
+      "name": "Girls U11",
+      "play_cricket_league_id": 136968,
+      "play_cricket_team_id": 403819,
+      "game_type": "pairs"
+    },
+    {
+      "id": "girls-u13",
+      "name": "Girls U13",
+      "play_cricket_league_id": 136974,
+      "play_cricket_team_id": 355798,
+      "game_type": "standard"
     }
   ]
 }
