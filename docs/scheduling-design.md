@@ -31,7 +31,116 @@ including filtering stats slides to the relevant team/competition.
 ### Screen Identity
 
 Each screen/device bookmarks its own URL: `/screen/{location-id}/`
-e.g. `/screen/ground1/` — same pattern as current `/slideshow/pavilion-1/`
+e.g. `/screen/the-witchell/` — same pattern as current `/slideshow/pavilion-1/`
+
+---
+
+## What Has Been Built
+
+### Data pipeline (complete)
+
+`scripts/fetch_fixtures.py` → `content/data/fixtures.json`
+
+Runs in CI. For each team in `teams.json`, fetches the next upcoming match plus the
+full future schedule for the season. Output is a dict keyed by `team_id`, not an array:
+
+```json
+{
+  "generated_at": "...",
+  "season": 2026,
+  "fixtures": {
+    "1st-xi": {
+      "match_date": "10/05/2026",
+      "match_time": "13:00",
+      "ground_name": "Witchell Ground, Wendover",
+      "competition_id": "135855",
+      "competition_name": "Thames Valley Cricket League...",
+      "is_home": true,
+      "opposition_name": "...",
+      "opposition_club_name": "...",
+      "opposition_team_id": "...",
+      "opposition_site_id": "...",
+      "opposition_form": ["W", "L", "W", "W", "D"],
+      "opposition_players": { "batting": [...], "bowling": [...] }
+    }
+  },
+  "all_fixtures": {
+    "1st-xi": [
+      { "match_date": "10/05/2026", "match_time": "13:00", "ground_name": "...",
+        "competition_name": "...", "is_home": true,
+        "opposition_club_name": "...", "opposition_team_name": "..." }
+    ]
+  }
+}
+```
+
+Note: `fixtures` (next match per team, with opposition intelligence) and `all_fixtures`
+(full future schedule per team, slim records) are separate. The `match_time` field is
+present in Play Cricket data (open question resolved).
+
+`scripts/fetch_cs365_training.py` → `content/data/cs365_training.json`
+
+This replaces the original design's `content/training.json` (hardcoded recurring rules).
+Instead, actual sessions are fetched from ClubSports365 via Playwright for the next 8
+weeks. Each session record includes resolved `team_ids` and `location_id`:
+
+```json
+{
+  "fetched_at": "...",
+  "sessions": [
+    {
+      "title": "Under 11s Outdoor training",
+      "teams_raw": "U11 Invincibles, U11 Incredibles, U11 squad",
+      "date": "2026-05-08",
+      "time_start": "18:00",
+      "time_end": "19:30",
+      "location": "Witchell Ground, Wendover",
+      "session_id": "09004A60800C39F8",
+      "team_ids": ["u11-invincibles", "u11-incredibles"],
+      "location_id": "the-witchell"
+    }
+  ]
+}
+```
+
+### `content/locations.json` (built, extended beyond original design)
+
+The original design only had `id` and `name`. The actual file adds:
+- `screen: true` — flags which locations have physical displays
+- `aliases` — array of alternate spellings used by CS365 and Play Cricket, used for
+  location matching during build (case-insensitive lookup)
+
+Current screen locations: `the-witchell`, `tring-road`.
+
+### `content/teams.json` (partially updated)
+
+All teams now have `play_cricket_team_id` and `cs365_team_name` — this solved the open
+question about junior team IDs. All 18 senior and junior teams are mapped.
+
+**Still needed:** `home_location` and `section` per team entry (required by the smart player).
+
+### Schedule slides (`templates/slides/schedule.html`, built)
+
+`build.py` already generates schedule slides showing upcoming training + matches. Slides
+can be scoped by `team`, a list of `teams`, or `location`. The schedule slide for
+`schedule-the-witchell.json` (mode: location) shows all events at The Witchell —
+home matches + training sessions for all teams who use that ground.
+
+This gives a human-readable view of the location's upcoming schedule, and demonstrates
+that the data pipeline is working end-to-end.
+
+### CI / `deploy.yml` (complete)
+
+`fetch_fixtures.py` and `fetch_cs365_training.py` are both wired up. Daily cron runs
+at `0 2 * * *` (02:00 UTC). Original design proposed 06:00 BST — 02:00 UTC achieves
+the same effect.
+
+### Open questions (resolved)
+
+- **Play Cricket `match_time`**: present in the API response (may be null for some fixtures; defaults apply).
+- **Junior team Play Cricket IDs**: all 18 teams are now mapped in `teams.json`.
+- **Next-fixture slides**: built — `next-match-*.json` slides for every team.
+- **Migration path**: `/slideshow/pavilion-1/` remains live; migration to `/screen/the-witchell/` can be gradual.
 
 ---
 
@@ -40,61 +149,30 @@ e.g. `/screen/ground1/` — same pattern as current `/slideshow/pavilion-1/`
 ### Static site, no backend
 
 All scheduling logic runs **client-side in JavaScript**. The build pipeline pre-computes
-a `schedule.json` per location that the player fetches and evaluates against the current clock.
+a `schedule.json` per screen location that the player fetches and evaluates against the
+current clock.
 
-### New build steps
+### Build steps
 
 ```
-fetch_fixtures.py            → content/data/fixtures.json
-generate_screen_schedules.py → content/screens/{id}.json  (per location, gitignored)
+fetch_play_cricket.py        → content/data/league_table_*.json
+fetch_player_stats.py        → content/data/player_stats_this_season.json
+fetch_fixtures.py            → content/data/fixtures.json          ✓ done
+fetch_cs365_training.py      → content/data/cs365_training.json    ✓ done
+generate_screen_schedules.py → content/screens/{id}.json  (per screen, gitignored)
 build.py (extended)          → site/screen/{id}/index.html + schedule.json
 ```
 
-### New player template
+### Smart player template
 
-`templates/screen/player.html` — smart player that:
-1. Fetches `./schedule.json`
-2. Evaluates context from current time (events → fixtures → training → idle)
-3. Selects the matching slideshow
-4. Builds iframes, appending URL params (`?team=1st-xi&competition_id=135855`) to slides
-   that declare `context_params`
-5. Reloads on `refresh_interval_seconds` to re-evaluate context
+`templates/screen/player.html` — fetches `./schedule.json`, evaluates context from
+current time, selects slideshow, builds iframes with URL params.
 
 ---
 
-## New Config Files
+## Remaining Config Files
 
-### `content/locations.json`
-```json
-{
-  "locations": [
-    { "id": "ground1", "name": "Main Ground", "default_section": "senior" },
-    { "id": "ground2", "name": "Second Ground", "default_section": "senior" }
-  ]
-}
-```
-
-### `content/training.json`
-Recurring weekly sessions. Times are local (UK). Weekday uses ISO numbering (Mon=1, Sun=7).
-```json
-{
-  "sessions": [
-    {
-      "id": "seniors-tuesday",
-      "label": "Senior Training",
-      "location": "ground1",
-      "section": "senior",
-      "weekday": 2,
-      "start_time": "18:00",
-      "end_time": "20:30",
-      "valid_from": "2026-04-01",
-      "valid_until": "2026-09-30"
-    }
-  ]
-}
-```
-
-### `content/events.json`
+### `content/events.json` (not yet created)
 One-off special events. Each event specifies its own slideshow directly.
 ```json
 {
@@ -102,7 +180,7 @@ One-off special events. Each event specifies its own slideshow directly.
     {
       "id": "club-day-2026",
       "label": "Club Day",
-      "location": "ground1",
+      "location": "the-witchell",
       "date": "2026-07-12",
       "start_time": "11:00",
       "end_time": "20:00",
@@ -114,7 +192,7 @@ One-off special events. Each event specifies its own slideshow directly.
 }
 ```
 
-### `content/slideshow_map.json`
+### `content/slideshow_map.json` (not yet created)
 Maps `activity_type.section` to a slideshow slug (events use their own `slideshow` field instead).
 ```json
 {
@@ -133,65 +211,48 @@ Add `home_location` and `section` to each team entry:
 ```json
 {
   "id": "1st-xi",
-  "home_location": "ground1",
+  "home_location": "the-witchell",
   "section": "senior",
   "...": "...existing fields..."
 }
 ```
 
+### `content/slideshows/` — new slideshow configs needed
+Minimal set (all use existing JSON schema):
+- `default-senior.json`
+- `default-junior.json`
+- `match-day-senior.json`
+- `match-day-junior.json`
+- `training-senior.json`
+- `training-junior.json`
+
 ---
 
 ## New Scripts
 
-### `scripts/fetch_fixtures.py`
-
-Calls `matches.json?site_id=X&season=Y` (same endpoint as `fetch_player_stats.py`).
-For each fixture involving our teams, resolves: is_home, location (from team's `home_location`),
-match window (`match_time − 2h` to `match_time + 8h`). Defaults: seniors `11:00`, juniors `10:00`
-(configurable in `config.json` under `"defaults"`).
-
-Output `content/data/fixtures.json`:
-```json
-{
-  "generated_at": "...",
-  "season": 2026,
-  "fixtures": [
-    {
-      "match_id": "...",
-      "match_date": "2026-05-10",
-      "match_time": "13:00",
-      "window_start": "11:00",
-      "window_end": "21:00",
-      "location": "ground1",
-      "is_home": true,
-      "section": "senior",
-      "teams": ["1st-xi"],
-      "competition_id": "135855",
-      "competition_name": "Thames Valley Cricket League Div 6C",
-      "opposition": "Denham CC"
-    }
-  ]
-}
-```
-
 ### `scripts/generate_screen_schedules.py`
 
-For each location in `content/locations.json`, combines fixtures + training + events,
+For each location in `content/locations.json` where `screen: true`, combines
+`content/data/fixtures.json` + `content/data/cs365_training.json` + `content/events.json`,
 resolves slideshow slugs via `content/slideshow_map.json`, and inlines the relevant
 slideshow configs. Outputs `content/screens/{location_id}.json`.
+
+Key difference from original design: training comes from `cs365_training.json` (fetched
+actual sessions) rather than recurring weekly rules. The generator reads the fetched JSON
+directly — no need to re-evaluate weekday/date rules client-side.
 
 Per-screen schedule.json structure:
 ```json
 {
-  "screen_id": "ground1",
-  "screen_name": "Main Ground",
+  "screen_id": "the-witchell",
+  "screen_name": "The Witchell",
   "generated_at": "...",
   "default_slideshow": "default-senior",
   "slideshows": {
     "default-senior": {
       "refresh_interval_seconds": 300,
       "slides": [
-        { "slug": "batting-leaderboard", "duration": 20, "context_params": ["team", "competition_id"] },
+        { "slug": "batting-leaderboard-1st-xi", "duration": 20, "context_params": ["team", "competition_id"] },
         { "slug": "league-table-1st-xi", "duration": 20 },
         { "slug": "sponsors", "duration": 15 }
       ]
@@ -217,10 +278,15 @@ Per-screen schedule.json structure:
   ],
   "training": [
     {
-      "weekday": 2, "start_time": "18:00", "end_time": "20:30",
-      "valid_from": "2026-04-01", "valid_until": "2026-09-30",
-      "slideshow": "training-senior",
-      "context": { "activity_type": "training", "section": "senior" }
+      "date": "2026-05-08",
+      "start_time": "18:00",
+      "end_time": "19:30",
+      "slideshow": "training-junior",
+      "context": {
+        "activity_type": "training", "section": "junior",
+        "teams": ["u11-invincibles", "u11-incredibles"],
+        "group_label": "U11s"
+      }
     }
   ],
   "events": [
@@ -233,11 +299,15 @@ Per-screen schedule.json structure:
 }
 ```
 
+Note: `training` entries are now concrete dated sessions (from CS365), not recurring
+weekly rules. The client-side player can do simple date/time string comparisons with
+no weekday arithmetic.
+
 ---
 
 ## Smart Player: `templates/screen/player.html`
 
-Client-side scheduling logic:
+Client-side scheduling logic. All comparisons use `"YYYY-MM-DD"` ISO strings:
 
 ```javascript
 async function init() {
@@ -253,7 +323,6 @@ function resolveContext(schedule) {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);   // "YYYY-MM-DD"
     const timeNow = now.toTimeString().slice(0, 5);  // "HH:MM"
-    const weekday = now.getDay() || 7;               // ISO: Mon=1, Sun=7
 
     for (const ev of schedule.events)
         if (ev.date === today && timeNow >= ev.start_time && timeNow <= ev.end_time)
@@ -264,9 +333,7 @@ function resolveContext(schedule) {
             return { slideshowSlug: fx.slideshow, context: fx.context };
 
     for (const tr of schedule.training)
-        if (tr.valid_from <= today && today <= tr.valid_until
-                && tr.weekday === weekday
-                && timeNow >= tr.start_time && timeNow <= tr.end_time)
+        if (tr.date === today && timeNow >= tr.start_time && timeNow <= tr.end_time)
             return { slideshowSlug: tr.slideshow, context: tr.context };
 
     return { slideshowSlug: schedule.default_slideshow, context: { activity_type: 'idle' } };
@@ -288,7 +355,10 @@ function buildIframes(show, context) {
 }
 ```
 
-The `runPlayer` / `showSlide` / `advance` logic is lifted verbatim from the existing `player.html`.
+Note: the training loop no longer needs weekday arithmetic — entries are dated concrete
+sessions from CS365, so a simple `tr.date === today` comparison suffices.
+
+The `runPlayer` / `showSlide` / `advance` logic is lifted from the existing `player.html`.
 
 ---
 
@@ -305,20 +375,28 @@ Existing standalone slide URLs remain valid.
 
 ## CI Changes: `.github/workflows/deploy.yml`
 
+Already updated. Current state:
+
 ```yaml
 on:
   push:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: '0 5 * * *'   # 06:00 BST daily — picks up newly published fixtures
+    - cron: '0 2 * * *'   # 02:00 UTC daily (≈ 03:00 BST) — picks up newly published fixtures
 
-# New steps (after existing fetch_player_stats step):
+# Already present:
 - run: python scripts/fetch_fixtures.py
   env:
     PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
     PLAY_CRICKET_SITE_ID: ${{ secrets.PLAY_CRICKET_SITE_ID }}
 
+- run: python scripts/fetch_cs365_training.py
+  env:
+    CS365_USERNAME: ${{ secrets.CS365_USERNAME }}
+    CS365_PASSWORD: ${{ secrets.CS365_PASSWORD }}
+
+# Still to add:
 - run: python scripts/generate_screen_schedules.py
 ```
 
@@ -326,38 +404,43 @@ on:
 
 ## Files to Create / Modify
 
-| File | Action |
-|------|--------|
-| `content/locations.json` | New |
-| `content/training.json` | New |
-| `content/events.json` | New |
-| `content/slideshow_map.json` | New |
-| `content/teams.json` | Extend: add `home_location`, `section` per team |
-| `scripts/fetch_fixtures.py` | New |
-| `scripts/generate_screen_schedules.py` | New |
-| `scripts/build.py` | Add `build_screens()`, call in `main()` |
-| `templates/screen/player.html` | New — smart player |
-| `templates/slides/batting-leaderboard.html` | Add URL param filtering |
-| `templates/slides/bowling-leaderboard.html` | Add URL param filtering |
-| `templates/slides/league-table.html` | Add URL param filtering |
-| `.github/workflows/deploy.yml` | Add cron trigger + 2 new steps |
-| `.gitignore` | Add `content/screens/`, `content/data/fixtures.json` |
+| File | Action | Status |
+|------|--------|--------|
+| `content/locations.json` | New (with aliases + screen flag) | ✓ Done |
+| `content/data/fixtures.json` | Generated by fetch_fixtures.py | ✓ Done |
+| `content/data/cs365_training.json` | Generated by fetch_cs365_training.py | ✓ Done |
+| `content/events.json` | New | Not started |
+| `content/slideshow_map.json` | New | Not started |
+| `content/teams.json` | Add `home_location`, `section` per team | Not started |
+| `scripts/generate_screen_schedules.py` | New | Not started |
+| `scripts/build.py` | Add `build_screens()`, call in `main()` | Not started |
+| `templates/screen/player.html` | New — smart player | Not started |
+| `templates/slides/batting-leaderboard.html` | Add URL param filtering | Not started |
+| `templates/slides/bowling-leaderboard.html` | Add URL param filtering | Not started |
+| `templates/slides/league-table.html` | Add URL param filtering | Not started |
+| `.github/workflows/deploy.yml` | Add `generate_screen_schedules` step | Not started |
+| `.gitignore` | Add `content/screens/` | Not started |
+| `content/slideshows/default-senior.json` | New | Not started |
+| `content/slideshows/default-junior.json` | New | Not started |
+| `content/slideshows/match-day-senior.json` | New | Not started |
+| `content/slideshows/match-day-junior.json` | New | Not started |
+| `content/slideshows/training-senior.json` | New | Not started |
+| `content/slideshows/training-junior.json` | New | Not started |
 
-## New Slideshow Configs Needed
-
-Minimal set (all use existing JSON schema in `content/slideshows/`):
-- `default-senior.json`
-- `default-junior.json`
-- `match-day-senior.json`
-- `match-day-junior.json`
-- `training-senior.json`
-- `training-junior.json`
+Note: `content/training.json` (hardcoded recurring rules) is **not needed** — replaced
+by the fetched `content/data/cs365_training.json`.
 
 ---
 
 ## Open Questions
 
-- Does Play Cricket's `matches.json` include `match_time`? If not, defaults apply.
-- Junior teams in Play Cricket — need their `play_cricket_team_id` values to detect junior match days.
-- Should there be a "next fixture" slide that shows upcoming matches outside match-day windows?
-- The existing `/slideshow/pavilion-1/` URL can remain working; migration to `/screen/ground1/` can be gradual.
+- **Multiple simultaneous activities**: if seniors are playing a match and juniors are
+  training at The Witchell at the same time, which context wins? Current priority is
+  Event > Match > Training — but should the screen cycle between both contexts?
+- **Training with mixed age groups**: CS365 sessions often include multiple teams
+  (`U11 Invincibles, U11 Incredibles`). The `section` for a mixed-section screen
+  defaults to `junior` if any junior team is present; otherwise `senior`.
+- **Match window defaults**: seniors `match_time − 2h` to `match_time + 8h`; juniors
+  `match_time − 1h` to `match_time + 5h`. Configurable in `config.json` under `"defaults"`.
+- **Tring Road screen**: second screen location. Does it show junior-only content?
+  Needs `home_location` populated on the relevant teams.
