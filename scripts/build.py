@@ -529,6 +529,125 @@ def build_next_match(slide, teams_by_id, fixtures_data, stats_data):
                 })
 
 
+def format_dismissal(how_out, fielder_name="", bowler_name=""):
+    s = (how_out or "").strip()
+    sl = s.lower()
+    fielder = (fielder_name or "").strip()
+    bowler = (bowler_name or "").strip()
+
+    if not sl or sl in ("not out", "no"):
+        return "not out"
+    if sl in ("did not bat", "dnb"):
+        return "dnb"
+    if sl.startswith("retired"):
+        return s
+
+    if sl == "ct":
+        base = f"c {fielder}" if fielder else "caught"
+        return f"{base} b {bowler}" if bowler else base
+    if sl in ("c&b", "caught and bowled"):
+        return f"c&b {bowler}" if bowler else "c&b"
+    if sl == "b":
+        return f"b {bowler}" if bowler else "bowled"
+    if sl == "lbw":
+        return f"lbw b {bowler}" if bowler else "lbw"
+    if sl == "st":
+        base = f"st {fielder}" if fielder else "stumped"
+        return f"{base} b {bowler}" if bowler else base
+    if "run out" in sl:
+        return f"run out ({fielder})" if fielder else "run out"
+    if sl in ("hit wicket", "hw"):
+        return f"hit wkt b {bowler}" if bowler else "hit wicket"
+    return s
+
+
+def fmt_innings_total(total):
+    if not total:
+        return ""
+    runs = total.get("runs", 0)
+    wickets = total.get("wickets") or None
+    overs = total.get("overs") or ""
+    if wickets is None:
+        score = str(runs)
+    elif int(wickets) >= 10:
+        score = f"{runs} ao"
+    else:
+        score = f"{runs}/{int(wickets)}"
+    if overs:
+        return f"{score} ({overs} ovs)"
+    return score
+
+
+def build_last_match(slide, teams_by_id, fixtures_data):
+    team_id = slide.get("team")
+    data = (fixtures_data or {}).get("last_match", {}).get(team_id)
+
+    if not data:
+        slide["_no_match"] = True
+        return
+
+    slide["_no_match"] = False
+    slide["_match"] = data
+    slide["_date_formatted"] = fmt_match_date(data.get("match_date", ""))
+
+    league_name = teams_by_id.get(team_id, {}).get("league_name", "")
+    comp_name = data.get("competition_name", "") or ""
+    if league_name and comp_name and comp_name != league_name:
+        slide["_competition_display"] = f"{league_name} · {comp_name}"
+    else:
+        slide["_competition_display"] = league_name or comp_name
+    slide["_result"] = data.get("result")
+    result_flip = {"W": "L", "L": "W"}
+    slide["_opp_result"] = result_flip.get(slide["_result"], slide["_result"])
+    slide["_our_points"] = data.get("our_points")
+    slide["_their_points"] = data.get("their_points")
+    slide["_our_total_str"] = fmt_innings_total(data.get("our_total"))
+    slide["_their_total_str"] = fmt_innings_total(data.get("their_total"))
+
+    def fmt_batting(rows):
+        return [
+            {**b,
+             "how_out_abbr": format_dismissal(
+                 b.get("how_out", ""),
+                 b.get("fielder_name", ""),
+                 b.get("bowler_name", ""),
+             ),
+             "fours": b.get("fours", 0),
+             "sixes": b.get("sixes", 0),
+            }
+            for b in rows
+        ]
+
+    def fmt_bowling(rows):
+        return [
+            {**b, "overs_str": balls_to_overs(b["balls"]), "maidens": b.get("maidens", 0)}
+            for b in rows
+        ]
+
+    slide["_we_bat_first"] = data.get("we_bat_first", True)
+    slide["_our_batting"] = fmt_batting(data.get("our_batting", []))
+    slide["_our_bowling"] = fmt_bowling(data.get("our_bowling", []))
+    slide["_their_batting"] = fmt_batting(data.get("their_batting", []))
+    slide["_their_bowling"] = fmt_bowling(data.get("their_bowling", []))
+
+    opp_club = data.get("opposition_club_name", "") or ""
+    opp_full = data.get("opposition_name", "")
+    if opp_club:
+        slide["_opp_club_name"] = opp_club
+        slide["_opp_team_name"] = (
+            opp_full[len(opp_club) + 3:]
+            if opp_full.startswith(opp_club + " - ")
+            else opp_full
+        )
+    elif " - " in opp_full:
+        derived_club, _, opp_team_desig = opp_full.rpartition(" - ")
+        slide["_opp_club_name"] = derived_club
+        slide["_opp_team_name"] = opp_team_desig
+    else:
+        slide["_opp_club_name"] = opp_full
+        slide["_opp_team_name"] = ""
+
+
 def build_slides(env):
     teams_by_id = load_teams()
     config = load_config()
@@ -595,6 +714,9 @@ def build_slides(env):
 
         if slide.get("template") == "next-match":
             build_next_match(slide, teams_by_id, load_fixtures(), load_stats("this_season"))
+
+        if slide.get("template") == "last-match":
+            build_last_match(slide, teams_by_id, load_fixtures())
 
         if slide.get("template") == "schedule":
             training, all_fixtures, loc_lookup, loc_names = load_schedule_data()

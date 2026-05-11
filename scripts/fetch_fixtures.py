@@ -63,7 +63,7 @@ def overs_to_balls(overs_str):
 
 def is_not_out(how_out):
     s = (how_out or "").strip().lower()
-    return s == "not out" or s.startswith("retired")
+    return s in ("not out", "no") or s.startswith("retired")
 
 
 def empty_batting():
@@ -123,6 +123,130 @@ def determine_result_for_team(detail, their_team_id):
         result_desc = detail.get("result_description", "")
         return "W" if (their_name and their_name in result_desc) else "L"
     return None
+
+
+def fetch_our_match_scorecard(match, our_pc_id, api_token):
+    """Fetch and parse our team's scorecard from a completed match."""
+    match_id = match["id"]
+    try:
+        result_data = api_get("match_detail.json", api_token, match_id=match_id)
+        details = result_data.get("match_details", [])
+        if not details:
+            return None
+        detail = details[0]
+    except Exception as e:
+        print(f"    WARNING: failed to fetch match detail {match_id}: {e}", file=sys.stderr)
+        return None
+
+    result_char = determine_result_for_team(detail, our_pc_id)
+    result_description = (detail.get("result_description") or "").strip()
+
+    home_id = str(detail.get("home_team_id", ""))
+    away_id = str(detail.get("away_team_id", ""))
+    is_home = our_pc_id == home_id
+    opp_id = away_id if is_home else home_id
+
+    our_innings_data = None
+    their_innings_data = None
+    for innings in detail.get("innings", []):
+        batting_id = str(innings.get("team_batting_id", ""))
+        if batting_id == our_pc_id:
+            our_innings_data = innings
+        elif batting_id == opp_id:
+            their_innings_data = innings
+
+    def innings_scorecard_batting(inn):
+        """All batters in batting order, excluding DNB."""
+        rows = []
+        for bat in (inn or {}).get("bat", []):
+            how_out = bat.get("how_out", "")
+            if (how_out or "").strip().lower() == "dnb":
+                continue
+            pid = str(bat.get("batsman_id", ""))
+            if not pid or pid == "0":
+                continue
+            rows.append({
+                "name": bat.get("batsman_name", ""),
+                "runs": int(bat.get("runs") or 0),
+                "balls": int(bat.get("balls") or 0),
+                "fours": int(bat.get("fours") or 0),
+                "sixes": int(bat.get("sixes") or 0),
+                "not_out": is_not_out(how_out),
+                "how_out": (how_out or "").strip(),
+                "fielder_name": (bat.get("fielder_name") or "").strip(),
+                "bowler_name": (bat.get("bowler_name") or "").strip(),
+            })
+        return rows
+
+    def innings_scorecard_bowling(inn):
+        """All bowlers in bowling order with full figures."""
+        acc = {}
+        order = []
+        for bowl in (inn or {}).get("bowl", []):
+            pid = str(bowl.get("bowler_id", ""))
+            if not pid or pid == "0":
+                continue
+            if pid not in acc:
+                acc[pid] = {
+                    "name": bowl.get("bowler_name", ""),
+                    "wickets": 0, "runs": 0, "balls": 0, "maidens": 0,
+                }
+                order.append(pid)
+            acc[pid]["wickets"] += int(bowl.get("wickets") or 0)
+            acc[pid]["runs"] += int(bowl.get("runs") or 0)
+            acc[pid]["balls"] += overs_to_balls(bowl.get("overs", "0"))
+            acc[pid]["maidens"] += int(bowl.get("maidens") or 0)
+        return [acc[pid] for pid in order]
+
+    def innings_total(inn):
+        if not inn:
+            return None
+        return {
+            "runs": inn.get("runs", 0),
+            "wickets": inn.get("wickets"),
+            "overs": inn.get("overs") or "",
+        }
+
+    batted_first_id = str(detail.get("batted_first") or "")
+    we_bat_first = batted_first_id == our_pc_id
+
+    points_by_team = {str(p.get("team_id", "")): p for p in (detail.get("points") or [])}
+
+    def calc_points(entry):
+        if not entry:
+            return None
+        game = float(entry.get("game_points") or 0)
+        bonus = float(entry.get("bonus_points_together") or 0)
+        bonus_2nd = float(entry.get("bonus_points_2nd_innings_together") or 0)
+        penalty = float(entry.get("penalty_points") or 0)
+        total = game + bonus + bonus_2nd - penalty
+        return int(total) if total == int(total) else round(total, 1)
+
+    opp_club = (match.get("away_club_name", "") if is_home else match.get("home_club_name", "")) or ""
+    opp_name = (match.get("away_team_name", "") if is_home else match.get("home_team_name", "")) or ""
+
+    return {
+        "match_date": match.get("match_date", ""),
+        "match_time": match.get("match_time") or None,
+        "ground_name": match.get("ground_name") or None,
+        "competition_id": str(match.get("competition_id", "")),
+        "competition_name": match.get("competition_name", "") or "",
+        "is_home": is_home,
+        "result": result_char,
+        "result_description": result_description,
+        "opposition_name": opp_name,
+        "opposition_club_name": opp_club,
+        "we_bat_first": we_bat_first,
+        "our_total": innings_total(our_innings_data),
+        "their_total": innings_total(their_innings_data),
+        "our_batting": innings_scorecard_batting(our_innings_data),
+        "our_bowling": innings_scorecard_bowling(their_innings_data),
+        "their_batting": innings_scorecard_batting(their_innings_data),
+        "their_bowling": innings_scorecard_bowling(our_innings_data),
+        "our_points": calc_points(points_by_team.get(our_pc_id)),
+        "their_points": calc_points(points_by_team.get(opp_id)),
+        "opposition_team_id": opp_id,
+    }
 
 
 def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token):
@@ -381,11 +505,40 @@ def main():
 
         fixtures[team_id] = fixture
 
+    # Find most-recent completed match per team (for last-match slides)
+    last_match_candidates = {}
+    for match in all_matches:
+        home_id = str(match.get("home_team_id", ""))
+        away_id = str(match.get("away_team_id", ""))
+        match_date = parse_date(match.get("match_date", ""))
+        if not match_date or match_date >= today:
+            continue
+        for our_pc_id, team in teams_by_pc_id.items():
+            if our_pc_id not in (home_id, away_id):
+                continue
+            tid = team["id"]
+            existing_date = parse_date((last_match_candidates.get(tid) or {}).get("match_date", ""))
+            if existing_date is None or match_date > existing_date:
+                last_match_candidates[tid] = match
+
+    print(f"  {len(last_match_candidates)} team(s) with recent matches — fetching scorecards...")
+    last_match = {}
+    for team_id, match in last_match_candidates.items():
+        team = teams_by_id[team_id]
+        our_pc_id = str(team["play_cricket_team_id"])
+        is_home_lm = our_pc_id == str(match.get("home_team_id", ""))
+        opp = (match.get("away_team_name", "") if is_home_lm else match.get("home_team_name", "")) or "?"
+        print(f"  Fetching last match scorecard for {team_id} vs {opp}...")
+        scorecard = fetch_our_match_scorecard(match, our_pc_id, api_token)
+        if scorecard:
+            last_match[team_id] = scorecard
+
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "season": season_year,
         "fixtures": fixtures,
         "all_fixtures": all_upcoming,
+        "last_match": last_match,
     }
     data_dir = CONTENT / "data"
     data_dir.mkdir(exist_ok=True)
