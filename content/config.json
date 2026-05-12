@@ -10,6 +10,8 @@
   },
   "preview": {
     "title": "Wendover CC Slides",
+    "club_name": "Wendover Cricket Club",
+    "club_url": "https://www.wendovercc.org",
     "site_url": "https://slides.wendovercc.org",
     "github_url": "https://github.com/wendovercc/slides",
     "support_email": "wendovercctreasurer@gmail.com"

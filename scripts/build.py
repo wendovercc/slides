@@ -914,6 +914,7 @@ def build_slideshows(env):
             "slide_expires": s.get("expires"),
         }
 
+    homepage_shows = []
     for show_path in sorted((CONTENT / "slideshows").glob("*.json")):
         show = json.loads(show_path.read_text())
         slug = show_path.stem
@@ -934,8 +935,13 @@ def build_slideshows(env):
         (out_dir / "data.json").write_text(json.dumps(data))
         print(f"  slideshow/{slug}")
 
+        if "homepage_rank" in show:
+            homepage_shows.append({"slug": slug, "title": show["title"], "rank": show["homepage_rank"]})
 
-def build_screen_locations(env):
+    return sorted(homepage_shows, key=lambda x: x["rank"])
+
+
+def build_screen_locations(env, homepage_shows=None):
     locs_path = CONTENT / "locations.json"
     if not locs_path.exists():
         return
@@ -951,9 +957,17 @@ def build_screen_locations(env):
     qr_data_url = generate_qr_data_url(site_url) if site_url else ""
 
     screen_locs = [l for l in locs_data["locations"] if l.get("screen")]
-    template = env.get_template("screen/player.html")
+
+    index_tmpl = env.get_template("screen/index.html")
+    (SITE / "index.html").write_text(
+        index_tmpl.render(preview=preview_cfg, built_at=built_at,
+                          screen_locs=screen_locs, homepage_shows=homepage_shows or [])
+    )
+    print("  index.html")
+
+    player_tmpl = env.get_template("screen/player.html")
     for loc in screen_locs:
-        html = template.render(location=loc, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
+        html = player_tmpl.render(location=loc, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
         out_dir = SITE / "screen" / loc["id"]
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html)
@@ -973,13 +987,13 @@ if __name__ == "__main__":
     build_slides(env)
 
     print("Building slideshows...")
-    build_slideshows(env)
+    homepage_shows = build_slideshows(env)
 
     print("Building context calendar...")
     build_context_calendar()
 
     print("Building screen locations...")
-    build_screen_locations(env)
+    build_screen_locations(env, homepage_shows)
 
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")

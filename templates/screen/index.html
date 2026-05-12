@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ preview.title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0d0d0d;
+            color: #ccc;
+            font: 14px/1.6 monospace;
+            min-height: 100vh;
+            padding: 40px 32px;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 22px;
+            color: #fff;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+        .tagline {
+            color: #555;
+            font-size: 12px;
+            margin-bottom: 40px;
+        }
+        .tagline a { color: #00e5ff; text-decoration: none; }
+        .tagline a:hover { text-decoration: underline; }
+
+        h2 {
+            font-size: 10px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 12px;
+        }
+
+        .locations {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-bottom: 48px;
+        }
+        .location-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 10px 14px;
+            background: #161616;
+            border-radius: 4px;
+        }
+        .location-name {
+            color: #fff;
+            flex: 1;
+        }
+        .watch-btn {
+            color: #66bb6a;
+            text-decoration: none;
+            font-weight: bold;
+            padding: 4px 12px;
+            border: 1px solid #2a5a2a;
+            border-radius: 3px;
+        }
+        .watch-btn:hover { background: #1b2e1b; }
+        .preview-link {
+            color: #555;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        .preview-link:hover { color: #999; }
+
+        .meta {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            border-top: 1px solid #1e1e1e;
+            padding-top: 24px;
+            font-size: 12px;
+        }
+        .meta-row { display: flex; gap: 8px; }
+        .meta-k { color: #555; width: 22ch; flex-shrink: 0; }
+        .meta-v { color: #ddd; }
+        .meta-v a { color: #00e5ff; text-decoration: none; }
+        .meta-v a:hover { text-decoration: underline; }
+        .built { color: #333; font-size: 11px; margin-top: 16px; }
+    </style>
+</head>
+<body>
+    <h1>{{ preview.title }}</h1>
+    <p class="tagline">Live slideshow displays for <a href="{{ preview.club_url }}" target="_blank">{{ preview.club_name }}</a></p>
+
+    <h2>Screens</h2>
+    <div class="locations">
+        {% for loc in screen_locs %}
+        <div class="location-row">
+            <span class="location-name">{{ loc.name }}</span>
+            <a class="watch-btn" href="/screen/{{ loc.id }}/">Watch</a>
+            <a class="preview-link" href="/screen/{{ loc.id }}/?preview">Preview</a>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if homepage_shows %}
+    <h2>Slideshows</h2>
+    <div class="locations">
+        {% for show in homepage_shows %}
+        <div class="location-row">
+            <span class="location-name">{{ show.title }}</span>
+            <a class="watch-btn" href="/slideshow/{{ show.slug }}/">Watch</a>
+            <a class="preview-link" href="/slideshow/{{ show.slug }}/?preview">Preview</a>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="meta">
+        <div class="meta-row">
+            <span class="meta-k">Documentation &amp; code</span>
+            <span class="meta-v"><a href="{{ preview.github_url }}" target="_blank">{{ preview.github_url }}</a></span>
+        </div>
+        <div class="meta-row">
+            <span class="meta-k">Support / feature request</span>
+            <span class="meta-v"><a href="mailto:{{ preview.support_email }}">{{ preview.support_email }}</a></span>
+        </div>
+        <div class="built">Built {{ built_at }}</div>
+    </div>
+</body>
+</html>
