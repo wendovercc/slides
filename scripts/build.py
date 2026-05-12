@@ -648,6 +648,148 @@ def build_last_match(slide, teams_by_id, fixtures_data):
         slide["_opp_team_name"] = ""
 
 
+ACTIVITY_PRIORITY = {"club_event": 0, "section_event": 1, "match": 2, "training": 3, "hire": 4}
+
+_DEFAULT_PHASES = {
+    "match":    {"warm_up_mins": 120, "main_duration_mins": 210, "wind_down_mins": 180},
+    "training": {"warm_up_mins": 15,  "wind_down_mins": 30},
+    "hire":     {"warm_up_mins": 60,  "wind_down_mins": 60},
+}
+
+
+def add_minutes(time_str, minutes):
+    h, m = map(int, time_str.split(":"))
+    total = max(0, min(1439, h * 60 + m + minutes))
+    return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def infer_section(team_ids):
+    if not team_ids:
+        return "all"
+    sections = {"junior" if tid.startswith("u") else "senior" for tid in team_ids}
+    return sections.pop() if len(sections) == 1 else "all"
+
+
+def build_context_calendar():
+    config = load_config()
+    phase_cfg = config.get("activity_phases", _DEFAULT_PHASES)
+    match_p    = phase_cfg.get("match",    _DEFAULT_PHASES["match"])
+    training_p = phase_cfg.get("training", _DEFAULT_PHASES["training"])
+
+    locs_data = json.loads((CONTENT / "locations.json").read_text())
+    screen_loc_ids = {l["id"] for l in locs_data["locations"] if l.get("screen")}
+
+    loc_lookup = {}
+    for loc in locs_data["locations"]:
+        for alias in loc.get("aliases", []):
+            loc_lookup[alias.lower()] = loc["id"]
+
+    fixtures_path = CONTENT / "data" / "fixtures.json"
+    training_path = CONTENT / "data" / "cs365_training.json"
+
+    all_fixtures = {}
+    if fixtures_path.exists():
+        all_fixtures = json.loads(fixtures_path.read_text()).get("all_fixtures", {})
+
+    training_sessions = []
+    if training_path.exists():
+        training_sessions = json.loads(training_path.read_text()).get("sessions", [])
+
+    # Initialise per-screen-location structure
+    entries = {
+        lid: {
+            "default": {
+                "type": "idle",
+                "audience": {"section": "all", "teams": [], "label": None},
+                "detail": {},
+            },
+            "dates": {},
+        }
+        for lid in screen_loc_ids
+    }
+
+    # --- Home matches ---
+    for team_id, matches in all_fixtures.items():
+        for m in matches:
+            if not m.get("is_home"):
+                continue
+            loc_id = loc_lookup.get((m.get("ground_name") or "").lower())
+            if not loc_id or loc_id not in screen_loc_ids:
+                continue
+            match_time = m.get("match_time")
+            if not match_time:
+                continue
+            try:
+                iso_date = datetime.strptime(m["match_date"], "%d/%m/%Y").date().isoformat()
+            except (ValueError, KeyError):
+                continue
+
+            main_end = add_minutes(match_time, match_p["main_duration_mins"])
+            entry = {
+                "type": "match",
+                "audience": {
+                    "section": infer_section([team_id]),
+                    "teams": [team_id],
+                    "label": None,
+                },
+                "phases": {
+                    "warm_up":   {"start": add_minutes(match_time, -match_p["warm_up_mins"]), "end": match_time},
+                    "main":      {"start": match_time, "end": main_end},
+                    "wind_down": {"start": main_end, "end": add_minutes(main_end, match_p["wind_down_mins"])},
+                },
+                "detail": {
+                    "competition": m.get("competition_name", ""),
+                    "opposition": m.get("opposition_club_name") or m.get("opposition_name", ""),
+                    "is_home": True,
+                },
+            }
+            entries[loc_id]["dates"].setdefault(iso_date, []).append(entry)
+
+    # --- Training sessions ---
+    # Merge concurrent sessions at the same location/date/slot into one entry
+    training_groups: dict = {}
+    for s in training_sessions:
+        loc_id = s.get("location_id")
+        if not loc_id or loc_id not in screen_loc_ids:
+            continue
+        key = (loc_id, s.get("date"), s.get("time_start"), s.get("time_end"))
+        if None in key:
+            continue
+        if key not in training_groups:
+            training_groups[key] = set()
+        training_groups[key].update(s.get("team_ids", []))
+
+    for (loc_id, iso_date, time_start, time_end), team_ids in training_groups.items():
+        team_ids_list = sorted(team_ids)
+        entry = {
+            "type": "training",
+            "audience": {
+                "section": infer_section(team_ids_list),
+                "teams": team_ids_list,
+                "label": None,
+            },
+            "phases": {
+                "warm_up":   {"start": add_minutes(time_start, -training_p["warm_up_mins"]), "end": time_start},
+                "main":      {"start": time_start, "end": time_end},
+                "wind_down": {"start": time_end, "end": add_minutes(time_end, training_p["wind_down_mins"])},
+            },
+            "detail": {},
+        }
+        entries[loc_id]["dates"].setdefault(iso_date, []).append(entry)
+
+    # Sort entries within each date by activity priority
+    for loc_id in entries:
+        for iso_date in entries[loc_id]["dates"]:
+            entries[loc_id]["dates"][iso_date].sort(
+                key=lambda e: ACTIVITY_PRIORITY.get(e["type"], 99)
+            )
+
+    calendar = {"generated_at": date.today().isoformat(), "entries": entries}
+    out_path = SITE / "context_calendar.json"
+    out_path.write_text(json.dumps(calendar, indent=2))
+    print("  context_calendar.json")
+
+
 def build_slides(env):
     teams_by_id = load_teams()
     config = load_config()
@@ -788,6 +930,9 @@ if __name__ == "__main__":
 
     print("Building slideshows...")
     build_slideshows(env)
+
+    print("Building context calendar...")
+    build_context_calendar()
 
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")

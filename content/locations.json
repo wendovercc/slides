@@ -15,6 +15,7 @@
     {
       "id": "kimble",
       "name": "Kimble",
+      "screen": true,
       "aliases": [
         "Kimble",
         "Kimble CC"
@@ -23,6 +24,7 @@
     {
       "id": "monks-risborough",
       "name": "Monks Risborough",
+      "screen": true,
       "aliases": [
         "Monks Risborough",
         "Whiteleaf",
