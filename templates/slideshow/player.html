@@ -168,6 +168,7 @@
         const slides = allSlides.filter(s => s._shown);
 
         let current = 0;
+        let timer = null;
 
         function showSlide(index) {
             document.querySelectorAll('iframe').forEach((f, i) => {
@@ -176,11 +177,28 @@
             if (PREVIEW) markCurrentSlide(index);
         }
 
+        function schedule() {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(advance, slides[current].duration * 1000);
+        }
+
         function advance() {
             current = (current + 1) % slides.length;
             showSlide(current);
-            setTimeout(advance, slides[current].duration * 1000);
+            schedule();
         }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowRight') {
+                current = (current + 1) % slides.length;
+                showSlide(current);
+                schedule();
+            } else if (e.key === 'ArrowLeft') {
+                current = (current - 1 + slides.length) % slides.length;
+                showSlide(current);
+                schedule();
+            }
+        });
 
         function markCurrentSlide(idx) {
             document.querySelectorAll('#dbg-slides .slide-row').forEach(el => el.classList.remove('now'));
@@ -208,7 +226,7 @@
 
         if (slides.length > 0) {
             showSlide(0);
-            setTimeout(advance, slides[0].duration * 1000);
+            schedule();
         }
 
         const reloadMs = {{ show.refresh_interval_seconds }} * 1000;
