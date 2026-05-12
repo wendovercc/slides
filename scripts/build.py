@@ -903,6 +903,15 @@ def build_slides(env):
 
 
 def build_slideshows(env):
+    # Collect slide-level active/expires so data.json can carry them for the smart player
+    slide_meta = {}
+    for slide_path in (CONTENT / "slides").glob("*.json"):
+        s = json.loads(slide_path.read_text())
+        slide_meta[slide_path.stem] = {
+            "slide_active": s.get("active", True),
+            "slide_expires": s.get("expires"),
+        }
+
     for show_path in sorted((CONTENT / "slideshows").glob("*.json")):
         show = json.loads(show_path.read_text())
         slug = show_path.stem
@@ -913,7 +922,34 @@ def build_slideshows(env):
         out_dir = SITE / "slideshow" / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html)
+
+        # data.json consumed by the smart player at runtime
+        data = dict(show)
+        data["slides"] = [
+            {**entry, **slide_meta.get(entry["slug"], {})}
+            for entry in show.get("slides", [])
+        ]
+        (out_dir / "data.json").write_text(json.dumps(data))
         print(f"  slideshow/{slug}")
+
+
+def build_screen_locations(env):
+    locs_path = CONTENT / "locations.json"
+    if not locs_path.exists():
+        return
+    locs_data = json.loads(locs_path.read_text())
+
+    # Expose locations.json to the static site for the smart player
+    (SITE / "locations.json").write_text(json.dumps(locs_data))
+
+    screen_locs = [l for l in locs_data["locations"] if l.get("screen")]
+    template = env.get_template("screen/player.html")
+    for loc in screen_locs:
+        html = template.render(location=loc)
+        out_dir = SITE / "screen" / loc["id"]
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "index.html").write_text(html)
+        print(f"  screen/{loc['id']}")
 
 
 if __name__ == "__main__":
@@ -933,6 +969,9 @@ if __name__ == "__main__":
 
     print("Building context calendar...")
     build_context_calendar()
+
+    print("Building screen locations...")
+    build_screen_locations(env)
 
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")

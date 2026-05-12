@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ location.name }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+        iframe {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            border: none;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        iframe.active { opacity: 1; }
+    </style>
+</head>
+<body>
+<script>
+const LOCATION_ID = {{ location.id | tojson }};
+
+function resolveContext(calendar, loc) {
+    const today = new Date().toISOString().slice(0, 10);
+    const timeNow = new Date().toTimeString().slice(0, 5);
+    const entries = calendar.entries?.[loc.id]?.dates?.[today] ?? [];
+
+    for (const entry of entries) {
+        for (const [phase, window] of Object.entries(entry.phases)) {
+            if (timeNow >= window.start && timeNow < window.end) {
+                return {
+                    context: { type: entry.type, phase, audience: entry.audience, detail: entry.detail },
+                    slideshowSlug: entry.slideshow ?? loc.slideshow,
+                };
+            }
+        }
+    }
+
+    return {
+        context: { type: 'idle', phase: null, audience: loc.default_context ?? { section: 'all' }, detail: {} },
+        slideshowSlug: loc.slideshow,
+    };
+}
+
+function matchesContext(slideEntry, context) {
+    const conditions = slideEntry.show_when;
+    if (!conditions || conditions.length === 0) return true;
+    return conditions.some(cond => {
+        if (cond.type    && !cond.type.includes(context.type))                  return false;
+        if (cond.phase   && !cond.phase.includes(context.phase))                return false;
+        if (cond.section && !cond.section.includes(context.audience?.section))  return false;
+        if (cond.teams) {
+            const ctxTeams = context.audience?.teams ?? [];
+            if (!cond.teams.some(t => ctxTeams.includes(t)))                    return false;
+        }
+        return true;
+    });
+}
+
+async function init() {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const [calendar, locationsData] = await Promise.all([
+        fetch('/context_calendar.json').then(r => r.json()),
+        fetch('/locations.json').then(r => r.json()),
+    ]);
+
+    const loc = locationsData.locations.find(l => l.id === LOCATION_ID);
+    if (!loc) return;
+
+    const { context, slideshowSlug } = resolveContext(calendar, loc);
+    if (!slideshowSlug) return;
+
+    const show = await fetch(`/slideshow/${slideshowSlug}/data.json`).then(r => r.json());
+
+    const slides = show.slides
+        .filter(s => s.slide_active !== false)
+        .filter(s => !s.slide_expires || s.slide_expires >= today)
+        .filter(s => !s.expires       || s.expires       >= today)
+        .filter(s => matchesContext(s, context));
+
+    if (slides.length === 0) return;
+
+    slides.forEach(s => {
+        const f = document.createElement('iframe');
+        f.src = `/slide/${s.slug}/`;
+        document.body.appendChild(f);
+    });
+
+    const frames = document.querySelectorAll('iframe');
+    let current = 0;
+
+    function showSlide(i) {
+        frames.forEach((f, j) => f.classList.toggle('active', j === i));
+    }
+
+    function advance() {
+        current = (current + 1) % slides.length;
+        showSlide(current);
+        setTimeout(advance, slides[current].duration * 1000);
+    }
+
+    showSlide(0);
+    setTimeout(advance, slides[0].duration * 1000);
+    setTimeout(() => window.location.reload(), show.refresh_interval_seconds * 1000);
+}
+
+init();
+</script>
+</body>
+</html>

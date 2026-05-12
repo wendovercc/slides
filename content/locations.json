@@ -4,6 +4,8 @@
       "id": "the-witchell",
       "name": "The Witchell",
       "screen": true,
+      "slideshow": "pavilion-1",
+      "default_context": { "section": "all" },
       "aliases": [
         "The Witchell",
         "Witchell",
@@ -16,6 +18,8 @@
       "id": "kimble",
       "name": "Kimble",
       "screen": true,
+      "slideshow": "pavilion-1",
+      "default_context": { "section": "all" },
       "aliases": [
         "Kimble",
         "Kimble CC"
@@ -25,6 +29,8 @@
       "id": "monks-risborough",
       "name": "Monks Risborough",
       "screen": true,
+      "slideshow": "pavilion-1",
+      "default_context": { "section": "all" },
       "aliases": [
         "Monks Risborough",
         "Whiteleaf",
@@ -62,6 +68,8 @@
       "id": "tring-road",
       "name": "Tring Road",
       "screen": true,
+      "slideshow": "pavilion-1",
+      "default_context": { "section": "senior" },
       "aliases": [
         "Tring Road"
       ]
