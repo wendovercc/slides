@@ -16,7 +16,7 @@
         }
         iframe.active { opacity: 1; }
 
-        body.debug iframe {
+        body.preview iframe {
             width: 1920px; height: 1080px;
             left: auto; right: 0; top: 0;
             transform-origin: top right;
@@ -33,7 +33,7 @@
             font: 12px/1.6 monospace;
             color: #ccc;
         }
-        body.debug #dbg { display: block; }
+        body.preview #dbg { display: block; }
         .dbg-head { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .08em; margin: 12px 0 3px; }
         .dbg-head:first-child { margin-top: 0; }
         .dbg-val { color: #fff; }
@@ -53,11 +53,11 @@
     {% endfor %}
 
     <script>
-        const DEBUG = new URLSearchParams(window.location.search).has('debug');
-        if (DEBUG) document.body.classList.add('debug');
+        const PREVIEW = new URLSearchParams(window.location.search).has('preview');
+        if (PREVIEW) document.body.classList.add('preview');
 
         function applyDebugScale() {
-            if (!DEBUG) return;
+            if (!PREVIEW) return;
             const scale = (window.innerWidth * 0.5) / 1920;
             document.querySelectorAll('iframe').forEach(f => f.style.transform = `scale(${scale})`);
         }
@@ -77,7 +77,7 @@
             document.querySelectorAll('iframe').forEach((f, i) => {
                 f.classList.toggle('active', i === slides[index]._i);
             });
-            if (DEBUG) markCurrentSlide(index);
+            if (PREVIEW) markCurrentSlide(index);
         }
 
         function advance() {
@@ -107,7 +107,7 @@
             ].join('');
         }
 
-        if (DEBUG) renderPanel();
+        if (PREVIEW) renderPanel();
 
         if (slides.length > 0) {
             showSlide(0);

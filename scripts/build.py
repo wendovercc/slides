@@ -659,7 +659,9 @@ _DEFAULT_PHASES = {
 
 def add_minutes(time_str, minutes):
     h, m = map(int, time_str.split(":"))
-    total = max(0, min(1439, h * 60 + m + minutes))
+    total = max(0, h * 60 + m + minutes)
+    if total >= 1440:
+        return "24:00"
     return f"{total // 60:02d}:{total % 60:02d}"
 
 
@@ -942,10 +944,14 @@ def build_screen_locations(env):
     # Expose locations.json to the static site for the smart player
     (SITE / "locations.json").write_text(json.dumps(locs_data))
 
+    config = load_config()
+    preview_cfg = config.get("preview", {})
+    built_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
     screen_locs = [l for l in locs_data["locations"] if l.get("screen")]
     template = env.get_template("screen/player.html")
     for loc in screen_locs:
-        html = template.render(location=loc)
+        html = template.render(location=loc, preview=preview_cfg, built_at=built_at)
         out_dir = SITE / "screen" / loc["id"]
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html)

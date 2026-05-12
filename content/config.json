@@ -8,6 +8,12 @@
     "min_overs": 2,
     "rows": 8
   },
+  "preview": {
+    "title": "Wendover CC Slides",
+    "site_url": "https://slides.wendovercc.org",
+    "github_url": "https://github.com/wendovercc/slides",
+    "support_email": "wendovercctreasurer@gmail.com"
+  },
   "activity_phases": {
     "match":    { "warm_up_mins": 120, "main_duration_mins": 210, "wind_down_mins": 180 },
     "training": { "warm_up_mins": 15,  "wind_down_mins": 30 },

@@ -4,8 +4,10 @@
       "id": "the-witchell",
       "name": "The Witchell",
       "screen": true,
-      "slideshow": "pavilion-1",
-      "default_context": { "section": "all" },
+      "slideshow": "pavilion-auto",
+      "default_context": {
+        "section": "all"
+      },
       "aliases": [
         "The Witchell",
         "Witchell",
@@ -18,24 +20,21 @@
       "id": "kimble",
       "name": "Kimble",
       "screen": true,
-      "slideshow": "pavilion-1",
-      "default_context": { "section": "all" },
-      "aliases": [
-        "Kimble",
-        "Kimble CC"
-      ]
+      "slideshow": "pavilion-auto",
+      "default_context": {
+        "section": "all"
+      },
+      "aliases": ["Kimble", "Kimble CC"]
     },
     {
       "id": "monks-risborough",
       "name": "Monks Risborough",
       "screen": true,
-      "slideshow": "pavilion-1",
-      "default_context": { "section": "all" },
-      "aliases": [
-        "Monks Risborough",
-        "Whiteleaf",
-        "Whiteleaf Cricket Club"
-      ]
+      "slideshow": "pavilion-auto",
+      "default_context": {
+        "section": "all"
+      },
+      "aliases": ["Monks Risborough", "Whiteleaf", "Whiteleaf Cricket Club"]
     },
     {
       "id": "little-missenden",
@@ -50,29 +49,22 @@
     {
       "id": "elmbrook",
       "name": "Elmbrook",
-      "aliases": [
-        "Elmbrook",
-        "Elmbrook, Marsh",
-        "Elmbrook/Marsh HP17 8SR"
-      ]
+      "aliases": ["Elmbrook", "Elmbrook, Marsh", "Elmbrook/Marsh HP17 8SR"]
     },
     {
       "id": "aylesbury",
       "name": "Aylesbury CC",
-      "aliases": [
-        "Aylesbury CC",
-        "Wendover Road"
-      ]
+      "aliases": ["Aylesbury CC", "Wendover Road"]
     },
     {
       "id": "tring-road",
       "name": "Tring Road",
       "screen": true,
-      "slideshow": "pavilion-1",
-      "default_context": { "section": "senior" },
-      "aliases": [
-        "Tring Road"
-      ]
+      "slideshow": "pavilion-auto",
+      "default_context": {
+        "section": "all"
+      },
+      "aliases": ["Tring Road"]
     }
   ]
 }
