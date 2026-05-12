@@ -35,13 +35,27 @@
         body.preview #dbg { display: block; }
 
         .dbg-meta {
-            padding: 8px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 14px;
             font-size: 11px;
             color: #fff;
             background: #161616;
             border-bottom: 1px solid #2a2a2a;
         }
         .dbg-meta span { color: #555; }
+        .dbg-watch {
+            color: #66bb6a;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 3px 10px;
+            border: 1px solid #2a5a2a;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .dbg-watch:hover { background: #1b2e1b; }
 
         .dbg-row {
             display: flex;
@@ -118,7 +132,7 @@
             z-index: 10;
         }
         #iframe-overlay:hover::after {
-            content: '⛶  Watch full screen';
+            content: '⛶  Open current slide';
             position: absolute;
             bottom: 10px; right: 12px;
             font: 11px/1 monospace;
@@ -133,7 +147,7 @@
 </head>
 <body>
 <div id="dbg"></div>
-<div id="iframe-overlay" onclick="window.open(window.location.pathname, '_blank')"></div>
+<div id="iframe-overlay" onclick="openCurrentSlide()"></div>
 <div id="about">
     <div class="about-title">{{ preview.title }}</div>
     <div class="about-body">
@@ -154,6 +168,8 @@
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');
+let _currentSlug = null;
+function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }
 if (PREVIEW) document.body.classList.add('preview');
 
 function applyDebugScale() {
@@ -309,7 +325,7 @@ function renderPanel(loc, ctx, slideshowSlug, show, nextCtxs, today, contextEnd)
 
     const currentSlides = slidesForCtx(show, ctx, today);
 
-    let html = `<div class="dbg-meta">Preview of slides for <strong>${loc.name}</strong> <span>· ${slideshowSlug ?? '—'}</span></div>`;
+    let html = `<div class="dbg-meta"><span>Preview of slides for screen <strong>${loc.name}</strong> <span>· ${slideshowSlug ?? '—'}</span></span><a class="dbg-watch" href="${window.location.pathname}" target="_blank">Watch</a></div>`;
 
     // Current context row — countdown shows time remaining in this phase
     html += `<div class="dbg-row" id="dbg-row-current">
@@ -397,6 +413,7 @@ async function init() {
 
     function showSlide(i) {
         frames.forEach((f, j) => f.classList.toggle('active', j === i));
+        _currentSlug = slides[i].slug;
         if (PREVIEW) markCurrentSlide(slides, i);
     }
 

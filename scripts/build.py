@@ -914,13 +914,19 @@ def build_slideshows(env):
             "slide_expires": s.get("expires"),
         }
 
+    config = load_config()
+    preview_cfg = config.get("preview", {})
+    built_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    site_url = preview_cfg.get("site_url", "")
+    qr_data_url = generate_qr_data_url(site_url) if site_url else ""
+
     homepage_shows = []
     for show_path in sorted((CONTENT / "slideshows").glob("*.json")):
         show = json.loads(show_path.read_text())
         slug = show_path.stem
 
         template = env.get_template("slideshow/player.html")
-        html = template.render(show=show, slug=slug)
+        html = template.render(show=show, slug=slug, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
 
         out_dir = SITE / "slideshow" / slug
         out_dir.mkdir(parents=True, exist_ok=True)

@@ -29,25 +29,114 @@
             overflow-y: auto;
             background: #0d0d0d;
             border-right: 1px solid #2a2a2a;
-            padding: 14px 16px;
             font: 12px/1.6 monospace;
             color: #ccc;
         }
         body.preview #dbg { display: block; }
-        .dbg-head { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .08em; margin: 12px 0 3px; }
-        .dbg-head:first-child { margin-top: 0; }
-        .dbg-val { color: #fff; }
-        .slide-row { padding: 1px 4px; margin: 0 -4px; border-radius: 2px; }
+
+        .dbg-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 14px;
+            font-size: 11px;
+            color: #fff;
+            background: #161616;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .dbg-watch {
+            color: #66bb6a;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 3px 10px;
+            border: 1px solid #2a5a2a;
+            border-radius: 3px;
+            flex-shrink: 0;
+        }
+        .dbg-watch:hover { background: #1b2e1b; }
+        .dbg-slides { padding: 8px 14px; }
+        .dbg-head { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+
+        .slide-row { display: flex; justify-content: space-between; padding: 1px 3px; margin: 0 -3px; border-radius: 2px; }
         .slide-row.on  { color: #66bb6a; }
         .slide-row.off { color: #444; }
         .slide-row.now { background: #1b2e1b; color: #a5d6a7; }
-        .slide-reason  { font-size: 11px; color: #e65100; padding-left: 14px; }
-        .dbg-dim { color: #555; font-size: 11px; }
-        .dbg-note { color: #555; font-style: italic; }
+        .slide-row a { color: inherit; text-decoration: none; }
+        .slide-row a:hover { text-decoration: underline; }
+        .slide-dur { font-size: 11px; margin-left: 6px; flex-shrink: 0; opacity: 0.6; }
+        .slide-reason { font-size: 11px; color: #e65100; padding-left: 14px; }
+
+        #iframe-overlay {
+            display: none;
+            position: fixed;
+            right: 0; top: 0;
+            width: 50%;
+            aspect-ratio: 16 / 9;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #iframe-overlay:hover::after {
+            content: '⛶  Open current slide';
+            position: absolute;
+            bottom: 10px; right: 12px;
+            font: 11px/1 monospace;
+            color: rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.5);
+            padding: 4px 8px;
+            border-radius: 3px;
+            pointer-events: none;
+        }
+        body.preview #iframe-overlay { display: block; }
+
+        #about {
+            display: none;
+            position: fixed;
+            right: 0; bottom: 0;
+            width: 50%; height: 50%;
+            background: #0d0d0d;
+            border-top: 1px solid #2a2a2a;
+            font: 12px/1.6 monospace;
+            color: #ccc;
+            padding: 20px 24px;
+            box-sizing: border-box;
+            flex-direction: column;
+            gap: 10px;
+        }
+        body.preview #about { display: flex; }
+        .about-title { font-size: 15px; color: #fff; font-weight: bold; margin-bottom: 4px; }
+        .about-body { display: flex; gap: 24px; align-items: flex-start; flex: 1; }
+        .about-links { display: flex; flex-direction: column; gap: 4px; }
+        .about-label { color: #555; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; margin-top: 8px; }
+        .about-label:first-child { margin-top: 0; }
+        .about-val { color: #ddd; }
+        .about-val a { color: #00e5ff; text-decoration: none; }
+        .about-val a:hover { text-decoration: underline; }
+        .about-qr { margin-left: auto; flex-shrink: 0; }
+        .about-qr img { display: block; border-radius: 4px; }
+        .about-footer { color: #444; font-size: 11px; margin-top: auto; }
     </style>
 </head>
 <body>
     <div id="dbg"></div>
+    <div id="iframe-overlay" onclick="window.open(`/slide/${slides[current].slug}/`, '_blank')"></div>
+    <div id="about">
+        <div class="about-title">{{ preview.title }}</div>
+        <div class="about-body">
+            <div class="about-links">
+                <div class="about-label">Watch anywhere at</div>
+                <div class="about-val"><a href="{{ preview.site_url }}" target="_blank">{{ preview.site_url }}</a></div>
+                <div class="about-label">Documentation &amp; code</div>
+                <div class="about-val"><a href="{{ preview.github_url }}" target="_blank">{{ preview.github_url }}</a></div>
+                <div class="about-label">Support / feature request</div>
+                <div class="about-val"><a href="mailto:{{ preview.support_email }}">{{ preview.support_email }}</a></div>
+            </div>
+            <div class="about-qr">
+                <img src="{{ qr_data_url }}" width="120" height="120" alt="QR code">
+            </div>
+        </div>
+        <div class="about-footer">Built {{ built_at }} &nbsp;·&nbsp; <span id="about-reload"></span></div>
+    </div>
     {% for slide in show.slides %}
     <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
     {% endfor %}
@@ -63,6 +152,13 @@
         }
         window.addEventListener('resize', applyDebugScale);
         applyDebugScale();
+
+        function fmtCountdown(ms) {
+            const s = Math.max(0, Math.floor(ms / 1000));
+            const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+            if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
+            return `${m}m ${String(sec).padStart(2,'0')}s`;
+        }
 
         const today = new Date().toISOString().slice(0, 10);
         const allSlides = {{ show.slides | tojson }}.map((s, i) => {
@@ -96,15 +192,16 @@
             if (!panel) return;
             const rows = allSlides.map(s => {
                 const cls = s._shown ? 'on' : 'off';
-                const expires = s.expires ? ` <span class="dbg-dim">exp ${s.expires}</span>` : '';
+                const bullet = s._shown ? '●' : '○';
+                const label = s._shown
+                    ? `<a href="/slide/${s.slug}/" target="_blank">${s.slug}</a>`
+                    : s.slug;
                 const reason = s._reason ? `<div class="slide-reason">↳ ${s._reason}</div>` : '';
-                return `<div class="slide-row ${cls}" data-idx="${s._i}">${s._shown ? '●' : '○'} ${s.slug} <span class="dbg-dim">${s.duration}s</span>${expires}${reason}</div>`;
+                return `<div class="slide-row ${cls}" data-idx="${s._i}"><span>${bullet} ${label}</span><span class="slide-dur">${s.duration}s</span></div>${reason}`;
             }).join('');
-            panel.innerHTML = [
-                `<div class="dbg-head">Slideshow</div><div class="dbg-val">{{ show.title }}</div>`,
-                `<div class="dbg-head">Slides</div><div id="dbg-slides">${rows}</div>`,
-                `<div class="dbg-head">Context filtering</div><div class="dbg-note">n/a — use /screen/… for context-aware playback</div>`,
-            ].join('');
+            panel.innerHTML =
+                `<div class="dbg-meta"><span>Preview of slides for slideshow <strong>{{ show.title }}</strong></span><a class="dbg-watch" href="${window.location.pathname}" target="_blank">Watch</a></div>` +
+                `<div class="dbg-slides"><div class="dbg-head">Slides (${slides.length} of ${allSlides.length})</div><div id="dbg-slides">${rows}</div></div>`;
         }
 
         if (PREVIEW) renderPanel();
@@ -114,8 +211,21 @@
             setTimeout(advance, slides[0].duration * 1000);
         }
 
-        // Reload the player every 6 hours to pick up weekly updates
-        setTimeout(() => location.reload(), 6 * 60 * 60 * 1000);
+        const reloadMs = {{ show.refresh_interval_seconds }} * 1000;
+        setTimeout(() => location.reload(), reloadMs);
+
+        if (PREVIEW) {
+            const reloadEl = document.getElementById('about-reload');
+            const reloadAt = Date.now() + reloadMs;
+            const tickReload = () => {
+                const ms = reloadAt - Date.now();
+                if (ms > 0 && reloadEl) {
+                    reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
+                    setTimeout(tickReload, 1000);
+                }
+            };
+            tickReload();
+        }
     </script>
 </body>
 </html>
