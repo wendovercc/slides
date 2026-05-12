@@ -1,5 +1,6 @@
 {
   "template": "sponsors",
-  "title": "Our Club Partners",
-  "data": "content/sponsors.json"
+  "title": "Please support our sponsors",
+  "data": "content/sponsors.json",
+  "qr_cta": "Find out about our current sponsorship opportunities"
 }

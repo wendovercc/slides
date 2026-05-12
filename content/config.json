@@ -14,7 +14,8 @@
     "club_url": "https://www.wendovercc.org",
     "site_url": "https://slides.wendovercc.org",
     "github_url": "https://github.com/wendovercc/slides",
-    "support_email": "wendovercctreasurer@gmail.com"
+    "support_email": "wendovercctreasurer@gmail.com",
+    "sponsorship_url": "https://www.wendovercc.org/sponsorship-opportunities"
   },
   "activity_phases": {
     "match":    { "warm_up_mins": 120, "main_duration_mins": 210, "wind_down_mins": 180 },

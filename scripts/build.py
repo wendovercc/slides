@@ -853,6 +853,11 @@ def build_slides(env):
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
 
+        if slide.get("template") == "sponsors":
+            sponsorship_url = config.get("preview", {}).get("sponsorship_url", "")
+            if sponsorship_url:
+                slide["_qr_data_url"] = generate_qr_data_url(sponsorship_url)
+
         if slide.get("template") == "league-positions":
             build_league_positions(slide, teams_by_id, load_stats("this_season"))
 
