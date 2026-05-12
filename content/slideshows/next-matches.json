@@ -1,0 +1,28 @@
+{
+  "title": "Upcoming Matches",
+  "homepage_rank": 3,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "sponsors",               "duration": 15 },
+
+    { "slug": "next-match-1st-xi",      "duration": 20 },
+    { "slug": "next-match-2nd-xi",      "duration": 20 },
+    { "slug": "next-match-friendly-xi", "duration": 20 },
+
+    { "slug": "next-match-u17-spitfires",   "duration": 20 },
+    { "slug": "next-match-u15-hurricanes",  "duration": 20 },
+    { "slug": "next-match-u15-spitfires",   "duration": 20 },
+    { "slug": "next-match-u14-hurricanes",  "duration": 20 },
+    { "slug": "next-match-u13-girls",       "duration": 20 },
+    { "slug": "next-match-u13-hurricanes",  "duration": 20 },
+    { "slug": "next-match-u13-spitfires",   "duration": 20 },
+    { "slug": "next-match-u12-hurricanes",  "duration": 20 },
+    { "slug": "next-match-u12-spitfires",   "duration": 20 },
+    { "slug": "next-match-u11-girls",       "duration": 20 },
+    { "slug": "next-match-u11-incredibles", "duration": 20 },
+    { "slug": "next-match-u11-invincibles", "duration": 20 },
+    { "slug": "next-match-u10-lightning",   "duration": 20 },
+    { "slug": "next-match-u10-thunder",     "duration": 20 },
+    { "slug": "next-match-u9",              "duration": 20 }
+  ]
+}

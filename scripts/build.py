@@ -1004,4 +1004,4 @@ if __name__ == "__main__":
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")
     print("  cd site && python -m http.server 8000")
-    print("  open http://localhost:8000/slideshow/pavilion-1/")
+    print("  open http://localhost:8000/slideshow/pavilion-auto/")

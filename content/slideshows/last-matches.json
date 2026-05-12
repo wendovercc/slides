@@ -1,0 +1,28 @@
+{
+  "title": "Last Match Results",
+  "homepage_rank": 2,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "sponsors",               "duration": 15 },
+
+    { "slug": "last-match-1st-xi",      "duration": 20 },
+    { "slug": "last-match-2nd-xi",      "duration": 20 },
+    { "slug": "last-match-friendly-xi", "duration": 20 },
+
+    { "slug": "last-match-u17-spitfires",   "duration": 20 },
+    { "slug": "last-match-u15-hurricanes",  "duration": 20 },
+    { "slug": "last-match-u15-spitfires",   "duration": 20 },
+    { "slug": "last-match-u14-hurricanes",  "duration": 20 },
+    { "slug": "last-match-u13-girls",       "duration": 20 },
+    { "slug": "last-match-u13-hurricanes",  "duration": 20 },
+    { "slug": "last-match-u13-spitfires",   "duration": 20 },
+    { "slug": "last-match-u12-hurricanes",  "duration": 20 },
+    { "slug": "last-match-u12-spitfires",   "duration": 20 },
+    { "slug": "last-match-u11-girls",       "duration": 20 },
+    { "slug": "last-match-u11-incredibles", "duration": 20 },
+    { "slug": "last-match-u11-invincibles", "duration": 20 },
+    { "slug": "last-match-u10-lightning",   "duration": 20 },
+    { "slug": "last-match-u10-thunder",     "duration": 20 },
+    { "slug": "last-match-u9",              "duration": 20 }
+  ]
+}
