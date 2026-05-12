@@ -947,11 +947,13 @@ def build_screen_locations(env):
     config = load_config()
     preview_cfg = config.get("preview", {})
     built_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    site_url = preview_cfg.get("site_url", "")
+    qr_data_url = generate_qr_data_url(site_url) if site_url else ""
 
     screen_locs = [l for l in locs_data["locations"] if l.get("screen")]
     template = env.get_template("screen/player.html")
     for loc in screen_locs:
-        html = template.render(location=loc, preview=preview_cfg, built_at=built_at)
+        html = template.render(location=loc, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
         out_dir = SITE / "screen" / loc["id"]
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html)

@@ -123,7 +123,7 @@
             <div class="about-val"><a href="mailto:{{ preview.support_email }}">{{ preview.support_email }}</a></div>
         </div>
         <div class="about-qr">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={{ preview.site_url }}" width="120" height="120" alt="QR code">
+            <img src="{{ qr_data_url }}" width="120" height="120" alt="QR code">
         </div>
     </div>
     <div class="about-footer">Built {{ built_at }} &nbsp;·&nbsp; <span id="about-reload"></span></div>
