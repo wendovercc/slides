@@ -17,8 +17,9 @@
         iframe.active { opacity: 1; }
 
         body.debug iframe {
-            width: 50%; height: 50%;
-            left: auto; right: 0;
+            width: 1920px; height: 1080px;
+            left: auto; right: 0; top: 0;
+            transform-origin: top right;
         }
         #dbg {
             display: none;
@@ -54,6 +55,14 @@
     <script>
         const DEBUG = new URLSearchParams(window.location.search).has('debug');
         if (DEBUG) document.body.classList.add('debug');
+
+        function applyDebugScale() {
+            if (!DEBUG) return;
+            const scale = (window.innerWidth * 0.5) / 1920;
+            document.querySelectorAll('iframe').forEach(f => f.style.transform = `scale(${scale})`);
+        }
+        window.addEventListener('resize', applyDebugScale);
+        applyDebugScale();
 
         const today = new Date().toISOString().slice(0, 10);
         const allSlides = {{ show.slides | tojson }}.map((s, i) => {

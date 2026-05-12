@@ -17,8 +17,9 @@
         iframe.active { opacity: 1; }
 
         body.debug iframe {
-            width: 50%; height: 50%;
-            left: auto; right: 0;
+            width: 1920px; height: 1080px;
+            left: auto; right: 0; top: 0;
+            transform-origin: top right;
         }
         #dbg {
             display: none;
@@ -46,6 +47,8 @@
         .slide-reason  { font-size: 11px; color: #e65100; padding-left: 14px; }
         .dbg-countdown { font-size: 20px; font-weight: bold; color: #fff; margin: 2px 0 4px; }
         .dbg-dim { color: #555; font-size: 11px; }
+        .dbg-next-item { margin-bottom: 6px; }
+        .dbg-sep { border-top: 1px solid #222; margin: 6px 0; }
     </style>
 </head>
 <body>
@@ -54,6 +57,13 @@
 const LOCATION_ID = {{ location.id | tojson }};
 const DEBUG = new URLSearchParams(window.location.search).has('debug');
 if (DEBUG) document.body.classList.add('debug');
+
+function applyDebugScale() {
+    if (!DEBUG) return;
+    const scale = (window.innerWidth * 0.5) / 1920;
+    document.querySelectorAll('iframe').forEach(f => f.style.transform = `scale(${scale})`);
+}
+window.addEventListener('resize', applyDebugScale);
 
 function resolveContext(calendar, loc) {
     const today = new Date().toISOString().slice(0, 10);
@@ -107,24 +117,44 @@ function evaluateSlides(show, ctx, today) {
     });
 }
 
-function findNextContext(calendar, locId) {
+function findNextContexts(calendar, locId, count = 3) {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
     const timeNow = now.toTimeString().slice(0, 5);
     const locDates = calendar.entries?.[locId]?.dates ?? {};
 
+    // Collect all future phase windows
+    const upcoming = [];
     for (const dateStr of Object.keys(locDates).sort()) {
         if (dateStr < today) continue;
         for (const entry of locDates[dateStr]) {
             for (const phase of ['warm_up', 'main', 'wind_down']) {
                 const win = entry.phases?.[phase];
                 if (!win) continue;
-                if (dateStr === today && win.start <= timeNow) continue;
-                return { entry, phase, dateStr, start: new Date(`${dateStr}T${win.start}:00`) };
+                if (dateStr === today && win.start <= timeNow) continue; // past or currently active
+                upcoming.push({
+                    type: entry.type, phase, entry, dateStr,
+                    start: new Date(`${dateStr}T${win.start}:00`),
+                    end:   new Date(`${dateStr}T${win.end}:00`),
+                });
             }
         }
     }
-    return null;
+    // Entries are priority-ordered, not time-ordered, so sort chronologically
+    upcoming.sort((a, b) => a.start - b.start);
+
+    // Build result list, inserting idle gaps between non-contiguous phases
+    const results = [];
+    for (let i = 0; i < upcoming.length && results.length < count; i++) {
+        const prev = upcoming[i - 1];
+        const cur  = upcoming[i];
+        if (prev && cur.start > prev.end) {
+            results.push({ type: 'idle', start: prev.end, end: cur.start });
+            if (results.length >= count) break;
+        }
+        results.push(cur);
+    }
+    return results;
 }
 
 function fmtCountdown(ms) {
@@ -138,7 +168,27 @@ function row(label, value) {
     return `<div class="dbg-kv"><span class="dbg-k">${label}</span><span class="dbg-v">${value}</span></div>`;
 }
 
-function renderPanel(locId, ctx, slideshowSlug, allSlides, nextCtx) {
+function renderNextCtx(nc, i) {
+    if (nc.type === 'idle') {
+        const endStr = nc.end ? nc.end.toTimeString().slice(0, 5) : '—';
+        return `<div class="dbg-next-item">
+            <div class="dbg-kv"><span class="dbg-k">type</span><span class="dbg-v">idle</span></div>
+            <div class="dbg-kv"><span class="dbg-k">from</span><span class="dbg-v">${nc.start.toTimeString().slice(0,5)} → ${endStr} <span class="dbg-dim">(${nc.start.toISOString().slice(0,10)})</span></span></div>
+            <div class="dbg-kv"><span class="dbg-k">in</span><span class="dbg-v dbg-cd" data-start="${nc.start.getTime()}"></span></div>
+        </div>`;
+    }
+    const na = nc.entry.audience ?? {};
+    const win = nc.entry.phases[nc.phase];
+    return `<div class="dbg-next-item">
+        <div class="dbg-kv"><span class="dbg-k">type</span><span class="dbg-v">${nc.type} · ${nc.phase}</span></div>
+        <div class="dbg-kv"><span class="dbg-k">at</span><span class="dbg-v">${win.start} → ${win.end} <span class="dbg-dim">(${nc.dateStr})</span></span></div>
+        <div class="dbg-kv"><span class="dbg-k">in</span><span class="dbg-v dbg-cd" data-start="${nc.start.getTime()}"></span></div>
+        <div class="dbg-kv"><span class="dbg-k">section</span><span class="dbg-v">${na.section ?? '—'}</span></div>
+        <div class="dbg-kv"><span class="dbg-k">teams</span><span class="dbg-v">${na.teams?.join(', ') || '—'}</span></div>
+    </div>`;
+}
+
+function renderPanel(locId, ctx, slideshowSlug, allSlides, nextCtxs) {
     const panel = document.getElementById('dbg');
     if (!panel) return;
 
@@ -157,31 +207,23 @@ function renderPanel(locId, ctx, slideshowSlug, allSlides, nextCtx) {
         return `<div class="slide-row ${cls}" data-idx="${i}">${s._shown ? '●' : '○'} ${s.slug} <span class="dbg-dim">${s.duration}s</span>${expires}${reasonHtml}</div>`;
     }).join('');
 
-    let nextHtml = '<span class="dbg-dim">none found</span>';
-    if (nextCtx) {
-        const na = nextCtx.entry.audience ?? {};
-        nextHtml = [
-            `<div class="dbg-countdown" id="dbg-countdown"></div>`,
-            `<div class="dbg-dim">${nextCtx.dateStr} ${nextCtx.entry.phases[nextCtx.phase].start}</div>`,
-            row('type',    nextCtx.entry.type),
-            row('phase',   nextCtx.phase),
-            row('section', na.section ?? '—'),
-            row('teams',   na.teams?.join(', ') || '—'),
-        ].join('');
-    }
+    const nextHtml = nextCtxs.length
+        ? nextCtxs.map(renderNextCtx).join('<div class="dbg-sep"></div>')
+        : '<span class="dbg-dim">none found</span>';
 
     panel.innerHTML = [
         `<div class="dbg-head">Screen</div><div class="dbg-val">${locId}</div>`,
         `<div class="dbg-head">Slideshow</div><div class="dbg-val">${slideshowSlug ?? '—'}</div>`,
         `<div class="dbg-head">Context</div>${ctxHtml}`,
         `<div class="dbg-head">Slides</div><div id="dbg-slides">${slideRows}</div>`,
-        `<div class="dbg-head">Next context</div>${nextHtml}`,
+        `<div class="dbg-head">Next contexts</div>${nextHtml}`,
     ].join('');
 
-    if (nextCtx) {
+    if (nextCtxs.length) {
         const tick = () => {
-            const el = document.getElementById('dbg-countdown');
-            if (el) el.textContent = fmtCountdown(nextCtx.start - new Date());
+            document.querySelectorAll('.dbg-cd').forEach(el => {
+                el.textContent = fmtCountdown(el.dataset.start - new Date());
+            });
         };
         tick();
         setInterval(tick, 1000);
@@ -214,8 +256,8 @@ async function init() {
     const slides = allSlides.filter(s => s._shown);
 
     if (DEBUG) {
-        const nextCtx = findNextContext(calendar, LOCATION_ID);
-        renderPanel(LOCATION_ID, context, slideshowSlug, allSlides, nextCtx);
+        const nextCtxs = findNextContexts(calendar, LOCATION_ID);
+        renderPanel(LOCATION_ID, context, slideshowSlug, allSlides, nextCtxs);
     }
 
     if (slides.length === 0) return;
@@ -225,6 +267,7 @@ async function init() {
         f.src = `/slide/${s.slug}/`;
         document.body.appendChild(f);
     });
+    applyDebugScale();
 
     const frames = document.querySelectorAll('iframe');
     let current = 0;
