@@ -15,11 +15,45 @@
             transition: opacity 0.8s ease;
         }
         iframe.active { opacity: 1; }
+
+        body.debug iframe {
+            width: 50%; height: 50%;
+            left: auto; right: 0;
+        }
+        #dbg {
+            display: none;
+            position: fixed;
+            left: 0; top: 0;
+            width: 50%; height: 100%;
+            overflow-y: auto;
+            background: #0d0d0d;
+            border-right: 1px solid #2a2a2a;
+            padding: 14px 16px;
+            font: 12px/1.6 monospace;
+            color: #ccc;
+        }
+        body.debug #dbg { display: block; }
+        .dbg-head { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .08em; margin: 12px 0 3px; }
+        .dbg-head:first-child { margin-top: 0; }
+        .dbg-val { color: #fff; }
+        .dbg-kv { display: flex; gap: 6px; }
+        .dbg-k { color: #666; min-width: 56px; }
+        .dbg-v { color: #ddd; }
+        .slide-row { padding: 1px 4px; margin: 0 -4px; border-radius: 2px; }
+        .slide-row.on  { color: #66bb6a; }
+        .slide-row.off { color: #444; }
+        .slide-row.now { background: #1b2e1b; color: #a5d6a7; }
+        .slide-reason  { font-size: 11px; color: #e65100; padding-left: 14px; }
+        .dbg-countdown { font-size: 20px; font-weight: bold; color: #fff; margin: 2px 0 4px; }
+        .dbg-dim { color: #555; font-size: 11px; }
     </style>
 </head>
 <body>
+<div id="dbg"></div>
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
+const DEBUG = new URLSearchParams(window.location.search).has('debug');
+if (DEBUG) document.body.classList.add('debug');
 
 function resolveContext(calendar, loc) {
     const today = new Date().toISOString().slice(0, 10);
@@ -27,8 +61,8 @@ function resolveContext(calendar, loc) {
     const entries = calendar.entries?.[loc.id]?.dates?.[today] ?? [];
 
     for (const entry of entries) {
-        for (const [phase, window] of Object.entries(entry.phases)) {
-            if (timeNow >= window.start && timeNow < window.end) {
+        for (const [phase, win] of Object.entries(entry.phases)) {
+            if (timeNow >= win.start && timeNow < win.end) {
                 return {
                     context: { type: entry.type, phase, audience: entry.audience, detail: entry.detail },
                     slideshowSlug: entry.slideshow ?? loc.slideshow,
@@ -36,26 +70,129 @@ function resolveContext(calendar, loc) {
             }
         }
     }
-
     return {
         context: { type: 'idle', phase: null, audience: loc.default_context ?? { section: 'all' }, detail: {} },
         slideshowSlug: loc.slideshow,
     };
 }
 
-function matchesContext(slideEntry, context) {
-    const conditions = slideEntry.show_when;
-    if (!conditions || conditions.length === 0) return true;
-    return conditions.some(cond => {
-        if (cond.type    && !cond.type.includes(context.type))                  return false;
-        if (cond.phase   && !cond.phase.includes(context.phase))                return false;
-        if (cond.section && !cond.section.includes(context.audience?.section))  return false;
-        if (cond.teams) {
-            const ctxTeams = context.audience?.teams ?? [];
-            if (!cond.teams.some(t => ctxTeams.includes(t)))                    return false;
+function matchesContext(s, ctx) {
+    const conds = s.show_when;
+    if (!conds || conds.length === 0) return true;
+    return conds.some(c => {
+        if (c.type    && !c.type.includes(ctx.type))                 return false;
+        if (c.phase   && !c.phase.includes(ctx.phase))               return false;
+        if (c.section && !c.section.includes(ctx.audience?.section)) return false;
+        if (c.teams) {
+            const ct = ctx.audience?.teams ?? [];
+            if (!c.teams.some(t => ct.includes(t)))                  return false;
         }
         return true;
     });
+}
+
+function evaluateSlides(show, ctx, today) {
+    return show.slides.map((s, i) => {
+        let reason = null;
+        if (s.slide_active === false)                         reason = 'inactive';
+        else if (s.slide_expires && s.slide_expires < today) reason = `slide expired ${s.slide_expires}`;
+        else if (s.expires && s.expires < today)              reason = `expired ${s.expires}`;
+        else if (!matchesContext(s, ctx)) {
+            const desc = (s.show_when || []).map(c =>
+                Object.entries(c).map(([k, v]) => `${k}=${v.join('|')}`).join(' ')
+            ).join(' OR ');
+            reason = `show_when: ${desc || '(none)'}`;
+        }
+        return { ...s, _shown: !reason, _reason: reason, _allIdx: i };
+    });
+}
+
+function findNextContext(calendar, locId) {
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const timeNow = now.toTimeString().slice(0, 5);
+    const locDates = calendar.entries?.[locId]?.dates ?? {};
+
+    for (const dateStr of Object.keys(locDates).sort()) {
+        if (dateStr < today) continue;
+        for (const entry of locDates[dateStr]) {
+            for (const phase of ['warm_up', 'main', 'wind_down']) {
+                const win = entry.phases?.[phase];
+                if (!win) continue;
+                if (dateStr === today && win.start <= timeNow) continue;
+                return { entry, phase, dateStr, start: new Date(`${dateStr}T${win.start}:00`) };
+            }
+        }
+    }
+    return null;
+}
+
+function fmtCountdown(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
+    return `${m}m ${String(sec).padStart(2,'0')}s`;
+}
+
+function row(label, value) {
+    return `<div class="dbg-kv"><span class="dbg-k">${label}</span><span class="dbg-v">${value}</span></div>`;
+}
+
+function renderPanel(locId, ctx, slideshowSlug, allSlides, nextCtx) {
+    const panel = document.getElementById('dbg');
+    if (!panel) return;
+
+    const aud = ctx.audience ?? {};
+    const ctxHtml = [
+        row('type',    ctx.type ?? '—'),
+        row('phase',   ctx.phase ?? '—'),
+        row('section', aud.section ?? '—'),
+        row('teams',   aud.teams?.join(', ') || '—'),
+    ].join('');
+
+    const slideRows = allSlides.map((s, i) => {
+        const cls = s._shown ? 'on' : 'off';
+        const expires = s.expires ? ` <span class="dbg-dim">exp ${s.expires}</span>` : '';
+        const reasonHtml = s._reason ? `<div class="slide-reason">↳ ${s._reason}</div>` : '';
+        return `<div class="slide-row ${cls}" data-idx="${i}">${s._shown ? '●' : '○'} ${s.slug} <span class="dbg-dim">${s.duration}s</span>${expires}${reasonHtml}</div>`;
+    }).join('');
+
+    let nextHtml = '<span class="dbg-dim">none found</span>';
+    if (nextCtx) {
+        const na = nextCtx.entry.audience ?? {};
+        nextHtml = [
+            `<div class="dbg-countdown" id="dbg-countdown"></div>`,
+            `<div class="dbg-dim">${nextCtx.dateStr} ${nextCtx.entry.phases[nextCtx.phase].start}</div>`,
+            row('type',    nextCtx.entry.type),
+            row('phase',   nextCtx.phase),
+            row('section', na.section ?? '—'),
+            row('teams',   na.teams?.join(', ') || '—'),
+        ].join('');
+    }
+
+    panel.innerHTML = [
+        `<div class="dbg-head">Screen</div><div class="dbg-val">${locId}</div>`,
+        `<div class="dbg-head">Slideshow</div><div class="dbg-val">${slideshowSlug ?? '—'}</div>`,
+        `<div class="dbg-head">Context</div>${ctxHtml}`,
+        `<div class="dbg-head">Slides</div><div id="dbg-slides">${slideRows}</div>`,
+        `<div class="dbg-head">Next context</div>${nextHtml}`,
+    ].join('');
+
+    if (nextCtx) {
+        const tick = () => {
+            const el = document.getElementById('dbg-countdown');
+            if (el) el.textContent = fmtCountdown(nextCtx.start - new Date());
+        };
+        tick();
+        setInterval(tick, 1000);
+    }
+}
+
+function markCurrentSlide(shownSlides, currentIdx) {
+    document.querySelectorAll('#dbg-slides .slide-row').forEach(el => el.classList.remove('now'));
+    const allIdx = shownSlides[currentIdx]?._allIdx;
+    if (allIdx === undefined) return;
+    document.querySelector(`#dbg-slides .slide-row[data-idx="${allIdx}"]`)?.classList.add('now');
 }
 
 async function init() {
@@ -73,12 +210,13 @@ async function init() {
     if (!slideshowSlug) return;
 
     const show = await fetch(`/slideshow/${slideshowSlug}/data.json`).then(r => r.json());
+    const allSlides = evaluateSlides(show, context, today);
+    const slides = allSlides.filter(s => s._shown);
 
-    const slides = show.slides
-        .filter(s => s.slide_active !== false)
-        .filter(s => !s.slide_expires || s.slide_expires >= today)
-        .filter(s => !s.expires       || s.expires       >= today)
-        .filter(s => matchesContext(s, context));
+    if (DEBUG) {
+        const nextCtx = findNextContext(calendar, LOCATION_ID);
+        renderPanel(LOCATION_ID, context, slideshowSlug, allSlides, nextCtx);
+    }
 
     if (slides.length === 0) return;
 
@@ -93,6 +231,7 @@ async function init() {
 
     function showSlide(i) {
         frames.forEach((f, j) => f.classList.toggle('active', j === i));
+        if (DEBUG) markCurrentSlide(slides, i);
     }
 
     function advance() {
