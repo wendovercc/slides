@@ -410,6 +410,7 @@ async function init() {
 
     const frames = document.querySelectorAll('iframe');
     let current = 0;
+    let timer = null;
 
     function showSlide(i) {
         frames.forEach((f, j) => f.classList.toggle('active', j === i));
@@ -417,14 +418,31 @@ async function init() {
         if (PREVIEW) markCurrentSlide(slides, i);
     }
 
+    function schedule() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(advance, slides[current].duration * 1000);
+    }
+
     function advance() {
         current = (current + 1) % slides.length;
         showSlide(current);
-        setTimeout(advance, slides[current].duration * 1000);
+        schedule();
     }
 
+    document.addEventListener('keydown', e => {
+        if (e.key === 'ArrowRight') {
+            current = (current + 1) % slides.length;
+            showSlide(current);
+            schedule();
+        } else if (e.key === 'ArrowLeft') {
+            current = (current - 1 + slides.length) % slides.length;
+            showSlide(current);
+            schedule();
+        }
+    });
+
     showSlide(0);
-    setTimeout(advance, slides[0].duration * 1000);
+    schedule();
 
     const reloadMs = show.refresh_interval_seconds * 1000;
     setTimeout(() => window.location.reload(), reloadMs);
