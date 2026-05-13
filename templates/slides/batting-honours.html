@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ slide.title }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #1a3d1a;
+            font-family: Georgia, 'Times New Roman', serif;
+            color: #ffffff;
+        }
+        .slide {
+            width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 3rem 5rem 5rem;
+        }
+        .header {
+            margin-bottom: 1.5rem;
+        }
+        .title {
+            font-size: 3.5rem;
+            font-weight: bold;
+            line-height: 1.2;
+            text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        }
+        .halves {
+            flex: 1;
+            display: flex;
+            flex-direction: row;
+            gap: 0;
+            min-height: 0;
+        }
+        .half {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .half + .half {
+            border-left: 1px solid rgba(255,255,255,0.2);
+            padding-left: 3rem;
+        }
+        .half:first-child {
+            padding-right: 3rem;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            opacity: 0.6;
+            margin-bottom: 0.8rem;
+        }
+        .table {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .col-headers {
+            display: grid;
+            grid-template-columns: 2rem 1fr 3.5rem 1fr 3.5rem;
+            gap: 0 0.5rem;
+            padding: 0.3rem 0 0.5rem;
+            border-bottom: 1px solid rgba(255,255,255,0.25);
+            font-size: 1.1rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0.55;
+        }
+        .col-num { text-align: right; }
+        /* Score header uses same flex+star structure as data cells so numbers align exactly */
+        .col-score {
+            display: flex;
+            justify-content: flex-end;
+        }
+        .col-score-label { display: inline-block; }
+        .col-score-gap  { display: inline-block; width: 0.55em; }
+        .row {
+            display: grid;
+            grid-template-columns: 2rem 1fr 3.5rem 1fr 3.5rem;
+            gap: 0 0.5rem;
+            padding: 0.35rem 0;
+            font-size: 1.3rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            align-items: baseline;
+        }
+        .row.this-season {
+            color: #e8c040;
+        }
+        .pos {
+            opacity: 0.45;
+            font-size: 1.1rem;
+            text-align: right;
+        }
+        .row.this-season .pos {
+            opacity: 0.7;
+        }
+        .name {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            padding-right: 0.4rem;
+        }
+        .score-cell {
+            display: flex;
+            justify-content: flex-end;
+            font-variant-numeric: tabular-nums;
+            font-weight: bold;
+        }
+        .star { display: inline-block; width: 0.55em; }
+        .opp {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            opacity: 0.7;
+            font-size: 1.2rem;
+            padding-right: 0.4rem;
+        }
+        .row.this-season .opp {
+            opacity: 0.85;
+        }
+        .year {
+            text-align: right;
+            opacity: 0.6;
+            font-size: 1.15rem;
+        }
+        .row.this-season .year {
+            opacity: 0.85;
+        }
+        .branding {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            background: rgba(0,0,0,0.35);
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 1.4rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+    </style>
+</head>
+<body>
+    <div class="slide">
+        <div class="header">
+            <div class="title">{{ slide.title }}</div>
+        </div>
+        <div class="halves">
+
+            <div class="half">
+                <div class="section-title">Highest Scores</div>
+                <div class="table">
+                    <div class="col-headers">
+                        <span></span>
+                        <span>Name</span>
+                        <span class="col-score"><span class="col-score-label">Score</span><span class="col-score-gap"></span></span>
+                        <span>Match</span>
+                        <span class="col-num">Year</span>
+                    </div>
+                    {% for r in slide._top_scores %}
+                    <div class="row{% if r.is_season %} this-season{% endif %}">
+                        <span class="pos">{{ loop.index }}</span>
+                        <span class="name">{{ r.batsman }}</span>
+                        <span class="score-cell"><span>{{ r.score }}</span><span class="star">{% if r.not_out %}*{% endif %}</span></span>
+                        <span class="opp">{{ r.match }}</span>
+                        <span class="year">{{ r.year }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="half">
+                <div class="section-title">Most Recent Hundreds</div>
+                <div class="table">
+                    <div class="col-headers">
+                        <span></span>
+                        <span>Name</span>
+                        <span class="col-score"><span class="col-score-label">Score</span><span class="col-score-gap"></span></span>
+                        <span>Match</span>
+                        <span class="col-num">Year</span>
+                    </div>
+                    {% for r in slide._recent %}
+                    <div class="row{% if r.is_season %} this-season{% endif %}">
+                        <span class="pos">{{ loop.index }}</span>
+                        <span class="name">{{ r.batsman }}</span>
+                        <span class="score-cell"><span>{{ r.score }}</span><span class="star">{% if r.not_out %}*{% endif %}</span></span>
+                        <span class="opp">{{ r.match }}</span>
+                        <span class="year">{{ r.year }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <div class="branding">Wendover Cricket Club</div>
+</body>
+</html>

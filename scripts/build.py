@@ -19,6 +19,7 @@ SITE = ROOT / "site"
 
 LEAGUE_TABLE_EXCLUDED = {"ave+", "batp", "bowlp", "offbp", "pen", "t"}
 LEADERBOARD_TEMPLATES = {"batting-leaderboard", "bowling-leaderboard"}
+HONOURS_TEMPLATES = {"batting-honours", "bowling-honours"}
 FANTASY_TEMPLATES = {
     "fantasy-team-standings": "fantasy_team_standings",
     "fantasy-player-standings": "fantasy_player_standings",
@@ -199,6 +200,165 @@ def build_bowling_leaderboard(slide, stats_data, lb_config):
     slide["_wkts_rows"] = [fmt(e) for e in wkts_rows]
     slide["_avg_rows"] = [fmt(e) for e in avg_rows]
     slide["_min_overs"] = lb_config.get("min_overs", 2)
+
+
+def _abbrev_xi(designation):
+    """Abbreviate a team designation: '1st XI' → '1s', '4th XI' → '4s', 'A XI' → 'A'."""
+    if not designation:
+        return ""
+    import re as _re
+    m = _re.match(r'^(\d+)(?:st|nd|rd|th)\s+XI$', designation, _re.I)
+    if m:
+        return f"{m.group(1)}s"
+    if _re.match(r'^A\s+(?:XI|Team)$', designation, _re.I):
+        return "A"
+    # "Sunday 1st XI" etc.
+    m = _re.match(r'^(.+?)\s+(\d+)(?:st|nd|rd|th)\s+XI$', designation, _re.I)
+    if m:
+        return f"{m.group(1)} {m.group(2)}s"
+    # Strip trailing "XI" for anything else
+    return _re.sub(r'\s+XI$', '', designation, flags=_re.I).strip()
+
+
+def _abbrev_our_team(team):
+    """Abbreviate our team to short form: '1st XI'→'1s', '2nd-xi'→'2s', 'A XI'→'A'."""
+    if not team:
+        return ""
+    import re as _re
+    # Display labels: "1st XI", "2nd XI", "A XI"
+    m = _re.match(r'^(\d+)(?:st|nd|rd|th)\s+XI$', team, _re.I)
+    if m:
+        return f"{m.group(1)}s"
+    if _re.match(r'^A\s+(?:XI|Team)$', team, _re.I):
+        return "A"
+    # Internal IDs: "1st-xi", "2nd-xi", "3rd-xi"
+    m = _re.match(r'^(\d+)(?:st|nd|rd|th)-xi$', team, _re.I)
+    if m:
+        return f"{m.group(1)}s"
+    if _re.match(r'^a-(?:xi|team)$', team, _re.I):
+        return "A"
+    return ""
+
+
+def _fmt_match(team, opponents, home_away):
+    """Format a match string: '1s vs Ballinger Waggoners Away'."""
+    import re as _re
+    opp = (opponents or "").strip()
+    if " - " in opp:
+        opp = opp.split(" - ")[0].strip()
+    opp = _re.sub(r'\s+Cricket Club$', '', opp, flags=_re.I).strip()
+    opp = _re.sub(r'\s+CC$', '', opp).strip()
+    our_abbrev = _abbrev_our_team(team or "")
+    ha = {"H": "Home", "A": "Away"}.get(home_away or "", "")
+    parts = []
+    if our_abbrev:
+        parts.append(f"{our_abbrev} vs")
+    parts.append(opp or "Unknown")
+    if ha:
+        parts.append(ha)
+    return " ".join(parts)
+
+
+def _fmt_opponents(club, opponents_team=None):
+    """Format opponents display: strip CC suffix, append abbreviated team designation."""
+    import re as _re
+    name = (club or "").strip()
+    # Strip ' - Nth XI' if present (Play Cricket full names)
+    if " - " in name:
+        name = name.split(" - ")[0].strip()
+    # Strip common club suffixes
+    name = _re.sub(r'\s+Cricket Club$', '', name, flags=_re.I).strip()
+    name = _re.sub(r'\s+CC$', '', name).strip()
+    desig = _abbrev_xi(opponents_team or "")
+    return f"{name} {desig}".strip() if desig else name
+
+
+def build_batting_honours(slide, historic_data, season_data):
+    rows = slide.get("rows", 10)
+    season_year = (season_data or {}).get("season")
+
+    combined = []
+    for r in (historic_data or {}).get("records", []):
+        combined.append({**r, "is_season": False})
+    for r in (season_data or {}).get("records", []):
+        combined.append({**r, "is_season": True})
+
+    def fmt(r):
+        return {
+            "batsman": r.get("batsman") or "",
+            "score": r["score"],
+            "not_out": bool(r.get("not_out")),
+            "match": _fmt_match(r.get("team"), r.get("opponents"), r.get("home_away")),
+            "year": str(r["year"]) if r.get("year") else "",
+            "date": r.get("date"),
+            "is_season": r.get("is_season", False),
+        }
+
+    formatted = [fmt(r) for r in combined if r.get("score") is not None]
+
+    slide["_top_scores"] = sorted(
+        formatted, key=lambda r: (-r["score"], r.get("date") or "")
+    )[:rows]
+
+    slide["_recent"] = sorted(
+        [r for r in formatted if r.get("date")],
+        key=lambda r: r["date"],
+        reverse=True,
+    )[:rows]
+
+    from_year = slide.get("from_year") or min(
+        (r["year"] for r in combined if r.get("year")), default=None
+    )
+    to_year = season_year or max(
+        (r["year"] for r in combined if r.get("year")), default=None
+    )
+    if from_year:
+        slide["title"] = f"{slide['title']} · Senior weekend cricket {from_year}–{to_year}"
+    slide["_season_year"] = season_year
+
+
+def build_bowling_honours(slide, historic_data, season_data):
+    rows = slide.get("rows", 10)
+    season_year = (season_data or {}).get("season")
+
+    combined = []
+    for r in (historic_data or {}).get("records", []):
+        combined.append({**r, "is_season": False})
+    for r in (season_data or {}).get("records", []):
+        combined.append({**r, "is_season": True})
+
+    def fmt(r):
+        return {
+            "bowler": r.get("bowler") or "",
+            "wickets": r["wickets"],
+            "runs": r["runs"],
+            "match": _fmt_match(r.get("team"), r.get("opponents"), r.get("home_away")),
+            "year": str(r["year"]) if r.get("year") else "",
+            "date": r.get("date"),
+            "is_season": r.get("is_season", False),
+        }
+
+    formatted = [fmt(r) for r in combined if r.get("wickets") is not None]
+
+    slide["_best_figures"] = sorted(
+        formatted, key=lambda r: (-r["wickets"], r["runs"], r.get("date") or "")
+    )[:rows]
+
+    slide["_recent"] = sorted(
+        [r for r in formatted if r.get("date")],
+        key=lambda r: r["date"],
+        reverse=True,
+    )[:rows]
+
+    from_year = slide.get("from_year") or min(
+        (r["year"] for r in combined if r.get("year")), default=None
+    )
+    to_year = season_year or max(
+        (r["year"] for r in combined if r.get("year")), default=None
+    )
+    if from_year:
+        slide["title"] = f"{slide['title']} · Senior weekend cricket {from_year}–{to_year}"
+    slide["_season_year"] = season_year
 
 
 def generate_qr_data_url(url: str) -> str:
@@ -805,6 +965,14 @@ def build_slides(env):
             _stats_cache[label] = json.loads(path.read_text()) if path.exists() else None
         return _stats_cache[label]
 
+    _honours_cache = {}
+
+    def load_honours(name):
+        if name not in _honours_cache:
+            path = CONTENT / "data" / f"{name}.json"
+            _honours_cache[name] = json.loads(path.read_text()) if path.exists() else None
+        return _honours_cache[name]
+
     _fixtures_cache = {}
 
     def load_fixtures():
@@ -870,6 +1038,20 @@ def build_slides(env):
         if slide.get("template") == "schedule":
             training, all_fixtures, loc_lookup, loc_names = load_schedule_data()
             build_schedule(slide, teams_by_id, training, all_fixtures, loc_lookup, loc_names)
+
+        if slide.get("template") == "batting-honours":
+            build_batting_honours(
+                slide,
+                load_honours("historic_batting_hundreds"),
+                load_honours("season_batting_hundreds_this_season"),
+            )
+
+        if slide.get("template") == "bowling-honours":
+            build_bowling_honours(
+                slide,
+                load_honours("historic_bowling_sixplus"),
+                load_honours("season_bowling_sixplus_this_season"),
+            )
 
         if slide.get("template") in LEADERBOARD_TEMPLATES:
             if slide.get("competition") == "league" and slide.get("team"):

@@ -114,6 +114,8 @@
     { "slug": "schedule-u17-spitfires",      "duration": 15, "show_when": [{ "teams": ["u17-spitfires"] }] },
     { "slug": "next-match-u17-spitfires",    "duration": 20, "show_when": [{ "teams": ["u17-spitfires"] }] },
 
+    { "slug": "batting-honours",             "duration": 20, "show_when": [{ "section": ["senior", "all"] }] },
+    { "slug": "bowling-honours",             "duration": 20, "show_when": [{ "section": ["senior", "all"] }] },
     { "slug": "fantasy-team-standings",      "duration": 15, "show_when": [{ "section": ["senior", "all"] }] },
     { "slug": "fantasy-player-standings",    "duration": 15, "show_when": [{ "section": ["senior", "all"] }] },
     { "slug": "fantasy-team-of-week",        "duration": 15, "show_when": [{ "section": ["senior", "all"] }] }

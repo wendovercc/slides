@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-05-13T19:13:42.916379+00:00",
+  "season": 2026,
+  "records": [
+    {
+      "date": "2026-05-09",
+      "year": 2026,
+      "date_approx": false,
+      "home_away": "A",
+      "team": "2nd-xi",
+      "opponents": "Chenies & Latimer CC",
+      "opponents_team": "2nd XI",
+      "bowler": "Jonathan Seabrook",
+      "overs": "8.0",
+      "maidens": 1,
+      "runs": 28,
+      "wickets": 6,
+      "team_total": "219-3",
+      "oppo_total": "216-8",
+      "result": "W"
+    }
+  ]
+}

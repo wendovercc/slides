@@ -178,7 +178,39 @@ def determine_result(detail, our_pc_team_id):
     return None
 
 
-def process_match(detail, our_teams_by_pc_id, players, competitions, form, match_date_str=""):
+def _fmt_innings_total(innings):
+    """Format an innings dict to a display string like '325-3' or '43 ao'."""
+    if not innings:
+        return None
+    runs = innings.get("runs")
+    if runs is None or runs == "":
+        return None
+    wickets = innings.get("wickets")
+    runs_int = int(runs)
+    if wickets is None or wickets == "":
+        return str(runs_int)
+    wickets_int = int(wickets)
+    return f"{runs_int} ao" if wickets_int >= 10 else f"{runs_int}-{wickets_int}"
+
+
+def _fmt_overs(overs_str):
+    if not overs_str:
+        return None
+    s = str(overs_str).strip()
+    return s if "." in s else f"{s}.0"
+
+
+def _match_date_to_iso(match_date_str):
+    """Convert 'DD/MM/YYYY' to 'YYYY-MM-DD', returning (iso, year) or (None, None)."""
+    try:
+        d = datetime.strptime(match_date_str, "%d/%m/%Y").date()
+        return d.isoformat(), d.year
+    except (ValueError, TypeError):
+        return None, None
+
+
+def process_match(detail, our_teams_by_pc_id, players, competitions, form, match_date_str="",
+                  performances=None, opp_display_name=None, opp_team_designation=None):
     competition_id = str(detail.get("competition_id", ""))
     competition_name = detail.get("competition_name", "")
     if competition_id and competition_name:
@@ -203,6 +235,22 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
     innings_list = detail.get("innings", [])
     if not innings_list:
         return
+
+    is_home = our_pc_team_id == home_team_id
+    opp_name = opp_display_name or (
+        detail.get("away_team_name", "") if is_home else detail.get("home_team_name", "")
+    ) or ""
+    iso_date, year = _match_date_to_iso(match_date_str)
+
+    # Pre-scan to gather innings totals so batting records can include the opposition total.
+    our_inn_total = None
+    opp_inn_total = None
+    for innings in innings_list:
+        batting_id = str(innings.get("team_batting_id", ""))
+        if batting_id == our_pc_team_id:
+            our_inn_total = _fmt_innings_total(innings)
+        else:
+            opp_inn_total = _fmt_innings_total(innings)
 
     match_players = set()
 
@@ -244,6 +292,23 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
 
                 match_players.add(player_id)
 
+                if performances is not None and runs >= 100:
+                    performances["batting"].append({
+                        "date": iso_date,
+                        "year": year,
+                        "date_approx": False,
+                        "home_away": "H" if is_home else "A",
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "opponents_team": opp_team_designation or None,
+                        "batsman": player_name,
+                        "score": runs,
+                        "not_out": not_out,
+                        "team_total": our_inn_total,
+                        "oppo_total": opp_inn_total,
+                        "result": result_char,
+                    })
+
         if our_bowling:
             for bowl in innings.get("bowl", []):
                 player_id = str(bowl.get("bowler_id", ""))
@@ -251,7 +316,8 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                     continue
 
                 player_name = bowl.get("bowler_name", "")
-                balls = overs_to_balls(bowl.get("overs", "0"))
+                overs_str = bowl.get("overs", "0")
+                balls = overs_to_balls(overs_str)
                 maidens = int(bowl.get("maidens") or 0)
                 runs = int(bowl.get("runs") or 0)
                 wickets = int(bowl.get("wickets") or 0)
@@ -269,6 +335,25 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                     merge_bowling(comp_stats, balls, maidens, runs, wickets)
 
                 match_players.add(player_id)
+
+                if performances is not None and wickets >= 6:
+                    performances["bowling"].append({
+                        "date": iso_date,
+                        "year": year,
+                        "date_approx": False,
+                        "home_away": "H" if is_home else "A",
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "opponents_team": opp_team_designation or None,
+                        "bowler": player_name,
+                        "overs": _fmt_overs(overs_str),
+                        "maidens": maidens,
+                        "runs": runs,
+                        "wickets": wickets,
+                        "team_total": our_inn_total,
+                        "oppo_total": opp_inn_total,
+                        "result": result_char,
+                    })
 
     # Increment match counts once per player per match
     for player_id in match_players:
@@ -305,17 +390,42 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
     players = {}
     competitions = {}
     form = {}
+    performances = {"batting": [], "bowling": []}
 
     our_matches_sorted = sorted(our_matches, key=lambda m: match_date(m) or date.min)
 
     for match in our_matches_sorted:
         match_id = match["id"]
         match_date_str = match.get("match_date", "")
+        home_id = str(match.get("home_team_id", ""))
+        away_id = str(match.get("away_team_id", ""))
+        our_pc = next((pid for pid in (home_id, away_id) if pid in our_teams_by_pc_id), None)
+        if our_pc:
+            _is_home = our_pc == home_id
+            opp_club = (
+                match.get("away_club_name") if _is_home else match.get("home_club_name")
+            ) or (
+                match.get("away_team_name") if _is_home else match.get("home_team_name")
+            ) or ""
+            # team_name from the matches list is usually just the designation ("4th XI")
+            opp_team_raw = (
+                match.get("away_team_name") if _is_home else match.get("home_team_name")
+            ) or ""
+            # If team_name starts with the club name it's a full name; strip the prefix
+            if opp_club and opp_team_raw.startswith(opp_club):
+                opp_team_desig = opp_team_raw[len(opp_club):].lstrip(" -").strip()
+            else:
+                opp_team_desig = opp_team_raw
+        else:
+            opp_club = ""
+            opp_team_desig = ""
         try:
             result = api_get("match_detail.json", api_token, match_id=match_id)
             details = result.get("match_details", [])
             if details:
-                process_match(details[0], our_teams_by_pc_id, players, competitions, form, match_date_str)
+                process_match(details[0], our_teams_by_pc_id, players, competitions, form,
+                              match_date_str, performances,
+                              opp_display_name=opp_club, opp_team_designation=opp_team_desig)
         except Exception as e:
             print(f"    WARNING: failed to process match {match_id}: {e}", file=sys.stderr)
 
@@ -336,12 +446,16 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
             **by_comp,
         }
 
+    for key in ("batting", "bowling"):
+        performances[key].sort(key=lambda r: (r["date"] or ""))
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "season": season_year,
         "competitions": competitions,
         "players": players,
         "form": form_trimmed,
+        "performances": performances,
     }
 
 
@@ -372,6 +486,9 @@ def main():
     for label, year in config["seasons"].items():
         print(f"Fetching player stats: {label} ({year})...")
         stats = fetch_season_stats(site_id, api_token, year, our_teams_by_pc_id)
+
+        performances = stats.pop("performances")
+
         out_path = data_dir / f"player_stats_{label}.json"
         out_path.write_text(json.dumps(stats, indent=2))
         print(f"  → {out_path.relative_to(ROOT)}")
@@ -380,6 +497,22 @@ def main():
             p["stats"]["all"]["matches"] for p in stats["players"].values()
         ) // max(len(our_teams_by_pc_id), 1)
         print(f"  {player_count} players across ~{match_count} matches")
+
+        hundreds_path = data_dir / f"season_batting_hundreds_{label}.json"
+        hundreds_path.write_text(json.dumps({
+            "generated_at": stats["generated_at"],
+            "season": year,
+            "records": performances["batting"],
+        }, indent=2))
+        print(f"  → {hundreds_path.relative_to(ROOT)} ({len(performances['batting'])} centuries)")
+
+        sixplus_path = data_dir / f"season_bowling_sixplus_{label}.json"
+        sixplus_path.write_text(json.dumps({
+            "generated_at": stats["generated_at"],
+            "season": year,
+            "records": performances["bowling"],
+        }, indent=2))
+        print(f"  → {sixplus_path.relative_to(ROOT)} ({len(performances['bowling'])} six-plus hauls)")
 
 
 if __name__ == "__main__":
