@@ -110,11 +110,20 @@ EOF
 
 ## Step 5: Configure cage and Chromium to start on login
 
+Create `~/.kiosk_url` with the URL for this display:
+
+```bash
+echo "https://slides.wendovercc.org/screen/the-witchell/" > ~/.kiosk_url
+```
+
+Replace `the-witchell` with the slug for this location. The hostname and the slideshow URL are independent — you can point any Pi at any location.
+
 Create `~/.bash_profile` so that logging in to tty1 starts cage with Chromium:
 
 ```bash
 cat > ~/.bash_profile << 'EOF'
 if [ -z "$WAYLAND_DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  SLIDESHOW_URL=$(cat ~/.kiosk_url)
   while true; do
     cage -- chromium \
       --kiosk \
@@ -125,14 +134,12 @@ if [ -z "$WAYLAND_DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
       --disable-features=TranslateUI \
       --disable-session-crashed-bubble \
       --user-data-dir=/tmp/chromium-kiosk \
-      "https://slides.wendovercc.org/screen/the-witchell/"
+      "$SLIDESHOW_URL"
     sleep 5
   done
 fi
 EOF
 ```
-
-Replace `the-witchell` with the slug for the location this display shows. The hostname and the slideshow URL are independent — you can point any Pi at any location.
 
 Key points:
 - `cage` — runs Chromium fullscreen as a Wayland client
@@ -141,9 +148,21 @@ Key points:
 - The `while true` loop restarts Chromium automatically if it ever crashes
 - The cursor is hidden via `cursor: none` CSS in the screen player itself
 
+### Hide the system cursor
+
+On Pi 5, the HDMI ports register as input devices with pointer capabilities, causing wlroots to render a system-level cursor at centre screen regardless of CSS. Fix with a udev rule that tells libinput to ignore those devices — with no pointer device registered, no cursor is rendered:
+
+```bash
+sudo tee /etc/udev/rules.d/99-ignore-hdmi-input.rules << 'EOF'
+ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="vc4-hdmi-0", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+ACTION=="add", SUBSYSTEM=="input", ATTRS{name}=="vc4-hdmi-1", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+EOF
+sudo udevadm control --reload-rules
+```
+
 ### Disable HDMI CEC
 
-The TV presents itself as a pointer device via HDMI CEC, which can cause interference. Disable it:
+Optionally also disable CEC to prevent the TV remote from sending input events to the Pi:
 
 ```bash
 echo "hdmi_ignore_cec=1" | sudo tee -a /boot/firmware/config.txt
@@ -190,6 +209,65 @@ Set the TV's own sleep/standby timer to "never" in its menu — this is the most
 
 ---
 
+## Common tasks over SSH
+
+### Connect to the Pi
+
+```bash
+ssh -i ~/.ssh/wendovercc_pi pi@wendovercc-1.local
+```
+
+If you get a host key warning after re-flashing:
+```bash
+ssh-keygen -R wendovercc-1.local
+```
+
+### Change the slideshow URL
+
+```bash
+echo "https://slides.wendovercc.org/screen/new-slug/" > ~/.kiosk_url
+sudo reboot
+```
+
+### Add a WiFi network
+
+NetworkManager keeps a list of saved networks and connects to whichever is in range on boot. To add a new one:
+
+```bash
+# See what networks are nearby
+nmcli device wifi list
+
+# Add and connect to a new network (existing saved networks are kept)
+nmcli device wifi connect "NetworkName" password "password"
+```
+
+To see all saved networks: `nmcli connection show`
+
+### Restart the kiosk without rebooting
+
+```bash
+sudo pkill chromium
+sudo pkill cage
+```
+
+The `~/.bash_profile` loop will restart cage and Chromium automatically within a few seconds.
+
+### Reboot the Pi
+
+```bash
+sudo reboot
+```
+
+### Check if the kiosk is running
+
+```bash
+pgrep -a chromium
+```
+
+If nothing is returned, the kiosk isn't running. Check `journalctl -b` for errors.
+
+---
+
 ## Maintenance
 
 ### Updating Raspberry Pi OS
@@ -207,7 +285,10 @@ No Pi access needed. The screen player re-fetches content automatically. Push a 
 
 ### Changing which slideshow a display shows
 
-Edit the URL at the end of the `cage` command in `~/.bash_profile` on the Pi, then `sudo reboot`.
+```bash
+echo "https://slides.wendovercc.org/screen/new-slug/" > ~/.kiosk_url
+sudo reboot
+```
 
 ### Adding a second display / pavilion
 
@@ -225,5 +306,6 @@ Edit the URL at the end of the `cage` command in `~/.bash_profile` on the Pi, th
 | Chromium shows "profile in use" | Reboot — `/tmp/chromium-kiosk` clears on boot |
 | Can't log in via SSH | Use `ssh -i ~/.ssh/wendovercc_pi pi@wendovercc-1.local`; if re-flashed, run `ssh-keygen -R wendovercc-1.local` first |
 | sudo password not accepted | Avoid special characters in the Imager password — re-flash with an alphanumeric password |
+| Cursor visible at centre screen | Add the udev rule in Step 5 to hide HDMI input devices from libinput |
 | Slideshow not updating | Check network; try `curl -I https://slides.wendovercc.org/screen/the-witchell/` from SSH |
 | Screen goes blank after a while | Check TV sleep/standby settings |
