@@ -1,5 +1,10 @@
 {
   "template": "batting-leaderboard",
-  "title": "Batting · Senior Cricket 2026",
-  "teams": ["1st-xi", "2nd-xi", "friendly-xi"]
+  "title": "Batting \u00b7 Senior Cricket 2026",
+  "teams": [
+    "1st-xi",
+    "2nd-xi",
+    "friendly-xi"
+  ],
+  "duration": 20
 }

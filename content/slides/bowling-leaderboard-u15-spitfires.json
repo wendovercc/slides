@@ -2,5 +2,6 @@
   "template": "bowling-leaderboard",
   "title": "Bowling \u00b7 U15 Spitfires 2026",
   "team": "u15-spitfires",
-  "competition": "league"
+  "competition": "league",
+  "duration": 20
 }

@@ -1,6 +1,7 @@
 {
   "template": "batting-leaderboard",
-  "title": "Batting · 1st XI League 2026",
+  "title": "Batting \u00b7 1st XI League 2026",
   "team": "1st-xi",
-  "competition": "league"
+  "competition": "league",
+  "duration": 20
 }

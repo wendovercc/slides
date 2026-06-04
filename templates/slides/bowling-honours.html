@@ -1,47 +1,72 @@
 {% extends 'slides/_base-sidebar.html' %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
-    .header { margin-bottom: 1.5vh; }
+    .header { margin-bottom: 1.2vh; }
     .title {
         font-size: var(--t-lg);
         font-weight: bold;
         line-height: 1.2;
         text-shadow: 0 3px 6px rgba(0,0,0,0.4);
     }
+    .subtitle {
+        font-size: var(--t-md);
+        color: #e8c040;
+        margin-top: 0.3vh;
+        letter-spacing: 0.04em;
+    }
     .halves {
         flex: 1;
-        display: flex;
-        flex-direction: row;
-        gap: 0;
         min-height: 0;
+        position: relative;
     }
     .half {
-        flex: 1;
+        position: absolute;
+        inset: 0;
         display: flex;
         flex-direction: column;
-        min-width: 0;
+        opacity: 0;
+        transition: opacity 0.4s ease-in-out;
     }
-    .half + .half {
-        border-left: 1px solid rgba(255,255,255,0.2);
-        padding-left: 2.5vw;
+    .half.panel-active { opacity: 1; }
+    .panel-nav {
+        display: flex;
+        gap: 4vw;
+        margin-top: 1.5vh;
+        margin-bottom: 1.2vh;
+        align-items: flex-end;
     }
-    .half:first-child { padding-right: 2.5vw; }
-    .section-title {
-        font-size: var(--t-xxs);
-        letter-spacing: 0.12em;
+    .panel-tab {
+        font-size: var(--t-md);
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        opacity: 0.6;
-        margin-bottom: 0.8vh;
+        opacity: 0.35;
+        position: relative;
+        padding-bottom: 0.6vh;
+        transition: opacity 0.4s;
+    }
+    .panel-tab.active { opacity: 1; }
+    .panel-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 2px;
+        background: rgba(255,255,255,0.75);
+        transform-origin: left;
+        animation: panel-progress var(--panel-duration, 10s) linear forwards;
+    }
+    @keyframes panel-progress {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
     }
     .table { flex: 1; display: flex; flex-direction: column; }
     /* pos · name · figures · match · year */
     .col-headers {
         display: grid;
-        grid-template-columns: 1.7vw 1fr 3vw 1fr 3vw;
+        grid-template-columns: 2.5vw 18vw 5vw 1fr 5vw;
         gap: 0 0.4vw;
         padding: 0.3vh 0 0.5vh;
         border-bottom: 1px solid rgba(255,255,255,0.25);
-        font-size: var(--t-xxs);
+        font-size: var(--t-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         opacity: 0.55;
@@ -50,15 +75,16 @@
     .col-fig { text-align: right; }
     .row {
         display: grid;
-        grid-template-columns: 1.7vw 1fr 3vw 1fr 3vw;
+        grid-template-columns: 2.5vw 18vw 5vw 1fr 5vw;
         gap: 0 0.4vw;
-        padding: 0.35vh 0;
-        font-size: var(--t-xs);
-        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding: 0.3vh 0;
+        font-size: var(--t-md);
+        border-bottom: 1px solid rgba(255,255,255,0.06);
         align-items: baseline;
     }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
     .row.this-season { color: #e8c040; }
-    .pos { opacity: 0.45; font-size: var(--t-xxs); text-align: right; }
+    .pos { opacity: 0.45; text-align: right; padding-right: 0.8vw; }
     .row.this-season .pos { opacity: 0.7; }
     .name {
         overflow: hidden;
@@ -71,22 +97,26 @@
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-        opacity: 0.7;
-        font-size: var(--t-xxs);
+        opacity: 0.65;
+        padding-left: 1.5vw;
         padding-right: 0.4vw;
     }
     .row.this-season .match { opacity: 0.85; }
-    .year { text-align: right; opacity: 0.6; font-size: var(--t-xxs); }
+    .year { text-align: right; opacity: 0.55; }
     .row.this-season .year { opacity: 0.85; }
 {% endblock %}
 {% block content %}
     <div class="header">
         <div class="title">{{ slide.title }}</div>
+        {% if slide._subtitle is defined %}<div class="subtitle">{{ slide._subtitle }}</div>{% endif %}
     </div>
+    <nav class="panel-nav">
+        <span class="panel-tab active">Best Figures</span>
+        <span class="panel-tab">Most Recent 6+ Wickets</span>
+    </nav>
     <div class="halves">
 
-        <div class="half">
-            <div class="section-title">Best Figures</div>
+        <div class="half panel-active">
             <div class="table">
                 <div class="col-headers">
                     <span></span>
@@ -108,7 +138,6 @@
         </div>
 
         <div class="half">
-            <div class="section-title">Most Recent 6+ Wickets</div>
             <div class="table">
                 <div class="col-headers">
                     <span></span>
@@ -130,4 +159,21 @@
         </div>
 
     </div>
+    <script>
+        const SLIDE_DURATION = {{ slide.duration }};
+        const panels = Array.from(document.querySelectorAll('.half'));
+        const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
+        const panelDuration = SLIDE_DURATION / panels.length;
+        let current = 0;
+        document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
+        function showPanel(i) {
+            panels[current].classList.remove('panel-active');
+            tabs[current].classList.remove('active');
+            void tabs[i].offsetWidth;
+            panels[i].classList.add('panel-active');
+            tabs[i].classList.add('active');
+            current = i;
+        }
+        setInterval(() => showPanel((current + 1) % panels.length), panelDuration * 1000);
+    </script>
 {% endblock %}

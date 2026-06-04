@@ -1,5 +1,10 @@
 {
   "template": "bowling-leaderboard",
-  "title": "Bowling · Senior Cricket 2026",
-  "teams": ["1st-xi", "2nd-xi", "friendly-xi"]
+  "title": "Bowling \u00b7 Senior Cricket 2026",
+  "teams": [
+    "1st-xi",
+    "2nd-xi",
+    "friendly-xi"
+  ],
+  "duration": 20
 }

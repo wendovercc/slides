@@ -313,7 +313,7 @@ def build_batting_honours(slide, historic_data, season_data):
         (r["year"] for r in combined if r.get("year")), default=None
     )
     if from_year:
-        slide["title"] = f"{slide['title']} · Senior weekend cricket {from_year}–{to_year}"
+        slide["_subtitle"] = f"Senior weekend cricket {from_year}–{to_year}"
     slide["_season_year"] = season_year
 
 
@@ -357,7 +357,7 @@ def build_bowling_honours(slide, historic_data, season_data):
         (r["year"] for r in combined if r.get("year")), default=None
     )
     if from_year:
-        slide["title"] = f"{slide['title']} · Senior weekend cricket {from_year}–{to_year}"
+        slide["_subtitle"] = f"Senior weekend cricket {from_year}–{to_year}"
     slide["_season_year"] = season_year
 
 
@@ -1102,10 +1102,13 @@ def build_slideshows(env):
     slide_meta = {}
     for slide_path in (CONTENT / "slides").glob("*.json"):
         s = json.loads(slide_path.read_text())
-        slide_meta[slide_path.stem] = {
+        meta = {
             "slide_active": s.get("active", True),
             "slide_expires": s.get("expires"),
         }
+        if "duration" in s:
+            meta["duration"] = s["duration"]
+        slide_meta[slide_path.stem] = meta
 
     config = load_config()
     preview_cfg = config.get("preview", {})
