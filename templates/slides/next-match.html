@@ -1,383 +1,312 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>{{ slide.title }}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-        html, body {
-            width: 100%; height: 100%; overflow: hidden;
-            background: #1a3d1a;
-            font-family: Georgia, 'Times New Roman', serif;
-            color: #ffffff;
-        }
-        .slide {
-            width: 100%; height: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 2rem 4rem 5rem;
-        }
+{% extends 'slides/_base.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+    .header { margin-bottom: 1vh; flex-shrink: 0; }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .no-fixture {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--t-md);
+        opacity: 0.5;
+        letter-spacing: 0.06em;
+    }
+    .details-row {
+        display: flex;
+        gap: 2vw;
+        font-size: var(--t-xs);
+        opacity: 0.88;
+        padding: 0.55vh 0;
+        border-top: 1px solid rgba(255,255,255,0.15);
+        border-bottom: 1px solid rgba(255,255,255,0.15);
+        margin-bottom: 1.2vh;
+        flex-shrink: 0;
+        align-items: center;
+    }
+    .detail-item { display: flex; align-items: center; gap: 0.45vw; }
+    .detail-label {
+        opacity: 0.5;
+        font-size: var(--t-xxs);
+        font-family: Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+    .home-pill {
+        background: rgba(60,180,80,0.3);
+        border: 1px solid rgba(60,180,80,0.5);
+        border-radius: 4px;
+        padding: 0.1vh 0.55vw;
+        font-size: var(--t-xxs);
+        font-family: Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+    .away-pill {
+        background: rgba(180,100,40,0.3);
+        border: 1px solid rgba(180,100,40,0.5);
+        border-radius: 4px;
+        padding: 0.1vh 0.55vw;
+        font-size: var(--t-xxs);
+        font-family: Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+    .columns {
+        flex: 1;
+        display: flex;
+        gap: 1.5vw;
+        overflow: hidden;
+        min-height: 0;
+    }
+    .col { display: flex; flex-direction: column; overflow: hidden; }
+    .col-us, .col-opp { flex: 0 0 22%; }
+    .col-table { flex: 1; }
+    .col-heading {
+        padding-bottom: 0.5vh;
+        border-bottom: 1px solid rgba(255,255,255,0.15);
+        margin-bottom: 0.7vh;
+        flex-shrink: 0;
+    }
+    .col-h2 {
+        font-size: var(--t-sm);
+        font-weight: bold;
+        letter-spacing: 0.03em;
+        line-height: 1.2;
+    }
+    .col-h3 {
+        font-size: var(--t-xxs);
+        opacity: 0.55;
+        font-family: Arial, sans-serif;
+        letter-spacing: 0.06em;
+        margin-top: 0.2vh;
+    }
+    .form-label {
+        font-size: var(--t-xxs);
+        opacity: 0.5;
+        font-family: Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.3vh;
+    }
+    .form-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 0.8vh; }
+    .badge {
+        display: inline-block;
+        width: 1.3vw; height: 1.3vw; line-height: 1.3vw;
+        text-align: center;
+        border-radius: 3px;
+        font-size: var(--t-xxs);
+        font-family: Arial, sans-serif;
+        font-weight: bold;
+    }
+    .badge-W { background: var(--accent-win);   color: #fff; }
+    .badge-L { background: var(--accent-loss);  color: #fff; }
+    .badge-C { background: #555; color: #ccc; }
+    .badge-A { background: var(--accent-amber); color: #ffe; }
+    .badge-D { background: #444; color: #ccc; }
+    .badge-T { background: var(--accent-draw);  color: #fff; }
+    .players-section { margin-top: 0.3vh; }
+    .players-section-label {
+        font-size: var(--t-xxs);
+        opacity: 0.5;
+        font-family: Arial, sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.4vh;
+    }
+    .player-row {
+        padding: 0.25vh 0;
+        border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .player-name { font-size: var(--t-xs); }
+    .player-stat {
+        font-size: var(--t-xxs);
+        font-family: Arial, sans-serif;
+        opacity: 0.7;
+    }
+    .league-table { width: 100%; border-collapse: collapse; font-size: var(--t-xs); }
+    .league-table thead tr { border-bottom: 1px solid rgba(255,255,255,0.2); }
+    .league-table th {
+        padding: 0.2vh 0.4vw;
+        font-size: var(--t-xxs);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-family: Arial, sans-serif;
+        opacity: 0.5;
+        font-weight: normal;
+    }
+    .league-table th.th-team { text-align: left; }
+    .league-table th.th-num  { text-align: center; width: 2.2vw; }
+    .league-table td {
+        padding: 0.22vh 0.4vw;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .league-table td.td-pos  { text-align: center; opacity: 0.5; font-family: Arial, sans-serif; font-size: var(--t-xxs); }
+    .league-table td.td-team { text-align: left; }
+    .league-table td.td-num  { text-align: center; font-family: Arial, sans-serif; }
+    .row-us   { background: rgba(60,180,80,0.18); font-weight: bold; }
+    .row-opp  { background: rgba(180,100,40,0.18); font-weight: bold; }
+{% endblock %}
+{% block content %}
+    <div class="header">
+        <div class="title">Next Match · {{ slide.title }}</div>
+    </div>
 
-        /* Header */
-        .header {
-            margin-bottom: 1rem;
-            flex-shrink: 0;
-        }
-        .title {
-            font-size: 3.5rem;
-            font-weight: bold;
-            line-height: 1.2;
-            text-shadow: 0 3px 6px rgba(0,0,0,0.4);
-        }
+    {% if slide._no_fixture %}
+    <div class="no-fixture">No upcoming fixtures</div>
+    {% else %}
+    {% set f = slide._fixture %}
 
-        /* No-fixture state */
-        .no-fixture {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            opacity: 0.5;
-            letter-spacing: 0.06em;
-        }
-
-        /* Details row */
-        .details-row {
-            display: flex;
-            gap: 2rem;
-            font-size: 1.25rem;
-            opacity: 0.88;
-            padding: 0.55rem 0;
-            border-top: 1px solid rgba(255,255,255,0.15);
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-            margin-bottom: 1.2rem;
-            flex-shrink: 0;
-            align-items: center;
-        }
-        .detail-item {
-            display: flex;
-            align-items: center;
-            gap: 0.45rem;
-        }
-        .detail-label {
-            opacity: 0.5;
-            font-size: 0.95rem;
-            font-family: Arial, sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-        .home-pill {
-            background: rgba(60, 180, 80, 0.3);
-            border: 1px solid rgba(60, 180, 80, 0.5);
-            border-radius: 4px;
-            padding: 0.1rem 0.55rem;
-            font-size: 0.95rem;
-            font-family: Arial, sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-        .away-pill {
-            background: rgba(180, 100, 40, 0.3);
-            border: 1px solid rgba(180, 100, 40, 0.5);
-            border-radius: 4px;
-            padding: 0.1rem 0.55rem;
-            font-size: 0.95rem;
-            font-family: Arial, sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-        }
-
-        /* Three-column layout */
-        .columns {
-            flex: 1;
-            display: flex;
-            gap: 1.5rem;
-            overflow: hidden;
-            min-height: 0;
-        }
-        .col {
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        .col-us, .col-opp { flex: 0 0 22%; }
-        .col-table { flex: 1; }
-
-        .col-heading {
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid rgba(255,255,255,0.15);
-            margin-bottom: 0.7rem;
-            flex-shrink: 0;
-        }
-        .col-h2 {
-            font-size: 1.45rem;
-            font-weight: bold;
-            letter-spacing: 0.03em;
-            line-height: 1.2;
-        }
-        .col-h3 {
-            font-size: 1rem;
-            opacity: 0.55;
-            font-family: Arial, sans-serif;
-            letter-spacing: 0.06em;
-            margin-top: 0.2rem;
-        }
-
-        /* Form badges */
-        .form-label {
-            font-size: 0.8rem;
-            opacity: 0.5;
-            font-family: Arial, sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 0.3rem;
-        }
-        .form-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 0.8rem; }
-        .badge {
-            display: inline-block;
-            width: 1.5rem; height: 1.5rem; line-height: 1.5rem;
-            text-align: center;
-            border-radius: 3px;
-            font-size: 0.9rem;
-            font-family: Arial, sans-serif;
-            font-weight: bold;
-        }
-        .badge-W { background: #2d7a2d; color: #fff; }
-        .badge-L { background: #8b1a1a; color: #fff; }
-        .badge-C { background: #555;    color: #ccc; }
-        .badge-A { background: #7a5c00; color: #ffe; }
-        .badge-D { background: #444;    color: #ccc; }
-        .badge-T { background: #1a5c7a; color: #fff; }
-
-        /* Players to watch */
-        .players-section { margin-top: 0.3rem; }
-        .players-section-label {
-            font-size: 0.8rem;
-            opacity: 0.5;
-            font-family: Arial, sans-serif;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            margin-bottom: 0.4rem;
-        }
-        .player-row {
-            padding: 0.25rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-        }
-        .player-name { font-size: 1.05rem; }
-        .player-stat {
-            font-size: 0.9rem;
-            font-family: Arial, sans-serif;
-            opacity: 0.7;
-        }
-
-        /* League table */
-        .league-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 1.05rem;
-        }
-        .league-table thead tr {
-            border-bottom: 1px solid rgba(255,255,255,0.2);
-        }
-        .league-table th {
-            padding: 0.2rem 0.4rem;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            letter-spacing: 0.06em;
-            font-family: Arial, sans-serif;
-            opacity: 0.5;
-            font-weight: normal;
-        }
-        .league-table th.th-team { text-align: left; }
-        .league-table th.th-num  { text-align: center; width: 2.2rem; }
-        .league-table td {
-            padding: 0.22rem 0.4rem;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
-        }
-        .league-table td.td-pos  { text-align: center; opacity: 0.5; font-family: Arial, sans-serif; font-size: 0.9rem; }
-        .league-table td.td-team { text-align: left; }
-        .league-table td.td-num  { text-align: center; font-family: Arial, sans-serif; }
-        .row-us   { background: rgba(60, 180, 80, 0.18); font-weight: bold; }
-        .row-opp  { background: rgba(180, 100, 40, 0.18); font-weight: bold; }
-
-        .footer {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.4);
-            padding: 0.8rem 2rem;
-        }
-        .branding {
-            text-align: center;
-            font-size: 1.2rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            opacity: 0.75;
-        }
-    </style>
-</head>
-<body>
-    <div class="slide">
-
-        <div class="header">
-            <div class="title">Next Match · {{ slide.title }}</div>
+    <div class="details-row">
+        <div class="detail-item">
+            <span>{{ slide._date_formatted }}</span>
         </div>
-
-        {% if slide._no_fixture %}
-        <div class="no-fixture">No upcoming fixtures</div>
-        {% else %}
-        {% set f = slide._fixture %}
-
-        <div class="details-row">
-            <div class="detail-item">
-                <span>{{ slide._date_formatted }}</span>
-            </div>
-            {% if f.match_time %}
-            <div class="detail-item">
-                <span class="detail-label">Start</span>
-                <span>{{ f.match_time }}</span>
-            </div>
-            {% endif %}
-            {% if f.ground_name %}
-            <div class="detail-item">
-                <span class="detail-label">Ground</span>
-                <span>{{ f.ground_name }}</span>
-            </div>
-            {% endif %}
-            <div class="detail-item">
-                {% if f.is_home %}<span class="home-pill">Home</span>
-                {% else %}<span class="away-pill">Away</span>{% endif %}
-            </div>
-        </div>
-
-        <div class="columns">
-
-            <!-- Left: our team -->
-            <div class="col col-us">
-                <div class="col-heading">
-                    <div class="col-h2">Wendover CC</div>
-                    <div class="col-h3">{{ slide.title }}</div>
-                </div>
-                {% if slide._our_form %}
-                <div class="form-label">Form</div>
-                <div class="form-badges">
-                    {% for r in slide._our_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
-                </div>
-                {% endif %}
-                {% if slide._our_players.batting %}
-                <div class="players-section">
-                    <div class="players-section-label">Batting</div>
-                    {% for p in slide._our_players.batting %}
-                    <div class="player-row">
-                        <div class="player-name">{{ p.name }}</div>
-                        <div class="player-stat">
-                            {{ p.runs }} runs{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.high_score is not none %} · HS {{ p.high_score }}{% if p.high_score_not_out %}*{% endif %}{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                {% if slide._our_players.bowling %}
-                <div class="players-section" style="margin-top:0.6rem;">
-                    <div class="players-section-label">Bowling</div>
-                    {% for p in slide._our_players.bowling %}
-                    <div class="player-row">
-                        <div class="player-name">{{ p.name }}</div>
-                        <div class="player-stat">
-                            {{ p.wickets }} wkts{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.best %} · best {{ p.best.wickets }}-{{ p.best.runs }}{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Middle: league table -->
-            <div class="col col-table">
-                {% if slide._league_rows %}
-                <div class="col-heading">
-                    <div class="col-h2">{{ slide._league_name }}</div>
-                    {% if slide._division_name and slide._division_name != slide._league_name %}<div class="col-h3">{{ slide._division_name }}</div>{% endif %}
-                </div>
-                <table class="league-table">
-                    <thead>
-                        <tr>
-                            <th class="th-num">#</th>
-                            <th class="th-team">Team</th>
-                            <th class="th-num">P</th>
-                            <th class="th-num">W</th>
-                            <th class="th-num">L</th>
-                            <th class="th-num">Pts</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in slide._league_rows %}
-                        <tr class="{% if row.is_us %}row-us{% elif row.is_opp %}row-opp{% endif %}">
-                            <td class="td-pos">{{ row.position }}</td>
-                            <td class="td-team">{{ row.name }}</td>
-                            <td class="td-num">{{ row.played }}</td>
-                            <td class="td-num">{{ row.won }}</td>
-                            <td class="td-num">{{ row.lost }}</td>
-                            <td class="td-num">{{ row.pts }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <div style="flex:1;overflow:hidden;">
-                    <img src="/assets/images/placeholder.svg" alt="Wendover Cricket Club"
-                         style="width:100%;height:100%;object-fit:contain;">
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Right: opposition -->
-            <div class="col col-opp">
-                <div class="col-heading">
-                    <div class="col-h2">{{ slide._opp_club_name }}</div>
-                    {% if slide._opp_team_name %}<div class="col-h3">{{ slide._opp_team_name }}</div>{% endif %}
-                </div>
-                {% if f.opposition_form %}
-                <div class="form-label">Form</div>
-                <div class="form-badges">
-                    {% for r in f.opposition_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
-                </div>
-                {% endif %}
-                {% if f.opposition_players %}
-                {% if f.opposition_players.batting %}
-                <div class="players-section">
-                    <div class="players-section-label">Batting</div>
-                    {% for p in f.opposition_players.batting %}
-                    <div class="player-row">
-                        <div class="player-name">{{ p.name }}</div>
-                        <div class="player-stat">
-                            {{ p.runs }} runs{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.high_score is not none %} · HS {{ p.high_score }}{% if p.high_score_not_out %}*{% endif %}{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                {% if f.opposition_players.bowling %}
-                <div class="players-section" style="margin-top:0.6rem;">
-                    <div class="players-section-label">Bowling</div>
-                    {% for p in f.opposition_players.bowling %}
-                    <div class="player-row">
-                        <div class="player-name">{{ p.name }}</div>
-                        <div class="player-stat">
-                            {{ p.wickets }} wkts{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.best %} · best {{ p.best.wickets }}-{{ p.best.runs }}{% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                {% endif %}
-            </div>
-
+        {% if f.match_time %}
+        <div class="detail-item">
+            <span class="detail-label">Start</span>
+            <span>{{ f.match_time }}</span>
         </div>
         {% endif %}
+        {% if f.ground_name %}
+        <div class="detail-item">
+            <span class="detail-label">Ground</span>
+            <span>{{ f.ground_name }}</span>
+        </div>
+        {% endif %}
+        <div class="detail-item">
+            {% if f.is_home %}<span class="home-pill">Home</span>
+            {% else %}<span class="away-pill">Away</span>{% endif %}
+        </div>
+    </div>
+
+    <div class="columns">
+
+        <!-- Left: our team -->
+        <div class="col col-us">
+            <div class="col-heading">
+                <div class="col-h2">Wendover CC</div>
+                <div class="col-h3">{{ slide.title }}</div>
+            </div>
+            {% if slide._our_form %}
+            <div class="form-label">Form</div>
+            <div class="form-badges">
+                {% for r in slide._our_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
+            </div>
+            {% endif %}
+            {% if slide._our_players.batting %}
+            <div class="players-section">
+                <div class="players-section-label">Batting</div>
+                {% for p in slide._our_players.batting %}
+                <div class="player-row">
+                    <div class="player-name">{{ p.name }}</div>
+                    <div class="player-stat">
+                        {{ p.runs }} runs{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.high_score is not none %} · HS {{ p.high_score }}{% if p.high_score_not_out %}*{% endif %}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if slide._our_players.bowling %}
+            <div class="players-section" style="margin-top:0.6vh;">
+                <div class="players-section-label">Bowling</div>
+                {% for p in slide._our_players.bowling %}
+                <div class="player-row">
+                    <div class="player-name">{{ p.name }}</div>
+                    <div class="player-stat">
+                        {{ p.wickets }} wkts{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.best %} · best {{ p.best.wickets }}-{{ p.best.runs }}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Middle: league table -->
+        <div class="col col-table">
+            {% if slide._league_rows %}
+            <div class="col-heading">
+                <div class="col-h2">{{ slide._league_name }}</div>
+                {% if slide._division_name and slide._division_name != slide._league_name %}<div class="col-h3">{{ slide._division_name }}</div>{% endif %}
+            </div>
+            <table class="league-table">
+                <thead>
+                    <tr>
+                        <th class="th-num">#</th>
+                        <th class="th-team">Team</th>
+                        <th class="th-num">P</th>
+                        <th class="th-num">W</th>
+                        <th class="th-num">L</th>
+                        <th class="th-num">Pts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in slide._league_rows %}
+                    <tr class="{% if row.is_us %}row-us{% elif row.is_opp %}row-opp{% endif %}">
+                        <td class="td-pos">{{ row.position }}</td>
+                        <td class="td-team">{{ row.name }}</td>
+                        <td class="td-num">{{ row.played }}</td>
+                        <td class="td-num">{{ row.won }}</td>
+                        <td class="td-num">{{ row.lost }}</td>
+                        <td class="td-num">{{ row.pts }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="flex:1;overflow:hidden;">
+                <img src="/assets/images/placeholder.svg" alt="Wendover Cricket Club"
+                     style="width:100%;height:100%;object-fit:contain;">
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right: opposition -->
+        <div class="col col-opp">
+            <div class="col-heading">
+                <div class="col-h2">{{ slide._opp_club_name }}</div>
+                {% if slide._opp_team_name %}<div class="col-h3">{{ slide._opp_team_name }}</div>{% endif %}
+            </div>
+            {% if f.opposition_form %}
+            <div class="form-label">Form</div>
+            <div class="form-badges">
+                {% for r in f.opposition_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
+            </div>
+            {% endif %}
+            {% if f.opposition_players %}
+            {% if f.opposition_players.batting %}
+            <div class="players-section">
+                <div class="players-section-label">Batting</div>
+                {% for p in f.opposition_players.batting %}
+                <div class="player-row">
+                    <div class="player-name">{{ p.name }}</div>
+                    <div class="player-stat">
+                        {{ p.runs }} runs{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.high_score is not none %} · HS {{ p.high_score }}{% if p.high_score_not_out %}*{% endif %}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if f.opposition_players.bowling %}
+            <div class="players-section" style="margin-top:0.6vh;">
+                <div class="players-section-label">Bowling</div>
+                {% for p in f.opposition_players.bowling %}
+                <div class="player-row">
+                    <div class="player-name">{{ p.name }}</div>
+                    <div class="player-stat">
+                        {{ p.wickets }} wkts{% if p.average is not none %} · avg {{ p.average }}{% endif %}{% if p.best %} · best {{ p.best.wickets }}-{{ p.best.runs }}{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
 
     </div>
-    <div class="footer">
-        <div class="branding">Wendover Cricket Club</div>
-    </div>
-</body>
-</html>
+    {% endif %}
+{% endblock %}

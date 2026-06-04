@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}{% endblock %}</title>
+    <style>
+        :root {
+            --bg:           #1a3d1a;
+            --text:         #ffffff;
+            --accent-win:   #2d7a2d;
+            --accent-loss:  #8b1a1a;
+            --accent-amber: #7a5c00;
+            --accent-draw:  #1a5c7a;
+            --safe-x:       5vw;
+            --safe-y:       5vh;
+            --sidebar-w:    20vw;
+            --t-xl:         4vw;
+            --t-lg:         2.8vw;
+            --t-md:         2vw;
+            --t-sm:         1.2vw;
+            --t-xs:         0.9vw;
+            --t-xxs:        0.7vw;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+        html, body {
+            width: 100vw; height: 100vh; overflow: hidden;
+            background: var(--bg);
+            font-family: Georgia, 'Times New Roman', serif;
+            color: var(--text);
+        }
+        .layout-sidebar {
+            width: 100vw; height: 100vh;
+            display: flex;
+            flex-direction: row;
+        }
+        .slide-main {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-y) 2vw var(--safe-y) var(--safe-x);
+        }
+        .slide-sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: var(--safe-y) var(--safe-x) var(--safe-y) 2vw;
+            background: rgba(0,0,0,0.25);
+            border-left: 1px solid rgba(255,255,255,0.08);
+            gap: 2.5vh;
+            overflow: hidden;
+        }
+        .club-logo {
+            width: 65%;
+            max-width: 10vw;
+            height: auto;
+            object-fit: contain;
+        }
+        .club-name {
+            font-family: Arial, sans-serif;
+            font-size: var(--t-xxs);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            opacity: 0.8;
+            text-align: center;
+        }
+        .sidebar-divider {
+            width: 60%;
+            height: 1px;
+            background: rgba(255,255,255,0.15);
+            flex-shrink: 0;
+        }
+        .sponsor-logos-vert {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2vh;
+            width: 100%;
+        }
+        .sponsor-logo-vert {
+            width: 75%;
+            max-width: 9vw;
+            height: auto;
+            max-height: 5.5vh;
+            object-fit: contain;
+            background: rgba(255,255,255,0.88);
+            border-radius: 3px;
+            padding: 2px 6px;
+        }
+        {% block styles %}{% endblock %}
+    </style>
+</head>
+<body>
+    <div class="layout-sidebar">
+        <main class="slide-main">{% block content %}{% endblock %}</main>
+        <aside class="slide-sidebar">
+            <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
+            <span class="club-name">Wendover Cricket Club</span>
+            <div class="sidebar-divider"></div>
+            <div class="sponsor-logos-vert">
+                {% for s in sponsors %}
+                <img class="sponsor-logo-vert" src="{{ s.src }}" alt="{{ s.name }}">
+                {% endfor %}
+            </div>
+            {% block sidebar_extra %}{% endblock %}
+        </aside>
+    </div>
+</body>
+</html>

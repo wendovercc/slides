@@ -1,155 +1,114 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>{{ slide.title }}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-        html, body {
-            width: 100%; height: 100%; overflow: hidden;
-            background: #1a3d1a;
-            font-family: Georgia, 'Times New Roman', serif;
-            color: #ffffff;
-        }
-        .slide {
-            width: 100%; height: 100%;
-            display: flex;
-            flex-direction: row;
-            align-items: flex-start;
-            padding: 4rem 6rem 7rem;
-            gap: 4rem;
-        }
-        .main {
-            flex: 1 1 0;
-            min-width: 0;
-            display: flex;
-            flex-direction: column;
-        }
-        .title {
-            font-size: 2.8rem;
-            font-weight: bold;
-            letter-spacing: 0.12em;
-            text-transform: uppercase;
-            margin-bottom: 3.5rem;
-            opacity: 0.85;
-        }
-        .sponsors {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 2rem;
-        }
-        .sponsor-card {
-            background: #ffffff;
-            border-radius: 0.75rem;
-            padding: 1.75rem 2.25rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            flex: 1 1 200px;
-            max-width: 260px;
-            height: 200px;
-        }
-        .sponsor-logo-wrap {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .sponsor-logo {
-            max-width: 180px;
-            max-height: 90px;
-            width: auto;
-            height: auto;
-            object-fit: contain;
-            display: block;
-        }
-        .sponsor-name {
-            color: #1a3d1a;
-            font-size: 1rem;
-            font-weight: bold;
-            text-align: center;
-            margin-top: 1.25rem;
-        }
-        .qr-panel {
-            flex: 0 0 240px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 1.25rem;
-        }
-        .qr-image {
-            width: 100%;
-            aspect-ratio: 1;
-            background: #fff;
-            padding: 0.75rem;
-            border-radius: 0.5rem;
-        }
-        .qr-image img {
-            width: 100%;
-            height: 100%;
-            display: block;
-        }
-        .qr-label {
-            width: 100%;
-            text-align: center;
-        }
-        .scan-to {
-            font-size: 1.1rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            opacity: 0.75;
-            margin-bottom: 0.3rem;
-        }
-        .cta-button {
-            font-size: 1rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            opacity: 0.75;
-            line-height: 1.4;
-        }
-        .branding {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.35);
-            padding: 1rem 2rem;
-            text-align: center;
-            font-size: 1.4rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            opacity: 0.75;
-        }
-    </style>
-</head>
-<body>
-    <div class="slide">
-        <div class="main">
-            <div class="title">{{ slide.title }}</div>
-            <div class="sponsors">
-                {% for sponsor in slide._data.sponsors %}
-                <div class="sponsor-card">
-                    <div class="sponsor-logo-wrap">
-                        <img class="sponsor-logo"
-                             src="/{{ sponsor.logo }}"
-                             alt="{{ sponsor.name }}"
-                             onerror="this.style.display='none'">
-                    </div>
-                    <div class="sponsor-name">{{ sponsor.name }}</div>
+{% extends 'slides/_base.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+    .slide { flex-direction: row; align-items: flex-start; gap: 4vw; }
+    .main {
+        flex: 1 1 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        margin-bottom: 3.5vh;
+        opacity: 0.85;
+    }
+    .sponsor-cards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2vw;
+    }
+    .sponsor-card {
+        background: #ffffff;
+        border-radius: 0.75vh;
+        padding: 1.5vh 2vw;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1 1 15vw;
+        max-width: 18vw;
+        height: 18vh;
+    }
+    .sponsor-logo-wrap {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .sponsor-logo {
+        max-width: 13vw;
+        max-height: 8vh;
+        width: auto; height: auto;
+        object-fit: contain;
+        display: block;
+    }
+    .sponsor-name {
+        color: #1a3d1a;
+        font-size: var(--t-xs);
+        font-weight: bold;
+        text-align: center;
+        margin-top: 1vh;
+    }
+    .qr-panel {
+        flex: 0 0 18vw;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1.5vh;
+    }
+    .qr-image {
+        width: 100%;
+        aspect-ratio: 1;
+        background: #fff;
+        padding: 0.75vh;
+        border-radius: 0.5vh;
+    }
+    .qr-image img { width: 100%; height: 100%; display: block; }
+    .qr-label { width: 100%; text-align: center; }
+    .scan-to {
+        font-size: var(--t-xs);
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        opacity: 0.75;
+        margin-bottom: 0.3vh;
+    }
+    .cta-button {
+        font-size: var(--t-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.75;
+        line-height: 1.4;
+    }
+{% endblock %}
+{% block content %}
+    <div class="main">
+        <div class="title">{{ slide.title }}</div>
+        <div class="sponsor-cards">
+            {% for sponsor in slide._data.sponsors %}
+            <div class="sponsor-card">
+                <div class="sponsor-logo-wrap">
+                    <img class="sponsor-logo"
+                         src="/{{ sponsor.logo }}"
+                         alt="{{ sponsor.name }}"
+                         onerror="this.style.display='none'">
                 </div>
-                {% endfor %}
+                <div class="sponsor-name">{{ sponsor.name }}</div>
             </div>
+            {% endfor %}
         </div>
-        {% if slide._qr_data_url is defined %}
-        <div class="qr-panel">
-            <div class="qr-image">
-                <img src="{{ slide._qr_data_url }}" alt="QR code">
-            </div>
-            <div class="qr-label">
-                <div class="scan-to">Scan to</div>
-                <div class="cta-button">{{ slide.qr_cta }}</div>
-            </div>
-        </div>
-        {% endif %}
     </div>
-    <div class="branding">Wendover Cricket Club</div>
-</body>
-</html>
+    {% if slide._qr_data_url is defined %}
+    <div class="qr-panel">
+        <div class="qr-image">
+            <img src="{{ slide._qr_data_url }}" alt="QR code">
+        </div>
+        <div class="qr-label">
+            <div class="scan-to">Scan to</div>
+            <div class="cta-button">{{ slide.qr_cta }}</div>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}{% endblock %}</title>
+    <style>
+        :root {
+            --bg:           #1a3d1a;
+            --text:         #ffffff;
+            --accent-win:   #2d7a2d;
+            --accent-loss:  #8b1a1a;
+            --accent-amber: #7a5c00;
+            --accent-draw:  #1a5c7a;
+            --safe-x:       5vw;
+            --safe-y:       5vh;
+            --footer-h:     8vh;
+            --t-xl:         4vw;
+            --t-lg:         2.8vw;
+            --t-md:         2vw;
+            --t-sm:         1.2vw;
+            --t-xs:         0.9vw;
+            --t-xxs:        0.7vw;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+        html, body {
+            width: 100vw; height: 100vh; overflow: hidden;
+            background: var(--bg);
+            font-family: Georgia, 'Times New Roman', serif;
+            color: var(--text);
+        }
+        .slide {
+            width: 100vw;
+            height: calc(100vh - var(--footer-h));
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: var(--safe-y) var(--safe-x);
+        }
+        .footer-strip {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            height: var(--footer-h);
+            background: rgba(0,0,0,0.45);
+            display: flex;
+            align-items: center;
+            padding: 0 var(--safe-x);
+            gap: 2vw;
+        }
+        .club-logo {
+            height: calc(var(--footer-h) * 0.72);
+            width: auto;
+            object-fit: contain;
+        }
+        .club-name {
+            font-family: Arial, sans-serif;
+            font-size: var(--t-xxs);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            opacity: 0.8;
+            white-space: nowrap;
+        }
+        .sponsor-logos {
+            display: flex;
+            gap: 1.5vw;
+            align-items: center;
+            margin-left: auto;
+        }
+        .sponsor-logo {
+            height: calc(var(--footer-h) * 0.55);
+            max-width: 8vw;
+            width: auto;
+            object-fit: contain;
+            background: rgba(255,255,255,0.88);
+            border-radius: 3px;
+            padding: 2px 6px;
+        }
+        {% block styles %}{% endblock %}
+    </style>
+</head>
+<body>
+    <div class="slide">{% block content %}{% endblock %}</div>
+    <footer class="footer-strip">
+        <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
+        <span class="club-name">Wendover Cricket Club</span>
+        <div class="sponsor-logos">
+            {% for s in sponsors %}
+            <img class="sponsor-logo" src="{{ s.src }}" alt="{{ s.name }}">
+            {% endfor %}
+        </div>
+    </footer>
+</body>
+</html>

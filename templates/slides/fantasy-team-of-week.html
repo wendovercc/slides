@@ -1,125 +1,78 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>{{ slide.title }}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-        html, body {
-            width: 100%; height: 100%; overflow: hidden;
-            background: #1a3d1a;
-            font-family: Georgia, 'Times New Roman', serif;
-            color: #ffffff;
-        }
-        .slide {
-            width: 100%; height: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 2.5rem 4rem 5rem;
-        }
-        .header { margin-bottom: 1.5rem; }
-        .title {
-            font-size: 3.2rem;
-            font-weight: bold;
-            line-height: 1.2;
-            text-shadow: 0 3px 6px rgba(0,0,0,0.4);
-        }
-
-        .cards {
-            flex: 1;
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 0.9rem;
-            align-content: start;
-            min-height: 0;
-        }
-
-        .card {
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 0.6rem;
-            padding: 0.9rem 0.8rem 0.8rem;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.3rem;
-        }
-
-        .badge {
-            font-size: 0.85rem;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            opacity: 0.6;
-        }
-
-        .player-name {
-            font-size: 1.55rem;
-            font-weight: bold;
-            text-align: center;
-            line-height: 1.25;
-            word-break: break-word;
-        }
-
-        .value {
-            font-size: 1rem;
-            opacity: 0.55;
-        }
-
-        .pts-wrap {
-            margin-top: auto;
-            padding-top: 0.4rem;
-        }
-        .pts {
-            font-size: 2.2rem;
-            font-weight: bold;
-            color: #a8d5a2;
-            line-height: 1;
-        }
-
-        .empty { opacity: 0.4; font-size: 1.3rem; padding-top: 1rem; }
-
-        .branding {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.35);
-            padding: 1rem 2rem;
-            text-align: center;
-            font-size: 1.4rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            opacity: 0.75;
-        }
-    </style>
-</head>
-<body>
-    <div class="slide">
-        <div class="header">
-            <div class="title">{{ slide.title }}</div>
-
-        </div>
-
-        {% set rows = slide._data.rows %}
-        {% if rows %}
-        <div class="cards">
-            {% for row in rows %}
-            {% set category = row[0] %}
-            {% set name     = row[1] %}
-            {% set value    = row[2] %}
-            {% set pts      = row[3] %}
-            <div class="card">
-                <div class="badge">{{ category }}</div>
-                <div class="player-name">{{ name }}</div>
-                <div class="value">{{ value }}</div>
-                <div class="pts-wrap">
-                    <div class="pts">{{ pts }}</div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="empty">No team of the week data yet</div>
-        {% endif %}
+{% extends 'slides/_base.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+    .header { margin-bottom: 1.5vh; }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .cards {
+        flex: 1;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.9vw;
+        align-content: start;
+        min-height: 0;
+    }
+    .card {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 0.6vh;
+        padding: 0.9vh 0.8vw 0.8vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.3vh;
+    }
+    .badge {
+        font-size: var(--t-xxs);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        opacity: 0.6;
+    }
+    .player-name {
+        font-size: var(--t-sm);
+        font-weight: bold;
+        text-align: center;
+        line-height: 1.25;
+        word-break: break-word;
+    }
+    .value { font-size: var(--t-xxs); opacity: 0.55; }
+    .pts-wrap { margin-top: auto; padding-top: 0.4vh; }
+    .pts {
+        font-size: var(--t-md);
+        font-weight: bold;
+        color: #a8d5a2;
+        line-height: 1;
+    }
+    .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
+{% endblock %}
+{% block content %}
+    <div class="header">
+        <div class="title">{{ slide.title }}</div>
     </div>
-    <div class="branding">Wendover Cricket Club · Fantasy League</div>
-</body>
-</html>
+
+    {% set rows = slide._data.rows %}
+    {% if rows %}
+    <div class="cards">
+        {% for row in rows %}
+        {% set category = row[0] %}
+        {% set name     = row[1] %}
+        {% set value    = row[2] %}
+        {% set pts      = row[3] %}
+        <div class="card">
+            <div class="badge">{{ category }}</div>
+            <div class="player-name">{{ name }}</div>
+            <div class="value">{{ value }}</div>
+            <div class="pts-wrap">
+                <div class="pts">{{ pts }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty">No team of the week data yet</div>
+    {% endif %}
+{% endblock %}

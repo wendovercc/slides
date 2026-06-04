@@ -387,6 +387,12 @@ def make_env():
         autoescape=False,
     )
     env.filters["tojson"] = json.dumps
+    sponsor_dir = ASSETS / "images" / "sponsors"
+    env.globals["sponsors"] = [
+        {"name": p.stem.replace("-", " ").title(), "src": f"/assets/images/sponsors/{p.name}"}
+        for p in sorted(sponsor_dir.glob("*.*"))
+        if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg"}
+    ]
     return env
 
 

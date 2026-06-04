@@ -1,121 +1,86 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>{{ slide.title }}</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-        html, body {
-            width: 100%; height: 100%; overflow: hidden;
-            background: #1a3d1a;
-            font-family: Georgia, 'Times New Roman', serif;
-            color: #ffffff;
-        }
-        .slide {
-            width: 100%; height: 100%;
-            display: flex;
-            flex-direction: column;
-            padding: 3rem 5rem 5rem;
-        }
-        .header { margin-bottom: 2rem; }
-        .title {
-            font-size: 3.5rem;
-            font-weight: bold;
-            line-height: 1.2;
-            text-shadow: 0 3px 6px rgba(0,0,0,0.4);
-        }
-
-        .table-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-
-        /* rank | name | value | runs | ct | ro | st | bowling | gw | total */
-        .grid {
-            display: grid;
-            grid-template-columns: 2rem 1fr 5rem 4rem 3rem 3rem 3rem 6rem 4.5rem 5.5rem;
-            gap: 0 0.5rem;
-            align-items: baseline;
-        }
-        .col-headers {
-            padding: 0.3rem 0 0.5rem;
-            border-bottom: 1px solid rgba(255,255,255,0.25);
-            font-size: 1rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-            opacity: 0.55;
-        }
-        .row {
-            padding: 0.45rem 0;
-            font-size: 1.35rem;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-        }
-        .row.top-3 { font-size: 1.45rem; }
-        .pos { opacity: 0.45; font-size: 1rem; text-align: right; }
-        .name {
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-            padding-right: 0.5rem;
-        }
-        .r { text-align: right; }
-        .pts { text-align: right; font-weight: bold; }
-        .row.top-3 .pts { color: #a8d5a2; }
-        .empty { opacity: 0.4; font-size: 1.3rem; padding-top: 1rem; }
-        .branding {
-            position: absolute;
-            bottom: 0; left: 0; right: 0;
-            background: rgba(0,0,0,0.35);
-            padding: 1rem 2rem;
-            text-align: center;
-            font-size: 1.4rem;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            opacity: 0.75;
-        }
-    </style>
-</head>
-<body>
-    <div class="slide">
-        <div class="header">
-            <div class="title">{{ slide.title }}</div>
-
-        </div>
-
-        <div class="table-wrap">
-            {% set h = slide._data.headers %}
-            {% set max_rows = slide.max_rows if slide.max_rows is defined else 10 %}
-            {% set rows = slide._data.rows[:max_rows] %}
-
-            {% if rows %}
-                <div class="grid col-headers">
-                    <span></span>
-                    <span>{{ h[0] if h|length > 0 else 'Name' }}</span>
-                    <span class="r">{{ h[1] if h|length > 1 else 'Val' }}</span>
-                    <span class="r">{{ h[2] if h|length > 2 else 'Runs' }}</span>
-                    <span class="r">{{ h[3] if h|length > 3 else 'Ct' }}</span>
-                    <span class="r">{{ h[4] if h|length > 4 else 'RO' }}</span>
-                    <span class="r">{{ h[5] if h|length > 5 else 'St' }}</span>
-                    <span class="r">{{ h[6] if h|length > 6 else 'Bowling' }}</span>
-                    <span class="r">{{ h[7] if h|length > 7 else 'GW' }}</span>
-                    <span class="r">{{ h[8] if h|length > 8 else 'Total' }}</span>
-                </div>
-                {% for row in rows %}
-                <div class="grid row {% if loop.index <= 3 %}top-3{% endif %}">
-                    <span class="pos">{{ loop.index }}</span>
-                    <span class="name">{{ row[0] }}</span>
-                    <span class="r">{{ row[1] if row|length > 1 else '' }}</span>
-                    <span class="r">{{ row[2] if row|length > 2 else '' }}</span>
-                    <span class="r">{{ row[3] if row|length > 3 else '' }}</span>
-                    <span class="r">{{ row[4] if row|length > 4 else '' }}</span>
-                    <span class="r">{{ row[5] if row|length > 5 else '' }}</span>
-                    <span class="r">{{ row[6] if row|length > 6 else '' }}</span>
-                    <span class="r">{{ row[7] if row|length > 7 else '' }}</span>
-                    <span class="pts">{{ row[8] if row|length > 8 else '' }}</span>
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty">No standings data yet</div>
-            {% endif %}
-        </div>
+{% extends 'slides/_base.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+    .header { margin-bottom: 1.5vh; }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .table-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    /* rank | name | value | runs | ct | ro | st | bowling | gw | total */
+    .grid {
+        display: grid;
+        grid-template-columns: 1.7vw 1fr 4.2vw 3.4vw 2.5vw 2.5vw 2.5vw 5vw 3.8vw 4.6vw;
+        gap: 0 0.4vw;
+        align-items: baseline;
+    }
+    .col-headers {
+        padding: 0.3vh 0 0.5vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
+        font-size: var(--t-xxs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.55;
+    }
+    .row {
+        padding: 0.45vh 0;
+        font-size: var(--t-xs);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .row.top-3 { font-size: var(--t-xs); }
+    .pos { opacity: 0.45; font-size: var(--t-xxs); text-align: right; }
+    .name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        padding-right: 0.5vw;
+    }
+    .r { text-align: right; }
+    .pts { text-align: right; font-weight: bold; }
+    .row.top-3 .pts { color: #a8d5a2; }
+    .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
+{% endblock %}
+{% block content %}
+    <div class="header">
+        <div class="title">{{ slide.title }}</div>
     </div>
-    <div class="branding">Wendover Cricket Club · Fantasy League</div>
-</body>
-</html>
+
+    <div class="table-wrap">
+        {% set h = slide._data.headers %}
+        {% set max_rows = slide.max_rows if slide.max_rows is defined else 10 %}
+        {% set rows = slide._data.rows[:max_rows] %}
+
+        {% if rows %}
+            <div class="grid col-headers">
+                <span></span>
+                <span>{{ h[0] if h|length > 0 else 'Name' }}</span>
+                <span class="r">{{ h[1] if h|length > 1 else 'Val' }}</span>
+                <span class="r">{{ h[2] if h|length > 2 else 'Runs' }}</span>
+                <span class="r">{{ h[3] if h|length > 3 else 'Ct' }}</span>
+                <span class="r">{{ h[4] if h|length > 4 else 'RO' }}</span>
+                <span class="r">{{ h[5] if h|length > 5 else 'St' }}</span>
+                <span class="r">{{ h[6] if h|length > 6 else 'Bowling' }}</span>
+                <span class="r">{{ h[7] if h|length > 7 else 'GW' }}</span>
+                <span class="r">{{ h[8] if h|length > 8 else 'Total' }}</span>
+            </div>
+            {% for row in rows %}
+            <div class="grid row {% if loop.index <= 3 %}top-3{% endif %}">
+                <span class="pos">{{ loop.index }}</span>
+                <span class="name">{{ row[0] }}</span>
+                <span class="r">{{ row[1] if row|length > 1 else '' }}</span>
+                <span class="r">{{ row[2] if row|length > 2 else '' }}</span>
+                <span class="r">{{ row[3] if row|length > 3 else '' }}</span>
+                <span class="r">{{ row[4] if row|length > 4 else '' }}</span>
+                <span class="r">{{ row[5] if row|length > 5 else '' }}</span>
+                <span class="r">{{ row[6] if row|length > 6 else '' }}</span>
+                <span class="r">{{ row[7] if row|length > 7 else '' }}</span>
+                <span class="pts">{{ row[8] if row|length > 8 else '' }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty">No standings data yet</div>
+        {% endif %}
+    </div>
+{% endblock %}
