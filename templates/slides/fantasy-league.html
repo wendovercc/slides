@@ -1,0 +1,308 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+    .header { margin-bottom: 1.2vh; }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .panels {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+    }
+    .panel {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        opacity: 0;
+        transition: opacity 0.4s ease-in-out;
+    }
+    .panel.panel-active { opacity: 1; }
+    .panel-nav {
+        display: flex;
+        gap: 3vw;
+        margin-top: 1.2vh;
+        align-items: flex-end;
+    }
+    .panel-tab {
+        font-size: var(--t-md);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.35;
+        position: relative;
+        padding-bottom: 0.6vh;
+        transition: opacity 0.4s;
+    }
+    .panel-tab.active { opacity: 1; }
+    .panel-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 2px;
+        background: rgba(255,255,255,0.75);
+        transform-origin: left;
+        animation: panel-progress var(--panel-duration, 10s) linear forwards;
+    }
+    @keyframes panel-progress {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+    }
+    .placeholder {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--t-md);
+        opacity: 0.4;
+        font-style: italic;
+    }
+    .table { flex: 1; display: flex; flex-direction: column; }
+    /* Team of the Week: role | name | value | pts */
+    .totw-grid {
+        display: grid;
+        grid-template-columns: 9vw 1fr 6vw 5vw;
+        gap: 0 0.4vw;
+        align-items: baseline;
+    }
+    .col-headers {
+        padding: 0.3vh 0 0.5vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
+        font-size: var(--t-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.55;
+    }
+    .row {
+        padding: 0.3vh 0;
+        font-size: var(--t-md);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    /* Bars provide row rhythm — suppress zebra stripes where bars are present */
+    .totw-grid.row:nth-child(even),
+    .top-grid.row:nth-child(even) { background: transparent; }
+    /* Top Players: pos | name | value | bat | bowl | field | pts */
+    .top-grid {
+        display: grid;
+        grid-template-columns: 2.5vw 1fr 6vw 6vw 7vw 9vw 5vw;
+        gap: 0 0.5vw;
+        align-items: baseline;
+    }
+    .pos { opacity: 0.45; text-align: right; padding-right: 0.4vw; }
+    .stat {
+        text-align: right;
+        opacity: 0.75;
+        font-variant-numeric: tabular-nums;
+    }
+    .stat.empty-stat { opacity: 0.2; }
+    /* Top Managers: pos | manager | team | pts */
+    .league-grid {
+        display: grid;
+        grid-template-columns: 2.5vw 20vw 1fr 5vw;
+        gap: 0 0.5vw;
+        align-items: baseline;
+    }
+    .role {
+        opacity: 0.55;
+        font-size: var(--t-xs);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+    }
+    .name {
+        position: relative;
+        isolation: isolate;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        padding: 0 0.4vw 0 0.6vw;
+    }
+    .name::before {
+        content: '';
+        position: absolute;
+        left: 0; top: 0.1vh; bottom: 0.1vh;
+        width: var(--bar, 0%);
+        background: linear-gradient(to right, rgba(168,213,162,0.22), rgba(168,213,162,0.06));
+        border-left: 2px solid rgba(168,213,162,0.55);
+        border-radius: 0 0.3vh 0.3vh 0;
+        z-index: -1;
+    }
+    .name.no-bar { padding-left: 0; }
+    .name.no-bar::before { display: none; }
+    .val { text-align: right; opacity: 0.7; font-variant-numeric: tabular-nums; }
+    .pts {
+        text-align: right;
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+        color: #a8d5a2;
+    }
+    .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
+{% endblock %}
+{% block content %}
+    <div class="header">
+        <div class="title">{{ slide.title }}</div>
+    </div>
+    <nav class="panel-nav">
+        <span class="panel-tab active">Team of the Week</span>
+        <span class="panel-tab">Top Players</span>
+        <span class="panel-tab">Top Managers</span>
+    </nav>
+    <div class="panels">
+
+        <div class="panel panel-active">
+            {% set totw_rows = slide._team_of_week.rows %}
+            {% set ns = namespace(max_pts=0) %}
+            {% for r in totw_rows %}
+                {% set p = r[3]|int %}
+                {% if p > ns.max_pts %}{% set ns.max_pts = p %}{% endif %}
+            {% endfor %}
+            {% if totw_rows %}
+            <div class="table">
+                <div class="totw-grid col-headers">
+                    <span>Role</span>
+                    <span>Player</span>
+                    <span class="val">Value (£m)</span>
+                    <span class="pts">Pts</span>
+                </div>
+                {% for row in totw_rows %}
+                {% set p = row[3]|int %}
+                {% set bar_pct = ((p / ns.max_pts) * 100) | round(1) if ns.max_pts else 0 %}
+                {% set v_num = row[2]|replace('£','')|replace('m','')|float %}
+                <div class="totw-grid row">
+                    <span class="role">{{ row[0] }}</span>
+                    <span class="name" style="--bar: {{ bar_pct }}%">{{ row[1] }}</span>
+                    <span class="val">{{ "%.1f"|format(v_num) }}</span>
+                    <span class="pts">{{ row[3] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">No team of the week data yet</div>
+            {% endif %}
+        </div>
+
+        <div class="panel">
+            {% set max_rows = slide.top_rows if slide.top_rows is defined else 10 %}
+            {% set top_rows = slide._player_standings.rows[:max_rows] %}
+            {% set tp = namespace(max_pts=0) %}
+            {% for r in top_rows %}
+                {% set p = (r[8] if r|length > 8 else 0)|int %}
+                {% if p > tp.max_pts %}{% set tp.max_pts = p %}{% endif %}
+            {% endfor %}
+
+            {% macro bat_cell(row) -%}
+                {%- set runs = row[2] if row|length > 2 else '0' -%}
+                {{ runs if runs and runs != '0' else '' }}
+            {%- endmacro %}
+
+            {% macro bowl_cell(row) -%}
+                {%- set bowl = row[6] if row|length > 6 else '0/0' -%}
+                {%- if bowl and '/' in bowl -%}
+                    {%- set wkts, conc = bowl.split('/', 1) -%}
+                    {%- if wkts and wkts != '0' %}{{ bowl }}{% endif -%}
+                {%- endif -%}
+            {%- endmacro %}
+
+            {% macro field_cell(row) -%}
+                {%- set parts = [] -%}
+                {%- set ct = row[3] if row|length > 3 else '0' -%}
+                {%- set ro = row[4] if row|length > 4 else '0' -%}
+                {%- set st = row[5] if row|length > 5 else '0' -%}
+                {%- if ct and ct != '0' %}{% set _ = parts.append(ct ~ 'c') %}{% endif -%}
+                {%- if ro and ro != '0' %}{% set _ = parts.append(ro ~ 'ro') %}{% endif -%}
+                {%- if st and st != '0' %}{% set _ = parts.append(st ~ 'st') %}{% endif -%}
+                {{ parts | join(' ') }}
+            {%- endmacro %}
+
+            {% if top_rows %}
+            <div class="table">
+                <div class="top-grid col-headers">
+                    <span></span>
+                    <span>Player</span>
+                    <span class="val">Value (£m)</span>
+                    <span class="stat">Bat</span>
+                    <span class="stat">Bowl</span>
+                    <span class="stat">Field</span>
+                    <span class="pts">Pts</span>
+                </div>
+                {% for row in top_rows %}
+                {% set p = (row[8] if row|length > 8 else 0)|int %}
+                {% set bar_pct = ((p / tp.max_pts) * 100) | round(1) if tp.max_pts else 0 %}
+                {% set bat = bat_cell(row)|trim %}
+                {% set bowl = bowl_cell(row)|trim %}
+                {% set field = field_cell(row)|trim %}
+                {% set v_num = (row[1] if row|length > 1 else '0')|replace('£','')|replace('m','')|float %}
+                <div class="top-grid row">
+                    <span class="pos">{{ loop.index }}</span>
+                    <span class="name" style="--bar: {{ bar_pct }}%">{{ row[0] }}</span>
+                    <span class="val">{{ "%.1f"|format(v_num) }}</span>
+                    <span class="stat{% if not bat %} empty-stat{% endif %}">{{ bat or '·' }}</span>
+                    <span class="stat{% if not bowl %} empty-stat{% endif %}">{{ bowl or '·' }}</span>
+                    <span class="stat{% if not field %} empty-stat{% endif %}">{{ field or '·' }}</span>
+                    <span class="pts">{{ row[8] if row|length > 8 else '' }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">No player standings yet</div>
+            {% endif %}
+        </div>
+
+        <div class="panel">
+            {% set league_max = slide.league_rows if slide.league_rows is defined else 12 %}
+            {% set league_rows = slide._team_standings.rows[:league_max] %}
+
+            {% if league_rows %}
+            <div class="table">
+                <div class="league-grid col-headers">
+                    <span></span>
+                    <span>Manager</span>
+                    <span>Team</span>
+                    <span class="pts">Pts</span>
+                </div>
+                {% for row in league_rows %}
+                <div class="league-grid row">
+                    <span class="pos">{{ row[0] }}</span>
+                    <span class="name no-bar">{{ row[2] }}</span>
+                    <span class="name no-bar">{{ row[1] }}</span>
+                    <span class="pts">{{ row[3] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">No team standings yet</div>
+            {% endif %}
+        </div>
+
+    </div>
+    <script>
+        const SLIDE_DURATION = {{ slide.duration }};
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
+        const panelDuration = SLIDE_DURATION / panels.length;
+        let current = 0;
+        document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
+        function showPanel(i) {
+            panels[current].classList.remove('panel-active');
+            tabs[current].classList.remove('active');
+            void tabs[i].offsetWidth;
+            panels[i].classList.add('panel-active');
+            tabs[i].classList.add('active');
+            current = i;
+        }
+        const autoRotate = setInterval(() => showPanel((current + 1) % panels.length), panelDuration * 1000);
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowRight' && current < panels.length - 1) {
+                clearInterval(autoRotate);
+                showPanel(current + 1);
+            } else if (e.key === 'ArrowLeft' && current > 0) {
+                clearInterval(autoRotate);
+                showPanel(current - 1);
+            }
+        });
+    </script>
+{% endblock %}

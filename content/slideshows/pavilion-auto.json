@@ -1010,32 +1010,8 @@
       ]
     },
     {
-      "slug": "fantasy-team-standings",
-      "duration": 15,
-      "show_when": [
-        {
-          "section": [
-            "senior",
-            "all"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "fantasy-player-standings",
-      "duration": 15,
-      "show_when": [
-        {
-          "section": [
-            "senior",
-            "all"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "fantasy-team-of-week",
-      "duration": 15,
+      "slug": "fantasy-league",
+      "duration": 30,
       "show_when": [
         {
           "section": [

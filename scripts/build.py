@@ -1024,6 +1024,15 @@ def build_slides(env):
             data_path = CONTENT / "data" / f"{key}.json"
             slide["_data"] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
 
+        if slide.get("template") == "fantasy-league":
+            for tab_key, file_key in [
+                ("_player_standings", "fantasy_player_standings"),
+                ("_team_standings",   "fantasy_team_standings"),
+                ("_team_of_week",     "fantasy_team_of_week"),
+            ]:
+                data_path = CONTENT / "data" / f"{file_key}.json"
+                slide[tab_key] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
+
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
 
