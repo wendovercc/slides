@@ -480,8 +480,8 @@ def main():
         if "play_cricket_team_id" in t
     }
 
-    data_dir = CONTENT / "data"
-    data_dir.mkdir(exist_ok=True)
+    data_dir = CONTENT / "data" / "fetched"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     for label, year in config["seasons"].items():
         print(f"Fetching player stats: {label} ({year})...")

@@ -42,8 +42,8 @@ def main():
 
     teams = json.loads((CONTENT / "teams.json").read_text())["teams"]
 
-    data_dir = CONTENT / "data"
-    data_dir.mkdir(exist_ok=True)
+    data_dir = CONTENT / "data" / "fetched"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     for team in teams:
         league_id = team.get("play_cricket_league_id")

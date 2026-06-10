@@ -540,8 +540,8 @@ def main():
         "all_fixtures": all_upcoming,
         "last_match": last_match,
     }
-    data_dir = CONTENT / "data"
-    data_dir.mkdir(exist_ok=True)
+    data_dir = CONTENT / "data" / "fetched"
+    data_dir.mkdir(parents=True, exist_ok=True)
     out_path = data_dir / "fixtures.json"
     out_path.write_text(json.dumps(out, indent=2))
     print(f"  → {out_path.relative_to(ROOT)}")

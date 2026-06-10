@@ -13,6 +13,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
+FETCHED = CONTENT / "data" / "fetched"
 TEMPLATES = ROOT / "templates"
 ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
@@ -411,7 +412,7 @@ def build_league_positions(slide, teams_by_id, stats_data):
         team = teams_by_id.get(team_id)
         if not team or "play_cricket_league_id" not in team:
             continue
-        data_path = CONTENT / "data" / f"league_table_{team['play_cricket_league_id']}.json"
+        data_path = FETCHED / f"league_table_{team['play_cricket_league_id']}.json"
         if not data_path.exists():
             continue
         data = json.loads(data_path.read_text())
@@ -670,7 +671,7 @@ def build_next_match(slide, teams_by_id, fixtures_data, stats_data):
     slide["_division_name"] = ""
 
     if league_id:
-        data_path = CONTENT / "data" / f"league_table_{league_id}.json"
+        data_path = FETCHED / f"league_table_{league_id}.json"
         if data_path.exists():
             table_data = json.loads(data_path.read_text())
             table = table_data.get("league_table", [{}])[0]
@@ -852,8 +853,8 @@ def build_context_calendar():
         for alias in loc.get("aliases", []):
             loc_lookup[alias.lower()] = loc["id"]
 
-    fixtures_path = CONTENT / "data" / "fixtures.json"
-    training_path = CONTENT / "data" / "cs365_training.json"
+    fixtures_path = FETCHED / "fixtures.json"
+    training_path = FETCHED / "cs365_training.json"
 
     all_fixtures = {}
     if fixtures_path.exists():
@@ -967,7 +968,7 @@ def build_slides(env):
 
     def load_stats(label):
         if label not in _stats_cache:
-            path = CONTENT / "data" / f"player_stats_{label}.json"
+            path = FETCHED / f"player_stats_{label}.json"
             _stats_cache[label] = json.loads(path.read_text()) if path.exists() else None
         return _stats_cache[label]
 
@@ -975,7 +976,8 @@ def build_slides(env):
 
     def load_honours(name):
         if name not in _honours_cache:
-            path = CONTENT / "data" / f"{name}.json"
+            base = CONTENT / "data" if name.startswith("historic_") else FETCHED
+            path = base / f"{name}.json"
             _honours_cache[name] = json.loads(path.read_text()) if path.exists() else None
         return _honours_cache[name]
 
@@ -983,7 +985,7 @@ def build_slides(env):
 
     def load_fixtures():
         if "data" not in _fixtures_cache:
-            path = CONTENT / "data" / "fixtures.json"
+            path = FETCHED / "fixtures.json"
             _fixtures_cache["data"] = json.loads(path.read_text()) if path.exists() else None
         return _fixtures_cache["data"]
 
@@ -998,7 +1000,7 @@ def build_slides(env):
             for loc in locs:
                 for alias in loc["aliases"]:
                     loc_lookup[alias.lower()] = loc["id"]
-            training_path = CONTENT / "data" / "cs365_training.json"
+            training_path = FETCHED / "cs365_training.json"
             training = json.loads(training_path.read_text())["sessions"] if training_path.exists() else []
             fixtures_data = load_fixtures()
             all_fixtures = (fixtures_data or {}).get("all_fixtures", {})
@@ -1011,7 +1013,7 @@ def build_slides(env):
 
         if slide.get("template") == "league-table" and "team" in slide:
             team = teams_by_id[slide["team"]]
-            data_path = CONTENT / "data" / f"league_table_{team['play_cricket_league_id']}.json"
+            data_path = FETCHED / f"league_table_{team['play_cricket_league_id']}.json"
             slide["_data"] = json.loads(data_path.read_text())
             slide["_highlight_team_id"] = str(team["play_cricket_team_id"])
             slide["_team"] = team
@@ -1021,7 +1023,7 @@ def build_slides(env):
 
         if slide.get("template") in FANTASY_TEMPLATES:
             key = FANTASY_TEMPLATES[slide["template"]]
-            data_path = CONTENT / "data" / f"{key}.json"
+            data_path = FETCHED / f"{key}.json"
             slide["_data"] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
 
         if slide.get("template") == "fantasy-league":
@@ -1030,7 +1032,7 @@ def build_slides(env):
                 ("_team_standings",   "fantasy_team_standings"),
                 ("_team_of_week",     "fantasy_team_of_week"),
             ]:
-                data_path = CONTENT / "data" / f"{file_key}.json"
+                data_path = FETCHED / f"{file_key}.json"
                 slide[tab_key] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
 
         if slide.get("template") == "cta" and "qr_url" in slide:

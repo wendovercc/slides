@@ -332,8 +332,8 @@ def main():
 
     from playwright.sync_api import sync_playwright
 
-    data_dir = CONTENT / "data"
-    data_dir.mkdir(exist_ok=True)
+    data_dir = CONTENT / "data" / "fetched"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     fetched_at = datetime.now(timezone.utc).isoformat()
 

@@ -191,8 +191,8 @@ def main():
 
     team_lookup = build_team_lookup()
     location_lookup = build_location_lookup()
-    data_dir = CONTENT / "data"
-    data_dir.mkdir(exist_ok=True)
+    data_dir = CONTENT / "data" / "fetched"
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     today = date.today()
     # Start from the Monday of the current week
