@@ -431,10 +431,18 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
 
     compute_all_derived(players)
 
-    # Build per-competition and all-match form, sorted by date, last 5 results each
+    # Build per-competition and all-match form, sorted by date, last 5 results each.
+    # Dates are dd/mm/yyyy strings — parse before sorting so they order
+    # chronologically (lexical sort puts "06/06/2026" before "23/05/2026").
+    def _parse_dmy(s):
+        try:
+            return datetime.strptime(s, "%d/%m/%Y").date()
+        except (ValueError, TypeError):
+            return date.min
+
     form_trimmed = {}
     for team_id, entries in form.items():
-        sorted_entries = sorted(entries, key=lambda x: x[0])
+        sorted_entries = sorted(entries, key=lambda x: _parse_dmy(x[0]))
         by_comp = {}
         for _, result_char, comp_id in sorted_entries:
             if comp_id:

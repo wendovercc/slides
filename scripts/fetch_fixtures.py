@@ -436,6 +436,11 @@ def main():
             existing_date = parse_date((upcoming.get(tid) or {}).get("match_date", ""))
             if existing_date is None or match_date < existing_date:
                 upcoming[tid] = match
+            opp_site_id_raw = (
+                str(match.get("away_club_id", "")) if is_home
+                else str(match.get("home_club_id", ""))
+            )
+            opp_team_id_raw = away_id if is_home else home_id
             all_upcoming.setdefault(tid, []).append({
                 "match_date": match.get("match_date", ""),
                 "match_time": match.get("match_time") or None,
@@ -448,12 +453,45 @@ def main():
                 "opposition_team_name": (
                     match.get("away_team_name", "") if is_home else match.get("home_team_name", "")
                 ) or "",
+                "opposition_site_id": opp_site_id_raw or None,
+                "opposition_team_id": opp_team_id_raw or None,
+                "opposition_form": None,
+                "opposition_players": None,
             })
 
     for tid in all_upcoming:
         all_upcoming[tid].sort(key=lambda m: parse_date(m["match_date"]) or date.max)
 
     print(f"  {len(upcoming)} team(s) with upcoming fixtures")
+
+    # Enrich the first 3 upcoming fixtures per team with opposition form/players.
+    # Cache by (opp_site_id, opp_team_id) so multiple teams facing the same
+    # opposition don't trigger duplicate fetches.
+    UPCOMING_OPP_N = 3
+    opp_data_cache = {}
+    enrich_pending = []
+    for tid, entries in all_upcoming.items():
+        # Skip junior teams — we don't display opposition junior player names
+        # or stats on screen.
+        if tid.startswith("u"):
+            continue
+        for entry in entries[:UPCOMING_OPP_N]:
+            sid = entry.get("opposition_site_id")
+            otid = entry.get("opposition_team_id")
+            if sid and otid:
+                enrich_pending.append((tid, entry, sid, otid))
+
+    print(f"  Enriching {len(enrich_pending)} upcoming fixture(s) with opposition data...")
+    for tid, entry, sid, otid in enrich_pending:
+        key = (sid, otid)
+        if key not in opp_data_cache:
+            opp_club = entry.get("opposition_club_name") or "?"
+            print(f"  Fetching opposition data for {tid} vs {opp_club} (site {sid})...")
+            opp_data_cache[key] = fetch_opposition_data(otid, sid, season_year, api_token)
+        opp_data = opp_data_cache[key]
+        if opp_data:
+            entry["opposition_form"] = opp_data["form"]
+            entry["opposition_players"] = opp_data["players"]
 
     teams_by_id = {t["id"]: t for t in teams}
 
@@ -492,11 +530,20 @@ def main():
             "opposition_players": None,
         }
 
-        if opp_site_id:
-            print(f"  Fetching opposition data for {team_id} vs {opp_name} (site {opp_site_id})...")
-            opp_data = fetch_opposition_data(
-                opp_team_id, opp_site_id, season_year, api_token
-            )
+        if team_id.startswith("u"):
+            # Junior teams: skip opposition data (avoids surfacing junior
+            # opposition player names/stats on screen).
+            pass
+        elif opp_site_id:
+            key = (opp_site_id, opp_team_id)
+            if key in opp_data_cache:
+                opp_data = opp_data_cache[key]
+            else:
+                print(f"  Fetching opposition data for {team_id} vs {opp_name} (site {opp_site_id})...")
+                opp_data = fetch_opposition_data(
+                    opp_team_id, opp_site_id, season_year, api_token
+                )
+                opp_data_cache[key] = opp_data
             if opp_data:
                 fixture["opposition_form"] = opp_data["form"]
                 fixture["opposition_players"] = opp_data["players"]
@@ -505,8 +552,11 @@ def main():
 
         fixtures[team_id] = fixture
 
-    # Find most-recent completed match per team (for last-match slides)
-    last_match_candidates = {}
+    # Find most-recent completed matches per team — up to RECENT_MATCHES_N most
+    # recent, newest first. Index 0 backs the existing last-match slides;
+    # the full list backs the multi-result tab on the team-overview slide.
+    RECENT_MATCHES_N = 3
+    recent_candidates = {tid: [] for tid in teams_by_id}
     for match in all_matches:
         home_id = str(match.get("home_team_id", ""))
         away_id = str(match.get("away_team_id", ""))
@@ -514,24 +564,33 @@ def main():
         if not match_date or match_date >= today:
             continue
         for our_pc_id, team in teams_by_pc_id.items():
-            if our_pc_id not in (home_id, away_id):
-                continue
-            tid = team["id"]
-            existing_date = parse_date((last_match_candidates.get(tid) or {}).get("match_date", ""))
-            if existing_date is None or match_date > existing_date:
-                last_match_candidates[tid] = match
+            if our_pc_id in (home_id, away_id):
+                recent_candidates[team["id"]].append((match_date, match))
 
-    print(f"  {len(last_match_candidates)} team(s) with recent matches — fetching scorecards...")
+    for tid, lst in recent_candidates.items():
+        lst.sort(key=lambda x: x[0], reverse=True)
+        del lst[RECENT_MATCHES_N:]
+
+    fetch_total = sum(len(lst) for lst in recent_candidates.values())
+    print(f"  {sum(1 for lst in recent_candidates.values() if lst)} team(s) with recent matches — fetching {fetch_total} scorecard(s)...")
+    recent_matches = {}
     last_match = {}
-    for team_id, match in last_match_candidates.items():
+    for team_id, lst in recent_candidates.items():
+        if not lst:
+            continue
         team = teams_by_id[team_id]
         our_pc_id = str(team["play_cricket_team_id"])
-        is_home_lm = our_pc_id == str(match.get("home_team_id", ""))
-        opp = (match.get("away_team_name", "") if is_home_lm else match.get("home_team_name", "")) or "?"
-        print(f"  Fetching last match scorecard for {team_id} vs {opp}...")
-        scorecard = fetch_our_match_scorecard(match, our_pc_id, api_token)
-        if scorecard:
-            last_match[team_id] = scorecard
+        scorecards = []
+        for _, match in lst:
+            is_home_lm = our_pc_id == str(match.get("home_team_id", ""))
+            opp = (match.get("away_team_name", "") if is_home_lm else match.get("home_team_name", "")) or "?"
+            print(f"  Fetching scorecard for {team_id} vs {opp} ({match.get('match_date', '')})...")
+            scorecard = fetch_our_match_scorecard(match, our_pc_id, api_token)
+            if scorecard:
+                scorecards.append(scorecard)
+        if scorecards:
+            recent_matches[team_id] = scorecards
+            last_match[team_id] = scorecards[0]
 
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -539,6 +598,7 @@ def main():
         "fixtures": fixtures,
         "all_fixtures": all_upcoming,
         "last_match": last_match,
+        "recent_matches": recent_matches,
     }
     data_dir = CONTENT / "data" / "fetched"
     data_dir.mkdir(parents=True, exist_ok=True)

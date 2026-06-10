@@ -111,6 +111,37 @@ headline metric (usually points, scaled to the panel's leader).
 - For whole panels with no data, render `<div class="empty">No X data yet</div>`
   at `var(--t-sm)` and opacity 0.4.
 
+## Tile stacks
+
+For non-tabular per-row content inside a carousel panel (e.g. a panel showing
+three recent results, or three upcoming fixtures), use a **tile stack**:
+fixed-height tiles that pack from the top of the panel, with any leftover
+space falling below the last tile. Reference implementation:
+`templates/slides/team.html` (Form and Schedule tabs).
+
+- Container: `display: flex; flex-direction: column; gap: 1vh` inside the
+  panel (no `flex: 1` on the children).
+- Each tile: `height: 16vh; flex-shrink: 0; overflow: hidden; padding: 0.7vh 1vw;
+  background: rgba(255,255,255,0.04); border-radius: 4px`.
+  - The background tint matches the zebra-stripe shade used in tables, so a
+    tile reads as "one row of a non-tabular table".
+  - `flex-shrink: 0` and a fixed `vh` height — relying on `flex: 1` to share
+    the panel evenly does **not** reliably produce equal tiles when content
+    is heterogeneous; fixed height avoids the surprises and lets surplus
+    space fall below the stack.
+- The first row inside the tile is a **meta row** with col-headers
+  typography (`var(--t-xs)`, uppercase, `letter-spacing: 0.08em`). Plain
+  `<span>` children render at opacity 0.55; badges (`.home-pill`,
+  `.away-pill`, `.result-pill`, `.badge-*`) render at full opacity so they
+  remain the row's focal points.
+- Below the meta row, the headline content line (opposition / event name)
+  uses `var(--t-md)` bold with `line-height: 1.1`. Supporting lines use
+  `var(--t-xs)` / `var(--t-xxs)` at opacity 0.55–0.7.
+- Tiles must not grow with content. If a tile would otherwise exceed
+  16vh, reduce typography or supporting content rather than expanding —
+  the carousel relies on consistent tile heights so the third tile is
+  always fully visible.
+
 ## Reference implementations
 
 When introducing a new slide that follows these conventions, copy from one of
@@ -120,3 +151,6 @@ these and adapt:
   honours table.
 - `templates/slides/fantasy-league.html` — three-panel carousel, mixed
   rendering (tables with and without bars, single- and split-name columns).
+- `templates/slides/team.html` — five-panel carousel with tabs hidden when
+  their data is empty; reference for the tile-stack pattern (Form,
+  Schedule).

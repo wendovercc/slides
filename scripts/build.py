@@ -815,6 +815,440 @@ def build_last_match(slide, teams_by_id, fixtures_data):
         slide["_opp_team_name"] = ""
 
 
+def _iso_from_dmy(s):
+    try:
+        return datetime.strptime(s, "%d/%m/%Y").date().isoformat()
+    except (ValueError, TypeError):
+        return None
+
+
+def _fmt_date_past(iso_date):
+    try:
+        d = datetime.strptime(iso_date, "%Y-%m-%d")
+        return d.strftime(f"%a {d.day} %b").upper()
+    except (ValueError, TypeError):
+        return (iso_date or "").upper()
+
+
+def _fmt_date_future(iso_date, today):
+    try:
+        d = datetime.strptime(iso_date, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return (iso_date or "").upper()
+    delta = (d - today).days
+    if delta == 0:
+        return "TODAY"
+    if delta == 1:
+        return "TOMORROW"
+    return datetime.combine(d, datetime.min.time()).strftime(f"%a {d.day} %b").upper()
+
+
+def _short_innings_total(total):
+    if not total:
+        return ""
+    runs = total.get("runs", 0)
+    wickets = total.get("wickets") or None
+    overs = total.get("overs") or ""
+    if wickets is None:
+        score = str(runs)
+    elif int(wickets) >= 10:
+        score = f"{runs} ao"
+    else:
+        score = f"{runs}/{int(wickets)}"
+    return f"{score} ({overs})" if overs else score
+
+
+def _bat_highlight(kind, b):
+    parts = []
+    if b.get("balls"):
+        parts.append(f"{b['balls']} balls")
+    if b.get("fours"):
+        parts.append(f"{b['fours']} fours")
+    if b.get("sixes"):
+        parts.append(f"{b['sixes']} sixes")
+    return {
+        "kind": kind,
+        "category": "bat",
+        "name": b.get("name", ""),
+        "primary": f"{b.get('runs', 0)}{'*' if b.get('not_out') else ''}",
+        "secondary": " · ".join(parts),
+    }
+
+
+def _bowl_highlight(kind, b):
+    parts = [f"{balls_to_overs(b.get('balls', 0) or 0)} overs"]
+    maidens = b.get("maidens") or 0
+    if maidens:
+        parts.append(f"{maidens} maiden{'s' if maidens != 1 else ''}")
+    return {
+        "kind": kind,
+        "category": "bowl",
+        "name": b.get("name", ""),
+        "primary": f"{b.get('wickets', 0)}–{b.get('runs', 0)}",
+        "secondary": " · ".join(parts),
+    }
+
+
+def _select_match_highlights(scorecard, max_hl=2):
+    """Return up to max_hl highlight dicts for Wendover's performance in a match.
+
+    Each Wendover player appears at most once, even when they qualify under
+    multiple priority rules (e.g. a 5fer also clears the tight-spell threshold).
+    """
+    our_bat = scorecard.get("our_batting", []) or []
+    our_bowl = scorecard.get("our_bowling", []) or []
+    their_bat = scorecard.get("their_batting", []) or []
+
+    out = []
+    seen = set()
+
+    def add(highlight):
+        name = (highlight.get("name") or "").strip()
+        if not name or name in seen:
+            return False
+        out.append(highlight)
+        seen.add(name)
+        return True
+
+    five_fers = sorted(
+        [b for b in our_bowl if b.get("wickets", 0) >= 5],
+        key=lambda x: (x["wickets"], -x["runs"]),
+        reverse=True,
+    )
+    for b in five_fers:
+        if len(out) >= max_hl:
+            break
+        add(_bowl_highlight("5fer", b))
+
+    centuries = sorted(
+        [b for b in our_bat if b.get("runs", 0) >= 100],
+        key=lambda x: x["runs"],
+        reverse=True,
+    )
+    for b in centuries:
+        if len(out) >= max_hl:
+            break
+        add(_bat_highlight("century", b))
+
+    if len(out) < max_hl:
+        four_fers = sorted(
+            [b for b in our_bowl if b.get("wickets", 0) == 4],
+            key=lambda x: x.get("runs", 0),
+        )
+        for b in four_fers:
+            if len(out) >= max_hl:
+                break
+            add(_bowl_highlight("4fer", b))
+
+    if len(out) < max_hl:
+        fifties = sorted(
+            [b for b in our_bat if 50 <= b.get("runs", 0) < 100],
+            key=lambda x: x["runs"],
+            reverse=True,
+        )
+        for b in fifties:
+            if len(out) >= max_hl:
+                break
+            add(_bat_highlight("fifty", b))
+
+    if len(out) < max_hl:
+        for b in our_bat:
+            balls = b.get("balls", 0) or 0
+            runs = b.get("runs", 0) or 0
+            if runs >= 30 and balls >= 10 and runs / balls * 100 >= 150:
+                if len(out) >= max_hl:
+                    break
+                add(_bat_highlight("cameo", b))
+
+    if len(out) < max_hl:
+        for b in our_bowl:
+            balls = b.get("balls", 0) or 0
+            if balls == 0:
+                continue
+            overs = balls / 6
+            if b.get("wickets", 0) >= 2 and overs >= 4 and b.get("runs", 0) / balls * 6 <= 3.5:
+                if len(out) >= max_hl:
+                    break
+                add(_bowl_highlight("tight_spell", b))
+
+    if len(out) < max_hl:
+        counts = {}
+        for bat in their_bat:
+            ho = (bat.get("how_out") or "").strip().lower()
+            fielder = (bat.get("fielder_name") or "").strip()
+            if not fielder:
+                continue
+            if ho == "ct" or ho == "st" or "run out" in ho:
+                counts[fielder] = counts.get(fielder, 0) + 1
+        for name, count in sorted(counts.items(), key=lambda x: x[1], reverse=True):
+            if count < 2:
+                break
+            if len(out) >= max_hl:
+                break
+            add({"kind": "fielding", "category": "field", "name": name, "primary": "", "secondary": f"{count} dismissals"})
+
+    if not out:
+        if our_bat:
+            top = max(our_bat, key=lambda x: x.get("runs", 0) or 0)
+            if (top.get("runs", 0) or 0) > 0 or (top.get("balls", 0) or 0) > 0:
+                add(_bat_highlight("top_scorer", top))
+        if len(out) < max_hl and our_bowl:
+            top_w = max(our_bowl, key=lambda x: x.get("wickets", 0) or 0)
+            if (top_w.get("wickets", 0) or 0) > 0:
+                add(_bowl_highlight("top_wicket_taker", top_w))
+
+    return out
+
+
+def _split_opp_name(opp_full, opp_club):
+    if opp_club:
+        return opp_club, (
+            opp_full[len(opp_club) + 3:]
+            if opp_full.startswith(opp_club + " - ")
+            else opp_full
+        )
+    if " - " in (opp_full or ""):
+        club, _, desig = opp_full.rpartition(" - ")
+        return club, desig
+    return opp_full or "", ""
+
+
+def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
+    """Assemble the multi-tab team slide object.
+
+    Tabs (any with no data are omitted from slide._tabs):
+      league · results · schedule · top_batting · top_bowling
+    """
+    team_id = slide.get("team")
+    team = teams_by_id.get(team_id, {})
+    fixtures_data = fixtures_data or {}
+    today = date.today()
+    today_iso = today.isoformat()
+
+    tabs = []
+
+    # ── Tab 1: League table ────────────────────────────────────────────────
+    league_id = team.get("play_cricket_league_id")
+    slide["_has_league"] = False
+    slide["_league_data"] = None
+    if league_id:
+        path = FETCHED / f"league_table_{league_id}.json"
+        if path.exists():
+            league_data = json.loads(path.read_text())
+            for table in league_data.get("league_table", []):
+                ordered = sorted(
+                    table["headings"].items(),
+                    key=lambda x: int(x[0].split("_")[1]),
+                )
+                ordered = [
+                    (k, v) for k, v in ordered
+                    if k == "column_1" or v.lower() not in LEAGUE_TABLE_EXCLUDED
+                ]
+                team_col = [(k, v) for k, v in ordered if k == "column_1"]
+                pts_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
+                rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
+                table["headings_list"] = team_col + rest_cols + pts_cols
+                table["rows"] = table["values"]
+            slide["_league_data"] = league_data
+            slide["_league_team_id"] = str(team.get("play_cricket_team_id", ""))
+            slide["_league_name"] = team.get("league_name", "")
+            slide["_has_league"] = True
+            tabs.append("league")
+
+    # ── Tab 2: Results (most recent N) ─────────────────────────────────────
+    form_data = (stats_data or {}).get("form", {}).get(team_id, {})
+    slide["_our_form"] = form_data.get("all", []) or []
+
+    recent = (fixtures_data.get("recent_matches") or {}).get(team_id) or []
+    if not recent:
+        # Fallback for fixtures.json predating the recent_matches field.
+        legacy = (fixtures_data.get("last_match") or {}).get(team_id)
+        if legacy:
+            recent = [legacy]
+    slide["_has_results"] = False
+    slide["_results"] = []
+    if recent:
+        results = []
+        for sc in recent:
+            iso = _iso_from_dmy(sc.get("match_date", ""))
+            opp_club, opp_team_desig = _split_opp_name(
+                sc.get("opposition_name", ""), sc.get("opposition_club_name", "")
+            )
+            our_short = _short_innings_total(sc.get("our_total"))
+            their_short = _short_innings_total(sc.get("their_total"))
+            our_inn = {"team": "Wendover", "score": our_short}
+            their_inn = {"team": opp_club, "score": their_short}
+            innings = [our_inn, their_inn] if sc.get("we_bat_first", True) else [their_inn, our_inn]
+            results.append({
+                "date_iso": iso,
+                "date_label": _fmt_date_past(iso) if iso else "",
+                "is_home": sc.get("is_home", True),
+                "opp_club_name": opp_club,
+                "opp_team_name": opp_team_desig,
+                "result": sc.get("result"),
+                "result_description": sc.get("result_description", ""),
+                "our_points": sc.get("our_points"),
+                "their_points": sc.get("their_points"),
+                "innings": innings,
+                "highlights": _select_match_highlights(sc, max_hl=2),
+            })
+        slide["_results"] = results
+        slide["_has_results"] = True
+        tabs.append("results")
+
+    # ── Tab 3: Schedule (next N fixtures) ──────────────────────────────────
+    all_fixtures = (fixtures_data.get("all_fixtures") or {}).get(team_id) or []
+    upcoming = []
+    for m in all_fixtures:
+        iso = _iso_from_dmy(m.get("match_date", ""))
+        if not iso or iso < today_iso:
+            continue
+        upcoming.append((iso, m))
+    upcoming.sort(key=lambda x: (x[0], x[1].get("match_time") or ""))
+    upcoming = upcoming[:3]
+
+    slide["_has_schedule"] = False
+    slide["_fixtures"] = []
+    if upcoming:
+        fixtures_out = []
+        for iso, m in upcoming:
+            # Schedule entries store the team designation separately as
+            # opposition_team_name; recent-match scorecards bundle it into
+            # opposition_name. Use whichever is present.
+            opp_club = m.get("opposition_club_name") or ""
+            if m.get("opposition_team_name"):
+                opp_team_desig = m["opposition_team_name"]
+            else:
+                opp_club, opp_team_desig = _split_opp_name(
+                    m.get("opposition_name") or "", opp_club
+                )
+            entry = {
+                "date_iso": iso,
+                "date_label": _fmt_date_future(iso, today),
+                "match_time": m.get("match_time") or None,
+                "is_home": m.get("is_home", True),
+                "opp_club_name": opp_club,
+                "opp_team_name": opp_team_desig,
+                "ground_name": m.get("ground_name") or "",
+                "opp_form": m.get("opposition_form"),
+                "top_bat": None,
+                "top_bowl": None,
+            }
+            opp_players = m.get("opposition_players") or {}
+            bat_list = opp_players.get("batting") or []
+            bowl_list = opp_players.get("bowling") or []
+            if bat_list:
+                p = bat_list[0]
+                entry["top_bat"] = {
+                    "name": p.get("name", ""),
+                    "runs": p.get("runs", 0),
+                    "average": p.get("average"),
+                }
+            if bowl_list:
+                p = bowl_list[0]
+                entry["top_bowl"] = {
+                    "name": p.get("name", ""),
+                    "wickets": p.get("wickets", 0),
+                    "average": p.get("average"),
+                }
+            fixtures_out.append(entry)
+        slide["_fixtures"] = fixtures_out
+        slide["_has_schedule"] = True
+        tabs.append("schedule")
+
+    # ── Tabs 4 & 5: Top batting / Top bowling (5 rows each table) ──────────
+    TOP_ROWS = 5
+    min_innings = (lb_config or {}).get("min_innings", 2)
+    min_balls = (lb_config or {}).get("min_overs", 2) * 6
+
+    slide["_top_runs"] = []
+    slide["_top_avg_bat"] = []
+    slide["_top_wkts"] = []
+    slide["_top_avg_bowl"] = []
+    slide["_has_top_batting"] = False
+    slide["_has_top_bowling"] = False
+    slide["_min_innings"] = min_innings
+    slide["_min_overs"] = (lb_config or {}).get("min_overs", 2)
+
+    if stats_data:
+        entries = []
+        for p in stats_data["players"].values():
+            block = get_leaderboard_block(p, team_id, None)
+            if block and block["matches"] > 0:
+                entries.append({"name": p["name"], "block": block})
+
+        def fmt_bat(e):
+            b = e["block"]["batting"]
+            avg = b.get("average")
+            return {
+                "name": e["name"],
+                "matches": e["block"]["matches"],
+                "innings": b["innings"],
+                "not_outs": b["not_outs"],
+                "runs": b["runs"],
+                "high_score_num": str(b["high_score"]) if b["high_score"] is not None else "-",
+                "high_score_not_out": bool(b.get("high_score_not_out")),
+                "average": f"{avg:.1f}" if avg is not None else "-",
+            }
+
+        runs_rows = sorted(
+            [e for e in entries if e["block"]["batting"]["innings"] > 0],
+            key=lambda e: e["block"]["batting"]["runs"],
+            reverse=True,
+        )[:TOP_ROWS]
+
+        avg_bat_rows = sorted(
+            [
+                e for e in entries
+                if e["block"]["batting"]["innings"] >= min_innings
+                and e["block"]["batting"].get("average") is not None
+            ],
+            key=lambda e: e["block"]["batting"]["average"],
+            reverse=True,
+        )[:TOP_ROWS]
+
+        slide["_top_runs"] = [fmt_bat(e) for e in runs_rows]
+        slide["_top_avg_bat"] = [fmt_bat(e) for e in avg_bat_rows]
+        if slide["_top_runs"] or slide["_top_avg_bat"]:
+            slide["_has_top_batting"] = True
+            tabs.append("top_batting")
+
+        def fmt_bowl(e):
+            b = e["block"]["bowling"]
+            avg = b.get("average")
+            return {
+                "name": e["name"],
+                "matches": e["block"]["matches"],
+                "overs": balls_to_overs(b["balls"]),
+                "wickets": b["wickets"],
+                "best": fmt_best(b),
+                "average": f"{avg:.1f}" if avg is not None else "-",
+            }
+
+        wkts_rows = sorted(
+            [e for e in entries if e["block"]["bowling"]["wickets"] > 0],
+            key=lambda e: e["block"]["bowling"]["wickets"],
+            reverse=True,
+        )[:TOP_ROWS]
+
+        avg_bowl_rows = sorted(
+            [
+                e for e in entries
+                if e["block"]["bowling"]["balls"] >= min_balls
+                and e["block"]["bowling"].get("average") is not None
+            ],
+            key=lambda e: e["block"]["bowling"]["average"],
+        )[:TOP_ROWS]
+
+        slide["_top_wkts"] = [fmt_bowl(e) for e in wkts_rows]
+        slide["_top_avg_bowl"] = [fmt_bowl(e) for e in avg_bowl_rows]
+        if slide["_top_wkts"] or slide["_top_avg_bowl"]:
+            slide["_has_top_bowling"] = True
+            tabs.append("top_bowling")
+
+    slide["_tabs"] = tabs
+
+
 ACTIVITY_PRIORITY = {"club_event": 0, "section_event": 1, "match": 2, "training": 3, "hire": 4}
 
 _DEFAULT_PHASES = {
@@ -1056,6 +1490,12 @@ def build_slides(env):
             training, all_fixtures, loc_lookup, loc_names = load_schedule_data()
             build_schedule(slide, teams_by_id, training, all_fixtures, loc_lookup, loc_names)
 
+        if slide.get("template") == "team":
+            build_team(
+                slide, teams_by_id, load_fixtures(),
+                load_stats("this_season"), lb_config,
+            )
+
         if slide.get("template") == "batting-honours":
             build_batting_honours(
                 slide,
@@ -1095,7 +1535,7 @@ def build_slides(env):
                 team_col  = [(k, v) for k, v in ordered if k == "column_1"]
                 pts_cols  = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
                 rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
-                table["headings_list"] = team_col + pts_cols + rest_cols
+                table["headings_list"] = team_col + rest_cols + pts_cols
                 table["rows"] = table["values"]
 
         template = env.get_template(f"slides/{slide['template']}.html")

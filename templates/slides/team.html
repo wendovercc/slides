@@ -1,0 +1,760 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+    .header { margin-bottom: 1.2vh; }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .panels {
+        flex: 1;
+        min-height: 0;
+        position: relative;
+    }
+    .panel {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        opacity: 0;
+        transition: opacity 0.4s ease-in-out;
+    }
+    .panel.panel-active { opacity: 1; }
+    .panel-nav {
+        display: flex;
+        gap: 3vw;
+        margin-top: 1.2vh;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+    .panel-tab {
+        font-size: var(--t-md);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.35;
+        position: relative;
+        padding-bottom: 0.6vh;
+        transition: opacity 0.4s;
+    }
+    .panel-tab.active { opacity: 1; }
+    .panel-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 2px;
+        background: rgba(255,255,255,0.75);
+        transform-origin: left;
+        animation: panel-progress var(--panel-duration, 10s) linear forwards;
+    }
+    @keyframes panel-progress {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+    }
+    .empty {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        font-size: var(--t-sm);
+        opacity: 0.4;
+        font-style: italic;
+    }
+
+    /* ── Tab 1: League table ───────────────────────────────────────────── */
+    .league-subtitle {
+        font-size: var(--t-sm);
+        letter-spacing: 0.06em;
+        opacity: 0.75;
+        margin-bottom: 1.4vh;
+        flex-shrink: 0;
+    }
+    .league-grid {
+        display: grid;
+        grid-template-columns: 1fr repeat(var(--stat-cols, 7), 4vw);
+        gap: 0 0.5vw;
+        align-items: baseline;
+    }
+    .league-grid.row.highlight {
+        background: rgba(212,175,55,0.2);
+        color: #ffd966;
+        font-weight: bold;
+    }
+    .league-grid .name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        padding-right: 0.5vw;
+    }
+
+    /* ── Tabs 4 & 5: Top batting / Top bowling — two stacked tables ─────── */
+    .stacked {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2.2vh;
+    }
+    .stacked-half {
+        flex: 0 0 auto;
+        display: flex;
+        flex-direction: column;
+    }
+    .section-head {
+        display: flex;
+        align-items: baseline;
+        gap: 1vw;
+        margin-bottom: 0.6vh;
+    }
+    .section-title {
+        font-size: var(--t-sm);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        opacity: 0.7;
+    }
+    .qualifier-note {
+        font-size: var(--t-xxs);
+        opacity: 0.45;
+    }
+    .top-table { flex: 1; display: flex; flex-direction: column; }
+    .col-headers {
+        gap: 0 0.4vw;
+        padding: 0.3vh 0 0.5vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
+        font-size: var(--t-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.55;
+    }
+    .col-num { text-align: right; }
+    .row {
+        gap: 0 0.4vw;
+        padding: 0.3vh 0;
+        font-size: var(--t-md);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        align-items: baseline;
+    }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    .pos { opacity: 0.45; text-align: right; }
+    .name-cell {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        padding-right: 0.5vw;
+    }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .num.headline { font-weight: bold; color: #a8d5a2; }
+    .val {
+        text-align: right;
+        opacity: 0.7;
+        font-variant-numeric: tabular-nums;
+    }
+    .pts {
+        text-align: right;
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+        color: #a8d5a2;
+    }
+    .hs-cell {
+        display: flex;
+        justify-content: flex-end;
+        font-variant-numeric: tabular-nums;
+    }
+    .hs-star { display: inline-block; width: 0.6em; }
+
+    .bat-runs-cols,
+    .bat-avg-cols { display: grid; grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw; }
+    .bowl-wkts-cols { display: grid; grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
+    .bowl-avg-cols  { display: grid; grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
+
+    .empty-mini {
+        opacity: 0.4;
+        font-size: var(--t-sm);
+        padding-top: 0.6vh;
+        font-style: italic;
+    }
+
+    /* ── Tab 2: Form (match strips) ────────────────────────────────────── */
+    .form-summary {
+        display: flex;
+        align-items: center;
+        gap: 0.8vw;
+        margin-bottom: 1.4vh;
+    }
+    .form-summary-label {
+        font-family: Arial, sans-serif;
+        font-size: var(--t-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.55;
+    }
+    .strips {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1vh;
+    }
+    .strip {
+        height: 16vh;
+        display: flex;
+        gap: 1.2vw;
+        padding: 0.7vh 1vw;
+        background: rgba(255,255,255,0.04);
+        border-radius: 4px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    /* Shared two-column structure used by Form (.strip) and Schedule (.fix-strip) */
+    .tile-left {
+        flex: 0 0 55%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+        justify-content: flex-start;
+        min-width: 0;
+    }
+    .tile-right {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4vh;
+        justify-content: flex-start;
+        padding-left: 1vw;
+        border-left: 1px solid rgba(255,255,255,0.08);
+        min-width: 0;
+    }
+    /* Tile-stack meta row: col-headers typography for text, pills at full opacity.
+       Shared by Form (.strip-meta) and Schedule (.fix-meta). */
+    .strip-meta, .fix-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.8vw;
+        font-size: var(--t-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 0.6vh;
+    }
+    .strip-meta > span, .fix-meta > span { opacity: 0.55; }
+    .strip-meta > .home-pill, .strip-meta > .away-pill, .strip-meta > .result-pill,
+    .fix-meta > .home-pill, .fix-meta > .away-pill { opacity: 1; }
+    .strip-meta .spacer { flex: 1; }
+    .home-pill, .away-pill {
+        background: rgba(60,180,80,0.3);
+        border: 1px solid rgba(60,180,80,0.5);
+        border-radius: 4px;
+        padding: 0.1vh 0.55vw;
+    }
+    .away-pill {
+        background: rgba(180,100,40,0.3);
+        border: 1px solid rgba(180,100,40,0.5);
+    }
+    .result-pill {
+        font-weight: bold;
+        font-size: var(--t-xs);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        padding: 0.15vh 0.7vw;
+        border-radius: 4px;
+    }
+    .result-row {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 0.8vh;
+    }
+    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
+    .result-A, .result-C, .result-NR {
+        background: #4a3800; border: 1px solid #8c6800; color: #ffd966;
+    }
+    /* Opposition + score line: data-row weight (var(--t-md)) */
+    .strip-opp {
+        font-size: var(--t-md);
+        font-weight: bold;
+        line-height: 1.1;
+    }
+    .strip-opp .opp-sub {
+        font-family: Arial, sans-serif;
+        font-size: var(--t-xs);
+        font-weight: normal;
+        opacity: 0.55;
+        margin-left: 0.6vw;
+    }
+    .strip-score {
+        display: flex;
+        gap: 0.6vw;
+        align-items: baseline;
+        font-size: var(--t-md);
+        font-variant-numeric: tabular-nums;
+        opacity: 0.85;
+    }
+    .strip-score .inn-team {
+        flex: 1;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .strip-score .inn-score { flex-shrink: 0; font-weight: bold; }
+    /* Highlight: two stacked lines — name + headline above, breakdown below. */
+    .match-hl {
+        display: flex;
+        flex-direction: column;
+    }
+    .hl-line {
+        display: grid;
+        grid-template-columns: 1.6vw 1fr auto;
+        gap: 0 0.6vw;
+        align-items: baseline;
+        font-size: var(--t-md);
+    }
+    .perf-icon {
+        width: 1.5vw;
+        height: 1.5vw;
+        vertical-align: middle;
+        color: rgba(255,255,255,0.85);
+    }
+    .hl-line .perf-icon-cell {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .hl-line .name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        opacity: 0.85;
+    }
+    .hl-detail {
+        padding-left: 2.2vw;
+        font-family: Arial, sans-serif;
+        font-size: var(--t-xs);
+        opacity: 0.55;
+        letter-spacing: 0.04em;
+    }
+    .strip-empty {
+        font-size: var(--t-sm);
+        opacity: 0.4;
+        font-style: italic;
+    }
+
+    /* ── Tab 3: Schedule ───────────────────────────────────────────────── */
+    .fix-strip {
+        height: 16vh;
+        display: flex;
+        gap: 1.2vw;
+        padding: 0.7vh 1vw;
+        background: rgba(255,255,255,0.04);
+        border-radius: 4px;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    /* .fix-left / .fix-right replaced by shared .tile-left / .tile-right above */
+    /* .fix-meta typography unified with .strip-meta above */
+    .fix-opp {
+        font-size: var(--t-md);
+        font-weight: bold;
+        line-height: 1.1;
+    }
+    .fix-opp .opp-sub {
+        font-family: Arial, sans-serif;
+        font-size: var(--t-xs);
+        font-weight: normal;
+        opacity: 0.55;
+        margin-left: 0.6vw;
+    }
+    /* Time @ ground: same typography as the Form tab innings row */
+    .fix-when-where {
+        font-size: var(--t-md);
+        font-variant-numeric: tabular-nums;
+        opacity: 0.85;
+    }
+    .fix-rrow {
+        display: grid;
+        grid-template-columns: 1.6vw 1fr auto;
+        gap: 0 0.6vw;
+        align-items: center;
+        font-size: var(--t-md);
+    }
+    .fix-rrow .rrow-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .fix-rrow .rrow-name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        opacity: 0.85;
+    }
+    .fix-rrow .rrow-stat {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.8;
+    }
+    .form-badges { display: flex; gap: 0.25vw; flex-wrap: wrap; }
+    .fix-form-row { margin-bottom: 0.6vh; }
+    .badge {
+        display: inline-block;
+        width: 1.6vw; height: 1.6vw; line-height: 1.6vw;
+        text-align: center;
+        border-radius: 3px;
+        font-family: Arial, sans-serif;
+        font-size: var(--t-xs);
+        font-weight: bold;
+    }
+    .badge-W { background: var(--accent-win);   color: #fff; }
+    .badge-L { background: var(--accent-loss);  color: #fff; }
+    .badge-C { background: #555; color: #ccc; }
+    .badge-A { background: var(--accent-amber); color: #ffe; }
+    .badge-D { background: #444; color: #ccc; }
+    .badge-T { background: var(--accent-draw);  color: #fff; }
+    .fix-empty {
+        opacity: 0.4;
+        font-style: italic;
+        font-size: var(--t-xs);
+        align-self: center;
+    }
+{% endblock %}
+{% block content %}
+    {%- macro perf_icon(category) -%}
+        {%- if category == 'bat' -%}
+        <svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="8.5" y="2.5" width="7" height="13" rx="1.5" fill="currentColor"/>
+            <rect x="11" y="15.5" width="2" height="6" rx="0.5" fill="currentColor"/>
+        </svg>
+        {%- elif category == 'bowl' -%}
+        <svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="7.5" fill="#cc3a3a"/>
+            <path d="M5 10 Q 12 13 19 10" stroke="rgba(255,255,255,0.75)" stroke-width="0.6" fill="none"/>
+            <path d="M5 14 Q 12 11 19 14" stroke="rgba(255,255,255,0.75)" stroke-width="0.6" fill="none"/>
+        </svg>
+        {%- elif category == 'field' -%}
+        <svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M7 14 Q 7 7 12 7 Q 17 7 17 14 L 17 17 Q 17 20 14 20 L 10 20 Q 7 20 7 17 Z" fill="currentColor"/>
+            <rect x="3.5" y="11" width="3.5" height="4" rx="1" fill="currentColor"/>
+        </svg>
+        {%- endif -%}
+    {%- endmacro %}
+    {% set tab_labels = {
+        'league': 'League',
+        'results': 'Form',
+        'schedule': 'Schedule',
+        'top_batting': 'Batting',
+        'top_bowling': 'Bowling',
+    } %}
+    <div class="header">
+        <div class="title">{{ slide.title }}</div>
+    </div>
+    <nav class="panel-nav">
+        {% for tab in slide._tabs %}
+        <span class="panel-tab{% if loop.first %} active{% endif %}">{{ tab_labels[tab] }}</span>
+        {% endfor %}
+    </nav>
+    <div class="panels">
+
+        {% for tab in slide._tabs %}
+        <div class="panel{% if loop.first %} panel-active{% endif %}">
+
+            {% if tab == 'league' %}
+                {% set table = slide._league_data.league_table[0] %}
+                {% set stat_cols = table.headings_list|length - 1 %}
+                <div class="league-subtitle">{% if slide._league_name and slide._league_name != table.name %}{{ slide._league_name }} · {% endif %}{{ table.name }}</div>
+                <div class="table" style="--stat-cols: {{ stat_cols }}">
+                    <div class="league-grid col-headers">
+                        {% for key, label in table.headings_list %}
+                        <span class="{% if key != 'column_1' %}col-num{% endif %}">{{ label }}</span>
+                        {% endfor %}
+                    </div>
+                    {% for row in table.rows %}
+                    <div class="league-grid row{% if row.team_id == slide._league_team_id %} highlight{% endif %}">
+                        {% for key, label in table.headings_list %}
+                            {% if key == 'column_1' %}
+                                <span class="name">{{ row[key] }}</span>
+                            {% elif label|lower == 'pts' %}
+                                <span class="pts">{{ row[key] }}</span>
+                            {% else %}
+                                <span class="val">{{ row[key] }}</span>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% endfor %}
+                </div>
+
+            {% elif tab == 'results' %}
+                {% if slide._our_form %}
+                <div class="form-summary">
+                    <span class="form-summary-label">Form</span>
+                    <span class="form-badges">
+                        {% for r in slide._our_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
+                    </span>
+                </div>
+                {% endif %}
+                {%- macro result_label(r) -%}
+                    {%- if r == 'W' %}Won{%- elif r == 'L' %}Lost{%- elif r == 'D' %}Drew
+                    {%- elif r == 'T' %}Tied{%- elif r == 'A' %}Abandoned
+                    {%- elif r == 'C' %}Cancelled{%- elif r == 'NR' %}No result
+                    {%- else %}{{ r }}{%- endif %}
+                {%- endmacro %}
+                <div class="strips">
+                    {% for r in slide._results %}
+                    <div class="strip">
+                        <div class="tile-left">
+                            <div class="strip-meta">
+                                <span>{{ r.date_label }}</span>
+                                {% if r.is_home %}<span class="home-pill">Home</span>
+                                {% else %}<span class="away-pill">Away</span>{% endif %}
+                            </div>
+                            <div class="strip-opp">
+                                {{ r.opp_club_name }}{% if r.opp_team_name %}<span class="opp-sub">{{ r.opp_team_name }}</span>{% endif %}
+                            </div>
+                            {% for inn in r.innings %}
+                                {% if inn.score %}
+                                <div class="strip-score">
+                                    <span class="inn-team">{{ inn.team }}</span>
+                                    <span class="inn-score">{{ inn.score }}</span>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        <div class="tile-right">
+                            {% if r.result %}
+                            <div class="result-row">
+                                <span class="result-pill result-{{ r.result }}">{{ result_label(r.result) | trim }}{% if r.our_points is not none %} · {{ r.our_points }} pts{% endif %}</span>
+                            </div>
+                            {% endif %}
+                            {% if r.highlights %}
+                            {% for h in r.highlights %}
+                            <div class="match-hl">
+                                <div class="hl-line">
+                                    <span class="perf-icon-cell">{{ perf_icon(h.category) }}</span>
+                                    <span class="name">{{ h.name }}</span>
+                                    <span class="pts">{{ h.primary }}</span>
+                                </div>
+                                {% if h.secondary %}
+                                <div class="hl-detail">{{ h.secondary }}</div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+            {% elif tab == 'schedule' %}
+                <div class="strips">
+                    {% for f in slide._fixtures %}
+                    <div class="fix-strip">
+                        <div class="tile-left">
+                            <div class="fix-meta">
+                                <span>{{ f.date_label }}</span>
+                                {% if f.is_home %}<span class="home-pill">Home</span>
+                                {% else %}<span class="away-pill">Away</span>{% endif %}
+                            </div>
+                            <div class="fix-opp">
+                                {{ f.opp_club_name }}{% if f.opp_team_name %}<span class="opp-sub">{{ f.opp_team_name }}</span>{% endif %}
+                            </div>
+                            {% if f.match_time or f.ground_name %}
+                            <div class="fix-when-where">
+                                {%- if f.match_time %}{{ f.match_time }}{% endif -%}
+                                {%- if f.match_time and f.ground_name %} @ {% endif -%}
+                                {%- if f.ground_name %}{{ f.ground_name }}{% endif -%}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="tile-right">
+                            {% if f.opp_form or f.top_bat or f.top_bowl %}
+                                {% if f.opp_form %}
+                                <div class="form-summary fix-form-row">
+                                    <span class="form-summary-label">Form</span>
+                                    <span class="form-badges">
+                                        {% for r in f.opp_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
+                                    </span>
+                                </div>
+                                {% endif %}
+                                {% if f.top_bat %}
+                                <div class="match-hl">
+                                    <div class="hl-line">
+                                        <span class="perf-icon-cell">{{ perf_icon('bat') }}</span>
+                                        <span class="name">{{ f.top_bat.name }}</span>
+                                    </div>
+                                    <div class="hl-detail">{{ f.top_bat.runs }} runs{% if f.top_bat.average is not none %} · Average {{ f.top_bat.average }}{% endif %}</div>
+                                </div>
+                                {% endif %}
+                                {% if f.top_bowl %}
+                                <div class="match-hl">
+                                    <div class="hl-line">
+                                        <span class="perf-icon-cell">{{ perf_icon('bowl') }}</span>
+                                        <span class="name">{{ f.top_bowl.name }}</span>
+                                    </div>
+                                    <div class="hl-detail">{{ f.top_bowl.wickets }} wickets{% if f.top_bowl.average is not none %} · Average {{ f.top_bowl.average }}{% endif %}</div>
+                                </div>
+                                {% endif %}
+                            {% else %}
+                                <div class="fix-empty">No opposition data yet</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+            {% elif tab == 'top_batting' %}
+                <div class="stacked">
+                    <div class="stacked-half">
+                        <div class="section-head">
+                            <span class="section-title">Most runs</span>
+                        </div>
+                        {% if slide._top_runs %}
+                        <div class="top-table">
+                            <div class="bat-runs-cols col-headers">
+                                <span></span>
+                                <span>Name</span>
+                                <span class="col-num">Inns</span>
+                                <span class="col-num">NO</span>
+                                <span class="col-num">HS</span>
+                                <span class="col-num">Runs</span>
+                            </div>
+                            {% for r in slide._top_runs %}
+                            <div class="bat-runs-cols row">
+                                <span class="pos">{{ loop.index }}</span>
+                                <span class="name-cell">{{ r.name }}</span>
+                                <span class="num">{{ r.innings }}</span>
+                                <span class="num">{{ r.not_outs }}</span>
+                                <span class="num hs-cell"><span>{{ r.high_score_num }}</span><span class="hs-star">{% if r.high_score_not_out %}*{% endif %}</span></span>
+                                <span class="num headline">{{ r.runs }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="empty-mini">No batting data yet</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="stacked-half">
+                        <div class="section-head">
+                            <span class="section-title">Best average</span>
+                            <span class="qualifier-note">min {{ slide._min_innings }} innings</span>
+                        </div>
+                        {% if slide._top_avg_bat %}
+                        <div class="top-table">
+                            <div class="bat-avg-cols col-headers">
+                                <span></span>
+                                <span>Name</span>
+                                <span class="col-num">Inns</span>
+                                <span class="col-num">NO</span>
+                                <span class="col-num">HS</span>
+                                <span class="col-num">Avg</span>
+                            </div>
+                            {% for r in slide._top_avg_bat %}
+                            <div class="bat-avg-cols row">
+                                <span class="pos">{{ loop.index }}</span>
+                                <span class="name-cell">{{ r.name }}</span>
+                                <span class="num">{{ r.innings }}</span>
+                                <span class="num">{{ r.not_outs }}</span>
+                                <span class="num hs-cell"><span>{{ r.high_score_num }}</span><span class="hs-star">{% if r.high_score_not_out %}*{% endif %}</span></span>
+                                <span class="num headline">{{ r.average }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="empty-mini">No qualifying batters yet</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+            {% elif tab == 'top_bowling' %}
+                <div class="stacked">
+                    <div class="stacked-half">
+                        <div class="section-head">
+                            <span class="section-title">Most wickets</span>
+                        </div>
+                        {% if slide._top_wkts %}
+                        <div class="top-table">
+                            <div class="bowl-wkts-cols col-headers">
+                                <span></span>
+                                <span>Name</span>
+                                <span class="col-num">Overs</span>
+                                <span class="col-num">Best</span>
+                                <span class="col-num">Wkts</span>
+                            </div>
+                            {% for r in slide._top_wkts %}
+                            <div class="bowl-wkts-cols row">
+                                <span class="pos">{{ loop.index }}</span>
+                                <span class="name-cell">{{ r.name }}</span>
+                                <span class="num">{{ r.overs }}</span>
+                                <span class="num">{{ r.best }}</span>
+                                <span class="num headline">{{ r.wickets }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="empty-mini">No bowling data yet</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="stacked-half">
+                        <div class="section-head">
+                            <span class="section-title">Best average</span>
+                            <span class="qualifier-note">min {{ slide._min_overs }} overs</span>
+                        </div>
+                        {% if slide._top_avg_bowl %}
+                        <div class="top-table">
+                            <div class="bowl-avg-cols col-headers">
+                                <span></span>
+                                <span>Name</span>
+                                <span class="col-num">Overs</span>
+                                <span class="col-num">Wkts</span>
+                                <span class="col-num">Avg</span>
+                            </div>
+                            {% for r in slide._top_avg_bowl %}
+                            <div class="bowl-avg-cols row">
+                                <span class="pos">{{ loop.index }}</span>
+                                <span class="name-cell">{{ r.name }}</span>
+                                <span class="num">{{ r.overs }}</span>
+                                <span class="num">{{ r.wickets }}</span>
+                                <span class="num headline">{{ r.average }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="empty-mini">No qualifying bowlers yet</div>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+
+        </div>
+        {% endfor %}
+
+    </div>
+    <script>
+        const SLIDE_DURATION = {{ slide.duration }};
+        const panels = Array.from(document.querySelectorAll('.panel'));
+        const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
+        const panelDuration = panels.length ? SLIDE_DURATION / panels.length : SLIDE_DURATION;
+        let current = 0;
+        document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
+        function showPanel(i) {
+            panels[current].classList.remove('panel-active');
+            tabs[current].classList.remove('active');
+            void tabs[i].offsetWidth;
+            panels[i].classList.add('panel-active');
+            tabs[i].classList.add('active');
+            current = i;
+        }
+        if (panels.length > 1) {
+            const autoRotate = setInterval(() => showPanel((current + 1) % panels.length), panelDuration * 1000);
+            document.addEventListener('keydown', e => {
+                if (e.key === 'ArrowRight' && current < panels.length - 1) {
+                    clearInterval(autoRotate);
+                    showPanel(current + 1);
+                } else if (e.key === 'ArrowLeft' && current > 0) {
+                    clearInterval(autoRotate);
+                    showPanel(current - 1);
+                }
+            });
+        }
+    </script>
+{% endblock %}
