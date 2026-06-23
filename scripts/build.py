@@ -20,12 +20,8 @@ SITE = ROOT / "site"
 
 LEAGUE_TABLE_EXCLUDED = {"ave+", "batp", "bowlp", "offbp", "pen", "t"}
 LEADERBOARD_TEMPLATES = {"batting-leaderboard", "bowling-leaderboard"}
-HONOURS_TEMPLATES = {"batting-honours", "bowling-honours"}
-FANTASY_TEMPLATES = {
-    "fantasy-team-standings": "fantasy_team_standings",
-    "fantasy-player-standings": "fantasy_player_standings",
-    "fantasy-team-of-week": "fantasy_team_of_week",
-}
+HONOURS_TEMPLATES = {"honours"}
+# Empty fallback for the fantasy-league panels when a feed is missing this build.
 FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fetched_at": None}
 
 # Carousel templates whose panel count is fixed (panels are hard-coded in the
@@ -33,8 +29,7 @@ FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fet
 # publishes a `slide["_panels"]` list, which takes precedence over this map.
 # Used to derive each slide's total duration = panel_duration × panel count.
 FIXED_PANEL_COUNTS = {
-    "batting-honours": 2,
-    "bowling-honours": 2,
+    "honours": 4,
     "batting-leaderboard": 2,
     "bowling-leaderboard": 2,
     "fantasy-league": 3,
@@ -372,6 +367,28 @@ def build_bowling_honours(slide, historic_data, season_data):
     if from_year:
         slide["_subtitle"] = f"Senior weekend cricket {from_year}–{to_year}"
     slide["_season_year"] = season_year
+
+
+def build_honours(slide, bat_historic, bat_season, bowl_historic, bowl_season):
+    """Combined batting + bowling honours: four panels in one carousel.
+
+    Reuses the single-discipline builders on throwaway copies, then lifts their
+    outputs onto the slide under distinct keys (the two `_recent` lists would
+    otherwise collide). The shared `from_year`/`rows`/subtitle logic is identical
+    across disciplines, so the batting subtitle stands in for both.
+    """
+    bat = dict(slide)
+    build_batting_honours(bat, bat_historic, bat_season)
+    bowl = dict(slide)
+    build_bowling_honours(bowl, bowl_historic, bowl_season)
+
+    slide["_top_scores"] = bat["_top_scores"]
+    slide["_recent_hundreds"] = bat["_recent"]
+    slide["_best_figures"] = bowl["_best_figures"]
+    slide["_recent_wickets"] = bowl["_recent"]
+    if bat.get("_subtitle") or bowl.get("_subtitle"):
+        slide["_subtitle"] = bat.get("_subtitle") or bowl.get("_subtitle")
+    slide["_season_year"] = bat.get("_season_year")
 
 
 def generate_qr_data_url(url: str) -> str:
@@ -1473,11 +1490,6 @@ def build_slides(env):
             data_path = ROOT / slide["data"]
             slide["_data"] = json.loads(data_path.read_text())
 
-        if slide.get("template") in FANTASY_TEMPLATES:
-            key = FANTASY_TEMPLATES[slide["template"]]
-            data_path = FETCHED / f"{key}.json"
-            slide["_data"] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
-
         if slide.get("template") == "fantasy-league":
             for tab_key, file_key in [
                 ("_player_standings", "fantasy_player_standings"),
@@ -1514,16 +1526,11 @@ def build_slides(env):
                 load_stats("this_season"), lb_config,
             )
 
-        if slide.get("template") == "batting-honours":
-            build_batting_honours(
+        if slide.get("template") == "honours":
+            build_honours(
                 slide,
                 load_honours("historic_batting_hundreds"),
                 load_honours("season_batting_hundreds_this_season"),
-            )
-
-        if slide.get("template") == "bowling-honours":
-            build_bowling_honours(
-                slide,
                 load_honours("historic_bowling_sixplus"),
                 load_honours("season_bowling_sixplus_this_season"),
             )

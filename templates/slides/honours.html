@@ -28,16 +28,19 @@
         transition: opacity 0.4s ease-in-out;
     }
     .half.panel-active { opacity: 1; }
+    /* Four tabs across the sidebar column: tighter gap/tracking than the
+       two-tab honours slides so all four labels fit on one line. */
     .panel-nav {
         display: flex;
-        gap: 4vw;
+        gap: 2vw;
         margin-top: 1.5vh;
         align-items: flex-end;
     }
     .panel-tab {
         font-size: var(--t-md);
-        letter-spacing: 0.08em;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
+        white-space: nowrap;
         opacity: 0.35;
         position: relative;
         padding-bottom: 0.6vh;
@@ -58,7 +61,7 @@
         to   { transform: scaleX(1); }
     }
     .table { flex: 1; display: flex; flex-direction: column; }
-    /* pos · name · figures · match · year */
+    /* pos · name · score|figures · match · year */
     .col-headers {
         display: grid;
         grid-template-columns: 2.5vw 18vw 5vw 1fr 5vw;
@@ -72,13 +75,16 @@
     }
     .col-num { text-align: right; }
     .col-fig { text-align: right; }
+    .col-score { display: flex; justify-content: flex-end; }
+    .col-score-label { display: inline-block; }
+    .col-score-gap  { display: inline-block; width: 0.55em; }
     .row {
         display: grid;
         grid-template-columns: 2.5vw 18vw 5vw 1fr 5vw;
         gap: 0 0.4vw;
         padding: 0.3vh 0;
         font-size: var(--t-md);
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
         align-items: baseline;
     }
     .row:nth-child(even) { background: rgba(255,255,255,0.04); }
@@ -91,17 +97,24 @@
         text-overflow: ellipsis;
         padding-right: 0.4vw;
     }
+    .score-cell {
+        display: flex;
+        justify-content: flex-end;
+        font-variant-numeric: tabular-nums;
+        font-weight: bold;
+    }
+    .star { display: inline-block; width: 0.55em; }
     .fig-cell { text-align: right; font-variant-numeric: tabular-nums; font-weight: bold; }
-    .match {
+    .opp {
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-        opacity: 0.65;
+        opacity: 0.7;
         padding-left: 1.5vw;
         padding-right: 0.4vw;
     }
-    .row.this-season .match { opacity: 0.85; }
-    .year { text-align: right; opacity: 0.55; }
+    .row.this-season .opp { opacity: 0.85; }
+    .year { text-align: right; opacity: 0.6; }
     .row.this-season .year { opacity: 0.85; }
 {% endblock %}
 {% block content %}
@@ -110,8 +123,10 @@
         {% if slide._subtitle is defined %}<div class="subtitle">{{ slide._subtitle }}</div>{% endif %}
     </div>
     <nav class="panel-nav">
-        <span class="panel-tab active">Best Figures</span>
-        <span class="panel-tab">Most Recent 6+ Wickets</span>
+        <span class="panel-tab active">Top Scores</span>
+        <span class="panel-tab">Recent 100s</span>
+        <span class="panel-tab">Best Figures</span>
+        <span class="panel-tab">Recent 6+ Wickets</span>
     </nav>
     <div class="halves">
 
@@ -120,16 +135,37 @@
                 <div class="col-headers">
                     <span></span>
                     <span>Name</span>
-                    <span class="col-fig">Figures</span>
+                    <span class="col-score"><span class="col-score-label">Score</span><span class="col-score-gap"></span></span>
                     <span>Match</span>
                     <span class="col-num">Year</span>
                 </div>
-                {% for r in slide._best_figures %}
+                {% for r in slide._top_scores %}
                 <div class="row{% if r.is_season %} this-season{% endif %}">
                     <span class="pos">{{ loop.index }}</span>
-                    <span class="name">{{ r.bowler }}</span>
-                    <span class="fig-cell">{{ r.wickets }}-{{ r.runs }}</span>
-                    <span class="match">{{ r.match }}</span>
+                    <span class="name">{{ r.batsman }}</span>
+                    <span class="score-cell"><span>{{ r.score }}</span><span class="star">{% if r.not_out %}*{% endif %}</span></span>
+                    <span class="opp">{{ r.match }}</span>
+                    <span class="year">{{ r.year }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="half">
+            <div class="table">
+                <div class="col-headers">
+                    <span></span>
+                    <span>Name</span>
+                    <span class="col-score"><span class="col-score-label">Score</span><span class="col-score-gap"></span></span>
+                    <span>Match</span>
+                    <span class="col-num">Year</span>
+                </div>
+                {% for r in slide._recent_hundreds %}
+                <div class="row{% if r.is_season %} this-season{% endif %}">
+                    <span class="pos">{{ loop.index }}</span>
+                    <span class="name">{{ r.batsman }}</span>
+                    <span class="score-cell"><span>{{ r.score }}</span><span class="star">{% if r.not_out %}*{% endif %}</span></span>
+                    <span class="opp">{{ r.match }}</span>
                     <span class="year">{{ r.year }}</span>
                 </div>
                 {% endfor %}
@@ -145,12 +181,33 @@
                     <span>Match</span>
                     <span class="col-num">Year</span>
                 </div>
-                {% for r in slide._recent %}
+                {% for r in slide._best_figures %}
                 <div class="row{% if r.is_season %} this-season{% endif %}">
                     <span class="pos">{{ loop.index }}</span>
                     <span class="name">{{ r.bowler }}</span>
                     <span class="fig-cell">{{ r.wickets }}-{{ r.runs }}</span>
-                    <span class="match">{{ r.match }}</span>
+                    <span class="opp">{{ r.match }}</span>
+                    <span class="year">{{ r.year }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="half">
+            <div class="table">
+                <div class="col-headers">
+                    <span></span>
+                    <span>Name</span>
+                    <span class="col-fig">Figures</span>
+                    <span>Match</span>
+                    <span class="col-num">Year</span>
+                </div>
+                {% for r in slide._recent_wickets %}
+                <div class="row{% if r.is_season %} this-season{% endif %}">
+                    <span class="pos">{{ loop.index }}</span>
+                    <span class="name">{{ r.bowler }}</span>
+                    <span class="fig-cell">{{ r.wickets }}-{{ r.runs }}</span>
+                    <span class="opp">{{ r.match }}</span>
                     <span class="year">{{ r.year }}</span>
                 </div>
                 {% endfor %}

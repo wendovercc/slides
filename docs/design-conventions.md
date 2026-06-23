@@ -1,7 +1,7 @@
 # Slide Design Conventions
 
 Conventions for the 10-foot TV UI. Reference implementations live in
-`templates/slides/batting-honours.html` and `templates/slides/fantasy-league.html`
+`templates/slides/honours.html` and `templates/slides/fantasy-league.html`
 — consult those when in doubt; this doc summarises the patterns they share.
 
 ## Layouts
@@ -207,8 +207,8 @@ space falling below the last tile. Reference implementation:
 When introducing a new slide that follows these conventions, copy from one of
 these and adapt:
 
-- `templates/slides/batting-honours.html` — two-panel carousel, sidebar layout,
-  honours table.
+- `templates/slides/honours.html` — four-panel carousel, sidebar layout,
+  honours tables (batting scores and bowling figures).
 - `templates/slides/fantasy-league.html` — three-panel carousel, mixed
   rendering (tables with and without bars, single- and split-name columns).
 - `templates/slides/team.html` — five-panel carousel with tabs hidden when

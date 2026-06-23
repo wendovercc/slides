@@ -916,18 +916,7 @@
       ]
     },
     {
-      "slug": "batting-honours",
-      "show_when": [
-        {
-          "section": [
-            "senior",
-            "all"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-honours",
+      "slug": "honours",
       "show_when": [
         {
           "section": [
