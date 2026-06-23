@@ -4,9 +4,22 @@
     <meta charset="utf-8">
     <title>{% block title %}{% endblock %}</title>
     <style>
+        /* WCC brand typeface — self-hosted Lato (OFL), offline-safe for the kiosk */
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: italic; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-italic.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
         :root {
-            --bg:           #1a3d1a;
+            /* WCC brand palette */
+            --navy-1:       #0f2346;
+            --navy-2:       #0a1c3a;
+            --gold:         #d4af37;
+            --light-blue:   #b4c8e4;
+            --bg:           linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
             --text:         #ffffff;
+            --muted:        var(--light-blue);   /* secondary labels — prefer over opacity-white */
+            --accent:       var(--gold);         /* single decorative accent: rules, headline metric, active tab */
+            /* Result semantics (kept green/red/blue — these signal outcomes, not brand) */
             --accent-win:   #2d7a2d;
             --accent-loss:  #8b1a1a;
             --accent-amber: #7a5c00;
@@ -25,7 +38,7 @@
         html, body {
             width: 100vw; height: 100vh; overflow: hidden;
             background: var(--bg);
-            font-family: Georgia, 'Times New Roman', serif;
+            font-family: 'Lato', -apple-system, Arial, sans-serif;
             color: var(--text);
         }
         .slide {
@@ -52,7 +65,7 @@
             object-fit: contain;
         }
         .club-name {
-            font-family: Arial, sans-serif;
+            font-family: 'Lato', Arial, sans-serif;
             font-size: var(--t-xxs);
             letter-spacing: 0.18em;
             text-transform: uppercase;

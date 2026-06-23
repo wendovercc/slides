@@ -20,7 +20,8 @@ column is acceptable.
 
 ## Design tokens
 
-Defined in both bases. Always use these — never hard-code typography or spacing.
+Defined in both bases. Always use these — never hard-code typography, colour, or
+spacing.
 
 ```css
 --safe-x: 5vw;  --safe-y: 5vh;          /* outer safe zone */
@@ -32,6 +33,38 @@ Defined in both bases. Always use these — never hard-code typography or spacin
 --t-xs: 0.9vw;  /* column headers */
 --t-xxs: 0.7vw;
 ```
+
+## Brand colour & type
+
+Defined in both bases from the WCC brand kit (navy + gold). Use the semantic
+tokens, not raw hex.
+
+```css
+--navy-1: #0f2346; --navy-2: #0a1c3a;   /* background gradient */
+--gold:   #d4af37;                       /* the single decorative accent */
+--light-blue: #b4c8e4;                   /* secondary / label text */
+--bg:     linear-gradient(165deg, var(--navy-1), var(--navy-2));
+--text:   #fff;        /* primary text */
+--muted:  var(--light-blue);   /* secondary labels — prefer over opacity-white */
+--accent: var(--gold);         /* rules, headline metric, active tab underline */
+```
+
+- **Gold is the only decorative accent — use it sparingly.** `--accent` reads
+  well on navy at any size (gold is light, navy dark), so the limit is aesthetic,
+  not contrast: reserve it for the headline metric column (`.pts`), the
+  active-tab underline, slide subtitles, and rules so it stays a highlight rather
+  than flooding the slide. Body text stays white; muted/secondary copy uses
+  `--muted` (light blue) or opacity.
+- **Result colours stay semantic.** `--accent-win/loss/amber/draw` (green/red/
+  amber/blue) signal match outcomes, not brand — leave them as-is.
+- **Value-bars are neutral**, not gold: a white-alpha gradient with a
+  `rgba(255,255,255,0.45)` left edge. Gold is reserved for the points figure so
+  bar and headline accent don't compete.
+- **Type is Lato** (self-hosted woff2 under `assets/fonts/`, `@font-face` in both
+  bases — offline-safe for the kiosk). Weights shipped: 400, 700, 900, 400i.
+  Lato is Google's standard cut, so there is **no Semibold (600)** — use 700.
+  Inherit the body font; only set `font-family: 'Lato', Arial, sans-serif`
+  locally if you must re-assert it over an old override.
 
 ## Carousel slides (tabbed panels)
 

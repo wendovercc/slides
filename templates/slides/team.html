@@ -44,7 +44,7 @@
         position: absolute;
         bottom: 0; left: 0; right: 0;
         height: 2px;
-        background: rgba(255,255,255,0.75);
+        background: var(--accent);
         transform-origin: left;
         animation: panel-progress var(--panel-duration, 10s) linear forwards;
     }
@@ -144,7 +144,7 @@
         padding-right: 0.5vw;
     }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
-    .num.headline { font-weight: bold; color: #a8d5a2; }
+    .num.headline { font-weight: bold; color: var(--accent); }
     .val {
         text-align: right;
         opacity: 0.7;
@@ -154,7 +154,7 @@
         text-align: right;
         font-weight: bold;
         font-variant-numeric: tabular-nums;
-        color: #a8d5a2;
+        color: var(--accent);
     }
     .hs-cell {
         display: flex;
@@ -183,7 +183,7 @@
         margin-bottom: 1.4vh;
     }
     .form-summary-label {
-        font-family: Arial, sans-serif;
+        font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
         text-transform: uppercase;
         letter-spacing: 0.08em;
@@ -277,7 +277,7 @@
         line-height: 1.1;
     }
     .strip-opp .opp-sub {
-        font-family: Arial, sans-serif;
+        font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
         font-weight: normal;
         opacity: 0.55;
@@ -329,7 +329,7 @@
     }
     .hl-detail {
         padding-left: 2.2vw;
-        font-family: Arial, sans-serif;
+        font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
         opacity: 0.55;
         letter-spacing: 0.04em;
@@ -359,7 +359,7 @@
         line-height: 1.1;
     }
     .fix-opp .opp-sub {
-        font-family: Arial, sans-serif;
+        font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
         font-weight: normal;
         opacity: 0.55;
@@ -400,7 +400,7 @@
         width: 1.6vw; height: 1.6vw; line-height: 1.6vw;
         text-align: center;
         border-radius: 3px;
-        font-family: Arial, sans-serif;
+        font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
         font-weight: bold;
     }
