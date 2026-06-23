@@ -86,6 +86,15 @@
             background: rgba(255,255,255,0.15);
             flex-shrink: 0;
         }
+        .sponsor-heading {
+            font-family: 'Lato', Arial, sans-serif;
+            font-size: var(--t-xxs);
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            text-align: center;
+        }
         .sponsor-logos-vert {
             display: flex;
             flex-direction: column;
@@ -94,14 +103,18 @@
             width: 100%;
         }
         .sponsor-logo-vert {
-            width: 75%;
-            max-width: 9vw;
-            height: auto;
-            max-height: 5.5vh;
-            object-fit: contain;
-            background: rgba(255,255,255,0.88);
-            border-radius: 3px;
-            padding: 2px 6px;
+            /* Each logo is a uniform 800x150 (16:3) banner tile. The white backing
+               shows only behind transparent logos (Dayla, Squirrel, Print Minds);
+               logos that carry their own opaque background (Kings Farm black,
+               DGD blue) cover it completely. A hairline border defines the dark
+               tiles against the dark sidebar. cover (not contain) fills the tile
+               edge-to-edge so the 1px border can't expose letterbox slivers. */
+            width: 100%;
+            aspect-ratio: 16 / 3;
+            object-fit: cover;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.12);
         }
         /* Carousel-style slides: breathing room between tab nav and table headers */
         .panel-nav { margin-bottom: 2.8vh; }
@@ -115,6 +128,7 @@
             <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
             <span class="club-name">Wendover Cricket Club</span>
             <div class="sidebar-divider"></div>
+            <span class="sponsor-heading">Please support our sponsors</span>
             <div class="sponsor-logos-vert">
                 {% for s in sponsors %}
                 <img class="sponsor-logo-vert" src="{{ s.src }}" alt="{{ s.name }}">
