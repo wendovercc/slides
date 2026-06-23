@@ -1,32 +1,32 @@
-{% extends 'slides/_base.html' %}
+{% extends 'slides/_base-sidebar.html' %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
+    /* Title/subtitle/body styling mirrors announcement.html; the body text
+       stacks above the QR panel in a single left-aligned column. */
     .title {
         font-size: var(--t-xl);
         font-weight: bold;
         line-height: 1.2;
-        margin-bottom: 2.5vh;
         text-shadow: 0 3px 6px rgba(0,0,0,0.4);
     }
     .subtitle {
         font-size: var(--t-md);
-        opacity: 0.75;
-        margin-top: -1.5vh;
-        margin-bottom: 2.5vh;
+        color: var(--accent);
+        margin-top: 0.8vh;
+        letter-spacing: 0.04em;
     }
     .lower {
         flex: 1;
         display: flex;
-        flex-direction: row;
+        flex-direction: column;
         align-items: flex-start;
-        gap: 4vw;
+        gap: 4vh;
         min-height: 0;
+        margin-top: 3vh;
     }
     .body {
-        flex: 1;
         font-size: var(--t-md);
         line-height: 1.6;
-        opacity: 0.9;
     }
     .qr-panel {
         flex: 0 0 auto;
