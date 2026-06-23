@@ -10,70 +10,37 @@
       "slug": "honours"
     },
     {
-      "slug": "batting-leaderboard"
+      "slug": "leaderboard"
     },
     {
-      "slug": "bowling-leaderboard"
+      "slug": "leaderboard-senior"
     },
     {
-      "slug": "batting-leaderboard-senior"
+      "slug": "leaderboard-1st-xi"
     },
     {
-      "slug": "bowling-leaderboard-senior"
+      "slug": "leaderboard-2nd-xi"
     },
     {
-      "slug": "batting-leaderboard-1st-xi"
+      "slug": "leaderboard-u17-spitfires"
     },
     {
-      "slug": "bowling-leaderboard-1st-xi"
+      "slug": "leaderboard-u15-hurricanes"
     },
     {
-      "slug": "batting-leaderboard-2nd-xi"
+      "slug": "leaderboard-u15-spitfires"
     },
     {
-      "slug": "bowling-leaderboard-2nd-xi"
+      "slug": "leaderboard-u14-hurricanes"
     },
     {
-      "slug": "batting-leaderboard-u17-spitfires"
+      "slug": "leaderboard-u13-girls"
     },
     {
-      "slug": "bowling-leaderboard-u17-spitfires"
+      "slug": "leaderboard-u13-hurricanes"
     },
     {
-      "slug": "batting-leaderboard-u15-hurricanes"
-    },
-    {
-      "slug": "bowling-leaderboard-u15-hurricanes"
-    },
-    {
-      "slug": "batting-leaderboard-u15-spitfires"
-    },
-    {
-      "slug": "bowling-leaderboard-u15-spitfires"
-    },
-    {
-      "slug": "batting-leaderboard-u14-hurricanes"
-    },
-    {
-      "slug": "bowling-leaderboard-u14-hurricanes"
-    },
-    {
-      "slug": "batting-leaderboard-u13-girls"
-    },
-    {
-      "slug": "bowling-leaderboard-u13-girls"
-    },
-    {
-      "slug": "batting-leaderboard-u13-hurricanes"
-    },
-    {
-      "slug": "bowling-leaderboard-u13-hurricanes"
-    },
-    {
-      "slug": "batting-leaderboard-u13-spitfires"
-    },
-    {
-      "slug": "bowling-leaderboard-u13-spitfires"
+      "slug": "leaderboard-u13-spitfires"
     }
   ]
 }

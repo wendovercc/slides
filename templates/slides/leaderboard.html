@@ -1,14 +1,19 @@
 {% extends 'slides/_base-sidebar.html' %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
-    .header { margin-bottom: 1.5vh; }
+    .header { margin-bottom: 1.2vh; }
     .title {
         font-size: var(--t-lg);
         font-weight: bold;
         line-height: 1.2;
         text-shadow: 0 3px 6px rgba(0,0,0,0.4);
     }
-    .subtitle { font-size: var(--t-sm); opacity: 0.75; margin-top: 0.4vh; }
+    .subtitle {
+        font-size: var(--t-md);
+        color: var(--accent);
+        margin-top: 0.3vh;
+        letter-spacing: 0.04em;
+    }
     .halves {
         flex: 1;
         min-height: 0;
@@ -23,17 +28,19 @@
         transition: opacity 0.4s ease-in-out;
     }
     .half.panel-active { opacity: 1; }
+    /* Four tabs across the sidebar column: tighter gap/tracking than the
+       two-tab slides so all four labels fit on one line. */
     .panel-nav {
         display: flex;
-        gap: 4vw;
+        gap: 2vw;
         margin-top: 1.5vh;
-        margin-bottom: 1.5vh;
         align-items: flex-end;
     }
     .panel-tab {
         font-size: var(--t-md);
-        letter-spacing: 0.08em;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
+        white-space: nowrap;
         opacity: 0.35;
         position: relative;
         padding-bottom: 0.6vh;
@@ -56,13 +63,17 @@
     .qualifier-note {
         font-size: var(--t-xxs);
         opacity: 0.45;
-        margin-bottom: 0.6vh;
+        margin-top: 0.6vh;
         letter-spacing: 0;
     }
     .table { flex: 1; display: flex; flex-direction: column; }
+    /* Per-panel grid templates — batting and bowling columns differ. */
+    .runs-grid    { grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw; }
+    .batavg-grid  { grid-template-columns: 2.5vw 1fr 4.5vw 4.5vw 5.5vw; }
+    .wkts-grid    { grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
+    .bowlavg-grid { grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
     .col-headers {
         display: grid;
-        grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw;
         gap: 0 0.4vw;
         padding: 0.3vh 0 0.5vh;
         border-bottom: 1px solid rgba(255,255,255,0.25);
@@ -71,21 +82,14 @@
         text-transform: uppercase;
         opacity: 0.55;
     }
-    .col-headers.avg-cols {
-        grid-template-columns: 2.5vw 1fr 4.5vw 4.5vw 5.5vw;
-    }
     .col-num { text-align: right; }
     .row {
         display: grid;
-        grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw;
         gap: 0 0.4vw;
         padding: 0.3vh 0;
         font-size: var(--t-md);
         border-bottom: 1px solid rgba(255,255,255,0.08);
         align-items: baseline;
-    }
-    .row.avg-cols {
-        grid-template-columns: 2.5vw 1fr 4.5vw 4.5vw 5.5vw;
     }
     .row:nth-child(even) { background: rgba(255,255,255,0.04); }
     .pos { opacity: 0.45; text-align: right; }
@@ -96,7 +100,13 @@
         padding-right: 0.5vw;
     }
     .num { text-align: right; }
-    .num.highlight { font-weight: bold; }
+    /* Headline metric per panel (runs / average / wickets) — the gold accent
+       column, mirroring the `.pts` convention. */
+    .num.highlight {
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+    }
     .hs-cell { display: flex; justify-content: flex-end; font-variant-numeric: tabular-nums; }
     .hs-star { display: inline-block; width: 0.6em; }
     .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
@@ -104,19 +114,19 @@
 {% block content %}
     <div class="header">
         <div class="title">{{ slide.title }}</div>
-        {% if slide.subtitle is defined %}
-        <div class="subtitle">{{ slide.subtitle }}</div>
-        {% endif %}
+        {% if slide.subtitle is defined %}<div class="subtitle">{{ slide.subtitle }}</div>{% endif %}
     </div>
     <nav class="panel-nav">
         <span class="panel-tab active">Most Runs</span>
         <span class="panel-tab">Batting Average</span>
+        <span class="panel-tab">Most Wickets</span>
+        <span class="panel-tab">Bowling Average</span>
     </nav>
     <div class="halves">
 
         <div class="half panel-active">
             <div class="table">
-                <div class="col-headers">
+                <div class="col-headers runs-grid">
                     <span></span>
                     <span>Name</span>
                     <span class="col-num">Inns</span>
@@ -126,7 +136,7 @@
                 </div>
                 {% if slide._runs_rows %}
                     {% for r in slide._runs_rows %}
-                    <div class="row">
+                    <div class="row runs-grid">
                         <span class="pos">{{ loop.index }}</span>
                         <span class="name">{{ r.name }}</span>
                         <span class="num">{{ r.innings }}</span>
@@ -142,18 +152,17 @@
         </div>
 
         <div class="half">
-            <div class="qualifier-note">min {{ slide._min_innings }} innings</div>
             <div class="table">
-                <div class="col-headers avg-cols">
+                <div class="col-headers batavg-grid">
                     <span></span>
                     <span>Name</span>
                     <span class="col-num">Inns</span>
                     <span class="col-num">HS</span>
                     <span class="col-num">Avg</span>
                 </div>
-                {% if slide._avg_rows %}
-                    {% for r in slide._avg_rows %}
-                    <div class="row avg-cols">
+                {% if slide._bat_avg_rows %}
+                    {% for r in slide._bat_avg_rows %}
+                    <div class="row batavg-grid">
                         <span class="pos">{{ loop.index }}</span>
                         <span class="name">{{ r.name }}</span>
                         <span class="num">{{ r.innings }}</span>
@@ -165,6 +174,58 @@
                     <div class="empty">No qualifying batters yet</div>
                 {% endif %}
             </div>
+            <div class="qualifier-note">min {{ slide._min_innings }} innings</div>
+        </div>
+
+        <div class="half">
+            <div class="table">
+                <div class="col-headers wkts-grid">
+                    <span></span>
+                    <span>Name</span>
+                    <span class="col-num">Overs</span>
+                    <span class="col-num">Best</span>
+                    <span class="col-num">Wkts</span>
+                </div>
+                {% if slide._wkts_rows %}
+                    {% for r in slide._wkts_rows %}
+                    <div class="row wkts-grid">
+                        <span class="pos">{{ loop.index }}</span>
+                        <span class="name">{{ r.name }}</span>
+                        <span class="num">{{ r.overs }}</span>
+                        <span class="num">{{ r.best }}</span>
+                        <span class="num highlight">{{ r.wickets }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty">No bowling data yet</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="half">
+            <div class="table">
+                <div class="col-headers bowlavg-grid">
+                    <span></span>
+                    <span>Name</span>
+                    <span class="col-num">Overs</span>
+                    <span class="col-num">Wkts</span>
+                    <span class="col-num">Avg</span>
+                </div>
+                {% if slide._bowl_avg_rows %}
+                    {% for r in slide._bowl_avg_rows %}
+                    <div class="row bowlavg-grid">
+                        <span class="pos">{{ loop.index }}</span>
+                        <span class="name">{{ r.name }}</span>
+                        <span class="num">{{ r.overs }}</span>
+                        <span class="num">{{ r.wickets }}</span>
+                        <span class="num highlight">{{ r.average }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty">No qualifying bowlers yet</div>
+                {% endif %}
+            </div>
+            <div class="qualifier-note">min {{ slide._min_overs }} overs</div>
         </div>
 
     </div>

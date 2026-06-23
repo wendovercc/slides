@@ -188,9 +188,9 @@ Field values that are arrays allow multiple options for that field (OR within fi
   "slides": [
     { "slug": "club-photo" },
     { "slug": "sponsors" },
-    { "slug": "batting-leaderboard-1st-xi",
+    { "slug": "leaderboard-1st-xi",
       "show_when": [{ "section": ["senior"] }] },
-    { "slug": "batting-leaderboard-2nd-xi",
+    { "slug": "leaderboard-2nd-xi",
       "show_when": [{ "section": ["senior"] }] },
     { "slug": "league-table-u11-incredibles",
       "show_when": [{ "section": ["junior"] }] },

@@ -26,17 +26,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-1st-xi",
-      "show_when": [
-        {
-          "teams": [
-            "1st-xi"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-1st-xi",
+      "slug": "leaderboard-1st-xi",
       "show_when": [
         {
           "teams": [
@@ -86,17 +76,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-2nd-xi",
-      "show_when": [
-        {
-          "teams": [
-            "2nd-xi"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-2nd-xi",
+      "slug": "leaderboard-2nd-xi",
       "show_when": [
         {
           "teams": [
@@ -156,17 +136,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-senior",
-      "show_when": [
-        {
-          "section": [
-            "senior"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-senior",
+      "slug": "leaderboard-senior",
       "show_when": [
         {
           "section": [
@@ -516,17 +486,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u13-hurricanes",
-      "show_when": [
-        {
-          "teams": [
-            "u13-hurricanes"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u13-hurricanes",
+      "slug": "leaderboard-u13-hurricanes",
       "show_when": [
         {
           "teams": [
@@ -576,17 +536,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u13-spitfires",
-      "show_when": [
-        {
-          "teams": [
-            "u13-spitfires"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u13-spitfires",
+      "slug": "leaderboard-u13-spitfires",
       "show_when": [
         {
           "teams": [
@@ -636,17 +586,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u13-girls",
-      "show_when": [
-        {
-          "teams": [
-            "u13-girls"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u13-girls",
+      "slug": "leaderboard-u13-girls",
       "show_when": [
         {
           "teams": [
@@ -696,17 +636,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u14-hurricanes",
-      "show_when": [
-        {
-          "teams": [
-            "u14-hurricanes"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u14-hurricanes",
+      "slug": "leaderboard-u14-hurricanes",
       "show_when": [
         {
           "teams": [
@@ -756,17 +686,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u15-hurricanes",
-      "show_when": [
-        {
-          "teams": [
-            "u15-hurricanes"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u15-hurricanes",
+      "slug": "leaderboard-u15-hurricanes",
       "show_when": [
         {
           "teams": [
@@ -816,17 +736,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u15-spitfires",
-      "show_when": [
-        {
-          "teams": [
-            "u15-spitfires"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u15-spitfires",
+      "slug": "leaderboard-u15-spitfires",
       "show_when": [
         {
           "teams": [
@@ -876,17 +786,7 @@
       ]
     },
     {
-      "slug": "batting-leaderboard-u17-spitfires",
-      "show_when": [
-        {
-          "teams": [
-            "u17-spitfires"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "bowling-leaderboard-u17-spitfires",
+      "slug": "leaderboard-u17-spitfires",
       "show_when": [
         {
           "teams": [

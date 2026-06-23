@@ -209,6 +209,9 @@ these and adapt:
 
 - `templates/slides/honours.html` — four-panel carousel, sidebar layout,
   honours tables (batting scores and bowling figures).
+- `templates/slides/leaderboard.html` — four-panel carousel, sidebar layout,
+  combined season leaderboards (runs, batting average, wickets, bowling
+  average) with per-panel grid templates and an honours-style yellow subtitle.
 - `templates/slides/fantasy-league.html` — three-panel carousel, mixed
   rendering (tables with and without bars, single- and split-name columns).
 - `templates/slides/team.html` — five-panel carousel with tabs hidden when

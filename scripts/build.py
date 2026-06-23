@@ -19,7 +19,7 @@ ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
 
 LEAGUE_TABLE_EXCLUDED = {"ave+", "batp", "bowlp", "offbp", "pen", "t"}
-LEADERBOARD_TEMPLATES = {"batting-leaderboard", "bowling-leaderboard"}
+LEADERBOARD_TEMPLATES = {"leaderboard"}
 HONOURS_TEMPLATES = {"honours"}
 # Empty fallback for the fantasy-league panels when a feed is missing this build.
 FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fetched_at": None}
@@ -30,8 +30,7 @@ FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fet
 # Used to derive each slide's total duration = panel_duration × panel count.
 FIXED_PANEL_COUNTS = {
     "honours": 4,
-    "batting-leaderboard": 2,
-    "bowling-leaderboard": 2,
+    "leaderboard": 4,
     "fantasy-league": 3,
 }
 
@@ -208,6 +207,26 @@ def build_bowling_leaderboard(slide, stats_data, lb_config):
     slide["_wkts_rows"] = [fmt(e) for e in wkts_rows]
     slide["_avg_rows"] = [fmt(e) for e in avg_rows]
     slide["_min_overs"] = lb_config.get("min_overs", 2)
+
+
+def build_leaderboard(slide, stats_data, lb_config):
+    """Combined batting + bowling leaderboard: four panels in one carousel.
+
+    Reuses the single-discipline builders on throwaway copies, then lifts their
+    outputs onto the slide under distinct keys (both set `_avg_rows`, which would
+    otherwise collide). Panels: runs · batting average · wickets · bowling average.
+    """
+    bat = dict(slide)
+    build_batting_leaderboard(bat, stats_data, lb_config)
+    bowl = dict(slide)
+    build_bowling_leaderboard(bowl, stats_data, lb_config)
+
+    slide["_runs_rows"] = bat["_runs_rows"]
+    slide["_bat_avg_rows"] = bat["_avg_rows"]
+    slide["_min_innings"] = bat["_min_innings"]
+    slide["_wkts_rows"] = bowl["_wkts_rows"]
+    slide["_bowl_avg_rows"] = bowl["_avg_rows"]
+    slide["_min_overs"] = bowl["_min_overs"]
 
 
 def _abbrev_xi(designation):
@@ -1542,10 +1561,7 @@ def build_slides(env):
                     slide["competition"] = str(team["play_cricket_league_id"])
             stats = load_stats("this_season")
             if stats:
-                if slide["template"] == "batting-leaderboard":
-                    build_batting_leaderboard(slide, stats, lb_config)
-                else:
-                    build_bowling_leaderboard(slide, stats, lb_config)
+                build_leaderboard(slide, stats, lb_config)
 
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:
