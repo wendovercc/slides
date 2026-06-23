@@ -1,7 +1,9 @@
-{% extends 'slides/_base.html' %}
+{% extends 'slides/_base-sidebar.html' %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
-    .slide {
+    /* Centred hero message — the title is the focal point, so it runs at the
+       hero size (--t-xl) rather than the --t-lg used by data-slide headers. */
+    .slide-main {
         align-items: center;
         justify-content: center;
         text-align: center;
@@ -10,18 +12,26 @@
         font-size: var(--t-xl);
         font-weight: bold;
         line-height: 1.2;
-        margin-bottom: 2.5vh;
         text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    .subtitle {
+        font-size: var(--t-md);
+        color: var(--accent);
+        margin-top: 0.8vh;
+        letter-spacing: 0.04em;
     }
     .body {
         font-size: var(--t-md);
         line-height: 1.6;
-        opacity: 0.9;
         max-width: 80%;
+        margin-top: 3vh;
     }
 {% endblock %}
 {% block content %}
     <div class="title">{{ slide.title }}</div>
+    {% if slide.subtitle is defined %}
+    <div class="subtitle">{{ slide.subtitle }}</div>
+    {% endif %}
     {% if slide.body is defined %}
     <div class="body">{{ slide.body }}</div>
     {% endif %}
