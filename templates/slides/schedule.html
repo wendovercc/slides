@@ -1,7 +1,7 @@
-{% extends 'slides/_base.html' %}
-{% block title %}Schedule · {{ slide.title }}{% endblock %}
+{% extends 'slides/_base-sidebar.html' %}
+{% block title %}{{ slide.title }} · Schedule{% endblock %}
 {% block styles %}
-    .header { flex-shrink: 0; margin-bottom: 1.2vh; }
+    .header { margin-bottom: 1.2vh; }
     .title {
         font-size: var(--t-lg);
         font-weight: bold;
@@ -9,184 +9,155 @@
         text-shadow: 0 3px 6px rgba(0,0,0,0.4);
     }
     .subtitle {
-        font-size: var(--t-xxs);
-        font-family: 'Lato', Arial, sans-serif;
-        opacity: 0.5;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        margin-top: 0.2vh;
-    }
-    .no-events {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
         font-size: var(--t-md);
-        opacity: 0.4;
-        letter-spacing: 0.06em;
+        color: var(--accent);
+        margin-top: 0.3vh;
+        letter-spacing: 0.04em;
     }
-    .col-heads {
-        display: flex;
-        align-items: center;
-        gap: 1vw;
-        padding: 0 0.5vw 0.4vh;
-        border-bottom: 1px solid rgba(255,255,255,0.2);
-        margin-bottom: 0.3vh;
-        flex-shrink: 0;
-        font-size: var(--t-xxs);
-        font-family: 'Lato', Arial, sans-serif;
-        text-transform: uppercase;
-        letter-spacing: 0.1em;
-        opacity: 0.45;
-    }
-    .ch-date { flex: 0 0 7.5vw; }
-    .ch-time { flex: 0 0 4.2vw; }
-    .ch-type { flex: 0 0 5.4vw; }
-    .ch-ctx  { flex: 0 0 17vw; }
-    .ch-desc { flex: 1; }
-    .events { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
-    .event-row {
-        display: flex;
-        align-items: center;
-        gap: 1vw;
-        padding: 0.55vh 0.5vw;
-        border-bottom: 1px solid rgba(255,255,255,0.07);
-        flex-shrink: 0;
-    }
-    .week-break { border-top: 1px solid rgba(255,255,255,0.28); }
-    .event-row:nth-child(odd) { background: rgba(255,255,255,0.03); }
-    .ev-date {
-        flex: 0 0 7.5vw;
-        font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
-        opacity: 0.75;
-    }
-    .ev-date-hidden { opacity: 0; }
-    .ev-time {
-        flex: 0 0 4.2vw;
-        font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
-        opacity: 0.7;
-    }
-    .ev-type { flex: 0 0 5.4vw; }
-    .badge {
-        display: inline-block;
-        padding: 0.15em 0.6em;
-        border-radius: 3px;
-        font-size: var(--t-xxs);
-        font-family: 'Lato', Arial, sans-serif;
-        font-weight: bold;
-        letter-spacing: 0.07em;
-        text-transform: uppercase;
-    }
-    .badge-match    { background: rgba(180,120,30,0.35); border: 1px solid rgba(220,160,50,0.5); color: #ffd070; }
-    .badge-training { background: rgba(30,100,180,0.35); border: 1px solid rgba(60,140,220,0.5); color: #80c0ff; }
-    .ev-desc {
+    .table-wrap {
         flex: 1;
-        font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
-        opacity: 0.75;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
     }
-    .ev-ctx {
-        flex: 0 0 17vw;
-        font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
-        opacity: 0.75;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+    /* Agenda grid: date · time · type · venue/teams · description.
+       Description flexes (1fr); the rest are fixed-width like other tables. */
+    .sched-grid {
+        display: grid;
+        grid-template-columns: 8vw 4.5vw 6vw 16vw 1fr;
+        gap: 0 1vw;
+        align-items: center;
     }
-    .home-pill {
-        display: inline-block;
-        padding: 0.1em 0.5em;
-        background: rgba(60,180,80,0.25);
-        border: 1px solid rgba(60,180,80,0.4);
-        border-radius: 3px;
-        font-size: var(--t-xxs);
+    .col-headers {
+        padding: 0.3vh 0.5vw 0.5vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
+        font-size: var(--t-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: #80e890;
+        opacity: 0.55;
+    }
+    /* Dense-agenda exception: this slide lists up to ~15 events (matches +
+       training), so rows run at var(--t-sm) rather than the var(--t-md) used by
+       the shorter league/honours tables. Header, zebra and chrome stay on the
+       shared pattern. */
+    .row {
+        padding: 0.55vh 0.5vw;
+        font-size: var(--t-sm);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    .week-break { border-top: 1px solid rgba(255,255,255,0.28); }
+    .ev-date { opacity: 0.85; }
+    .ev-date-hidden { opacity: 0; }
+    .ev-time {
+        opacity: 0.7;
+        font-variant-numeric: tabular-nums;
+    }
+    .ev-ctx,
+    .ev-desc {
+        opacity: 0.8;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Type badges read as categories, not results — kept off gold so the gold
+       subtitle stays the slide's only accent. */
+    .badge {
+        display: inline-block;
+        padding: 0.1vh 0.55vw;
+        border-radius: 4px;
+        font-size: var(--t-xs);
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .badge-match    { background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.25); color: #fff; }
+    .badge-training { background: rgba(30,100,180,0.35); border: 1px solid rgba(60,140,220,0.5); color: #80c0ff; }
+    /* Home/away pills mirror the team slide's Schedule tab so the two schedule
+       views share one visual language. */
+    .home-pill, .away-pill {
+        display: inline-block;
+        border-radius: 4px;
+        padding: 0.1vh 0.55vw;
+        margin-right: 0.4vw;
+        background: rgba(60,180,80,0.3);
+        border: 1px solid rgba(60,180,80,0.5);
+    }
+    .away-pill {
+        background: rgba(180,100,40,0.3);
+        border: 1px solid rgba(180,100,40,0.5);
     }
     .team-pill {
         display: inline-block;
-        padding: 0.1em 0.5em;
+        padding: 0.1vh 0.55vw;
+        margin-right: 0.4vw;
         background: rgba(255,255,255,0.08);
         border: 1px solid rgba(255,255,255,0.2);
-        border-radius: 3px;
-        font-size: var(--t-xxs);
-        letter-spacing: 0.05em;
-        color: rgba(255,255,255,0.55);
-    }
-    .away-pill {
-        display: inline-block;
-        padding: 0.1em 0.5em;
-        background: rgba(180,80,30,0.25);
-        border: 1px solid rgba(180,80,30,0.4);
-        border-radius: 3px;
-        font-size: var(--t-xxs);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #e89060;
+        border-radius: 4px;
+        color: rgba(255,255,255,0.6);
     }
     .more-row {
-        font-family: 'Lato', Arial, sans-serif;
+        padding: 0.6vh 0.5vw;
+        text-align: center;
         font-size: var(--t-xs);
         opacity: 0.4;
         font-style: italic;
-        justify-content: center;
-        border-bottom: none;
+    }
+    .empty {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        font-size: var(--t-sm);
+        opacity: 0.4;
+        font-style: italic;
     }
 {% endblock %}
 {% block content %}
     <div class="header">
-        <div class="title">Schedule · {{ slide.title }}</div>
+        <div class="title">{{ slide.title }}</div>
+        <div class="subtitle">Fixtures &amp; Training</div>
     </div>
 
     {% if not slide._events %}
-    <div class="no-events">No upcoming events</div>
+    <div class="empty">No upcoming events</div>
     {% else %}
 
-    <div class="col-heads">
-        <div class="ch-date">Date</div>
-        <div class="ch-time">Time</div>
-        <div class="ch-type">Type</div>
-        <div class="ch-ctx">{% if slide._mode == 'location' %}Teams{% else %}Venue{% endif %}</div>
-        <div class="ch-desc">Description</div>
-    </div>
-
-    <div class="events">
-    {% set ns = namespace(prev_date='', prev_week='') %}
-    {% for e in slide._events %}
-    <div class="event-row{% if ns.prev_week and e.week != ns.prev_week %} week-break{% endif %}">
-        <div class="ev-date{% if e.date == ns.prev_date %} ev-date-hidden{% endif %}">{{ e.date_display }}</div>
-        <div class="ev-time">{{ e.time or '—' }}</div>
-        <div class="ev-type">
-            <span class="badge badge-{{ e.type }}">{{ e.type }}</span>
-        </div>
-        {% set ns.prev_date = e.date %}
-        {% set ns.prev_week = e.week %}
-        <div class="ev-ctx">
-            {% if slide._mode == 'location' %}
-                {{ e.team_names | join(', ') }}
-            {% elif e.type == 'match' %}
-                {% if e.is_home %}<span class="home-pill">Home</span>
-                {% else %}<span class="away-pill">Away</span>{% endif %}
-                {% if e.location %}&nbsp;{{ e.location }}{% endif %}
-            {% else %}
-                {{ e.location }}
+    <div class="table-wrap">
+        <div class="table">
+            <div class="sched-grid col-headers">
+                <span>Date</span>
+                <span>Time</span>
+                <span>Type</span>
+                <span>{% if slide._mode == 'location' %}Teams{% else %}Venue{% endif %}</span>
+                <span>Description</span>
+            </div>
+            {% set ns = namespace(prev_date='', prev_week='') %}
+            {% for e in slide._events %}
+            <div class="sched-grid row{% if ns.prev_week and e.week != ns.prev_week %} week-break{% endif %}">
+                <span class="ev-date{% if e.date == ns.prev_date %} ev-date-hidden{% endif %}">{{ e.date_display }}</span>
+                <span class="ev-time">{{ e.time or '—' }}</span>
+                <span class="ev-type"><span class="badge badge-{{ e.type }}">{{ e.type }}</span></span>
+                {% set ns.prev_date = e.date %}
+                {% set ns.prev_week = e.week %}
+                <span class="ev-ctx">
+                    {%- if slide._mode == 'location' -%}
+                        {{ e.team_names | join(', ') }}
+                    {%- elif e.type == 'match' -%}
+                        {% if e.is_home %}<span class="home-pill">Home</span>
+                        {% else %}<span class="away-pill">Away</span>{% endif %}
+                        {%- if e.location %}{{ e.location }}{% endif -%}
+                    {%- else -%}
+                        {{ e.location }}
+                    {%- endif -%}
+                </span>
+                <span class="ev-desc">{% if slide._multi_team and e.team_names %}<span class="team-pill">{{ e.team_names | join(', ') }}</span>{% endif %}{{ e.title }}</span>
+            </div>
+            {% endfor %}
+            {% if slide._more_count %}
+            <div class="more-row">… and more to follow …</div>
             {% endif %}
         </div>
-        <div class="ev-desc">{% if slide._multi_team and e.team_names %}<span class="team-pill">{{ e.team_names | join(', ') }}</span>&nbsp;{% endif %}{{ e.title }}</div>
-    </div>
-    {% endfor %}
-    {% if slide._more_count %}
-    <div class="event-row more-row">
-        <span>… and more to follow …</span>
-    </div>
-    {% endif %}
     </div>
 
     {% endif %}
