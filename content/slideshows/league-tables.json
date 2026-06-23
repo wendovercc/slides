@@ -3,25 +3,25 @@
   "homepage_rank": 1,
   "refresh_interval_seconds": 300,
   "slides": [
-    { "slug": "sponsors",                    "duration": 15 },
+    { "slug": "sponsors" },
 
-    { "slug": "league-table-1st-xi",         "duration": 20 },
-    { "slug": "league-table-2nd-xi",         "duration": 20 },
+    { "slug": "league-table-1st-xi" },
+    { "slug": "league-table-2nd-xi" },
 
-    { "slug": "league-table-u17-spitfires",  "duration": 20 },
-    { "slug": "league-table-u15-hurricanes", "duration": 20 },
-    { "slug": "league-table-u15-spitfires",  "duration": 20 },
-    { "slug": "league-table-u14-hurricanes", "duration": 20 },
-    { "slug": "league-table-u13-girls",      "duration": 20 },
-    { "slug": "league-table-u13-hurricanes", "duration": 20 },
-    { "slug": "league-table-u13-spitfires",  "duration": 20 },
-    { "slug": "league-table-u12-hurricanes", "duration": 20 },
-    { "slug": "league-table-u12-spitfires",  "duration": 20 },
-    { "slug": "league-table-u11-girls",      "duration": 20 },
-    { "slug": "league-table-u11-incredibles","duration": 20 },
-    { "slug": "league-table-u11-invincibles","duration": 20 },
-    { "slug": "league-table-u10-lightning",  "duration": 20 },
-    { "slug": "league-table-u10-thunder",    "duration": 20 },
-    { "slug": "league-table-u9",             "duration": 20 }
+    { "slug": "league-table-u17-spitfires" },
+    { "slug": "league-table-u15-hurricanes" },
+    { "slug": "league-table-u15-spitfires" },
+    { "slug": "league-table-u14-hurricanes" },
+    { "slug": "league-table-u13-girls" },
+    { "slug": "league-table-u13-hurricanes" },
+    { "slug": "league-table-u13-spitfires" },
+    { "slug": "league-table-u12-hurricanes" },
+    { "slug": "league-table-u12-spitfires" },
+    { "slug": "league-table-u11-girls" },
+    { "slug": "league-table-u11-incredibles" },
+    { "slug": "league-table-u11-invincibles" },
+    { "slug": "league-table-u10-lightning" },
+    { "slug": "league-table-u10-thunder" },
+    { "slug": "league-table-u9" }
   ]
 }

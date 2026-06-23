@@ -448,13 +448,13 @@
         <div class="title">{{ slide.title }}</div>
     </div>
     <nav class="panel-nav">
-        {% for tab in slide._tabs %}
+        {% for tab in slide._panels %}
         <span class="panel-tab{% if loop.first %} active{% endif %}">{{ tab_labels[tab] }}</span>
         {% endfor %}
     </nav>
     <div class="panels">
 
-        {% for tab in slide._tabs %}
+        {% for tab in slide._panels %}
         <div class="panel{% if loop.first %} panel-active{% endif %}">
 
             {% if tab == 'league' %}
@@ -730,10 +730,9 @@
 
     </div>
     <script>
-        const SLIDE_DURATION = {{ slide.duration }};
+        const panelDuration = {{ slide.panel_duration }};
         const panels = Array.from(document.querySelectorAll('.panel'));
         const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
-        const panelDuration = panels.length ? SLIDE_DURATION / panels.length : SLIDE_DURATION;
         let current = 0;
         document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
         function showPanel(i) {

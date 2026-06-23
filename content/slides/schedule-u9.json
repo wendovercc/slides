@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "U9",
-  "team": "u9"
+  "team": "u9",
+  "panel_duration": 15
 }

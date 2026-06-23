@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "U11 Incredibles",
-  "team": "u11-incredibles"
+  "team": "u11-incredibles",
+  "panel_duration": 15
 }

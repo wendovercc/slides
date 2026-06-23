@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "U11 Girls",
-  "team": "u11-girls"
+  "team": "u11-girls",
+  "panel_duration": 15
 }

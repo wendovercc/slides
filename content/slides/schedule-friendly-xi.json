@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "Friendly XI",
-  "team": "friendly-xi"
+  "team": "friendly-xi",
+  "panel_duration": 15
 }

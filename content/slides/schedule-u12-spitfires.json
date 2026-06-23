@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "U12 Spitfires",
-  "team": "u12-spitfires"
+  "team": "u12-spitfires",
+  "panel_duration": 15
 }

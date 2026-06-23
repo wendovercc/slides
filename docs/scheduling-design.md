@@ -14,8 +14,8 @@ Content visibility is controlled at three independent levels:
 
 | Level | Where | Controls |
 |-------|-------|----------|
-| **Slide** | `content/slides/{slug}.json` | Global kill switch (`active: false`), expiry date |
-| **Slideshow** | `content/slideshows/{slug}.json` | Sequencing, durations, audience predicates per slide entry |
+| **Slide** | `content/slides/{slug}.json` | Global kill switch (`active: false`), expiry date, `panel_duration` |
+| **Slideshow** | `content/slideshows/{slug}.json` | Sequencing, audience predicates per slide entry |
 | **Runtime** | Player JS + context calendar | Current activity type, phase, section, teams |
 
 The universal slideshow (`pavilion-auto`) contains all slides with audience predicates on
@@ -186,16 +186,16 @@ Field values that are arrays allow multiple options for that field (OR within fi
   "title": "Pavilion Auto",
   "refresh_interval_seconds": 300,
   "slides": [
-    { "slug": "club-photo",                  "duration": 10 },
-    { "slug": "sponsors",                    "duration": 15 },
-    { "slug": "batting-leaderboard-1st-xi",  "duration": 20,
+    { "slug": "club-photo" },
+    { "slug": "sponsors" },
+    { "slug": "batting-leaderboard-1st-xi",
       "show_when": [{ "section": ["senior"] }] },
-    { "slug": "batting-leaderboard-2nd-xi",  "duration": 20,
+    { "slug": "batting-leaderboard-2nd-xi",
       "show_when": [{ "section": ["senior"] }] },
-    { "slug": "league-table-u11-incredibles","duration": 20,
+    { "slug": "league-table-u11-incredibles",
       "show_when": [{ "section": ["junior"] }] },
-    { "slug": "junior-camp",                 "duration": 15, "expires": "2026-08-08" },
-    { "slug": "next-activity",               "duration": 10,
+    { "slug": "junior-camp",                 "expires": "2026-08-08" },
+    { "slug": "next-activity",
       "show_when": [
         { "type": ["idle"] },
         { "type": ["match"], "teams": ["1st-xi"], "phase": ["warm_up"] }
@@ -204,8 +204,10 @@ Field values that are arrays allow multiple options for that field (OR within fi
 }
 ```
 
-The last entry illustrates OR: "show when idle, or when it is the warm-up phase of a
-1st XI match." `NOT` predicates are explicitly deferred.
+Slideshow entries carry no timing: each slide's duration is derived by the build
+from its `panel_duration` (see `design-conventions.md`) and written into
+`data.json`. The last entry illustrates OR: "show when idle, or when it is the
+warm-up phase of a 1st XI match." `NOT` predicates are explicitly deferred.
 
 Curated event slideshows remain supported. A screen can be pointed at a specific
 slideshow for the duration of an event, bypassing `pavilion-auto` entirely.

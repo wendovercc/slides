@@ -1,5 +1,9 @@
 {
   "template": "schedule",
   "title": "U10",
-  "teams": ["u10-lightning", "u10-thunder"]
+  "teams": [
+    "u10-lightning",
+    "u10-thunder"
+  ],
+  "panel_duration": 15
 }

@@ -169,10 +169,9 @@
 
     </div>
     <script>
-        const SLIDE_DURATION = {{ slide.duration }};
+        const panelDuration = {{ slide.panel_duration }};
         const panels = Array.from(document.querySelectorAll('.half'));
         const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
-        const panelDuration = SLIDE_DURATION / panels.length;
         let current = 0;
         document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
         function showPanel(i) {

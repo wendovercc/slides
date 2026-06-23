@@ -3,6 +3,7 @@
   "seasons": {
     "this_season": 2026
   },
+  "default_panel_duration": 20,
   "leaderboards": {
     "min_innings": 2,
     "min_overs": 2,

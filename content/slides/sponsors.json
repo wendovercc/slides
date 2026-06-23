@@ -2,5 +2,6 @@
   "template": "sponsors",
   "title": "Please support our sponsors",
   "data": "content/sponsors.json",
-  "qr_cta": "Find out about current sponsorship opportunities"
+  "qr_cta": "Find out about current sponsorship opportunities",
+  "panel_duration": 15
 }

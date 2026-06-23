@@ -80,11 +80,38 @@ timer.
   `_base-sidebar.html` (`.panel-nav { margin-bottom: 2.8vh }`). Don't redeclare
   this locally — slides may set `margin-top` and `gap`, but leave
   `margin-bottom` alone for consistency.
-- Total slide duration is split evenly across panels (see the script block in
-  `fantasy-league.html` for the canonical implementation).
+- Each panel is shown for `panel_duration` seconds — the same dwell a
+  single-panel slide gets — so reading pace is constant regardless of how many
+  panels a slide has. The slide's total on-screen time is *derived*:
+  `panel_duration × panel count`. The script block reads
+  `const panelDuration = {{ slide.panel_duration }}` and drives both the
+  rotation timer and the `--panel-duration` underline from it (see
+  `fantasy-league.html` for the canonical implementation). It does **not**
+  compute a per-panel slice from a total — that arithmetic now lives in the
+  build (see "Panel duration" below).
+- The build must know a carousel's panel count to derive its total. Fixed-panel
+  templates are listed in `FIXED_PANEL_COUNTS` (`scripts/build.py`); the
+  data-driven `team` template publishes `slide["_panels"]` instead. A carousel
+  with zero panels (no data this build) is skipped entirely.
 - Left/right arrow keys advance/retreat tabs and cancel the auto-rotation.
   Boundaries are hard stops (no wrap) so slideshow-level nav remains
   unambiguous if the slide is ever embedded with focusable keys.
+
+### Panel duration
+
+`panel_duration` is the only timing knob. It is the per-panel dwell, and for a
+single-panel slide it *is* the slide's duration.
+
+- The global default lives in `config.json` (`default_panel_duration`). Any slide
+  may override it with a `panel_duration` field in its own
+  `content/slides/*.json`.
+- It is **slide-level only** — never a slideshow-entry or per-show value. A slide
+  is rendered once, standalone (the rotation timing is baked into its HTML), so
+  its panel timing can't vary between the slideshows that embed it.
+- The build derives each slide's total `duration` (`panel_duration × panel
+  count`) and writes it into the slideshow `data.json`; the players only ever
+  read that total. Do not author a `duration` anywhere in content — it is always
+  computed.
 
 ## Tables
 

@@ -2,6 +2,5 @@
   "template": "batting-honours",
   "title": "Batting Honours",
   "from_year": 1955,
-  "rows": 15,
-  "duration": 20
+  "rows": 15
 }

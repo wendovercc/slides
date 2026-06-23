@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "The Witchell",
-  "location": "the-witchell"
+  "location": "the-witchell",
+  "panel_duration": 15
 }

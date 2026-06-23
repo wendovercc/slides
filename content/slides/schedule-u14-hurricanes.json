@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "U14 Hurricanes",
-  "team": "u14-hurricanes"
+  "team": "u14-hurricanes",
+  "panel_duration": 15
 }

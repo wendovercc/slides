@@ -3,12 +3,10 @@
   "refresh_interval_seconds": 300,
   "slides": [
     {
-      "slug": "sponsors",
-      "duration": 15
+      "slug": "sponsors"
     },
     {
       "slug": "last-match-1st-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -19,7 +17,6 @@
     },
     {
       "slug": "league-table-1st-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -50,7 +47,6 @@
     },
     {
       "slug": "schedule-1st-xi",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -61,7 +57,6 @@
     },
     {
       "slug": "next-match-1st-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -72,7 +67,6 @@
     },
     {
       "slug": "last-match-2nd-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -83,7 +77,6 @@
     },
     {
       "slug": "league-table-2nd-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -114,7 +107,6 @@
     },
     {
       "slug": "schedule-2nd-xi",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -125,7 +117,6 @@
     },
     {
       "slug": "next-match-2nd-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -136,7 +127,6 @@
     },
     {
       "slug": "last-match-friendly-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -147,7 +137,6 @@
     },
     {
       "slug": "schedule-friendly-xi",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -158,7 +147,6 @@
     },
     {
       "slug": "next-match-friendly-xi",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -189,7 +177,6 @@
     },
     {
       "slug": "last-match-u9",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -200,7 +187,6 @@
     },
     {
       "slug": "league-table-u9",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -211,7 +197,6 @@
     },
     {
       "slug": "schedule-u9",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -222,7 +207,6 @@
     },
     {
       "slug": "next-match-u9",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -233,7 +217,6 @@
     },
     {
       "slug": "last-match-u10-lightning",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -244,7 +227,6 @@
     },
     {
       "slug": "league-table-u10-lightning",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -255,7 +237,6 @@
     },
     {
       "slug": "schedule-u10-lightning",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -266,7 +247,6 @@
     },
     {
       "slug": "next-match-u10-lightning",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -277,7 +257,6 @@
     },
     {
       "slug": "last-match-u10-thunder",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -288,7 +267,6 @@
     },
     {
       "slug": "league-table-u10-thunder",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -299,7 +277,6 @@
     },
     {
       "slug": "schedule-u10-thunder",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -310,7 +287,6 @@
     },
     {
       "slug": "next-match-u10-thunder",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -321,7 +297,6 @@
     },
     {
       "slug": "last-match-u11-incredibles",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -332,7 +307,6 @@
     },
     {
       "slug": "league-table-u11-incredibles",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -343,7 +317,6 @@
     },
     {
       "slug": "schedule-u11-incredibles",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -354,7 +327,6 @@
     },
     {
       "slug": "next-match-u11-incredibles",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -365,7 +337,6 @@
     },
     {
       "slug": "last-match-u11-invincibles",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -376,7 +347,6 @@
     },
     {
       "slug": "league-table-u11-invincibles",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -387,7 +357,6 @@
     },
     {
       "slug": "schedule-u11-invincibles",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -398,7 +367,6 @@
     },
     {
       "slug": "next-match-u11-invincibles",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -409,7 +377,6 @@
     },
     {
       "slug": "last-match-u11-girls",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -420,7 +387,6 @@
     },
     {
       "slug": "league-table-u11-girls",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -431,7 +397,6 @@
     },
     {
       "slug": "schedule-u11-girls",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -442,7 +407,6 @@
     },
     {
       "slug": "next-match-u11-girls",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -453,7 +417,6 @@
     },
     {
       "slug": "last-match-u12-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -464,7 +427,6 @@
     },
     {
       "slug": "league-table-u12-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -475,7 +437,6 @@
     },
     {
       "slug": "schedule-u12-hurricanes",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -486,7 +447,6 @@
     },
     {
       "slug": "next-match-u12-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -497,7 +457,6 @@
     },
     {
       "slug": "last-match-u12-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -508,7 +467,6 @@
     },
     {
       "slug": "league-table-u12-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -519,7 +477,6 @@
     },
     {
       "slug": "schedule-u12-spitfires",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -530,7 +487,6 @@
     },
     {
       "slug": "next-match-u12-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -541,7 +497,6 @@
     },
     {
       "slug": "last-match-u13-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -552,7 +507,6 @@
     },
     {
       "slug": "league-table-u13-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -583,7 +537,6 @@
     },
     {
       "slug": "schedule-u13-hurricanes",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -594,7 +547,6 @@
     },
     {
       "slug": "next-match-u13-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -605,7 +557,6 @@
     },
     {
       "slug": "last-match-u13-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -616,7 +567,6 @@
     },
     {
       "slug": "league-table-u13-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -647,7 +597,6 @@
     },
     {
       "slug": "schedule-u13-spitfires",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -658,7 +607,6 @@
     },
     {
       "slug": "next-match-u13-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -669,7 +617,6 @@
     },
     {
       "slug": "last-match-u13-girls",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -680,7 +627,6 @@
     },
     {
       "slug": "league-table-u13-girls",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -711,7 +657,6 @@
     },
     {
       "slug": "schedule-u13-girls",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -722,7 +667,6 @@
     },
     {
       "slug": "next-match-u13-girls",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -733,7 +677,6 @@
     },
     {
       "slug": "last-match-u14-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -744,7 +687,6 @@
     },
     {
       "slug": "league-table-u14-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -775,7 +717,6 @@
     },
     {
       "slug": "schedule-u14-hurricanes",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -786,7 +727,6 @@
     },
     {
       "slug": "next-match-u14-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -797,7 +737,6 @@
     },
     {
       "slug": "last-match-u15-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -808,7 +747,6 @@
     },
     {
       "slug": "league-table-u15-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -839,7 +777,6 @@
     },
     {
       "slug": "schedule-u15-hurricanes",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -850,7 +787,6 @@
     },
     {
       "slug": "next-match-u15-hurricanes",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -861,7 +797,6 @@
     },
     {
       "slug": "last-match-u15-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -872,7 +807,6 @@
     },
     {
       "slug": "league-table-u15-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -903,7 +837,6 @@
     },
     {
       "slug": "schedule-u15-spitfires",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -914,7 +847,6 @@
     },
     {
       "slug": "next-match-u15-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -925,7 +857,6 @@
     },
     {
       "slug": "last-match-u17-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -936,7 +867,6 @@
     },
     {
       "slug": "league-table-u17-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -967,7 +897,6 @@
     },
     {
       "slug": "schedule-u17-spitfires",
-      "duration": 15,
       "show_when": [
         {
           "teams": [
@@ -978,7 +907,6 @@
     },
     {
       "slug": "next-match-u17-spitfires",
-      "duration": 20,
       "show_when": [
         {
           "teams": [
@@ -1011,7 +939,6 @@
     },
     {
       "slug": "fantasy-league",
-      "duration": 30,
       "show_when": [
         {
           "section": [

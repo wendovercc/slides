@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "2nd XI",
-  "team": "2nd-xi"
+  "team": "2nd-xi",
+  "panel_duration": 15
 }

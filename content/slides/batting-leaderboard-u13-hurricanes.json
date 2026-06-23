@@ -2,6 +2,5 @@
   "template": "batting-leaderboard",
   "title": "Batting \u00b7 U13 Hurricanes 2026",
   "team": "u13-hurricanes",
-  "competition": "league",
-  "duration": 20
+  "competition": "league"
 }

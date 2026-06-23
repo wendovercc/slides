@@ -1,5 +1,6 @@
 {
   "template": "schedule",
   "title": "Tring Road",
-  "location": "tring-road"
+  "location": "tring-road",
+  "panel_duration": 15
 }

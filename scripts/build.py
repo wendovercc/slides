@@ -28,6 +28,18 @@ FANTASY_TEMPLATES = {
 }
 FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fetched_at": None}
 
+# Carousel templates whose panel count is fixed (panels are hard-coded in the
+# template). The `team` template's panel count is data-driven instead — it
+# publishes a `slide["_panels"]` list, which takes precedence over this map.
+# Used to derive each slide's total duration = panel_duration × panel count.
+FIXED_PANEL_COUNTS = {
+    "batting-honours": 2,
+    "bowling-honours": 2,
+    "batting-leaderboard": 2,
+    "bowling-leaderboard": 2,
+    "fantasy-league": 3,
+}
+
 
 def load_config():
     path = CONTENT / "config.json"
@@ -1014,9 +1026,9 @@ def _split_opp_name(opp_full, opp_club):
 
 
 def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
-    """Assemble the multi-tab team slide object.
+    """Assemble the multi-panel team slide object.
 
-    Tabs (any with no data are omitted from slide._tabs):
+    Panels (any with no data are omitted from slide._panels):
       league · results · schedule · top_batting · top_bowling
     """
     team_id = slide.get("team")
@@ -1025,7 +1037,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
     today = date.today()
     today_iso = today.isoformat()
 
-    tabs = []
+    panels = []
 
     # ── Tab 1: League table ────────────────────────────────────────────────
     league_id = team.get("play_cricket_league_id")
@@ -1053,7 +1065,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
             slide["_league_team_id"] = str(team.get("play_cricket_team_id", ""))
             slide["_league_name"] = team.get("league_name", "")
             slide["_has_league"] = True
-            tabs.append("league")
+            panels.append("league")
 
     # ── Tab 2: Results (most recent N) ─────────────────────────────────────
     form_data = (stats_data or {}).get("form", {}).get(team_id, {})
@@ -1094,7 +1106,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
             })
         slide["_results"] = results
         slide["_has_results"] = True
-        tabs.append("results")
+        panels.append("results")
 
     # ── Tab 3: Schedule (next N fixtures) ──────────────────────────────────
     all_fixtures = (fixtures_data.get("all_fixtures") or {}).get(team_id) or []
@@ -1154,7 +1166,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
             fixtures_out.append(entry)
         slide["_fixtures"] = fixtures_out
         slide["_has_schedule"] = True
-        tabs.append("schedule")
+        panels.append("schedule")
 
     # ── Tabs 4 & 5: Top batting / Top bowling (5 rows each table) ──────────
     TOP_ROWS = 5
@@ -1211,7 +1223,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
         slide["_top_avg_bat"] = [fmt_bat(e) for e in avg_bat_rows]
         if slide["_top_runs"] or slide["_top_avg_bat"]:
             slide["_has_top_batting"] = True
-            tabs.append("top_batting")
+            panels.append("top_batting")
 
         def fmt_bowl(e):
             b = e["block"]["bowling"]
@@ -1244,9 +1256,9 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
         slide["_top_avg_bowl"] = [fmt_bowl(e) for e in avg_bowl_rows]
         if slide["_top_wkts"] or slide["_top_avg_bowl"]:
             slide["_has_top_bowling"] = True
-            tabs.append("top_bowling")
+            panels.append("top_bowling")
 
-    slide["_tabs"] = tabs
+    slide["_panels"] = panels
 
 
 ACTIVITY_PRIORITY = {"club_event": 0, "section_event": 1, "match": 2, "training": 3, "hire": 4}
@@ -1397,6 +1409,12 @@ def build_slides(env):
     teams_by_id = load_teams()
     config = load_config()
     lb_config = config.get("leaderboards", {})
+    default_panel_duration = config.get("default_panel_duration", 20)
+
+    # Per-slug timing/visibility, consumed by build_slideshows. Each slide's total
+    # on-screen duration is derived: panel_duration × panel count. A slide with no
+    # panels (no data this build) is marked _skip and never emitted.
+    slide_meta = {}
 
     _stats_cache = {}
 
@@ -1538,6 +1556,27 @@ def build_slides(env):
                 table["headings_list"] = team_col + rest_cols + pts_cols
                 table["rows"] = table["values"]
 
+        # Panel count drives the derived duration: a data-driven `_panels` list
+        # (team) wins; otherwise a fixed-carousel count; otherwise a plain slide
+        # is one panel. Zero panels means no data this build — skip the slide.
+        if "_panels" in slide:
+            panel_count = len(slide["_panels"])
+        else:
+            panel_count = FIXED_PANEL_COUNTS.get(slide.get("template"), 1)
+        if panel_count == 0:
+            slide_meta[slug] = {"_skip": True}
+            print(f"  slide/{slug} — skipped (no panels)")
+            continue
+
+        panel_duration = slide.get("panel_duration", default_panel_duration)
+        slide["panel_duration"] = panel_duration
+        slide["duration"] = panel_duration * panel_count
+        slide_meta[slug] = {
+            "slide_active": slide.get("active", True),
+            "slide_expires": slide.get("expires"),
+            "duration": slide["duration"],
+        }
+
         template = env.get_template(f"slides/{slide['template']}.html")
         html = template.render(slide=slide, slug=slug)
 
@@ -1546,22 +1585,15 @@ def build_slides(env):
         (out_dir / "index.html").write_text(html)
         print(f"  slide/{slug}")
 
+    return slide_meta
 
 
-def build_slideshows(env):
-    # Collect slide-level active/expires so data.json can carry them for the smart player
-    slide_meta = {}
-    for slide_path in (CONTENT / "slides").glob("*.json"):
-        s = json.loads(slide_path.read_text())
-        meta = {
-            "slide_active": s.get("active", True),
-            "slide_expires": s.get("expires"),
-        }
-        if "duration" in s:
-            meta["duration"] = s["duration"]
-        slide_meta[slide_path.stem] = meta
 
+def build_slideshows(env, slide_meta):
+    # slide_meta (from build_slides) carries each slide's computed duration,
+    # active/expires, and a _skip flag for slides with no data this build.
     config = load_config()
+    default_panel_duration = config.get("default_panel_duration", 20)
     preview_cfg = config.get("preview", {})
     built_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     site_url = preview_cfg.get("site_url", "")
@@ -1572,6 +1604,19 @@ def build_slideshows(env):
         show = json.loads(show_path.read_text())
         slug = show_path.stem
 
+        # Merge each entry with its slide's computed meta (duration, active,
+        # expires). Drop slides skipped for lack of data. Both players read the
+        # derived `duration` from here — neither knows about panels.
+        merged = []
+        for entry in show.get("slides", []):
+            meta = slide_meta.get(entry["slug"], {})
+            if meta.get("_skip"):
+                continue
+            merged_entry = {**entry, **meta}
+            merged_entry.setdefault("duration", default_panel_duration)
+            merged.append(merged_entry)
+        show["slides"] = merged
+
         template = env.get_template("slideshow/player.html")
         html = template.render(show=show, slug=slug, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
 
@@ -1580,12 +1625,7 @@ def build_slideshows(env):
         (out_dir / "index.html").write_text(html)
 
         # data.json consumed by the smart player at runtime
-        data = dict(show)
-        data["slides"] = [
-            {**entry, **slide_meta.get(entry["slug"], {})}
-            for entry in show.get("slides", [])
-        ]
-        (out_dir / "data.json").write_text(json.dumps(data))
+        (out_dir / "data.json").write_text(json.dumps(show))
         print(f"  slideshow/{slug}")
 
         if "homepage_rank" in show:
@@ -1637,10 +1677,10 @@ if __name__ == "__main__":
     env = make_env()
 
     print("Building slides...")
-    build_slides(env)
+    slide_meta = build_slides(env)
 
     print("Building slideshows...")
-    homepage_shows = build_slideshows(env)
+    homepage_shows = build_slideshows(env, slide_meta)
 
     print("Building context calendar...")
     build_context_calendar()

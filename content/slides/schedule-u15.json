@@ -1,5 +1,9 @@
 {
   "template": "schedule",
   "title": "U15",
-  "teams": ["u15-hurricanes", "u15-spitfires"]
+  "teams": [
+    "u15-hurricanes",
+    "u15-spitfires"
+  ],
+  "panel_duration": 15
 }
