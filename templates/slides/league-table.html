@@ -1,76 +1,98 @@
 {% extends 'slides/_base-sidebar.html' %}
 {% block title %}{{ slide.title or slide._data.league_table[0].division_name }}{% endblock %}
 {% block styles %}
+    .header { margin-bottom: 1.2vh; }
     .title {
         font-size: var(--t-lg);
         font-weight: bold;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        opacity: 0.9;
-        flex-shrink: 0;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
     }
     .subtitle {
-        font-size: var(--t-sm);
-        letter-spacing: 0.06em;
-        opacity: 0.75;
-        margin-top: 0.4vh;
-        margin-bottom: 2vh;
-        flex-shrink: 0;
+        font-size: var(--t-md);
+        color: var(--accent);
+        margin-top: 0.3vh;
+        letter-spacing: 0.04em;
     }
     .table-wrap {
         flex: 1;
-        overflow: hidden;
+        min-height: 0;
         display: flex;
         flex-direction: column;
-        justify-content: flex-start;
     }
-    table { width: 100%; border-collapse: collapse; font-size: var(--t-sm); }
-    thead tr {
-        background: rgba(255,255,255,0.15);
-        border-bottom: 2px solid rgba(255,255,255,0.3);
+    /* Team name flexes; stat columns are fixed-width and right-aligned. */
+    .league-grid {
+        display: grid;
+        grid-template-columns: 1fr repeat(var(--stat-cols, 7), 4.5vw);
+        gap: 0 0.5vw;
+        align-items: baseline;
     }
-    th {
-        padding: 0.6vh 1vw;
+    .col-headers {
+        padding: 0.3vh 0 0.5vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
         font-size: var(--t-xs);
+        letter-spacing: 0.08em;
         text-transform: uppercase;
-        letter-spacing: 0.06em;
-        font-weight: bold;
-        opacity: 0.75;
+        opacity: 0.55;
     }
-    tbody tr { border-bottom: 1px solid rgba(255,255,255,0.08); }
-    tbody tr:nth-child(even) { background: rgba(255,255,255,0.04); }
-    tbody tr.highlight {
+    .col-num { text-align: right; }
+    .row {
+        padding: 0.3vh 0;
+        font-size: var(--t-md);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    .league-grid.row.highlight {
         background: rgba(212,175,55,0.2);
         color: #ffd966;
         font-weight: bold;
     }
-    td { padding: 0.45vh 1vw; }
-    .col-team { text-align: left; white-space: nowrap; }
-    .col-stat { width: 4.5vw; text-align: center; }
+    .name {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        padding-right: 0.5vw;
+    }
+    .val {
+        text-align: right;
+        opacity: 0.7;
+        font-variant-numeric: tabular-nums;
+    }
+    .pts {
+        text-align: right;
+        font-weight: bold;
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+    }
 {% endblock %}
 {% block content %}
 {% set table = slide._data.league_table[0] %}
-    <div class="title">{{ slide.title }}</div>
-    <div class="subtitle">{{ table.name }}</div>
+{% set stat_cols = table.headings_list|length - 1 %}
+    <div class="header">
+        <div class="title">{{ slide.title }}</div>
+        <div class="subtitle">{{ table.name }}</div>
+    </div>
     <div class="table-wrap">
-        <table>
-            <thead>
-                <tr>
-                    {% for key, label in table.headings_list %}
-                    <th class="{{ 'col-team' if key == 'column_1' else 'col-stat' }}">{{ label }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in table.rows %}
-                {% set is_highlight = slide._highlight_team_id is defined and row.team_id == slide._highlight_team_id %}
-                <tr{{ ' class="highlight"' | safe if is_highlight else '' }}>
-                    {% for key, label in table.headings_list %}
-                    <td class="{{ 'col-team' if key == 'column_1' else 'col-stat' }}">{{ row[key] }}</td>
-                    {% endfor %}
-                </tr>
+        <div class="table" style="--stat-cols: {{ stat_cols }}">
+            <div class="league-grid col-headers">
+                {% for key, label in table.headings_list %}
+                <span class="{% if key != 'column_1' %}col-num{% endif %}">{{ label }}</span>
                 {% endfor %}
-            </tbody>
-        </table>
+            </div>
+            {% for row in table.rows %}
+            {% set is_highlight = slide._highlight_team_id is defined and row.team_id == slide._highlight_team_id %}
+            <div class="league-grid row{% if is_highlight %} highlight{% endif %}">
+                {% for key, label in table.headings_list %}
+                    {% if key == 'column_1' %}
+                        <span class="name">{{ row[key] }}</span>
+                    {% elif label|lower == 'pts' %}
+                        <span class="pts">{{ row[key] }}</span>
+                    {% else %}
+                        <span class="val">{{ row[key] }}</span>
+                    {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
     </div>
 {% endblock %}
