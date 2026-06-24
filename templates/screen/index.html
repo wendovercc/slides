@@ -29,7 +29,6 @@
             --text:       #ffffff;
             --muted:      var(--light-blue);
             --accent:     var(--gold);
-            --footer-h:   8vh;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
@@ -154,34 +153,6 @@
             background: #fff; animation: live-pulse 1.4s ease-in-out infinite;
         }
         @keyframes live-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
-
-        .footer-strip {
-            height: var(--footer-h);
-            min-height: 52px;
-            background: rgba(0,0,0,0.45);
-            display: flex;
-            align-items: center;
-            gap: 2vw;
-            padding: 0 clamp(20px, 5vw, 64px);
-        }
-        .club-logo { height: 60%; width: auto; object-fit: contain; }
-        .club-name {
-            font-size: clamp(9px, 0.7vw, 12px);
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-            opacity: 0.8;
-            white-space: nowrap;
-        }
-        .sponsor-logos { display: flex; gap: 1.5vw; align-items: center; margin-left: auto; overflow: hidden; }
-        .sponsor-logo {
-            height: 56%;
-            max-width: 96px;
-            width: auto;
-            object-fit: contain;
-            background: rgba(255,255,255,0.88);
-            border-radius: 3px;
-            padding: 2px 6px;
-        }
     </style>
 </head>
 <body>
@@ -210,15 +181,6 @@
         </div>
     </main>
 
-    <footer class="footer-strip">
-        <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
-        <span class="club-name">{{ preview.club_name }}</span>
-        <div class="sponsor-logos">
-            {% for s in sponsors %}
-            <img class="sponsor-logo" src="{{ s.src }}" alt="{{ s.name }}">
-            {% endfor %}
-        </div>
-    </footer>
 
     <script src="/assets/js/context.js"></script>
     <script>

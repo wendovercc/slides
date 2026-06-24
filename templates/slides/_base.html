@@ -80,20 +80,45 @@
             white-space: nowrap;
         }
         .club-watch strong { color: var(--accent); font-weight: 700; }
+        /* Sponsor block sits at the right end of the strip: a gold support
+           heading beside the uniform banner row. */
+        .sponsor-block {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 1vw;
+            min-width: 0;
+        }
+        .sponsor-heading {
+            font-family: 'Lato', Arial, sans-serif;
+            font-size: var(--t-xxs);
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--accent);
+            text-align: right;
+            line-height: 1.25;
+            max-width: 7vw;
+            flex-shrink: 0;
+        }
         .sponsor-logos {
             display: flex;
-            gap: 1.5vw;
+            gap: 0.8vw;
             align-items: center;
-            margin-left: auto;
+            min-width: 0;
         }
         .sponsor-logo {
-            height: calc(var(--footer-h) * 0.55);
-            max-width: 8vw;
+            /* Uniform 800x150 (16:3) banner tile, matching the sidebar. The white
+               backing shows only behind transparent logos; cover (not contain)
+               fills the tile edge-to-edge so no white letterbox slivers appear
+               around the artwork and the hairline border stays clean. */
+            height: calc(var(--footer-h) * 0.52);
+            aspect-ratio: 16 / 3;
             width: auto;
-            object-fit: contain;
-            background: rgba(255,255,255,0.88);
-            border-radius: 3px;
-            padding: 2px 6px;
+            object-fit: cover;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.12);
         }
         /* Interactive pause: freeze the active tab's gold underline at full width */
         body.paused .panel-tab.active::after { animation: none; transform: scaleX(1); }
@@ -109,10 +134,13 @@
             <span class="club-name">Wendover Cricket Club</span>
             <span class="club-watch">Watch anywhere · <strong>{{ site_url }}</strong></span>
         </div>
-        <div class="sponsor-logos">
-            {% for s in sponsors %}
-            <img class="sponsor-logo" src="{{ s.src }}" alt="{{ s.name }}">
-            {% endfor %}
+        <div class="sponsor-block">
+            <span class="sponsor-heading">Please support our sponsors</span>
+            <div class="sponsor-logos">
+                {% for s in sponsors %}
+                <img class="sponsor-logo" src="{{ s.src }}" alt="{{ s.name }}">
+                {% endfor %}
+            </div>
         </div>
     </footer>
 </body>
