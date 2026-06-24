@@ -2,11 +2,21 @@
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
     /* Centred hero message — the title is the focal point, so it runs at the
-       hero size (--t-xl) rather than the --t-lg used by data-slide headers. */
+       hero size (--t-xl) rather than the --t-lg used by data-slide headers.
+       Optional event fields (when / location badge) mirror the printed advert
+       layout: gold date line, then an inverted gold→navy location badge. */
     .slide-main {
         align-items: center;
         justify-content: center;
         text-align: center;
+    }
+    .eyebrow {
+        font-size: var(--t-sm);
+        font-weight: 700;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin-bottom: 1.2vh;
     }
     .title {
         font-size: var(--t-xl);
@@ -26,13 +36,49 @@
         max-width: 80%;
         margin-top: 3vh;
     }
+    /* Gold date/time line — the event's headline detail. */
+    .when {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        color: var(--accent);
+        line-height: 1.2;
+        margin-top: 4vh;
+    }
+    /* Inverted location badge: navy text on a solid gold bar — the one inverted
+       block on an otherwise gold-on-navy slide, so it reads as the call-to-place. */
+    .location-badge {
+        display: flex;
+        align-items: baseline;
+        gap: 1.6vw;
+        background: var(--accent);
+        color: var(--navy-1);
+        font-weight: 700;
+        font-size: var(--t-md);
+        letter-spacing: 0.03em;
+        padding: 1.3vh 2.6vw;
+        border-radius: 4px;
+        margin-top: 3vh;
+    }
+    .location-badge .loc-postcode { letter-spacing: 0.08em; }
 {% endblock %}
 {% block content %}
+    {% if slide.eyebrow is defined %}
+    <div class="eyebrow">{{ slide.eyebrow }}</div>
+    {% endif %}
     <div class="title">{{ slide.title }}</div>
     {% if slide.subtitle is defined %}
     <div class="subtitle">{{ slide.subtitle }}</div>
     {% endif %}
     {% if slide.body is defined %}
     <div class="body">{{ slide.body }}</div>
+    {% endif %}
+    {% if slide.when is defined %}
+    <div class="when">{{ slide.when }}</div>
+    {% endif %}
+    {% if slide.location is defined %}
+    <div class="location-badge">
+        <span class="loc-name">{{ slide.location }}</span>
+        {% if slide.postcode is defined %}<span class="loc-postcode">{{ slide.postcode }}</span>{% endif %}
+    </div>
     {% endif %}
 {% endblock %}

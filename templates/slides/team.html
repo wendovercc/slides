@@ -8,6 +8,12 @@
         line-height: 1.2;
         text-shadow: 0 3px 6px rgba(0,0,0,0.4);
     }
+    .subtitle {
+        font-size: var(--t-md);
+        color: var(--accent);
+        margin-top: 0.3vh;
+        letter-spacing: 0.04em;
+    }
     .panels {
         flex: 1;
         min-height: 0;
@@ -445,7 +451,8 @@
         'top_bowling': 'Bowling',
     } %}
     <div class="header">
-        <div class="title">{{ slide.title }}</div>
+        <div class="title">Team Focus</div>
+        <div class="subtitle">{{ slide.title }}</div>
     </div>
     <nav class="panel-nav">
         {% for tab in slide._panels %}

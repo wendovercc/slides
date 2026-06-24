@@ -1,9 +1,9 @@
 {
-  "title": "League Tables 2026",
+  "title": "League Standings",
   "homepage_rank": 1,
   "refresh_interval_seconds": 300,
   "slides": [
-    { "slug": "sponsors" },
+    { "slug": "leagues-all" },
 
     { "slug": "league-table-1st-xi" },
     { "slug": "league-table-2nd-xi" },

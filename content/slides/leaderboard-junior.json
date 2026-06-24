@@ -1,0 +1,14 @@
+{
+  "template": "leaderboard",
+  "title": "Leaderboards",
+  "subtitle": "Junior Cricket · 2026",
+  "teams": [
+    "u17-spitfires",
+    "u15-hurricanes",
+    "u15-spitfires",
+    "u14-hurricanes",
+    "u13-girls",
+    "u13-hurricanes",
+    "u13-spitfires"
+  ]
+}

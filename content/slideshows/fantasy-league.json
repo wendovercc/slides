@@ -3,8 +3,6 @@
   "homepage_rank": 4,
   "refresh_interval_seconds": 300,
   "slides": [
-    { "slug": "sponsors" },
-    { "slug": "honours" },
     { "slug": "fantasy-league" }
   ]
 }

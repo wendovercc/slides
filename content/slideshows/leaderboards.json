@@ -4,22 +4,22 @@
   "refresh_interval_seconds": 300,
   "slides": [
     {
-      "slug": "sponsors"
-    },
-    {
       "slug": "honours"
     },
     {
-      "slug": "leaderboard"
+      "slug": "leaderboard-senior"
     },
     {
-      "slug": "leaderboard-senior"
+      "slug": "leaderboard-junior"
     },
     {
       "slug": "leaderboard-1st-xi"
     },
     {
       "slug": "leaderboard-2nd-xi"
+    },
+    {
+      "slug": "leaderboard-friendly-xi"
     },
     {
       "slug": "leaderboard-u17-spitfires"

@@ -25,6 +25,7 @@
   },
   "homepage_cards": [
     { "type": "youtube", "title": "Live Streams", "url": "https://www.youtube.com/@Wendovercclive", "handle": "Wendovercclive", "channel_id": "UCbOTi2XUTaVHtQC7ca7Ac8Q" },
-    { "type": "external", "url": "https://www.wendovercc.org", "title": "Club Website", "description": "wendovercc.org" }
+    { "type": "external", "url": "https://www.wendovercc.org", "title": "Club Website", "description": "wendovercc.org" },
+    { "type": "external", "url": "https://wendovercc.play-cricket.com/home", "title": "Play Cricket", "description": "wendovercc.play-cricket.com" }
   ]
 }
