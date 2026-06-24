@@ -225,7 +225,7 @@
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 0.4vh;
+        gap: 0.15vh;
         justify-content: flex-start;
         padding-left: 1vw;
         border-left: 1px solid rgba(255,255,255,0.08);
@@ -245,6 +245,12 @@
     .strip-meta > span, .fix-meta > span { opacity: 0.55; }
     .strip-meta > .home-pill, .strip-meta > .away-pill, .strip-meta > .result-pill,
     .fix-meta > .home-pill, .fix-meta > .away-pill { opacity: 1; }
+    /* Gold date label — the tile echo of the announcement slide's gold date line. */
+    .strip-meta > .meta-date, .fix-meta > .meta-date {
+        opacity: 1;
+        color: var(--accent);
+        font-weight: 700;
+    }
     .strip-meta .spacer { flex: 1; }
     .home-pill, .away-pill {
         background: rgba(60,180,80,0.3);
@@ -267,7 +273,7 @@
     .result-row {
         display: flex;
         justify-content: flex-end;
-        margin-bottom: 0.8vh;
+        margin-bottom: 0.5vh;
     }
     .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
     .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
@@ -289,11 +295,13 @@
         opacity: 0.55;
         margin-left: 0.6vw;
     }
+    /* Innings lines are supporting detail beneath the opposition headline — kept
+       at --t-sm so two innings + the meta row and opposition fit the 16vh tile. */
     .strip-score {
         display: flex;
         gap: 0.6vw;
         align-items: baseline;
-        font-size: var(--t-md);
+        font-size: var(--t-sm);
         font-variant-numeric: tabular-nums;
         opacity: 0.85;
     }
@@ -309,17 +317,20 @@
         display: flex;
         flex-direction: column;
     }
+    /* Name and the gold headline figure run at the same size (--t-sm); the figure
+       stays the highlight through weight and colour, not size. Icon and text are
+       centre-aligned so the discipline icon reads level with the name. */
     .hl-line {
         display: grid;
         grid-template-columns: 1.6vw 1fr auto;
         gap: 0 0.6vw;
-        align-items: baseline;
-        font-size: var(--t-md);
+        align-items: center;
+        font-size: var(--t-sm);
+        line-height: 1.05;
     }
     .perf-icon {
-        width: 1.5vw;
-        height: 1.5vw;
-        vertical-align: middle;
+        width: 1.4vw;
+        height: 1.4vw;
         color: rgba(255,255,255,0.85);
     }
     .hl-line .perf-icon-cell {
@@ -335,8 +346,10 @@
     }
     .hl-detail {
         padding-left: 2.2vw;
+        margin-top: -0.2vh;
         font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
+        line-height: 1.0;
         opacity: 0.55;
         letter-spacing: 0.04em;
     }
@@ -371,36 +384,31 @@
         opacity: 0.55;
         margin-left: 0.6vw;
     }
-    /* Time @ ground: same typography as the Form tab innings row */
-    .fix-when-where {
-        font-size: var(--t-md);
-        font-variant-numeric: tabular-nums;
-        opacity: 0.85;
+    /* Location docks to the bottom-left of the card (the date+time live up in the
+       meta row), like an address anchor under the fixture. */
+    .fix-where {
+        margin-top: auto;
+        min-width: 0;
     }
-    .fix-rrow {
-        display: grid;
-        grid-template-columns: 1.6vw 1fr auto;
-        gap: 0 0.6vw;
-        align-items: center;
-        font-size: var(--t-md);
-    }
-    .fix-rrow .rrow-icon {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .fix-rrow .rrow-name {
-        overflow: hidden;
+    /* Inverted location badge (navy on gold) — the tile-sized echo of the
+       announcement slide's .location-badge. */
+    .loc-badge {
+        display: inline-block;
+        min-width: 0;
+        max-width: 100%;
+        background: var(--accent);
+        color: var(--navy-1);
+        font-size: var(--t-xs);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 0.2vh 0.7vw;
+        border-radius: 3px;
         white-space: nowrap;
+        overflow: hidden;
         text-overflow: ellipsis;
-        opacity: 0.85;
-    }
-    .fix-rrow .rrow-stat {
-        font-variant-numeric: tabular-nums;
-        opacity: 0.8;
     }
     .form-badges { display: flex; gap: 0.25vw; flex-wrap: wrap; }
-    .fix-form-row { margin-bottom: 0.6vh; }
+    .fix-form-row { margin-bottom: 0.3vh; }
     .badge {
         display: inline-block;
         width: 1.6vw; height: 1.6vw; line-height: 1.6vw;
@@ -427,19 +435,32 @@
     {%- macro perf_icon(category) -%}
         {%- if category == 'bat' -%}
         <svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <rect x="8.5" y="2.5" width="7" height="13" rx="1.5" fill="currentColor"/>
-            <rect x="11" y="15.5" width="2" height="6" rx="0.5" fill="currentColor"/>
+            <g transform="rotate(45 12 12)" fill="currentColor">
+                <rect x="8.8" y="6.6" width="6.4" height="12" rx="3"/>
+                <rect x="10.6" y="2.2" width="2.8" height="5.2" rx="1.4"/>
+            </g>
         </svg>
         {%- elif category == 'bowl' -%}
         <svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="7.5" fill="#cc3a3a"/>
-            <path d="M5 10 Q 12 13 19 10" stroke="rgba(255,255,255,0.75)" stroke-width="0.6" fill="none"/>
-            <path d="M5 14 Q 12 11 19 14" stroke="rgba(255,255,255,0.75)" stroke-width="0.6" fill="none"/>
+            <circle cx="12" cy="12" r="8" fill="currentColor"/>
+            <g fill="none" stroke="#0a1c3a" stroke-width="1.1" stroke-linecap="round" opacity="0.55">
+                <path d="M12 4.2 Q 14 12 12 19.8"/>
+                <path d="M10.7 6.7 l2.6 0.5"/>
+                <path d="M10.2 9.3 l2.9 0.4"/>
+                <path d="M10.1 12 l3 0"/>
+                <path d="M10.2 14.7 l2.9 -0.4"/>
+                <path d="M10.7 17.3 l2.6 -0.5"/>
+            </g>
         </svg>
         {%- elif category == 'field' -%}
         <svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M7 14 Q 7 7 12 7 Q 17 7 17 14 L 17 17 Q 17 20 14 20 L 10 20 Q 7 20 7 17 Z" fill="currentColor"/>
-            <rect x="3.5" y="11" width="3.5" height="4" rx="1" fill="currentColor"/>
+            <g fill="currentColor">
+                <rect x="6" y="7" width="1.9" height="13" rx="0.95"/>
+                <rect x="11.05" y="7" width="1.9" height="13" rx="0.95"/>
+                <rect x="16.1" y="7" width="1.9" height="13" rx="0.95"/>
+                <rect x="5.4" y="5.3" width="6.3" height="1.6" rx="0.8"/>
+                <rect x="12.3" y="5.3" width="6.3" height="1.6" rx="0.8"/>
+            </g>
         </svg>
         {%- endif -%}
     {%- endmacro %}
@@ -509,7 +530,7 @@
                     <div class="strip">
                         <div class="tile-left">
                             <div class="strip-meta">
-                                <span>{{ r.date_label }}</span>
+                                <span class="meta-date">{{ r.date_label }}</span>
                                 {% if r.is_home %}<span class="home-pill">Home</span>
                                 {% else %}<span class="away-pill">Away</span>{% endif %}
                             </div>
@@ -556,18 +577,16 @@
                     <div class="fix-strip">
                         <div class="tile-left">
                             <div class="fix-meta">
-                                <span>{{ f.date_label }}</span>
+                                <span class="meta-date">{{ f.date_label }}{% if f.match_time %} · {{ f.match_time }}{% endif %}</span>
                                 {% if f.is_home %}<span class="home-pill">Home</span>
                                 {% else %}<span class="away-pill">Away</span>{% endif %}
                             </div>
                             <div class="fix-opp">
                                 {{ f.opp_club_name }}{% if f.opp_team_name %}<span class="opp-sub">{{ f.opp_team_name }}</span>{% endif %}
                             </div>
-                            {% if f.match_time or f.ground_name %}
-                            <div class="fix-when-where">
-                                {%- if f.match_time %}{{ f.match_time }}{% endif -%}
-                                {%- if f.match_time and f.ground_name %} @ {% endif -%}
-                                {%- if f.ground_name %}{{ f.ground_name }}{% endif -%}
+                            {% if f.ground_name %}
+                            <div class="fix-where">
+                                <span class="loc-badge">{{ f.ground_name }}</span>
                             </div>
                             {% endif %}
                         </div>
@@ -586,8 +605,11 @@
                                     <div class="hl-line">
                                         <span class="perf-icon-cell">{{ perf_icon('bat') }}</span>
                                         <span class="name">{{ f.top_bat.name }}</span>
+                                        <span class="pts">{{ f.top_bat.runs }} runs</span>
                                     </div>
-                                    <div class="hl-detail">{{ f.top_bat.runs }} runs{% if f.top_bat.average is not none %} · Average {{ f.top_bat.average }}{% endif %}</div>
+                                    {% if f.top_bat.average is not none %}
+                                    <div class="hl-detail">Average {{ f.top_bat.average }}</div>
+                                    {% endif %}
                                 </div>
                                 {% endif %}
                                 {% if f.top_bowl %}
@@ -595,8 +617,11 @@
                                     <div class="hl-line">
                                         <span class="perf-icon-cell">{{ perf_icon('bowl') }}</span>
                                         <span class="name">{{ f.top_bowl.name }}</span>
+                                        <span class="pts">{{ f.top_bowl.wickets }} wkts</span>
                                     </div>
-                                    <div class="hl-detail">{{ f.top_bowl.wickets }} wickets{% if f.top_bowl.average is not none %} · Average {{ f.top_bowl.average }}{% endif %}</div>
+                                    {% if f.top_bowl.average is not none %}
+                                    <div class="hl-detail">Average {{ f.top_bowl.average }}</div>
+                                    {% endif %}
                                 </div>
                                 {% endif %}
                             {% else %}
