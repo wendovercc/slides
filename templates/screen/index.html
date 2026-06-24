@@ -123,16 +123,14 @@
             font-size: clamp(13px, 1.3vw, 16px);
             line-height: 1.4;
         }
-        .card-ctx { display: flex; flex-direction: column; gap: 7px; margin-top: 2px; }
-        .ctx-row {
-            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        .card-ctx { display: flex; flex-direction: column; gap: clamp(10px, 1.4vh, 16px); margin-top: 2px; }
+        .ctx-item { display: flex; flex-direction: column; gap: 4px; }
+        .ctx-line {
+            display: flex; align-items: center; gap: 8px;
             font-size: clamp(12px, 1.2vw, 15px);
         }
-        .ctx-when {
-            color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
-            font-size: 0.78em; width: 3.4em; flex-shrink: 0;
-        }
         .ctx-meta { color: #fff; }
+        .ctx-teams { color: #fff; font-size: clamp(12px, 1.2vw, 15px); padding-left: 2px; }
         .ctx-time { color: var(--muted); margin-left: auto; font-size: 0.9em; white-space: nowrap; }
         .badge {
             padding: 2px 9px; border-radius: 999px; font-size: 0.82em; font-weight: 700;
@@ -153,6 +151,14 @@
             background: #fff; animation: live-pulse 1.4s ease-in-out infinite;
         }
         @keyframes live-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+        /* Live/now vs next cue — mirrors the Live Streams card: the active "now"
+           item gets the pulsing dot, upcoming "next" items are muted. */
+        .ctx-live .badge { display: inline-flex; align-items: center; gap: 5px; }
+        .ctx-live .badge::before {
+            content: ''; width: 7px; height: 7px; border-radius: 50%;
+            background: #fff; animation: live-pulse 1.4s ease-in-out infinite;
+        }
+        .ctx-next { opacity: 0.6; }
     </style>
 </head>
 <body>
@@ -187,15 +193,17 @@
         const TEAM_NAMES = {{ team_names | tojson }};
         const YT_DATA = {{ youtube | tojson }};
         const TYPE_LABELS = { match: 'Match', training: 'Training', idle: 'Quiet', hire: 'Hire', club_event: 'Event', section_event: 'Event', live: 'Live', scheduled: 'Scheduled', offair: 'Off air' };
+        const MATCH_PHASE_LABELS = { warm_up: 'Match warm up', main: 'Match play', wind_down: 'Match wind down' };
         const SECTION_LABELS = { senior: 'Seniors', junior: 'Juniors' };
 
         function esc(s) {
             return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
         }
-        function badge(type) {
+        function badge(type, phase) {
             const cls = ['match', 'training', 'idle', 'hire', 'live', 'scheduled'].includes(type)
                 ? type : (String(type).endsWith('event') ? 'event' : 'idle');
-            return `<span class="badge badge-${cls}">${TYPE_LABELS[type] || type}</span>`;
+            const label = (type === 'match' && MATCH_PHASE_LABELS[phase]) || TYPE_LABELS[type] || type;
+            return `<span class="badge badge-${cls}">${label}</span>`;
         }
         function metaText(ctx) {
             const a = ctx.audience || {};
@@ -212,13 +220,18 @@
             const day = new Date(d); day.setHours(0, 0, 0, 0);
             const diff = Math.round((day - today) / 86400000);
             const t = d.toTimeString().slice(0, 5);
-            if (diff === 0) return `Today ${t}`;
+            if (diff === 0) return t;
             if (diff === 1) return `Tomorrow ${t}`;
             return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ` ${t}`;
         }
-        function ctxRow(when, type, meta, time) {
-            return `<div class="ctx-row"><span class="ctx-when">${when}</span>${badge(type)}${meta}` +
-                (time ? `<span class="ctx-time">${time}</span>` : '') + `</div>`;
+        const NOT_LIVE = new Set(['idle', 'offair']);
+        function ctxItem(type, phase, meta, time, kind) {
+            const live = kind === 'now' && !NOT_LIVE.has(type);
+            const cls = 'ctx-item' + (live ? ' ctx-live' : '') + (kind === 'next' ? ' ctx-next' : '');
+            const timeStr = live ? null : time;
+            return `<div class="${cls}"><div class="ctx-line">${badge(type, phase)}` +
+                (timeStr ? `<span class="ctx-time">${timeStr}</span>` : '') + `</div>` +
+                (meta ? `<div class="ctx-teams">${meta}</div>` : '') + `</div>`;
         }
 
         async function fillScreens() {
@@ -233,13 +246,24 @@
             document.querySelectorAll('.card-ctx[data-loc-id]').forEach(el => {
                 const loc = byId[el.dataset.locId];
                 if (!loc) return;
-                const { context } = WccContext.resolveContext(calendar, loc);
-                let html = ctxRow('Now', context.type, metaText(context));
+                const items = [];
+                const { context, contextStart } = WccContext.resolveContext(calendar, loc);
+                items.push({ type: context.type, phase: context.phase, meta: metaText(context), time: contextStart, kind: 'now' });
+                // Show the rest of today's schedule; if nothing remains today, fall
+                // back to the next upcoming entry so a card always shows what's next.
+                const todayStr = new Date().toISOString().slice(0, 10);
                 const nexts = WccContext.findNextContexts(calendar, loc.id).filter(n => n.type !== 'idle');
-                if (nexts.length) {
-                    const nc = nexts[0];
+                let upcoming = nexts.filter(n => n.dateStr === todayStr);
+                if (!upcoming.length && nexts.length) upcoming = [nexts[0]];
+                for (const nc of upcoming) {
                     const nctx = WccContext.ctxFromNext(nc, loc);
-                    html += ctxRow('Next', nctx.type, metaText(nctx), fmtWhen(nc.start));
+                    items.push({ type: nctx.type, phase: nctx.phase, meta: metaText(nctx), time: fmtWhen(nc.start), kind: 'next' });
+                }
+                // Drop the section/team row when it repeats the item directly above.
+                let prevMeta = null, html = '';
+                for (const it of items) {
+                    html += ctxItem(it.type, it.phase, it.meta === prevMeta ? '' : it.meta, it.time, it.kind);
+                    prevMeta = it.meta;
                 }
                 el.innerHTML = html;
             });
@@ -266,12 +290,12 @@
             }
 
             let html = live
-                ? ctxRow('Now', 'live', `<span class="ctx-meta">${esc(live.title)}</span>`)
-                : ctxRow('Now', 'offair', '');
+                ? ctxItem('live', null, `<span class="ctx-meta">${esc(live.title)}</span>`, null, 'now')
+                : ctxItem('offair', null, '', null, 'now');
             const future = upcoming.filter(u => u.start > now);
             if (future.length) {
                 const n = future[0];
-                html += ctxRow('Next', 'scheduled', `<span class="ctx-meta">${esc(n.title)}</span>`, fmtWhen(n.start));
+                html += ctxItem('scheduled', null, `<span class="ctx-meta">${esc(n.title)}</span>`, fmtWhen(n.start), 'next');
             }
             el.innerHTML = html;
         }
