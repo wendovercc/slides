@@ -426,7 +426,7 @@ def main():
         home_id = str(match.get("home_team_id", ""))
         away_id = str(match.get("away_team_id", ""))
         match_date = parse_date(match.get("match_date", ""))
-        if not match_date or match_date <= today:
+        if not match_date or match_date < today:
             continue
         for our_pc_id, team in teams_by_pc_id.items():
             if our_pc_id not in (home_id, away_id):
