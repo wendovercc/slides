@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    {% include "_pwa_head.html" %}
     <title>{{ location.name }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -166,6 +167,8 @@
     </div>
     <div class="about-footer">Built {{ built_at }} &nbsp;·&nbsp; <span id="about-reload"></span></div>
 </div>
+<script src="/assets/js/context.js"></script>
+<script src="/assets/js/player-core.js"></script>
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');
@@ -179,39 +182,6 @@ function applyDebugScale() {
     document.querySelectorAll('iframe').forEach(f => f.style.transform = `scale(${scale})`);
 }
 window.addEventListener('resize', applyDebugScale);
-
-function parsePhaseTime(dateStr, timeStr) {
-    if (timeStr === '24:00') {
-        const d = new Date(`${dateStr}T00:00:00`);
-        d.setDate(d.getDate() + 1);
-        return d;
-    }
-    return new Date(`${dateStr}T${timeStr}:00`);
-}
-
-function resolveContext(calendar, loc) {
-    const today = new Date().toISOString().slice(0, 10);
-    const timeNow = new Date().toTimeString().slice(0, 5);
-    const entries = calendar.entries?.[loc.id]?.dates?.[today] ?? [];
-
-    for (const entry of entries) {
-        for (const [phase, win] of Object.entries(entry.phases)) {
-            if (timeNow >= win.start && timeNow < win.end) {
-                return {
-                    context: { type: entry.type, phase, audience: entry.audience, detail: entry.detail },
-                    slideshowSlug: entry.slideshow ?? loc.slideshow,
-                    contextStart: win.start,
-                    contextEnd: parsePhaseTime(today, win.end),
-                };
-            }
-        }
-    }
-    return {
-        context: { type: 'idle', phase: null, audience: loc.default_context ?? { section: 'all' }, detail: {} },
-        slideshowSlug: loc.slideshow,
-        contextEnd: null,
-    };
-}
 
 function matchesContext(s, ctx) {
     const conds = s.show_when;
@@ -236,49 +206,6 @@ function slidesForCtx(show, ctx, today) {
         .filter(s => matchesContext(s, ctx));
 }
 
-function ctxFromNext(nc, loc) {
-    if (nc.type === 'idle') {
-        return { type: 'idle', phase: null, audience: loc.default_context ?? { section: 'all' }, detail: {} };
-    }
-    return { type: nc.type, phase: nc.phase, audience: nc.entry.audience, detail: nc.entry.detail };
-}
-
-function findNextContexts(calendar, locId) {
-    const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    const timeNow = now.toTimeString().slice(0, 5);
-    const cutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const locDates = calendar.entries?.[locId]?.dates ?? {};
-
-    const upcoming = [];
-    for (const dateStr of Object.keys(locDates).sort()) {
-        if (dateStr < today || dateStr > cutoff) continue;
-        for (const entry of locDates[dateStr]) {
-            for (const phase of ['warm_up', 'main', 'wind_down']) {
-                const win = entry.phases?.[phase];
-                if (!win) continue;
-                if (dateStr === today && win.start <= timeNow) continue;
-                upcoming.push({
-                    type: entry.type, phase, entry, dateStr,
-                    start: parsePhaseTime(dateStr, win.start),
-                    end:   parsePhaseTime(dateStr, win.end),
-                });
-            }
-        }
-    }
-    upcoming.sort((a, b) => a.start - b.start);
-
-    const results = [];
-    for (let i = 0; i < upcoming.length; i++) {
-        const prev = upcoming[i - 1];
-        const cur  = upcoming[i];
-        if (prev && cur.start > prev.end) {
-            results.push({ type: 'idle', start: prev.end, end: cur.start });
-        }
-        results.push(cur);
-    }
-    return results;
-}
 
 function fmtDuration(ms) {
     const totalMins = Math.ceil(ms / 60000);
@@ -336,7 +263,7 @@ function renderPanel(loc, ctx, slideshowSlug, show, nextCtxs, today, contextEnd)
 
     // Next context rows — show start time + static duration
     nextCtxs.forEach((nc, i) => {
-        const ncCtx = ctxFromNext(nc, loc);
+        const ncCtx = WccContext.ctxFromNext(nc, loc);
         const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         if (nc.type !== 'idle') {
             const dow = DAYS[new Date(`${nc.dateStr}T12:00:00`).getDay()];
@@ -383,7 +310,7 @@ async function init() {
     const loc = locationsData.locations.find(l => l.id === LOCATION_ID);
     if (!loc) return;
 
-    const { context, slideshowSlug, contextStart, contextEnd } = resolveContext(calendar, loc);
+    const { context, slideshowSlug, contextStart, contextEnd } = WccContext.resolveContext(calendar, loc);
     if (!slideshowSlug) return;
 
     if (contextStart) {
@@ -396,7 +323,7 @@ async function init() {
     const slides = slidesForCtx(show, context, today);
 
     if (PREVIEW) {
-        const nextCtxs = findNextContexts(calendar, LOCATION_ID);
+        const nextCtxs = WccContext.findNextContexts(calendar, LOCATION_ID);
         renderPanel(loc, context, slideshowSlug, show, nextCtxs, today, contextEnd);
     }
 
@@ -410,40 +337,19 @@ async function init() {
     applyDebugScale();
 
     const frames = document.querySelectorAll('iframe');
-    let current = 0;
-    let timer = null;
 
-    function showSlide(i) {
-        frames.forEach((f, j) => f.classList.toggle('active', j === i));
-        _currentSlug = slides[i].slug;
-        if (PREVIEW) markCurrentSlide(slides, i);
-    }
-
-    function schedule() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(advance, slides[current].duration * 1000);
-    }
-
-    function advance() {
-        current = (current + 1) % slides.length;
-        showSlide(current);
-        schedule();
-    }
-
-    document.addEventListener('keydown', e => {
-        if (e.key === 'ArrowRight') {
-            current = (current + 1) % slides.length;
-            showSlide(current);
-            schedule();
-        } else if (e.key === 'ArrowLeft') {
-            current = (current - 1 + slides.length) % slides.length;
-            showSlide(current);
-            schedule();
-        }
+    WccPlayer.start({
+        items: slides.map((s, j) => ({
+            slug: s.slug,
+            duration: s.duration,
+            panel_duration: s.panel_duration,
+            frame: frames[j],
+        })),
+        onShow: i => {
+            _currentSlug = slides[i].slug;
+            if (PREVIEW) markCurrentSlide(slides, i);
+        },
     });
-
-    showSlide(0);
-    schedule();
 
     const reloadMs = show.refresh_interval_seconds * 1000;
     setTimeout(() => window.location.reload(), reloadMs);

@@ -278,30 +278,6 @@
         </div>
 
     </div>
-    <script>
-        const panelDuration = {{ slide.panel_duration }};
-        const panels = Array.from(document.querySelectorAll('.panel'));
-        const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
-        let current = 0;
-        document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
-        function showPanel(i) {
-            panels[current].classList.remove('panel-active');
-            tabs[current].classList.remove('active');
-            void tabs[i].offsetWidth;
-            panels[i].classList.add('panel-active');
-            tabs[i].classList.add('active');
-            current = i;
-        }
-        const autoRotate = setInterval(() => showPanel((current + 1) % panels.length), panelDuration * 1000);
-
-        document.addEventListener('keydown', e => {
-            if (e.key === 'ArrowRight' && current < panels.length - 1) {
-                clearInterval(autoRotate);
-                showPanel(current + 1);
-            } else if (e.key === 'ArrowLeft' && current > 0) {
-                clearInterval(autoRotate);
-                showPanel(current - 1);
-            }
-        });
-    </script>
+    <script>window.WCC_CAROUSEL = { panelDuration: {{ slide.panel_duration }}, panelSelector: '.panel' };</script>
+    <script src="/assets/js/carousel.js"></script>
 {% endblock %}

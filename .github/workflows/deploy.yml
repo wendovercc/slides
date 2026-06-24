@@ -55,6 +55,10 @@ jobs:
           CS365_USERNAME: ${{ secrets.CS365_USERNAME }}
           CS365_PASSWORD: ${{ secrets.CS365_PASSWORD }}
 
+      - run: python scripts/fetch_youtube_live.py
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+
       - run: python scripts/build.py
 
       - uses: actions/upload-pages-artifact@v3

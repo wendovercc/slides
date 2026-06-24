@@ -64,6 +64,7 @@
             width: auto;
             object-fit: contain;
         }
+        .club-meta { display: flex; flex-direction: column; gap: 0.3vh; }
         .club-name {
             font-family: 'Lato', Arial, sans-serif;
             font-size: var(--t-xxs);
@@ -72,6 +73,13 @@
             opacity: 0.8;
             white-space: nowrap;
         }
+        .club-watch {
+            font-family: 'Lato', Arial, sans-serif;
+            font-size: var(--t-xxs);
+            color: var(--muted);
+            white-space: nowrap;
+        }
+        .club-watch strong { color: var(--accent); font-weight: 700; }
         .sponsor-logos {
             display: flex;
             gap: 1.5vw;
@@ -87,14 +95,20 @@
             border-radius: 3px;
             padding: 2px 6px;
         }
+        /* Interactive pause: freeze the active tab's gold underline at full width */
+        body.paused .panel-tab.active::after { animation: none; transform: scaleX(1); }
         {% block styles %}{% endblock %}
     </style>
+    <script src="/assets/js/slide-bridge.js"></script>
 </head>
 <body>
     <div class="slide">{% block content %}{% endblock %}</div>
     <footer class="footer-strip">
         <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
-        <span class="club-name">Wendover Cricket Club</span>
+        <div class="club-meta">
+            <span class="club-name">Wendover Cricket Club</span>
+            <span class="club-watch">Watch anywhere · <strong>{{ site_url }}</strong></span>
+        </div>
         <div class="sponsor-logos">
             {% for s in sponsors %}
             <img class="sponsor-logo" src="{{ s.src }}" alt="{{ s.name }}">

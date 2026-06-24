@@ -418,6 +418,47 @@ def generate_qr_data_url(url: str) -> str:
     return f"data:image/png;base64,{data}"
 
 
+def _compose_icon(logo, size, pad_ratio, bg=(15, 35, 70)):
+    """Centre the club logo on a navy square. pad_ratio is the fraction of the
+    canvas left as margin on the tighter axis (maskable icons need more)."""
+    from PIL import Image
+
+    canvas = Image.new("RGBA", (size, size), bg + (255,))
+    inner = int(size * (1 - 2 * pad_ratio))
+    lw, lh = logo.size
+    scale = min(inner / lw, inner / lh)
+    new = logo.resize((max(1, round(lw * scale)), max(1, round(lh * scale))), Image.LANCZOS)
+    canvas.alpha_composite(new, ((size - new.width) // 2, (size - new.height) // 2))
+    return canvas
+
+
+def build_pwa(env):
+    """Generate home-screen icons and render the web manifest."""
+    from PIL import Image
+
+    config = load_config()
+    preview_cfg = config.get("preview", {})
+
+    logo = Image.open(ASSETS / "images" / "wcc-logo.png").convert("RGBA")
+    icons_dir = SITE / "assets" / "icons"
+    icons_dir.mkdir(parents=True, exist_ok=True)
+
+    # (filename, size, pad_ratio) — maskable gets a wider safe margin so the
+    # logo survives the platform's circle/squircle crop.
+    for name, size, pad in [
+        ("apple-touch-icon.png", 180, 0.14),
+        ("icon-192.png", 192, 0.14),
+        ("icon-512.png", 512, 0.14),
+        ("icon-512-maskable.png", 512, 0.22),
+    ]:
+        _compose_icon(logo, size, pad).save(icons_dir / name)
+    print("  assets/icons/*")
+
+    manifest = env.get_template("manifest.webmanifest").render(preview=preview_cfg)
+    (SITE / "manifest.webmanifest").write_text(manifest)
+    print("  manifest.webmanifest")
+
+
 def clean():
     if SITE.exists():
         shutil.rmtree(SITE)
@@ -442,6 +483,10 @@ def make_env():
         for p in sorted(sponsor_dir.glob("*.*"))
         if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg"}
     ]
+    # Display form of the site URL (no scheme/trailing slash), shown under the
+    # club name in slide footers/sidebars and on the home page.
+    site_url = load_config().get("preview", {}).get("site_url", "")
+    env.globals["site_url"] = site_url.split("//")[-1].rstrip("/")
     return env
 
 
@@ -1598,6 +1643,7 @@ def build_slides(env):
             "slide_active": slide.get("active", True),
             "slide_expires": slide.get("expires"),
             "duration": slide["duration"],
+            "panel_duration": panel_duration,
         }
 
         template = env.get_template(f"slides/{slide['template']}.html")
@@ -1652,7 +1698,12 @@ def build_slideshows(env, slide_meta):
         print(f"  slideshow/{slug}")
 
         if "homepage_rank" in show:
-            homepage_shows.append({"slug": slug, "title": show["title"], "rank": show["homepage_rank"]})
+            homepage_shows.append({
+                "slug": slug,
+                "title": show["title"],
+                "rank": show["homepage_rank"],
+                "description": show.get("description"),
+            })
 
     return sorted(homepage_shows, key=lambda x: x["rank"])
 
@@ -1673,11 +1724,52 @@ def build_screen_locations(env, homepage_shows=None):
     qr_data_url = generate_qr_data_url(site_url) if site_url else ""
 
     screen_locs = [l for l in locs_data["locations"] if l.get("screen")]
+    team_names = {tid: t.get("name", tid) for tid, t in load_teams().items()}
+
+    # Unified home-page card list. Card types — screen, slideshow, external,
+    # youtube — each rendered with a type icon. Screens and homepage slideshows
+    # are derived automatically; extra `external`/`youtube` cards come from
+    # config.json "homepage_cards".
+    cards = []
+    for loc in screen_locs:
+        cards.append({
+            "type": "screen",
+            "title": loc["name"],
+            "href": f"/screen/{loc['id']}/?interactive",
+            "loc_id": loc["id"],
+        })
+    for show in (homepage_shows or []):
+        cards.append({
+            "type": "slideshow",
+            "title": show["title"],
+            "href": f"/slideshow/{show['slug']}/?interactive",
+            "description": show.get("description"),
+        })
+    youtube_data = None
+    for c in config.get("homepage_cards", []):
+        if c.get("type") == "external" and c.get("url"):
+            cards.append({
+                "type": "external",
+                "title": c.get("title", c["url"]),
+                "href": c["url"],
+                "target": "_blank",
+                "description": c.get("description"),
+            })
+        elif c.get("type") == "youtube" and c.get("url"):
+            yt_path = FETCHED / "youtube_live.json"
+            yt = json.loads(yt_path.read_text()) if yt_path.exists() else {}
+            cards.append({
+                "type": "youtube",
+                "title": c.get("title", "Live Streams"),
+                "href": c["url"],
+                "target": "_blank",
+            })
+            youtube_data = {"live": yt.get("live", []), "upcoming": yt.get("upcoming", [])}
 
     index_tmpl = env.get_template("screen/index.html")
     (SITE / "index.html").write_text(
         index_tmpl.render(preview=preview_cfg, built_at=built_at,
-                          screen_locs=screen_locs, homepage_shows=homepage_shows or [])
+                          cards=cards, team_names=team_names, youtube=youtube_data)
     )
     print("  index.html")
 
@@ -1698,6 +1790,9 @@ if __name__ == "__main__":
     copy_assets()
 
     env = make_env()
+
+    print("Building PWA icons and manifest...")
+    build_pwa(env)
 
     print("Building slides...")
     slide_meta = build_slides(env)

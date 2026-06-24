@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
+    {% include "_pwa_head.html" %}
     <title>{{ show.title }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -119,7 +120,7 @@
 </head>
 <body>
     <div id="dbg"></div>
-    <div id="iframe-overlay" onclick="window.open(`/slide/${slides[current].slug}/`, '_blank')"></div>
+    <div id="iframe-overlay" onclick="openCurrentSlide()"></div>
     <div id="about">
         <div class="about-title">{{ preview.title }}</div>
         <div class="about-body">
@@ -141,9 +142,13 @@
     <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
     {% endfor %}
 
+    <script src="/assets/js/player-core.js"></script>
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
+
+        let _currentSlug = null;
+        function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }
 
         function applyDebugScale() {
             if (!PREVIEW) return;
@@ -166,39 +171,6 @@
             return { ...s, _i: i, _shown: !reason, _reason: reason };
         });
         const slides = allSlides.filter(s => s._shown);
-
-        let current = 0;
-        let timer = null;
-
-        function showSlide(index) {
-            document.querySelectorAll('iframe').forEach((f, i) => {
-                f.classList.toggle('active', i === slides[index]._i);
-            });
-            if (PREVIEW) markCurrentSlide(index);
-        }
-
-        function schedule() {
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(advance, slides[current].duration * 1000);
-        }
-
-        function advance() {
-            current = (current + 1) % slides.length;
-            showSlide(current);
-            schedule();
-        }
-
-        document.addEventListener('keydown', e => {
-            if (e.key === 'ArrowRight') {
-                current = (current + 1) % slides.length;
-                showSlide(current);
-                schedule();
-            } else if (e.key === 'ArrowLeft') {
-                current = (current - 1 + slides.length) % slides.length;
-                showSlide(current);
-                schedule();
-            }
-        });
 
         function markCurrentSlide(idx) {
             document.querySelectorAll('#dbg-slides .slide-row').forEach(el => el.classList.remove('now'));
@@ -225,8 +197,15 @@
         if (PREVIEW) renderPanel();
 
         if (slides.length > 0) {
-            showSlide(0);
-            schedule();
+            WccPlayer.start({
+                items: slides.map(s => ({
+                    slug: s.slug,
+                    duration: s.duration,
+                    panel_duration: s.panel_duration,
+                    frame: document.getElementById(`frame-${s._i}`),
+                })),
+                onShow: idx => { _currentSlug = slides[idx].slug; if (PREVIEW) markCurrentSlide(idx); },
+            });
         }
 
         const reloadMs = {{ show.refresh_interval_seconds }} * 1000;

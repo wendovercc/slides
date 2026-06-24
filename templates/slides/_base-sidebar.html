@@ -72,6 +72,12 @@
             height: auto;
             object-fit: contain;
         }
+        .club-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.6vh;
+        }
         .club-name {
             font-family: 'Lato', Arial, sans-serif;
             font-size: var(--t-xxs);
@@ -80,6 +86,13 @@
             opacity: 0.8;
             text-align: center;
         }
+        .club-watch {
+            font-family: 'Lato', Arial, sans-serif;
+            font-size: var(--t-xxs);
+            color: var(--muted);
+            text-align: center;
+        }
+        .club-watch strong { color: var(--accent); font-weight: 700; }
         .sidebar-divider {
             width: 60%;
             height: 1px;
@@ -118,15 +131,21 @@
         }
         /* Carousel-style slides: breathing room between tab nav and table headers */
         .panel-nav { margin-bottom: 2.8vh; }
+        /* Interactive pause: freeze the active tab's gold underline at full width */
+        body.paused .panel-tab.active::after { animation: none; transform: scaleX(1); }
         {% block styles %}{% endblock %}
     </style>
+    <script src="/assets/js/slide-bridge.js"></script>
 </head>
 <body>
     <div class="layout-sidebar">
         <main class="slide-main">{% block content %}{% endblock %}</main>
         <aside class="slide-sidebar">
             <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
-            <span class="club-name">Wendover Cricket Club</span>
+            <div class="club-meta">
+                <span class="club-name">Wendover Cricket Club</span>
+                <span class="club-watch">Watch anywhere · <strong>{{ site_url }}</strong></span>
+            </div>
             <div class="sidebar-divider"></div>
             <span class="sponsor-heading">Please support our sponsors</span>
             <div class="sponsor-logos-vert">

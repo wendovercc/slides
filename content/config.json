@@ -22,5 +22,9 @@
     "match":    { "warm_up_mins": 120, "main_duration_mins": 210, "wind_down_mins": 180 },
     "training": { "warm_up_mins": 15,  "wind_down_mins": 30 },
     "hire":     { "warm_up_mins": 60,  "wind_down_mins": 60 }
-  }
+  },
+  "homepage_cards": [
+    { "type": "youtube", "title": "Live Streams", "url": "https://www.youtube.com/@Wendovercclive", "handle": "Wendovercclive", "channel_id": "UCbOTi2XUTaVHtQC7ca7Ac8Q" },
+    { "type": "external", "url": "https://www.wendovercc.org", "title": "Club Website", "description": "wendovercc.org" }
+  ]
 }

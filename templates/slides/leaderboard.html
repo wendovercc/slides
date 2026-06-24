@@ -229,20 +229,6 @@
         </div>
 
     </div>
-    <script>
-        const panelDuration = {{ slide.panel_duration }};
-        const panels = Array.from(document.querySelectorAll('.half'));
-        const tabs   = Array.from(document.querySelectorAll('.panel-tab'));
-        let current = 0;
-        document.querySelector('.panel-nav').style.setProperty('--panel-duration', panelDuration + 's');
-        function showPanel(i) {
-            panels[current].classList.remove('panel-active');
-            tabs[current].classList.remove('active');
-            void tabs[i].offsetWidth;
-            panels[i].classList.add('panel-active');
-            tabs[i].classList.add('active');
-            current = i;
-        }
-        setInterval(() => showPanel((current + 1) % panels.length), panelDuration * 1000);
-    </script>
+    <script>window.WCC_CAROUSEL = { panelDuration: {{ slide.panel_duration }}, panelSelector: '.half' };</script>
+    <script src="/assets/js/carousel.js"></script>
 {% endblock %}

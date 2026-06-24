@@ -83,19 +83,40 @@ timer.
 - Each panel is shown for `panel_duration` seconds — the same dwell a
   single-panel slide gets — so reading pace is constant regardless of how many
   panels a slide has. The slide's total on-screen time is *derived*:
-  `panel_duration × panel count`. The script block reads
-  `const panelDuration = {{ slide.panel_duration }}` and drives both the
-  rotation timer and the `--panel-duration` underline from it (see
-  `fantasy-league.html` for the canonical implementation). It does **not**
-  compute a per-panel slice from a total — that arithmetic now lives in the
-  build (see "Panel duration" below).
+  `panel_duration × panel count`. It does **not** compute a per-panel slice from
+  a total — that arithmetic lives in the build (see "Panel duration" below).
+- Rotation is handled by the shared **`assets/js/carousel.js`**, not a bespoke
+  inline script. Each carousel sets its config and loads the module (markup is
+  the standard `.panel-nav`/`.panel-tab` + panel selector):
+
+  ```html
+  <script>window.WCC_CAROUSEL = { panelDuration: {{ slide.panel_duration }}, panelSelector: '.panel' };</script>
+  <script src="/assets/js/carousel.js"></script>
+  ```
+
+  `panelSelector` is `.panel` (fantasy-league, team) or `.half` (honours,
+  leaderboard). `carousel.js` drives the rotation timer and the
+  `--panel-duration` underline, and registers a controller with the slide
+  bridge. Left alone (standalone/kiosk) it auto-rotates, wrapping.
 - The build must know a carousel's panel count to derive its total. Fixed-panel
   templates are listed in `FIXED_PANEL_COUNTS` (`scripts/build.py`); the
   data-driven `team` template publishes `slide["_panels"]` instead. A carousel
   with zero panels (no data this build) is skipped entirely.
-- Left/right arrow keys advance/retreat tabs and cancel the auto-rotation.
-  Boundaries are hard stops (no wrap) so slideshow-level nav remains
-  unambiguous if the slide is ever embedded with focusable keys.
+
+### Player coordination (slide bridge)
+
+Every slide loads **`assets/js/slide-bridge.js`** (from both bases). It reports
+the slide's panel count to the parent player and accepts navigation/pause
+commands, so the player can step through tabs and cross slide boundaries as one
+sequence (see the player section below / `player-core.js`).
+
+- Plain (single-panel) slides need no extra JS — the bridge defaults to one
+  panel. Carousels register their controller from `carousel.js`.
+- Navigation authority lives in the **player**, not the slide. Carousels no
+  longer bind arrow keys themselves; arrow keys are handled by the player.
+- The visual *paused* state is `body.paused`, which freezes the active tab's
+  gold underline at full width (rule lives in both bases). It is set only on an
+  explicit user pause in interactive mode — never in TV/kiosk playback.
 
 ### Panel duration
 

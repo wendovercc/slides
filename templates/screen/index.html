@@ -1,131 +1,319 @@
+{%- macro card_icon(type) -%}
+{%- if type == 'screen' -%}
+<svg viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="13" rx="1.5"/><path d="M9 20.5h6"/><path d="M12 17v3.5"/></svg>
+{%- elif type == 'slideshow' -%}
+<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path class="fill" d="M10 8.2l6 3.8-6 3.8z"/></svg>
+{%- elif type == 'external' -%}
+<svg viewBox="0 0 24 24"><path d="M13 4h7v7"/><path d="M20 4l-9 9"/><path d="M18 13.5V19a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5.5"/></svg>
+{%- elif type == 'youtube' -%}
+<svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="4"/><path class="fill" d="M10 8.5l6 3.5-6 3.5z"/></svg>
+{%- endif -%}
+{%- endmacro -%}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include "_pwa_head.html" %}
     <title>{{ preview.title }}</title>
     <style>
+        /* WCC brand typeface — self-hosted Lato (OFL) */
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+        :root {
+            --navy-1:     #0f2346;
+            --navy-2:     #0a1c3a;
+            --gold:       #d4af37;
+            --light-blue: #b4c8e4;
+            --bg:         linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+            --text:       #ffffff;
+            --muted:      var(--light-blue);
+            --accent:     var(--gold);
+            --footer-h:   8vh;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; min-height: 100vh;
+            background: var(--bg);
+            font-family: 'Lato', -apple-system, Arial, sans-serif;
+            color: var(--text);
+            -webkit-font-smoothing: antialiased;
+        }
         body {
-            background: #0d0d0d;
-            color: #ccc;
-            font: 14px/1.6 monospace;
-            min-height: 100vh;
-            padding: 40px 32px;
-            max-width: 720px;
-            margin: 0 auto;
-        }
-
-        h1 {
-            font-size: 22px;
-            color: #fff;
-            font-weight: bold;
-            margin-bottom: 6px;
-        }
-        .tagline {
-            color: #555;
-            font-size: 12px;
-            margin-bottom: 40px;
-        }
-        .tagline a { color: #00e5ff; text-decoration: none; }
-        .tagline a:hover { text-decoration: underline; }
-
-        h2 {
-            font-size: 10px;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: .08em;
-            margin-bottom: 12px;
-        }
-
-        .locations {
             display: flex;
             flex-direction: column;
-            gap: 2px;
-            margin-bottom: 48px;
+            min-height: 100vh;
         }
-        .location-row {
+
+        header {
             display: flex;
             align-items: center;
-            gap: 16px;
-            padding: 10px 14px;
-            background: #161616;
-            border-radius: 4px;
+            gap: clamp(12px, 2vw, 24px);
+            padding: clamp(20px, 4vh, 48px) clamp(20px, 5vw, 64px) clamp(12px, 2vh, 24px);
         }
-        .location-name {
-            color: #fff;
-            flex: 1;
+        header img { height: clamp(56px, 9vh, 96px); width: auto; }
+        .welcome h1 {
+            font-weight: 900;
+            font-size: clamp(22px, 3.4vw, 40px);
+            line-height: 1.1;
+            letter-spacing: 0.01em;
         }
-        .watch-btn {
-            color: #66bb6a;
-            text-decoration: none;
-            font-weight: bold;
-            padding: 4px 12px;
-            border: 1px solid #2a5a2a;
-            border-radius: 3px;
+        .welcome p {
+            color: var(--muted);
+            font-size: clamp(13px, 1.5vw, 18px);
+            margin-top: 4px;
         }
-        .watch-btn:hover { background: #1b2e1b; }
-        .preview-link {
-            color: #555;
-            font-size: 12px;
-            text-decoration: none;
-        }
-        .preview-link:hover { color: #999; }
+        .welcome a { color: var(--accent); text-decoration: none; }
 
-        .meta {
+        main {
+            flex: 1;
+            overflow-y: auto;
+            padding: clamp(8px, 1.5vh, 20px) clamp(20px, 5vw, 64px) clamp(20px, 4vh, 48px);
+            -webkit-overflow-scrolling: touch;
+        }
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: clamp(12px, 1.6vw, 22px);
+        }
+        .card {
             display: flex;
             flex-direction: column;
-            gap: 10px;
-            border-top: 1px solid #1e1e1e;
-            padding-top: 24px;
-            font-size: 12px;
+            gap: 8px;
+            padding: clamp(18px, 2.4vw, 30px);
+            min-height: clamp(120px, 16vh, 168px);
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.10);
+            border-radius: 12px;
+            text-decoration: none;
+            color: inherit;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
         }
-        .meta-row { display: flex; gap: 8px; }
-        .meta-k { color: #555; width: 22ch; flex-shrink: 0; }
-        .meta-v { color: #ddd; }
-        .meta-v a { color: #00e5ff; text-decoration: none; }
-        .meta-v a:hover { text-decoration: underline; }
-        .built { color: #333; font-size: 11px; margin-top: 16px; }
+        .card:hover, .card:active {
+            background: rgba(255,255,255,0.09);
+            border-color: var(--accent);
+        }
+        .card:active { transform: scale(0.99); }
+        .card-title {
+            font-weight: 700;
+            font-size: clamp(18px, 1.9vw, 24px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .card-icon {
+            margin-left: auto;
+            flex-shrink: 0;
+            display: flex;
+            color: var(--accent);
+            opacity: 0.85;
+        }
+        .card-icon svg {
+            width: clamp(22px, 2.1vw, 28px);
+            height: clamp(22px, 2.1vw, 28px);
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .card-icon svg .fill { fill: currentColor; stroke: none; }
+        .card-desc {
+            color: var(--muted);
+            font-size: clamp(13px, 1.3vw, 16px);
+            line-height: 1.4;
+        }
+        .card-ctx { display: flex; flex-direction: column; gap: 7px; margin-top: 2px; }
+        .ctx-row {
+            display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+            font-size: clamp(12px, 1.2vw, 15px);
+        }
+        .ctx-when {
+            color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em;
+            font-size: 0.78em; width: 3.4em; flex-shrink: 0;
+        }
+        .ctx-meta { color: #fff; }
+        .ctx-time { color: var(--muted); margin-left: auto; font-size: 0.9em; white-space: nowrap; }
+        .badge {
+            padding: 2px 9px; border-radius: 999px; font-size: 0.82em; font-weight: 700;
+            letter-spacing: 0.02em; white-space: nowrap;
+        }
+        .badge-match     { background: rgba(45,122,45,0.32);  color: #9bdf9b; }
+        .badge-training  { background: rgba(26,92,122,0.38);  color: #86c9e6; }
+        .badge-idle      { background: rgba(255,255,255,0.10); color: var(--muted); }
+        .badge-hire      { background: rgba(122,92,0,0.42);   color: #e7cf86; }
+        .badge-event     { background: rgba(212,175,55,0.22); color: var(--gold); }
+        .badge-scheduled { background: rgba(255,255,255,0.10); color: var(--muted); }
+        .badge-live {
+            background: #c0392b; color: #fff;
+            display: inline-flex; align-items: center; gap: 5px;
+        }
+        .badge-live::before {
+            content: ''; width: 7px; height: 7px; border-radius: 50%;
+            background: #fff; animation: live-pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes live-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+        .footer-strip {
+            height: var(--footer-h);
+            min-height: 52px;
+            background: rgba(0,0,0,0.45);
+            display: flex;
+            align-items: center;
+            gap: 2vw;
+            padding: 0 clamp(20px, 5vw, 64px);
+        }
+        .club-logo { height: 60%; width: auto; object-fit: contain; }
+        .club-name {
+            font-size: clamp(9px, 0.7vw, 12px);
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            opacity: 0.8;
+            white-space: nowrap;
+        }
+        .sponsor-logos { display: flex; gap: 1.5vw; align-items: center; margin-left: auto; overflow: hidden; }
+        .sponsor-logo {
+            height: 56%;
+            max-width: 96px;
+            width: auto;
+            object-fit: contain;
+            background: rgba(255,255,255,0.88);
+            border-radius: 3px;
+            padding: 2px 6px;
+        }
     </style>
 </head>
 <body>
-    <h1>{{ preview.title }}</h1>
-    <p class="tagline">Live slideshow displays for <a href="{{ preview.club_url }}" target="_blank">{{ preview.club_name }}</a></p>
+    <header>
+        <img src="/assets/images/wcc-logo.png" alt="{{ preview.club_name }}">
+        <div class="welcome">
+            <h1>{{ preview.club_name }}</h1>
+            <p>Watch anywhere · <a href="{{ preview.site_url }}" target="_blank">{{ site_url }}</a></p>
+        </div>
+    </header>
 
-    <h2>Screens</h2>
-    <div class="locations">
-        {% for loc in screen_locs %}
-        <div class="location-row">
-            <span class="location-name">{{ loc.name }}</span>
-            <a class="watch-btn" href="/screen/{{ loc.id }}/">Watch</a>
-            <a class="preview-link" href="/screen/{{ loc.id }}/?preview">Preview</a>
+    <main>
+        <div class="card-grid">
+            {% for c in cards %}
+            <a class="card" href="{{ c.href }}"{% if c.get('target') %} target="{{ c.target }}"{% endif %}>
+                <span class="card-title"><span class="card-name">{{ c.title }}</span><span class="card-icon">{{ card_icon(c.type) }}</span></span>
+                {% if c.type == 'screen' %}
+                <div class="card-ctx" data-loc-id="{{ c.loc_id }}"></div>
+                {% elif c.type == 'youtube' %}
+                <div class="card-ctx" data-yt></div>
+                {% elif c.get('description') %}
+                <span class="card-desc">{{ c.description }}</span>
+                {% endif %}
+            </a>
+            {% endfor %}
         </div>
-        {% endfor %}
-    </div>
+    </main>
 
-    {% if homepage_shows %}
-    <h2>Slideshows</h2>
-    <div class="locations">
-        {% for show in homepage_shows %}
-        <div class="location-row">
-            <span class="location-name">{{ show.title }}</span>
-            <a class="watch-btn" href="/slideshow/{{ show.slug }}/">Watch</a>
-            <a class="preview-link" href="/slideshow/{{ show.slug }}/?preview">Preview</a>
+    <footer class="footer-strip">
+        <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
+        <span class="club-name">{{ preview.club_name }}</span>
+        <div class="sponsor-logos">
+            {% for s in sponsors %}
+            <img class="sponsor-logo" src="{{ s.src }}" alt="{{ s.name }}">
+            {% endfor %}
         </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+    </footer>
 
-    <div class="meta">
-        <div class="meta-row">
-            <span class="meta-k">Documentation &amp; code</span>
-            <span class="meta-v"><a href="{{ preview.github_url }}" target="_blank">{{ preview.github_url }}</a></span>
-        </div>
-        <div class="meta-row">
-            <span class="meta-k">Support / feature request</span>
-            <span class="meta-v"><a href="mailto:{{ preview.support_email }}">{{ preview.support_email }}</a></span>
-        </div>
-        <div class="built">Built {{ built_at }}</div>
-    </div>
+    <script src="/assets/js/context.js"></script>
+    <script>
+        const TEAM_NAMES = {{ team_names | tojson }};
+        const YT_DATA = {{ youtube | tojson }};
+        const TYPE_LABELS = { match: 'Match', training: 'Training', idle: 'Quiet', hire: 'Hire', club_event: 'Event', section_event: 'Event', live: 'Live', scheduled: 'Scheduled', offair: 'Off air' };
+        const SECTION_LABELS = { senior: 'Seniors', junior: 'Juniors' };
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+        function badge(type) {
+            const cls = ['match', 'training', 'idle', 'hire', 'live', 'scheduled'].includes(type)
+                ? type : (String(type).endsWith('event') ? 'event' : 'idle');
+            return `<span class="badge badge-${cls}">${TYPE_LABELS[type] || type}</span>`;
+        }
+        function metaText(ctx) {
+            const a = ctx.audience || {};
+            const parts = [];
+            if (a.section && SECTION_LABELS[a.section]) parts.push(SECTION_LABELS[a.section]);
+            const teams = (a.teams || []).map(t => TEAM_NAMES[t] || t);
+            if (teams.length) {
+                parts.push(teams.slice(0, 3).join(', ') + (teams.length > 3 ? ` +${teams.length - 3}` : ''));
+            }
+            return parts.length ? `<span class="ctx-meta">${parts.join(' · ')}</span>` : '';
+        }
+        function fmtWhen(d) {
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            const day = new Date(d); day.setHours(0, 0, 0, 0);
+            const diff = Math.round((day - today) / 86400000);
+            const t = d.toTimeString().slice(0, 5);
+            if (diff === 0) return `Today ${t}`;
+            if (diff === 1) return `Tomorrow ${t}`;
+            return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ` ${t}`;
+        }
+        function ctxRow(when, type, meta, time) {
+            return `<div class="ctx-row"><span class="ctx-when">${when}</span>${badge(type)}${meta}` +
+                (time ? `<span class="ctx-time">${time}</span>` : '') + `</div>`;
+        }
+
+        async function fillScreens() {
+            let calendar, locs;
+            try {
+                [calendar, locs] = await Promise.all([
+                    fetch('/context_calendar.json').then(r => r.json()),
+                    fetch('/locations.json').then(r => r.json()),
+                ]);
+            } catch (e) { return; }
+            const byId = Object.fromEntries(locs.locations.map(l => [l.id, l]));
+            document.querySelectorAll('.card-ctx[data-loc-id]').forEach(el => {
+                const loc = byId[el.dataset.locId];
+                if (!loc) return;
+                const { context } = WccContext.resolveContext(calendar, loc);
+                let html = ctxRow('Now', context.type, metaText(context));
+                const nexts = WccContext.findNextContexts(calendar, loc.id).filter(n => n.type !== 'idle');
+                if (nexts.length) {
+                    const nc = nexts[0];
+                    const nctx = WccContext.ctxFromNext(nc, loc);
+                    html += ctxRow('Next', nctx.type, metaText(nctx), fmtWhen(nc.start));
+                }
+                el.innerHTML = html;
+            });
+        }
+        fillScreens();
+
+        function renderYT() {
+            const el = document.querySelector('[data-yt]');
+            if (!el) return;
+            const d = YT_DATA || { live: [], upcoming: [] };
+            const now = new Date();
+            const WINDOW_MS = 5 * 3600 * 1000; // assume a stream runs up to ~5h
+            const upcoming = (d.upcoming || [])
+                .filter(u => u.scheduled_start)
+                .map(u => ({ title: u.title, start: new Date(u.scheduled_start) }))
+                .sort((a, b) => a.start - b.start);
+
+            // Live if the API reported a live stream at build, or a scheduled
+            // start has passed within the assumed window (key-free "live now").
+            let live = (d.live && d.live[0]) ? { title: d.live[0].title } : null;
+            if (!live) {
+                const started = upcoming.find(u => u.start <= now && (now - u.start) < WINDOW_MS);
+                if (started) live = { title: started.title };
+            }
+
+            let html = live
+                ? ctxRow('Now', 'live', `<span class="ctx-meta">${esc(live.title)}</span>`)
+                : ctxRow('Now', 'offair', '');
+            const future = upcoming.filter(u => u.start > now);
+            if (future.length) {
+                const n = future[0];
+                html += ctxRow('Next', 'scheduled', `<span class="ctx-meta">${esc(n.title)}</span>`, fmtWhen(n.start));
+            }
+            el.innerHTML = html;
+        }
+        renderYT();
+    </script>
 </body>
 </html>
