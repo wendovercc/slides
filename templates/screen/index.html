@@ -252,7 +252,10 @@
                 // Show the rest of today's schedule; if nothing remains today, fall
                 // back to the next upcoming entry so a card always shows what's next.
                 const todayStr = new Date().toISOString().slice(0, 10);
-                const nexts = WccContext.findNextContexts(calendar, loc.id).filter(n => n.type !== 'idle');
+                // Skip phases a higher-priority overlap fully masks — the screen
+                // never switches to them, so the card shouldn't list them as next.
+                const nexts = WccContext.findNextContexts(calendar, loc.id)
+                    .filter(n => n.type !== 'idle' && n.masked?.level !== 'full');
                 let upcoming = nexts.filter(n => n.dateStr === todayStr);
                 if (!upcoming.length && nexts.length) upcoming = [nexts[0]];
                 for (const nc of upcoming) {
