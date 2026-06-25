@@ -50,6 +50,17 @@
       ]
     },
     {
+      "slug": "leaderboard-junior",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
       "slug": "team-u9",
       "show_when": [
         {
