@@ -84,9 +84,16 @@
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
 
-    /* ---- kiosk: whole-slide rotation, slides auto-rotate their own panels ---- */
+    /* ---- kiosk: whole-slide rotation, slides auto-rotate their own panels ----
+     * Every slide's iframe loads at startup and begins auto-rotating its panels
+     * immediately. So when a multi-panel slide finally comes on screen its panels
+     * are mid-cycle. Tell the outgoing slide to stop and the incoming one to
+     * rotate afresh from panel 0, so each slide's rotation is anchored to when it
+     * actually becomes visible. */
     function kioskShow(i) {
+      if (i !== current) send(current, 'take-over'); // stop the slide we're leaving
       activate(i);
+      send(i, 'restart-auto');                       // rotate from panel 0, aligned to now
       clearTimer();
       timer = setTimeout(function () { kioskShow((current + 1) % n); }, (items[i].duration || 20) * 1000);
     }

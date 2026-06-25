@@ -26,7 +26,7 @@
   }
 
   window.WccSlide = {
-    // Carousel controller: { count, show(i), pauseAuto(), restartCurrent() }
+    // Carousel controller: { count, show(i), startAuto(), pauseAuto(), restartCurrent() }
     register: function (c) {
       ctrl = c;
       count = c.count || 1;
@@ -64,6 +64,9 @@
       case 'resume':                          // user resumed: re-animate current
         setPaused(false);
         if (ctrl) ctrl.restartCurrent();
+        break;
+      case 'restart-auto':                    // kiosk: slide just became visible —
+        if (ctrl) { setPaused(false); ctrl.show(0); ctrl.startAuto(); } // rotate afresh from panel 0
         break;
       case 'next-panel': show(current + 1); break;
       case 'prev-panel': show(current - 1); break;

@@ -55,6 +55,7 @@
     window.WccSlide.register({
       count: panels.length,
       show: show,
+      startAuto: startAuto,
       pauseAuto: stopAuto,
       restartCurrent: function () { show(current); }
     });
