@@ -65,6 +65,8 @@ On first connection SSH will ask you to confirm the host fingerprint — type `y
 ssh-keygen -R wendovercc-1.local
 ```
 
+> **Before pasting any multi-line block in these steps, run `sudo -v` first.** It authenticates sudo up front (cached ~15 min), so a `sudo` command inside a pasted block won't stop to ask for a password mid-paste — which desyncs the paste and can leave the heredoc/`tee` blocks failing silently with no output.
+
 Run a full update before installing anything:
 
 ```bash
@@ -209,6 +211,125 @@ Set the TV's own sleep/standby timer to "never" in its menu — this is the most
 
 ---
 
+## Step 9: Scheduled nightly power-off and wake
+
+To save power and TV lifespan, the Pi powers itself off at midnight and wakes itself at 09:00.
+
+### How it works on Pi 5
+
+Unlike earlier models, the Pi 5 has a built-in real-time clock (RTC) and a power-management IC (PMIC) that supports a genuine low-power "off" state it can wake itself out of:
+
+- At **midnight**, a systemd timer runs a script that arms the RTC wake alarm for the next 09:00, then powers the board off into the PMIC's low-power state (a few milliwatts).
+- At **09:00**, the RTC alarm fires, the PMIC powers the board back up, and it boots straight back into the kiosk (auto-login → cage → Chromium).
+
+Important: this requires the Pi to **stay connected to its PSU**. "Off" here means the low-power standby state, not unplugged — the RTC keeps time off the 5V standby rail. (The optional RTC backup battery is only needed to survive a full power cut, which isn't our case, since the PSU stays plugged in even though the socket is out of reach.) The Pi syncs its clock from the network on boot, so the alarm time stays accurate.
+
+### Step 9a: Enable low-power halt in the bootloader
+
+Set `POWER_OFF_ON_HALT=1` in the bootloader EEPROM config so that power-off enters the deepest wake-capable state:
+
+```bash
+rpi-eeprom-config > /tmp/boot.conf
+grep -q '^POWER_OFF_ON_HALT' /tmp/boot.conf || echo 'POWER_OFF_ON_HALT=1' >> /tmp/boot.conf
+sudo rpi-eeprom-config --apply /tmp/boot.conf
+sudo reboot
+```
+
+After rebooting, confirm it stuck:
+
+```bash
+rpi-eeprom-config | grep POWER_OFF_ON_HALT
+```
+
+The onboard power button still wakes the Pi manually from this state with a short press — useful if you ever need it on outside the 09:00–00:00 window without reaching the socket.
+
+### Step 9b: Create the sleep script
+
+This computes the next 09:00, arms the RTC alarm, and powers off. It runs as root via systemd, so no `sudo` inside.
+
+```bash
+sudo tee /usr/local/bin/kiosk-sleep << 'EOF'
+#!/bin/bash
+# Arm the RTC to wake the Pi, then power off into the low-power state.
+set -e
+WAKE_HOUR=09:00
+
+WAKE=$(date -d "today $WAKE_HOUR" +%s)
+NOW=$(date +%s)
+if [ "$WAKE" -le "$NOW" ]; then
+  WAKE=$(date -d "tomorrow $WAKE_HOUR" +%s)
+fi
+
+# sysfs requires clearing any pending alarm (write 0) before setting a new one.
+echo 0 > /sys/class/rtc/rtc0/wakealarm
+echo "$WAKE" > /sys/class/rtc/rtc0/wakealarm
+
+logger -t kiosk-sleep "Wake alarm set for $(date -d @"$WAKE"); powering off"
+systemctl poweroff
+EOF
+sudo chmod +x /usr/local/bin/kiosk-sleep
+```
+
+To change the wake time later, edit `WAKE_HOUR` (24-hour, local time — BST is handled automatically).
+
+### Step 9c: Create the midnight timer
+
+A systemd service to run the script, and a timer to fire it at 00:00:
+
+```bash
+sudo tee /etc/systemd/system/kiosk-sleep.service << 'EOF'
+[Unit]
+Description=Arm RTC wake alarm and power off the kiosk for the night
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kiosk-sleep
+EOF
+
+sudo tee /etc/systemd/system/kiosk-sleep.timer << 'EOF'
+[Unit]
+Description=Power off the kiosk at midnight
+
+[Timer]
+OnCalendar=*-*-* 00:00:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target
+EOF
+```
+
+`Persistent=false` is deliberate: if the Pi happened to be off across a midnight, we do *not* want it to immediately shut down again the moment it boots — it should only power off when it's actually running at midnight.
+
+Enable the timer (this enables and starts the *timer*, not the service):
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now kiosk-sleep.timer
+```
+
+Confirm it's scheduled:
+
+```bash
+systemctl list-timers kiosk-sleep.timer
+```
+
+You should see the next trigger at the upcoming midnight.
+
+### Step 9d: Test without waiting
+
+Arm the alarm for two minutes out and power off manually — the Pi should switch off and come back ~2 minutes later:
+
+```bash
+echo 0 | sudo tee /sys/class/rtc/rtc0/wakealarm
+echo $(( $(date +%s) + 120 )) | sudo tee /sys/class/rtc/rtc0/wakealarm
+sudo systemctl poweroff
+```
+
+If it comes back on by itself, the full cycle works. (Run this when you can watch it — once it's off you can't SSH in until it wakes.)
+
+---
+
 ## Common tasks over SSH
 
 ### Connect to the Pi
@@ -266,6 +387,22 @@ pgrep -a chromium
 
 If nothing is returned, the kiosk isn't running. Check `journalctl -b` for errors.
 
+### Change the nightly sleep/wake times
+
+- **Wake time**: edit `WAKE_HOUR` in `/usr/local/bin/kiosk-sleep`.
+- **Sleep time**: edit `OnCalendar=` in `/etc/systemd/system/kiosk-sleep.timer`, then `sudo systemctl daemon-reload`.
+
+Confirm the next run with `systemctl list-timers kiosk-sleep.timer`.
+
+### Skip tonight's shutdown / keep it on temporarily
+
+```bash
+sudo systemctl stop kiosk-sleep.timer    # won't power off tonight
+sudo systemctl start kiosk-sleep.timer   # re-arm (or just reboot)
+```
+
+To disable scheduled power entirely: `sudo systemctl disable --now kiosk-sleep.timer`.
+
 ---
 
 ## Maintenance
@@ -309,3 +446,6 @@ sudo reboot
 | Cursor visible at centre screen | Add the udev rule in Step 5 to hide HDMI input devices from libinput |
 | Slideshow not updating | Check network; try `curl -I https://slides.wendovercc.org/screen/the-witchell/` from SSH |
 | Screen goes blank after a while | Check TV sleep/standby settings |
+| Pi doesn't wake at 09:00 | Confirm PSU stayed powered (wake needs 5V standby); `rpi-eeprom-config \| grep POWER_OFF_ON_HALT` should be `1`; update the bootloader with `sudo apt full-upgrade` then reboot |
+| Pi doesn't power off at midnight | `systemctl list-timers kiosk-sleep.timer` to check it's scheduled; `journalctl -u kiosk-sleep.service` for errors |
+| Wakes at the wrong time | Clock skew — check `timedatectl`; the alarm is set from system time, which syncs from the network on boot |
