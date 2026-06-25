@@ -45,6 +45,38 @@ window.WccContext = (function () {
     return { type: nc.type, phase: nc.phase, audience: nc.entry.audience, detail: nc.entry.detail };
   }
 
+  // How much of an upcoming phase window is hidden by a higher-priority
+  // overlapping entry on the same date. Entries within a date are ordered
+  // highest-priority first, so any entry at a lower index outranks this one
+  // and the live player would resolve to it instead. Returns null (fully
+  // shown), or { level: 'full' | 'partial', types: [...] }.
+  function phaseMask(dateEntries, item) {
+    const s = item.start.getTime();
+    const e = item.end.getTime();
+    const segs = [];
+    dateEntries.forEach((entry, idx) => {
+      if (idx >= item.entryIdx) return;            // not higher priority
+      for (const phase of ['warm_up', 'main', 'wind_down']) {
+        const win = entry.phases?.[phase];
+        if (!win) continue;
+        const a = Math.max(s, parsePhaseTime(item.dateStr, win.start).getTime());
+        const b = Math.min(e, parsePhaseTime(item.dateStr, win.end).getTime());
+        if (b > a) segs.push({ a, b, type: entry.type });
+      }
+    });
+    if (!segs.length) return null;
+    segs.sort((x, y) => x.a - y.a);
+    const types = [...new Set(segs.map(g => g.type))];
+    // Sweep from the window start to see how far higher-priority windows
+    // cover it contiguously; if they reach the end it is fully masked.
+    let reach = s;
+    for (const g of segs) {
+      if (g.a > reach) break;                       // gap → some of the window is visible
+      reach = Math.max(reach, g.b);
+    }
+    return { level: reach >= e ? 'full' : 'partial', types };
+  }
+
   function findNextContexts(calendar, locId) {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
@@ -55,29 +87,37 @@ window.WccContext = (function () {
     const upcoming = [];
     for (const dateStr of Object.keys(locDates).sort()) {
       if (dateStr < today || dateStr > cutoff) continue;
-      for (const entry of locDates[dateStr]) {
+      locDates[dateStr].forEach((entry, entryIdx) => {
         for (const phase of ['warm_up', 'main', 'wind_down']) {
           const win = entry.phases?.[phase];
           if (!win) continue;
           if (dateStr === today && win.start <= timeNow) continue;
           upcoming.push({
-            type: entry.type, phase, entry, dateStr,
+            type: entry.type, phase, entry, dateStr, entryIdx,
             start: parsePhaseTime(dateStr, win.start),
             end: parsePhaseTime(dateStr, win.end),
           });
         }
-      }
+      });
     }
     upcoming.sort((a, b) => a.start - b.start);
 
+    // Annotate each window with whether a higher-priority overlap masks it.
+    for (const item of upcoming) {
+      item.masked = phaseMask(locDates[item.dateStr], item);
+    }
+
+    // Insert idle only where no window covers the gap. Track the furthest
+    // covered point so overlapping windows don't open a phantom idle (e.g. a
+    // short session nested inside a longer match).
     const results = [];
-    for (let i = 0; i < upcoming.length; i++) {
-      const prev = upcoming[i - 1];
-      const cur = upcoming[i];
-      if (prev && cur.start > prev.end) {
-        results.push({ type: 'idle', start: prev.end, end: cur.start });
+    let reach = null;
+    for (const cur of upcoming) {
+      if (reach && cur.start > reach) {
+        results.push({ type: 'idle', start: reach, end: cur.start });
       }
       results.push(cur);
+      if (!reach || cur.end > reach) reach = cur.end;
     }
     return results;
   }

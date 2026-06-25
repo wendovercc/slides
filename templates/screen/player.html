@@ -97,6 +97,26 @@
         #dbg-row-current .dbg-slide.now { background: #1b2e1b; color: #a5d6a7; }
         .dbg-none { color: #333; }
 
+        /* A phase masked by a higher-priority overlap never goes live.
+           Dim the content (not the badge, which explains why). */
+        .dbg-row-masked .dbg-kv,
+        .dbg-row-masked .dbg-head,
+        .dbg-row-masked .dbg-slide { opacity: .4; }
+        .dbg-row-masked .dbg-slide { text-decoration: line-through; }
+        .dbg-row-partial .dbg-kv,
+        .dbg-row-partial .dbg-head,
+        .dbg-row-partial .dbg-slide { opacity: .7; }
+        .dbg-mask {
+            display: inline-block;
+            margin-top: 4px;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            letter-spacing: .04em;
+            background: #2a2310;
+            color: #d6a14f;
+        }
+
         #about {
             display: none;
             position: fixed;
@@ -275,8 +295,13 @@ function renderPanel(loc, ctx, slideshowSlug, show, nextCtxs, today, contextEnd)
         }
         ncCtx._durationStr = nc.end ? fmtDuration(nc.end - nc.start) : '—';
         const ncSlides = slidesForCtx(show, ncCtx, today);
-        html += `<div class="dbg-row">
-            <div class="dbg-ctx-col">${renderCtxCol(ncCtx, `Next ${i + 1}`)}</div>
+        const m = nc.masked;
+        const rowClass = m ? (m.level === 'full' ? ' dbg-row-masked' : ' dbg-row-partial') : '';
+        const maskBadge = m
+            ? `<div class="dbg-mask">${m.level === 'full' ? "won't show" : 'partly shown'} · masked by ${m.types.join(', ')}</div>`
+            : '';
+        html += `<div class="dbg-row${rowClass}">
+            <div class="dbg-ctx-col">${renderCtxCol(ncCtx, `Next ${i + 1}`)}${maskBadge}</div>
             <div class="dbg-slides-col">${renderSlidesCol(ncSlides, 'Slides')}</div>
         </div>`;
     });
