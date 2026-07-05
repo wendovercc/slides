@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-06-30",
+  "last_updated": "2026-07-05",
   "records": [
     {
       "date": "1967-08-27",
@@ -3458,6 +3458,34 @@
       "team_total": "223-6",
       "oppo_total": "222-7",
       "result": "W"
+    },
+    {
+      "date": "2025-08-17",
+      "year": 2025,
+      "date_approx": false,
+      "home_away": "H",
+      "team": "A XI",
+      "opponents": "Gully Cricketers",
+      "batsman": "James Harrington",
+      "score": 117,
+      "not_out": true,
+      "team_total": null,
+      "oppo_total": null,
+      "result": null
+    },
+    {
+      "date": "2025-08-24",
+      "year": 2025,
+      "date_approx": false,
+      "home_away": "A",
+      "team": "A XI",
+      "opponents": "Wooburn Narkovians",
+      "batsman": "Nick Roberts",
+      "score": 105,
+      "not_out": false,
+      "team_total": null,
+      "oppo_total": null,
+      "result": null
     }
   ]
 }
