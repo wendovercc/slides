@@ -216,7 +216,8 @@ def main():
         print(f"  {fp}: uploading ({duration:.1f}s) → {r2_url}")
         try:
             client.upload_file(str(path), bucket, f"{fp}.mp4",
-                               ExtraArgs={"ContentType": "video/mp4"})
+                               ExtraArgs={"ContentType": "video/mp4",
+                                          "CacheControl": "public, max-age=31536000, immutable"})
             manifest[fp] = {"src": r2_url, "duration": duration}
             uploaded += 1
         except Exception as e:
