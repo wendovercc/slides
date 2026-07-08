@@ -1,0 +1,14 @@
+{
+  "template": "video",
+  "title": "Cotswold Archaelogy at Tring Road",
+  "layout": "fullbleed",
+  "logo": true,
+  "overlay_fade_after": 5,
+  "active": true,
+  "videos": [
+    {
+      "src": "https://videos.wendovercc.org/2026-07-08-cotsworld-archaeology.mp4",
+      "duration": 116.62
+    }
+  ]
+}

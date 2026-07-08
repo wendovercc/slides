@@ -1,0 +1,15 @@
+{
+  "template": "cta",
+  "active": true,
+  "title": "Welcome to the Seabrook Pavilion",
+  "subtitle": "Interested in joining the club? We have options for everyone.",
+  "body": "Whether you want to play competitive cricket, social cricket, or simply to be a part of the club. To find out more, please visit our website at <span class=\"gold\">wendovercc.org</span>.",
+  "items": [
+    "Men's Cricket",
+    "Women's Cricket",
+    "Junior Cricket — Boys & Girls",
+    "Social Membership"
+  ],
+  "qr_url": "https://www.wendovercc.org",
+  "cta": "Visit our website"
+}

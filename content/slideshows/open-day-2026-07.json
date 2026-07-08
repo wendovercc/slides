@@ -1,0 +1,11 @@
+{
+  "title": "Open Day 2026-07",
+  "homepage_rank": 6,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "welcome-cta" },
+    { "slug": "cotswold-archaeology" },
+    { "slug": "fantasy-league" },
+    { "slug": "honours" }
+  ]
+}

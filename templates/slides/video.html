@@ -58,6 +58,8 @@
             height: 16vh; width: auto; object-fit: contain;
             z-index: 10;
         }
+        .overlay, .overlay-logo { transition: opacity 1.5s ease; }
+        .overlay.faded, .overlay-logo.faded { opacity: 0; pointer-events: none; }
         .fallback {
             width: 100%; height: 100%; background: var(--bg);
             display: flex; align-items: center; justify-content: center;
@@ -182,6 +184,9 @@
     var overlayEl = document.getElementById('overlay');
     var bodyEl = document.getElementById('overlay-body');
     var hasTitle = {{ (slide.title is defined) | tojson }};
+    var logoEl = document.querySelector('.overlay-logo');
+    var fadeAfter = {{ (slide.overlay_fade_after if slide.overlay_fade_after is defined else 0) | tojson }};
+    var fadeTimer = null;
     {% else %}
     var bodyEl = document.getElementById('body-slot');
     {% endif %}
@@ -198,7 +203,18 @@
         var body = VIDEOS[i] && VIDEOS[i].body;
         if (bodyEl) bodyEl.textContent = body || '';
         {% if slide.layout is defined and slide.layout == 'fullbleed' %}
-        if (overlayEl) overlayEl.style.display = (hasTitle || body) ? '' : 'none';
+        if (overlayEl) {
+            overlayEl.classList.remove('faded');
+            overlayEl.style.display = (hasTitle || body) ? '' : 'none';
+        }
+        if (logoEl) logoEl.classList.remove('faded');
+        if (fadeTimer) clearTimeout(fadeTimer);
+        if (fadeAfter > 0) {
+            fadeTimer = setTimeout(function () {
+                if (overlayEl) overlayEl.classList.add('faded');
+                if (logoEl) logoEl.classList.add('faded');
+            }, fadeAfter * 1000);
+        }
         {% else %}
         if (bodyEl) bodyEl.style.display = body ? '' : 'none';
         {% endif %}

@@ -1,8 +1,6 @@
 {% extends 'slides/_base-sidebar.html' %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
-    /* Title/subtitle/body styling mirrors announcement.html; the body text
-       stacks above the QR panel in a single left-aligned column. */
     .title {
         font-size: var(--t-xl);
         font-weight: bold;
@@ -20,7 +18,7 @@
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        gap: 4vh;
+        gap: 3vh;
         min-height: 0;
         margin-top: 3vh;
     }
@@ -28,8 +26,29 @@
         font-size: var(--t-md);
         line-height: 1.6;
     }
+    .body .gold { color: var(--accent); }
+    .items {
+        display: flex;
+        flex-direction: column;
+        gap: 1.2vh;
+    }
+    .item {
+        display: flex;
+        align-items: center;
+        gap: 0.8vw;
+        font-size: var(--t-md);
+        line-height: 1.6;
+    }
+    .item::before {
+        content: '✓';
+        color: var(--accent);
+        flex-shrink: 0;
+    }
+    .slide-main { position: relative; }
     .qr-panel {
-        flex: 0 0 auto;
+        position: absolute;
+        bottom: var(--safe-y);
+        right: 2vw;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -67,14 +86,19 @@
     <div class="subtitle">{{ slide.subtitle }}</div>
     {% endif %}
     <div class="lower">
-        <div class="body">{{ slide.body }}</div>
+        <div class="body">{{ slide.body | safe }}</div>
+        {% if 'items' in slide %}
+        <div class="items">
+            {% for item in slide['items'] %}<div class="item">{{ item }}</div>{% endfor %}
+        </div>
+        {% endif %}
         <div class="qr-panel">
-            <div class="qr-image">
-                <img src="{{ slide._qr_data_url }}" alt="QR code">
-            </div>
             <div class="qr-label">
                 <div class="scan-to">Scan to</div>
                 <div class="cta-button">{{ slide.cta }}</div>
+            </div>
+            <div class="qr-image">
+                <img src="{{ slide._qr_data_url }}" alt="QR code">
             </div>
         </div>
     </div>
