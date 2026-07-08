@@ -34,18 +34,18 @@
       // (overrides the kiosk `cursor:none` on both player and slide bases).
       'html,body{cursor:auto!important;}' +
       '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;}' +
-      '#wcc-bar{position:fixed;left:50%;bottom:max(3vh,env(safe-area-inset-bottom,0px));' +
-      'transform:translateX(-50%);z-index:60;display:flex;gap:8px;padding:8px;' +
+      '#wcc-bar{position:fixed;right:20vw;top:3vh;' +
+      'transform:translateX(12.5%);z-index:60;display:flex;gap:0.5vw;padding:0.5vw;' +
       'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);' +
       'border-radius:999px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
-      'box-shadow:0 6px 24px rgba(0,0,0,0.45);}' +
-      '#wcc-bar button{width:60px;height:60px;border:none;border-radius:50%;background:transparent;' +
+      'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);}' +
+      '#wcc-bar button{width:3.5vw;height:3.5vw;border:none;border-radius:50%;background:transparent;' +
       'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;' +
       '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
       '#wcc-bar button:active{background:rgba(255,255,255,0.12);}' +
       '#wcc-bar button.primary{background:rgba(212,175,55,0.18);}' +
       '#wcc-bar button.primary:active{background:rgba(212,175,55,0.32);}' +
-      '#wcc-bar svg{width:30px;height:30px;fill:#fff;stroke:#fff;stroke-width:2;' +
+      '#wcc-bar svg{width:1.75vw;height:1.75vw;fill:#fff;stroke:#fff;stroke-width:2;' +
       'stroke-linejoin:round;stroke-linecap:round;}' +
       '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}';
     var s = document.createElement('style');
@@ -135,19 +135,24 @@
       else { clearTimer(); send(current, 'pause'); }
     }
     function next() {
-      if (playing) setPlayingSilent(false);
-      if (panelIndex < (counts[current] || 1) - 1) send(current, 'next-panel');
-      else fwdSlide();
+      clearTimer();
+      if (panelIndex < (counts[current] || 1) - 1) {
+        send(current, 'next-panel');
+        if (playing) panelTimer();
+      } else {
+        if (!playing) { playing = true; updatePlayBtn(); }
+        fwdSlide();
+      }
     }
     function prev() {
-      if (playing) setPlayingSilent(false);
-      if (panelIndex > 0) send(current, 'prev-panel');
-      else backSlide();
-    }
-    // pause without sending resume/extra (used right before a manual step)
-    function setPlayingSilent(p) {
-      playing = p; updatePlayBtn(); clearTimer();
-      if (!p) send(current, 'pause');
+      clearTimer();
+      if (panelIndex > 0) {
+        send(current, 'prev-panel');
+        if (playing) panelTimer();
+      } else {
+        if (!playing) { playing = true; updatePlayBtn(); }
+        backSlide();
+      }
     }
 
     /* ---- control bar ---- */
@@ -182,10 +187,22 @@
 
     /* ---- bridge messages from slides ---- */
     window.addEventListener('message', function (e) {
-      if (!interactive) return;
       var d = e.data; if (!d) return;
       var idx = items.findIndex(function (it) { return it.frame.contentWindow === e.source; });
       if (idx < 0) return;
+
+      // wcc-done: video ended naturally — advance slide (works in both kiosk and interactive)
+      if (d.type === 'wcc-done' && idx === current) {
+        if (interactive) {
+          if (playing) fwdSlide(); // paused → hold last frame until user acts
+        } else {
+          clearTimer();
+          kioskShow((current + 1) % n);
+        }
+        return;
+      }
+
+      if (!interactive) return;
       if (d.type === 'wcc-slide') {
         var first = counts[idx] == null;
         counts[idx] = d.panels;

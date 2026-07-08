@@ -1,0 +1,16 @@
+{
+  "template": "video",
+  "layout": "fullbleed",
+  "logo": true,
+  "overlay_solid": true,
+  "title": "Test: Fullbleed Video",
+  "active": true,
+  "videos": [
+    {
+      "body": "An optional narrative caption for the full-bleed layout",
+      "url": "https://www.youtube.com/watch?v=qT1RLpCltCE",
+      "start": 19030,
+      "end": 19050
+    }
+  ]
+}

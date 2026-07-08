@@ -2,6 +2,7 @@
 """Build pipeline: content/ + templates/ + assets/ → site/"""
 
 import base64
+import hashlib
 import io
 import json
 import shutil
@@ -14,6 +15,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
 FETCHED = CONTENT / "data" / "fetched"
+VIDEOS_CACHE = CONTENT / "data" / "videos"
 TEMPLATES = ROOT / "templates"
 ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
@@ -465,9 +467,59 @@ def clean():
     SITE.mkdir()
 
 
+def video_fingerprint(url: str, start, end) -> str:
+    key = f"{url}:{start if start is not None else 0}-{end if end is not None else ''}"
+    return hashlib.sha256(key.encode()).hexdigest()[:12]
+
+
+def _resolve_video(v: dict) -> tuple:
+    """Return (src_path_or_None, duration_float) for a video config dict."""
+    url = v.get("url", "")
+    start = v.get("start")
+    end = v.get("end")
+    fallback_dur = float((end or 0) - (start or 0)) or 30.0
+    if not url:
+        return None, fallback_dur
+    fp = video_fingerprint(url, start, end)
+    meta_path = VIDEOS_CACHE / f"{fp}.json"
+    mp4_path = VIDEOS_CACHE / f"{fp}.mp4"
+    if mp4_path.exists() and meta_path.exists():
+        try:
+            dur = float(json.loads(meta_path.read_text()).get("duration", fallback_dur))
+        except Exception:
+            dur = fallback_dur
+        return f"/assets/videos/{fp}.mp4", dur
+    return None, fallback_dur
+
+
+def build_video_slide(slide):
+    """Resolve video clip paths and durations for template == 'video' slides."""
+    videos = slide.get("videos", [])
+    total_dur = 0.0
+    for v in videos:
+        src, dur = _resolve_video(v)
+        v["_video_src"] = src
+        v["_video_duration"] = dur
+        total_dur += dur
+    if not total_dur:
+        total_dur = 30.0
+    slide["duration"] = total_dur
+    slide["panel_duration"] = total_dur + 30.0  # safety net; wcc-done fires first
+    slide["_override_duration"] = True
+
+
 def copy_assets():
     if ASSETS.exists():
         shutil.copytree(ASSETS, SITE / "assets")
+
+
+def copy_videos():
+    if not VIDEOS_CACHE.exists():
+        return
+    dst = SITE / "assets" / "videos"
+    dst.mkdir(parents=True, exist_ok=True)
+    for mp4 in VIDEOS_CACHE.glob("*.mp4"):
+        shutil.copy2(mp4, dst / mp4.name)
 
 
 def make_env():
@@ -1608,6 +1660,9 @@ def build_slides(env):
             if stats:
                 build_leaderboard(slide, stats, lb_config)
 
+        if slide.get("template") == "video":
+            build_video_slide(slide)
+
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:
                 ordered = sorted(
@@ -1625,10 +1680,13 @@ def build_slides(env):
                 table["rows"] = table["values"]
 
         # Panel count drives the derived duration: a data-driven `_panels` list
-        # (team) wins; otherwise a fixed-carousel count; otherwise a plain slide
-        # is one panel. Zero panels means no data this build — skip the slide.
+        # (team) wins; video slides set _override_duration and own their timing;
+        # otherwise a fixed-carousel count; otherwise a plain slide is one panel.
+        # Zero panels means no data this build — skip the slide.
         if "_panels" in slide:
             panel_count = len(slide["_panels"])
+        elif slide.get("_override_duration"):
+            panel_count = 1  # duration already computed by build_video_slide
         else:
             panel_count = FIXED_PANEL_COUNTS.get(slide.get("template"), 1)
         if panel_count == 0:
@@ -1636,14 +1694,16 @@ def build_slides(env):
             print(f"  slide/{slug} — skipped (no panels)")
             continue
 
-        panel_duration = slide.get("panel_duration", default_panel_duration)
-        slide["panel_duration"] = panel_duration
-        slide["duration"] = panel_duration * panel_count
+        if not slide.get("_override_duration"):
+            panel_duration = slide.get("panel_duration", default_panel_duration)
+            slide["panel_duration"] = panel_duration
+            slide["duration"] = panel_duration * panel_count
+
         slide_meta[slug] = {
             "slide_active": slide.get("active", True),
             "slide_expires": slide.get("expires"),
             "duration": slide["duration"],
-            "panel_duration": panel_duration,
+            "panel_duration": slide["panel_duration"],
         }
 
         template = env.get_template(f"slides/{slide['template']}.html")
@@ -1788,6 +1848,7 @@ if __name__ == "__main__":
 
     print("Copying assets...")
     copy_assets()
+    copy_videos()
 
     env = make_env()
 

@@ -1,0 +1,19 @@
+{
+  "template": "video",
+  "title": "Test: Multi-Video",
+  "active": true,
+  "videos": [
+    {
+      "body": "First clip narrative",
+      "url": "https://www.youtube.com/watch?v=qT1RLpCltCE",
+      "start": 19030,
+      "end": 19040
+    },
+    {
+      "body": "Second clip narrative",
+      "url": "https://www.youtube.com/watch?v=qT1RLpCltCE",
+      "start": 19040,
+      "end": 19050
+    }
+  ]
+}

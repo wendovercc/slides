@@ -1,0 +1,9 @@
+{
+  "title": "Test Video",
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "test-video-fullbleed" },
+    { "slug": "test-video-framed" },
+    { "slug": "test-video-panels" }
+  ]
+}

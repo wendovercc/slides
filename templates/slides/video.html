@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ slide.title }}</title>
+    <style>
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: italic; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-italic.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+        :root {
+            --navy-1:       #0f2346;
+            --navy-2:       #0a1c3a;
+            --gold:         #d4af37;
+            --light-blue:   #b4c8e4;
+            --bg:           linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+            --text:         #ffffff;
+            --muted:        var(--light-blue);
+            --accent:       var(--gold);
+            --safe-x:       5vw;
+            --safe-y:       5vh;
+            --sidebar-w:    20vw;
+            --t-xl:         4vw;
+            --t-lg:         2.8vw;
+            --t-md:         2vw;
+            --t-sm:         1.2vw;
+            --t-xs:         0.9vw;
+            --t-xxs:        0.7vw;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+        html, body {
+            width: 100vw; height: 100vh; overflow: hidden;
+            font-family: 'Lato', -apple-system, Arial, sans-serif;
+            color: var(--text);
+        }
+
+        {% if slide.layout is defined and slide.layout == 'fullbleed' %}
+        /* ── Fullbleed mode ── */
+        html, body { background: var(--bg); display: flex; align-items: flex-end; }
+        .clip { width: 100%; height: auto; display: block; }
+        .overlay {
+            position: fixed; top: 0; left: 0; right: 0;
+            padding: var(--safe-y) var(--safe-x) 4vh;
+            background: {% if slide.overlay_solid is defined and slide.overlay_solid %}var(--navy-2){% else %}linear-gradient(rgba(10,28,58,0.95) 0%, transparent 100%){% endif %};
+        }
+        .overlay-title { font-size: var(--t-lg); font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+        .overlay-body {
+            font-size: 1.6vw; color: var(--muted); margin-top: 0.5vh;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        #video-progress {
+            position: fixed; top: 0; left: 0; right: 0; height: 4px;
+            background: var(--accent); transform-origin: left; transform: scaleX(0);
+            z-index: 10;
+        }
+        .overlay-logo {
+            position: fixed; top: 2vh; right: 2vw;
+            height: 16vh; width: auto; object-fit: contain;
+            z-index: 10;
+        }
+        .fallback {
+            width: 100%; height: 100%; background: var(--bg);
+            display: flex; align-items: center; justify-content: center;
+            font-size: var(--t-xl); font-weight: 700; text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        }
+
+        {% else %}
+        /* ── Sidebar framed mode ── */
+        html, body { background: var(--bg); }
+        .layout-sidebar { width: 100vw; height: 100vh; display: flex; flex-direction: row; }
+        .slide-main {
+            flex: 1; min-width: 0; overflow: hidden;
+            display: flex; flex-direction: column;
+            padding: var(--safe-y) 0;
+        }
+        .slide-sidebar {
+            width: var(--sidebar-w); flex-shrink: 0;
+            display: flex; flex-direction: column; align-items: center;
+            padding: var(--safe-y) var(--safe-x) var(--safe-y) 2vw;
+            background: rgba(0,0,0,0.25);
+            border-left: 1px solid rgba(255,255,255,0.08);
+            gap: 2.5vh; overflow: hidden;
+        }
+        .club-logo { width: 65%; max-width: 10vw; height: auto; object-fit: contain; }
+        .club-meta { display: flex; flex-direction: column; align-items: center; gap: 0.6vh; }
+        .club-name { font-size: var(--t-xxs); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; text-align: center; }
+        .club-watch { font-size: var(--t-xxs); color: var(--muted); text-align: center; }
+        .club-watch strong { color: var(--accent); font-weight: 700; }
+        .sidebar-divider { width: 60%; height: 1px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+        .sponsor-heading { font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); text-align: center; }
+        .sponsor-logos-vert { display: flex; flex-direction: column; align-items: center; gap: 2vh; width: 100%; }
+        .sponsor-logo-vert { width: 100%; aspect-ratio: 16 / 3; object-fit: cover; background: #fff; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); }
+        .slide-heading {
+            font-size: var(--t-lg); font-weight: bold; line-height: 1.2;
+            margin-bottom: 1.5vh; text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            flex-shrink: 0; padding: 0 2vw 0 var(--safe-x);
+        }
+        .slide-body {
+            font-size: 1.6vw; line-height: 1.6; margin-bottom: 2.5vh;
+            flex-shrink: 0; padding: 0 2vw 0 var(--safe-x);
+            color: var(--muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .video-wrap { width: 100%; aspect-ratio: 16 / 9; flex-shrink: 0; overflow: hidden; position: relative; }
+        .video-wrap video { position: absolute; inset: 0; width: 100%; height: 100%; }
+        #video-progress {
+            position: absolute; top: 0; left: 0; right: 0; height: 4px;
+            background: var(--accent); transform-origin: left; transform: scaleX(0);
+            z-index: 10;
+        }
+        .video-fallback {
+            width: 100%; height: 100%; min-height: 20vh;
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px; display: flex; align-items: center; justify-content: center;
+            font-size: var(--t-md); color: var(--muted);
+        }
+        {% endif %}
+    </style>
+    <script src="/assets/js/slide-bridge.js"></script>
+</head>
+<body>
+{% if slide.layout is defined and slide.layout == 'fullbleed' %}
+    {% set has_video = slide.videos is defined and slide.videos and slide.videos[0]._video_src %}
+    {% if has_video %}
+    <div id="video-progress"></div>
+    {% for v in slide.videos %}{% if v._video_src %}
+    <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto"{% if not loop.first %} style="display:none"{% endif %}>
+        <source src="{{ v._video_src }}" type="video/mp4">
+    </video>
+    {% endif %}{% endfor %}
+    <div id="overlay" class="overlay">
+        {% if slide.title is defined %}<div class="overlay-title">{{ slide.title }}</div>{% endif %}
+        <div id="overlay-body" class="overlay-body"></div>
+    </div>
+    {% if slide.logo is defined and slide.logo %}
+    <img class="overlay-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
+    {% endif %}
+    {% else %}
+    <div class="fallback">{{ slide.title }}</div>
+    {% endif %}
+
+{% else %}
+    <div class="layout-sidebar">
+        <main class="slide-main">
+            {% if slide.title is defined %}<div class="slide-heading">{{ slide.title }}</div>{% endif %}
+            <div id="body-slot" class="slide-body" style="display:none"></div>
+            <div class="video-wrap">
+                <div id="video-progress"></div>
+                {% for v in slide.videos %}{% if v._video_src %}
+                <video data-idx="{{ loop.index0 }}" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto"{% if not loop.first %} style="display:none"{% endif %}>
+                    <source src="{{ v._video_src }}" type="video/mp4">
+                </video>
+                {% endif %}{% endfor %}
+                {% if not (slide.videos is defined and slide.videos and slide.videos[0]._video_src) %}
+                <div class="video-fallback">Video unavailable</div>
+                {% endif %}
+            </div>
+        </main>
+        <aside class="slide-sidebar">
+            <img class="club-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
+            <div class="club-meta">
+                <span class="club-name">Wendover Cricket Club</span>
+                <span class="club-watch">Watch anywhere · <strong>{{ site_url }}</strong></span>
+            </div>
+            <div class="sidebar-divider"></div>
+            <span class="sponsor-heading">Please support our sponsors</span>
+            <div class="sponsor-logos-vert">
+                {% for s in sponsors %}<img class="sponsor-logo-vert" src="{{ s.src }}" alt="{{ s.name }}">{% endfor %}
+            </div>
+        </aside>
+    </div>
+{% endif %}
+
+<script>
+(function () {
+    var VIDEOS = {{ slide.videos | tojson }};
+    var videoEls = Array.from(document.querySelectorAll('video[data-idx]'));
+    var count = videoEls.length;
+    var current = 0;
+    var progressEl = document.getElementById('video-progress');
+    {% if slide.layout is defined and slide.layout == 'fullbleed' %}
+    var overlayEl = document.getElementById('overlay');
+    var bodyEl = document.getElementById('overlay-body');
+    var hasTitle = {{ (slide.title is defined) | tojson }};
+    {% else %}
+    var bodyEl = document.getElementById('body-slot');
+    {% endif %}
+
+    function showVideo(i) {
+        videoEls.forEach(function (v) { v.style.display = 'none'; v.pause(); });
+        current = i;
+        if (progressEl) progressEl.style.transform = 'scaleX(0)';
+        var v = videoEls[i];
+        if (!v) return;
+        v.style.display = 'block';
+        v.currentTime = 0;
+        v.play();
+        var body = VIDEOS[i] && VIDEOS[i].body;
+        if (bodyEl) bodyEl.textContent = body || '';
+        {% if slide.layout is defined and slide.layout == 'fullbleed' %}
+        if (overlayEl) overlayEl.style.display = (hasTitle || body) ? '' : 'none';
+        {% else %}
+        if (bodyEl) bodyEl.style.display = body ? '' : 'none';
+        {% endif %}
+        if (window.WccSlide) WccSlide.notifyPanel(i);
+    }
+
+    videoEls.forEach(function (v) {
+        v.addEventListener('timeupdate', function () {
+            if (+v.dataset.idx !== current || !progressEl) return;
+            var ratio = v.duration ? v.currentTime / v.duration : 0;
+            progressEl.style.transform = 'scaleX(' + ratio + ')';
+        });
+        v.addEventListener('ended', function () {
+            var i = +v.dataset.idx;
+            if (i !== current) return;
+            if (i < count - 1) { showVideo(i + 1); }
+            else { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
+        });
+    });
+
+    if (window.WccSlide) {
+        WccSlide.register({
+            count: count || 1,
+            show: function (i) { showVideo(i); },
+            startAuto: function () {},
+            pauseAuto: function () { if (videoEls[current]) videoEls[current].pause(); },
+            restartCurrent: function () { if (videoEls[current]) videoEls[current].play(); }
+        });
+    }
+    showVideo(0);
+})();
+</script>
+</body>
+</html>
