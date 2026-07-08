@@ -15,7 +15,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
 FETCHED = CONTENT / "data" / "fetched"
-VIDEOS_CACHE = CONTENT / "data" / "videos"
+VIDEOS_CACHE = CONTENT / "data" / "fetched" / "videos"
 TEMPLATES = ROOT / "templates"
 ASSETS = ROOT / "assets"
 SITE = ROOT / "site"

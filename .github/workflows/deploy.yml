@@ -62,7 +62,7 @@ jobs:
       - name: Cache downloaded video clips
         uses: actions/cache@v4
         with:
-          path: content/data/videos
+          path: content/data/fetched/videos
           key: videos-${{ hashFiles('content/slides/*.json') }}
           restore-keys: |
             videos-

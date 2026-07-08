@@ -24,7 +24,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
-VIDEOS_DIR = CONTENT / "data" / "videos"
+VIDEOS_DIR = CONTENT / "data" / "fetched" / "videos"
 
 
 def load_dotenv():
