@@ -15,7 +15,8 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
 FETCHED = CONTENT / "data" / "fetched"
-VIDEOS_CACHE = CONTENT / "data" / "fetched" / "videos"
+VIDEOS_CACHE    = CONTENT / "data" / "fetched" / "videos"
+VIDEO_MANIFEST  = CONTENT / "data" / "video_manifest.json"
 TEMPLATES = ROOT / "templates"
 ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
@@ -472,23 +473,39 @@ def video_fingerprint(url: str, start, end) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
+def _load_manifest() -> dict:
+    if VIDEO_MANIFEST.exists():
+        try:
+            return json.loads(VIDEO_MANIFEST.read_text())
+        except Exception:
+            pass
+    return {}
+
+
 def _resolve_video(v: dict) -> tuple:
-    """Return (src_path_or_None, duration_float) for a video config dict."""
+    """Return (src_url_or_None, duration_float) for a video config dict.
+
+    Accepts either:
+      {"src": "https://...", "duration": 180}  — direct R2/CDN URL
+      {"url": "https://youtube...", "start": N, "end": N}  — manifest lookup
+    """
+    # Direct URL (manually uploaded to R2 or elsewhere)
+    if "src" in v:
+        dur = float(v.get("duration", 30.0))
+        return v["src"], dur
+
     url = v.get("url", "")
     start = v.get("start")
     end = v.get("end")
     fallback_dur = float((end or 0) - (start or 0)) or 30.0
     if not url:
         return None, fallback_dur
+
     fp = video_fingerprint(url, start, end)
-    meta_path = VIDEOS_CACHE / f"{fp}.json"
-    mp4_path = VIDEOS_CACHE / f"{fp}.mp4"
-    if mp4_path.exists() and meta_path.exists():
-        try:
-            dur = float(json.loads(meta_path.read_text()).get("duration", fallback_dur))
-        except Exception:
-            dur = fallback_dur
-        return f"/assets/videos/{fp}.mp4", dur
+    manifest = _load_manifest()
+    entry = manifest.get(fp)
+    if entry:
+        return entry["src"], float(entry.get("duration", fallback_dur))
     return None, fallback_dur
 
 
@@ -513,13 +530,6 @@ def copy_assets():
         shutil.copytree(ASSETS, SITE / "assets")
 
 
-def copy_videos():
-    if not VIDEOS_CACHE.exists():
-        return
-    dst = SITE / "assets" / "videos"
-    dst.mkdir(parents=True, exist_ok=True)
-    for mp4 in VIDEOS_CACHE.glob("*.mp4"):
-        shutil.copy2(mp4, dst / mp4.name)
 
 
 def make_env():
@@ -1848,7 +1858,6 @@ if __name__ == "__main__":
 
     print("Copying assets...")
     copy_assets()
-    copy_videos()
 
     env = make_env()
 

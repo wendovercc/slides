@@ -85,9 +85,12 @@ def download_clip(clip: dict) -> bool:
     print(f"  Downloading {fp} ({url}, {start}-{end})")
     try:
         node = shutil.which("node")
+        cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
         ytdlp_cmd = ["yt-dlp"]
         if node:
             ytdlp_cmd += ["--js-runtimes", f"node:{node}", "--remote-components", "ejs:github"]
+        if cookies_file and os.path.exists(cookies_file):
+            ytdlp_cmd += ["--cookies", cookies_file]
         ytdlp_cmd += [
             "-f", "bestvideo[height<=720]+bestaudio",
             "--merge-output-format", "mp4",

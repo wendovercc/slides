@@ -59,15 +59,6 @@ jobs:
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
 
-      - name: Cache downloaded video clips
-        uses: actions/cache@v4
-        with:
-          path: content/data/fetched/videos
-          key: videos-${{ hashFiles('content/slides/*.json') }}
-          restore-keys: |
-            videos-
-
-      - run: python scripts/fetch_videos.py
 
       - run: python scripts/build.py
 
