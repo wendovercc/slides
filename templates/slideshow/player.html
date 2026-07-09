@@ -196,6 +196,10 @@
 
         if (PREVIEW) renderPanel();
 
+        const reloadMs = {{ show.refresh_interval_seconds }} * 1000;
+        let reloadPending = false;
+        setTimeout(() => { reloadPending = true; }, reloadMs);
+
         if (slides.length > 0) {
             WccPlayer.start({
                 items: slides.map(s => ({
@@ -205,20 +209,21 @@
                     frame: document.getElementById(`frame-${s._i}`),
                 })),
                 onShow: idx => { _currentSlug = slides[idx].slug; if (PREVIEW) markCurrentSlide(idx); },
+                shouldReloadNow: () => reloadPending,
             });
         }
-
-        const reloadMs = {{ show.refresh_interval_seconds }} * 1000;
-        setTimeout(() => location.reload(), reloadMs);
 
         if (PREVIEW) {
             const reloadEl = document.getElementById('about-reload');
             const reloadAt = Date.now() + reloadMs;
             const tickReload = () => {
+                if (!reloadEl) return;
                 const ms = reloadAt - Date.now();
-                if (ms > 0 && reloadEl) {
+                if (ms > 0) {
                     reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
                     setTimeout(tickReload, 1000);
+                } else {
+                    reloadEl.textContent = 'reload queued — waiting for cycle end';
                 }
             };
             tickReload();

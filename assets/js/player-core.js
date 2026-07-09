@@ -95,7 +95,11 @@
       activate(i);
       send(i, 'restart-auto');                       // rotate from panel 0, aligned to now
       clearTimer();
-      timer = setTimeout(function () { kioskShow((current + 1) % n); }, (items[i].duration || 20) * 1000);
+      timer = setTimeout(function () {
+        var next = (current + 1) % n;
+        if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { location.reload(); return; }
+        kioskShow(next);
+      }, (items[i].duration || 20) * 1000);
     }
     function kioskGo(delta) { kioskShow((current + delta + n) % n); }
 
@@ -197,7 +201,9 @@
           if (playing) fwdSlide(); // paused → hold last frame until user acts
         } else {
           clearTimer();
-          kioskShow((current + 1) % n);
+          var next = (current + 1) % n;
+          if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { location.reload(); return; }
+          kioskShow(next);
         }
         return;
       }

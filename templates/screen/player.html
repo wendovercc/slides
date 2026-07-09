@@ -363,6 +363,10 @@ async function init() {
 
     const frames = document.querySelectorAll('iframe');
 
+    const reloadMs = show.refresh_interval_seconds * 1000;
+    let reloadPending = false;
+    setTimeout(() => { reloadPending = true; }, reloadMs);
+
     WccPlayer.start({
         items: slides.map((s, j) => ({
             slug: s.slug,
@@ -374,19 +378,20 @@ async function init() {
             _currentSlug = slides[i].slug;
             if (PREVIEW) markCurrentSlide(slides, i);
         },
+        shouldReloadNow: () => reloadPending,
     });
-
-    const reloadMs = show.refresh_interval_seconds * 1000;
-    setTimeout(() => window.location.reload(), reloadMs);
 
     if (PREVIEW) {
         const reloadEl = document.getElementById('about-reload');
         const reloadAt = Date.now() + reloadMs;
         const tickReload = () => {
+            if (!reloadEl) return;
             const ms = reloadAt - Date.now();
-            if (ms > 0 && reloadEl) {
+            if (ms > 0) {
                 reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
                 setTimeout(tickReload, 1000);
+            } else {
+                reloadEl.textContent = 'reload queued — waiting for cycle end';
             }
         };
         tickReload();

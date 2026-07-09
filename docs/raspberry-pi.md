@@ -136,6 +136,7 @@ if [ -z "$WAYLAND_DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
       --disable-features=TranslateUI \
       --disable-session-crashed-bubble \
       --user-data-dir=/tmp/chromium-kiosk \
+      --disk-cache-size=524288000 \
       "$SLIDESHOW_URL"
     sleep 5
   done
@@ -147,8 +148,39 @@ Key points:
 - `cage` — runs Chromium fullscreen as a Wayland client
 - `--kiosk` — full-screen, no address bar, no UI chrome
 - `--user-data-dir=/tmp/chromium-kiosk` — fresh profile each boot, avoids "session restore" prompts
+- `--disk-cache-size=524288000` — 500 MB cache (default is 80 MB, too small for large video files)
 - The `while true` loop restarts Chromium automatically if it ever crashes
 - The cursor is hidden via `cursor: none` CSS in the screen player itself
+
+### Install the kiosk control server
+
+A small Python HTTP server runs on port 8080 and lets you restart the kiosk from any device on the same network — no SSH needed. The slideshow homepage shows a "↺ Restart screen" link on screen cards that have a Pi configured; clicking it opens `http://wendovercc-1.local:8080/` in a new tab where you can trigger the restart.
+
+Copy the script from the repo:
+
+```bash
+sudo cp /path/to/repo/scripts/kiosk-control.py /usr/local/bin/kiosk-control.py
+sudo cp /path/to/repo/scripts/kiosk-control.service /etc/systemd/system/kiosk-control.service
+```
+
+Or paste them directly — the source files are `scripts/kiosk-control.py` and `scripts/kiosk-control.service` in this repo.
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now kiosk-control.service
+```
+
+Confirm it's running:
+
+```bash
+systemctl status kiosk-control.service
+```
+
+To test: open `http://wendovercc-1.local:8080/` in a browser on the same network and click **Restart kiosk**. The screen will go dark briefly, then Chromium restarts from the `while true` loop.
+
+> The control server is only reachable on the local network (mDNS `.local` hostname). It requires no authentication — anyone on the same WiFi can restart the kiosk, which is acceptable for a pavilion LAN.
 
 ### Hide the system cursor
 
@@ -366,9 +398,13 @@ To see all saved networks: `nmcli connection show`
 
 ### Restart the kiosk without rebooting
 
+**From any device on the same network:** open `http://wendovercc-1.local:8080/` and click **Restart kiosk**.
+
+**Over SSH:**
+
 ```bash
-sudo pkill chromium
-sudo pkill cage
+pkill chromium
+pkill cage
 ```
 
 The `~/.bash_profile` loop will restart cage and Chromium automatically within a few seconds.
@@ -444,6 +480,8 @@ sudo reboot
 | Can't log in via SSH | Use `ssh -i ~/.ssh/wendovercc_pi pi@wendovercc-1.local`; if re-flashed, run `ssh-keygen -R wendovercc-1.local` first |
 | sudo password not accepted | Avoid special characters in the Imager password — re-flash with an alphanumeric password |
 | Cursor visible at centre screen | Add the udev rule in Step 5 to hide HDMI input devices from libinput |
+| High mobile data usage | Likely the video is larger than Chromium's default 80 MB cache — ensure `--disk-cache-size=524288000` is in `~/.bash_profile` (Step 5) |
+| Need to restart remotely | Open `http://wendovercc-1.local:8080/` on any device on the same network; or SSH and run `pkill chromium; pkill cage` |
 | Slideshow not updating | Check network; try `curl -I https://slides.wendovercc.org/screen/the-witchell/` from SSH |
 | Screen goes blank after a while | Check TV sleep/standby settings |
 | Pi doesn't wake at 09:00 | Confirm PSU stayed powered (wake needs 5V standby); `rpi-eeprom-config \| grep POWER_OFF_ON_HALT` should be `1`; update the bootloader with `sudo apt full-upgrade` then reboot |

@@ -61,6 +61,7 @@
       "name": "Tring Road",
       "screen": true,
       "slideshow": "open-day-2026-07",
+      "pi_hostname": "wendovercc-1",
       "default_context": {
         "section": "all"
       },
