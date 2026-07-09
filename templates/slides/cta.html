@@ -28,22 +28,34 @@
     }
     .body .gold { color: var(--accent); }
     .items {
-        display: flex;
-        flex-direction: column;
-        gap: 1.2vh;
+        display: block;
+        column-gap: 4vw;
     }
+    .items.single-col { column-count: 1; }
+    .items.two-col    { column-count: 2; }
     .item {
         display: flex;
         align-items: center;
         gap: 0.8vw;
         font-size: var(--t-md);
         line-height: 1.6;
+        margin-bottom: 1.2vh;
+        break-inside: avoid;
     }
     .item::before {
         content: '✓';
         color: var(--accent);
         flex-shrink: 0;
     }
+    .item-heading {
+        font-size: var(--t-md);
+        font-weight: 700;
+        color: var(--accent);
+        margin-bottom: 0.8vh;
+        margin-top: 0.4vh;
+        break-inside: avoid;
+    }
+    .item-heading.col-break { break-before: column; }
     .slide-main { position: relative; }
     .qr-panel {
         position: absolute;
@@ -88,10 +100,17 @@
     <div class="lower">
         <div class="body">{{ slide.body | safe }}</div>
         {% if 'items' in slide %}
-        <div class="items">
-            {% for item in slide['items'] %}<div class="item">{{ item }}</div>{% endfor %}
+        <div class="items {{ 'two-col' if slide.get('item_columns') == 2 else 'single-col' }}">
+            {% for item in slide['items'] %}
+                {% if item is string %}
+                    <div class="item">{{ item }}</div>
+                {% elif item.heading is defined %}
+                    <div class="item-heading{{ ' col-break' if item.get('col_break') else '' }}">{{ item.heading }}</div>
+                {% endif %}
+            {% endfor %}
         </div>
         {% endif %}
+        {% if slide.qr_url is defined %}
         <div class="qr-panel">
             <div class="qr-label">
                 <div class="scan-to">Scan to</div>
@@ -101,5 +120,6 @@
                 <img src="{{ slide._qr_data_url }}" alt="QR code">
             </div>
         </div>
+        {% endif %}
     </div>
 {% endblock %}

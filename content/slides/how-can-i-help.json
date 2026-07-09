@@ -1,0 +1,17 @@
+{
+  "template": "cta",
+  "active": true,
+  "title": "Welcome to the Seabrook Pavilion",
+  "subtitle": "How can I help the club?",
+  "body": "With our new cricket ground and pavilion at Tring Road coming into use, the cricket club needs more volunteers and more funds. If you are interested in helping out, or sponsoring the club, please let us know at the bar.",
+  "items": [
+    "Managing bookings and hirers",
+    "Managing a bar",
+    "Joining a bar rota",
+    "Maintaining the grounds and gardens",
+    "Managing our facilities",
+    "Cleaning and weekly maintenance"
+  ],
+  "qr_url": "https://www.wendovercc.org/how-can-i-help",
+  "cta": "Find out more"
+}
