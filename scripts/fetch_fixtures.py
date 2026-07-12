@@ -226,6 +226,7 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
     opp_name = (match.get("away_team_name", "") if is_home else match.get("home_team_name", "")) or ""
 
     return {
+        "match_id": match_id,
         "match_date": match.get("match_date", ""),
         "match_time": match.get("match_time") or None,
         "ground_name": match.get("ground_name") or None,

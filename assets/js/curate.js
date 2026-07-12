@@ -1,0 +1,487 @@
+/* Ball-events curation tool.
+ *
+ * Loads a match's fetched clip events, plays each against the YouTube stream,
+ * and tags clips for the slide contexts that will consume them (Model A):
+ *   - match / team / novelty : one-per-clip, each an include + optional pin (1-5)
+ *   - players                : per-(clip, player) include + pin + optional caption
+ * Plus a base narrative and the start/end trim. Exports a {pc_match_id}.curation
+ * .json overlay to commit into content/data/matches/.
+ *
+ * The working state (`edits`) IS the overlay: it holds only what differs from the
+ * fetched defaults, keyed by clip id. Slide selection (newest-first, pins fixed)
+ * happens later in build.py — this tool only records intent.
+ */
+(function () {
+  "use strict";
+
+  var CTXS = [["match", "Match highlights"], ["team", "Team reel"], ["novelty", "Club novelty"]];
+
+  // ---- YouTube IFrame API readiness ------------------------------------
+  var ytReady = false, ytWaiters = [];
+  window.onYouTubeIframeAPIReady = function () {
+    ytReady = true; ytWaiters.forEach(function (f) { f(); }); ytWaiters = [];
+  };
+  function whenYT(f) { ytReady ? f() : ytWaiters.push(f); }
+
+  // ---- State -----------------------------------------------------------
+  var LS_PREFIX = "wcc-curate:";
+  var state = {
+    match: null, byId: {}, edits: {}, committed: {}, selected: null, player: null, roster: [], cycle: 0,
+  };
+
+  // ---- DOM helpers -----------------------------------------------------
+  var $ = function (sel, root) { return (root || document).querySelector(sel); };
+  function el(tag, attrs, children) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === "class") n.className = attrs[k];
+      else if (k === "text") n.textContent = attrs[k];
+      else if (k.slice(0, 2) === "on") n.addEventListener(k.slice(2).toLowerCase(), attrs[k]);
+      else n.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) { if (c) n.appendChild(c); });
+    return n;
+  }
+  function fmtTime(s) {
+    if (s === null || s === undefined) return "—";
+    s = Math.round(s); var m = Math.floor(s / 60), r = s % 60;
+    return m + ":" + (r < 10 ? "0" : "") + r;
+  }
+
+  // ---- Effective values (override ?? fetched default) ------------------
+  function ev(id) { return state.byId[id]; }
+  function baseNarrative(id) {
+    var e = state.edits[id];
+    if (e && e.narrative != null) return e.narrative;
+    var v = ev(id); return v.narrative || v.title || "";
+  }
+  function effTrim(id, key) {
+    var e = state.edits[id] || {};
+    return (e[key] != null) ? e[key] : ev(id)[key];
+  }
+
+  function ctxObj(id, ctx) { var e = state.edits[id]; return (e && e[ctx]) || null; }
+  function ctxIncluded(id, ctx) { var c = ctxObj(id, ctx); return !!(c && c.include); }
+  function ctxPin(id, ctx) { var c = ctxObj(id, ctx); return c && c.pin != null ? c.pin : null; }
+
+  function playerRec(id, name) { var e = state.edits[id]; return (e && e.players && e.players[name]) || null; }
+  function playerIncluded(id, name) { var r = playerRec(id, name); return !!(r && r.include); }
+  function playerPin(id, name) { var r = playerRec(id, name); return r && r.pin != null ? r.pin : null; }
+  function playerNarrative(id, name) { var r = playerRec(id, name); return r && r.narrative != null ? r.narrative : ""; }
+  function clipPlayers(id) {
+    var names = (ev(id).our_players || []).slice();
+    var e = state.edits[id];
+    if (e && e.players) Object.keys(e.players).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
+    return names;
+  }
+  function clipTags(id) { var e = state.edits[id]; return (e && e.tags) || []; }
+  function normTag(s) { return (s || "").trim().toLowerCase().replace(/\s+/g, " "); }
+  function allTags() {
+    var set = {};
+    Object.keys(state.edits).forEach(function (id) { (state.edits[id].tags || []).forEach(function (t) { set[t] = 1; }); });
+    return Object.keys(set).sort();
+  }
+
+  // ---- Mutations (keep `edits` minimal) --------------------------------
+  function edit(id) { return state.edits[id] || (state.edits[id] = {}); }
+  function cleanup(id) {
+    var e = state.edits[id];
+    if (e) {
+      ["match", "team", "novelty"].forEach(function (c) {
+        if (e[c] && !e[c].include && e[c].pin == null) delete e[c];
+      });
+      if (e.players) {
+        Object.keys(e.players).forEach(function (n) { if (!Object.keys(e.players[n]).length) delete e.players[n]; });
+        if (!Object.keys(e.players).length) delete e.players;
+      }
+      if (e.tags && !e.tags.length) delete e.tags;
+      if (!Object.keys(e).length) delete state.edits[id];
+    }
+    persistDraft();
+  }
+
+  // ---- Local draft autosave --------------------------------------------
+  function persistDraft() {
+    if (!state.match) return;
+    try {
+      var key = LS_PREFIX + state.match.pc_match_id;
+      if (Object.keys(state.edits).length) localStorage.setItem(key, JSON.stringify(state.edits));
+      else localStorage.removeItem(key);
+    } catch (e) { /* storage full or disabled — nothing we can do */ }
+    updateDirty();
+  }
+  function updateDirty() {
+    var dirty = JSON.stringify(state.edits) !== JSON.stringify(state.committed);
+    var s = $("#save-status"), d = $("#discard-btn");
+    if (s) s.textContent = dirty ? "● autosaved in browser (not yet exported)" : "✓ in sync with committed";
+    if (d) d.hidden = !dirty;
+  }
+  function discardDraft() {
+    if (!confirm("Discard your local draft for this match and revert to the last committed curation?")) return;
+    try { localStorage.removeItem(LS_PREFIX + state.match.pc_match_id); } catch (e) {}
+    state.edits = JSON.parse(JSON.stringify(state.committed));
+    state.selected = null;
+    renderList(); renderEditor(); updateDirty();
+  }
+  function setTrim(id, key, value) {
+    var e = edit(id);
+    if (value == null || isNaN(value) || value === ev(id)[key]) delete e[key];
+    else e[key] = value;
+    cleanup(id);
+  }
+  function setBaseNarrative(id, text) {
+    var e = edit(id), v = ev(id);
+    if (!text || text === (v.narrative || v.title || "")) delete e.narrative; else e.narrative = text;
+    cleanup(id);
+  }
+  function setCtxInclude(id, ctx, on) {
+    var e = edit(id);
+    if (on) { e[ctx] = e[ctx] || {}; e[ctx].include = true; }
+    else if (e[ctx]) { delete e[ctx].include; }
+    cleanup(id);
+  }
+  function setCtxPin(id, ctx, pin) {
+    var e = edit(id); e[ctx] = e[ctx] || {};
+    if (pin) e[ctx].pin = pin; else delete e[ctx].pin;
+    cleanup(id);
+  }
+  function setPlayer(id, name, patch) {
+    var e = edit(id); e.players = e.players || {};
+    var r = e.players[name] || (e.players[name] = {});
+    Object.keys(patch).forEach(function (k) {
+      var v = patch[k];
+      if (v == null || v === false || (k === "narrative" && !v)) delete r[k];
+      else r[k] = v;
+    });
+    cleanup(id);
+  }
+  function addTag(id, tag) {
+    if (!tag) return;
+    var e = edit(id); e.tags = e.tags || [];
+    if (e.tags.indexOf(tag) < 0) e.tags.push(tag);
+    cleanup(id);
+  }
+  function removeTag(id, tag) {
+    var e = state.edits[id]; if (!e || !e.tags) return;
+    e.tags = e.tags.filter(function (t) { return t !== tag; });
+    cleanup(id);
+  }
+
+  // ---- Match list ------------------------------------------------------
+  function loadMatchList() {
+    return Promise.all([
+      fetch("matches.json").then(function (r) { return r.json(); }),
+      fetch("roster.json").then(function (r) { return r.json(); }).catch(function () { return []; }),
+    ]).then(function (res) {
+      var matches = res[0]; state.roster = res[1] || [];
+      var sel = $("#match-picker"); sel.innerHTML = "";
+      if (!matches.length) { sel.appendChild(el("option", { text: "No matches available", value: "" })); return; }
+      matches.forEach(function (m) {
+        var opp = (m.home_name && m.home_name.toLowerCase().indexOf("wendover") >= 0) ? m.away_name : m.home_name;
+        sel.appendChild(el("option", {
+          text: (m.date || "?") + " — " + (m.team || "?") + " v " + (opp || "?") + " (" + m.n_events + ")",
+          value: String(m.pc_match_id),
+        }));
+      });
+      sel.addEventListener("change", function () { if (sel.value) loadMatch(sel.value); });
+      loadMatch(sel.value || String(matches[0].pc_match_id));
+    });
+  }
+
+  function loadMatch(id) {
+    return fetch("data/" + id + ".json").then(function (r) { return r.json(); }).then(function (data) {
+      state.match = data; state.byId = {};
+      (data.events || []).forEach(function (e) { state.byId[e.id] = e; });
+      state.committed = data.curation || {};
+      // Prefer a locally-saved draft (may contain unexported work) over committed.
+      var draft = null;
+      try { var raw = localStorage.getItem(LS_PREFIX + data.pc_match_id); if (raw) draft = JSON.parse(raw); } catch (e) {}
+      state.edits = draft || JSON.parse(JSON.stringify(state.committed));
+      state.selected = null;
+      buildPlayer(data.video_id);
+      renderList(); renderEditor(); updateDirty();
+    });
+  }
+
+  // ---- YouTube player --------------------------------------------------
+  function buildPlayer(videoId) {
+    whenYT(function () {
+      if (state.player) return;
+      state.player = new YT.Player("player", { videoId: videoId, playerVars: { rel: 0, modestbranding: 1 } });
+    });
+  }
+  function playWindow(id) {
+    if (!state.player || !state.player.loadVideoById) return;
+    state.player.loadVideoById({ videoId: state.match.video_id, startSeconds: effTrim(id, "start"), endSeconds: effTrim(id, "end") });
+  }
+  function currentTime() {
+    return state.player && state.player.getCurrentTime ? Math.round(state.player.getCurrentTime()) : null;
+  }
+
+  // ---- Clip list -------------------------------------------------------
+  function chipsFor(id) {
+    var chips = [];
+    if (ctxIncluded(id, "match")) chips.push(chip("M", ctxPin(id, "match"), "match"));
+    if (ctxIncluded(id, "team")) chips.push(chip("T", ctxPin(id, "team"), "team"));
+    if (ctxIncluded(id, "novelty")) chips.push(chip("N", ctxPin(id, "novelty"), "novelty"));
+    var np = clipPlayers(id).filter(function (n) { return playerIncluded(id, n); }).length;
+    if (np) chips.push(chip("\u{1F464}" + np, null, "player"));
+    var nt = clipTags(id).length;
+    if (nt) chips.push(chip("\u{1F3F7}" + nt, null, "tag"));
+    return el("span", { class: "chips" }, chips);
+  }
+  function chip(label, pin, cls) {
+    return el("span", { class: "chip chip-" + cls, text: pin ? label + pin : label });
+  }
+  function anyIncluded(id) {
+    return ctxIncluded(id, "match") || ctxIncluded(id, "team") || ctxIncluded(id, "novelty") ||
+      clipPlayers(id).some(function (n) { return playerIncluded(id, n); });
+  }
+
+  function renderList() {
+    var list = $("#clip-list"); list.innerHTML = "";
+    (state.match.events || []).forEach(function (e) {
+      var row = el("div", {
+        class: "clip-row" + (state.selected === e.id ? " selected" : "") + (anyIncluded(e.id) ? " included" : ""),
+        onClick: function () { select(e.id); },
+      }, [
+        el("input", {
+          type: "checkbox", class: "inc", title: "Include in match highlights",
+          onClick: function ( x) { x.stopPropagation(); toggleMatch(e.id, x.target.checked); },
+        }),
+        el("span", { class: "badge type-" + e.type, text: e.type }),
+        el("span", { class: "ov", text: (e.over != null ? e.over : "?") + "." + (e.ball != null ? e.ball : "?") }),
+        el("span", { class: "ttl", text: baseNarrative(e.id) }),
+        chipsFor(e.id),
+        el("span", { class: "rng", text: fmtTime(effTrim(e.id, "start")) + "–" + fmtTime(effTrim(e.id, "end")) }),
+      ]);
+      row.querySelector(".inc").checked = ctxIncluded(e.id, "match");
+      list.appendChild(row);
+    });
+    updateCounts();
+  }
+
+  function rowOf(id) {
+    var evs = state.match.events;
+    for (var i = 0; i < evs.length; i++) if (evs[i].id === id) return $("#clip-list").children[i];
+    return null;
+  }
+  // Refresh a row's dynamic bits without rebuilding the whole list.
+  function syncRow(id) {
+    var row = rowOf(id); if (!row) return;
+    row.querySelector(".ttl").textContent = baseNarrative(id);
+    row.querySelector(".rng").textContent = fmtTime(effTrim(id, "start")) + "–" + fmtTime(effTrim(id, "end"));
+    row.replaceChild(chipsFor(id), row.querySelector(".chips"));
+    row.classList.toggle("included", anyIncluded(id));
+    row.querySelector(".inc").checked = ctxIncluded(id, "match");
+  }
+
+  function updateCounts() { /* header tally removed; kept as a no-op hook */ }
+
+  function toggleMatch(id, on) {
+    setCtxInclude(id, "match", on);
+    syncRow(id); updateCounts();
+    if (state.selected === id) renderEditor();
+  }
+  function select(id) {
+    var prev = state.selected; state.selected = id;
+    state.cycle = 0;
+    if (prev != null) { var r = rowOf(prev); if (r) r.classList.remove("selected"); }
+    var row = rowOf(id); if (row) row.classList.add("selected");
+    renderEditor(); playWindow(id);
+  }
+
+  // ---- Editor ----------------------------------------------------------
+  function pinSelect(current, onChange, disabled) {
+    var sel = el("select", { class: "pin" });
+    [["", "–"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"]].forEach(function (o) {
+      var op = el("option", { value: o[0], text: o[1] });
+      if (String(current || "") === o[0]) op.selected = true;
+      sel.appendChild(op);
+    });
+    sel.disabled = !!disabled;
+    sel.addEventListener("change", function () { onChange(sel.value ? parseInt(sel.value, 10) : null); });
+    return sel;
+  }
+
+  function ctxRow(id, ctx, label) {
+    var cb = el("input", { type: "checkbox" }); cb.checked = ctxIncluded(id, ctx);
+    var pin = pinSelect(ctxPin(id, ctx), function (v) { setCtxPin(id, ctx, v); syncRow(id); }, !cb.checked);
+    cb.addEventListener("change", function () {
+      setCtxInclude(id, ctx, cb.checked);
+      pin.disabled = !cb.checked; if (!cb.checked) pin.value = "";
+      syncRow(id); updateCounts();
+    });
+    return el("div", { class: "ctx-row" }, [
+      el("label", { class: "ctx-lbl" }, [cb, el("span", { text: " " + label })]),
+      el("span", { class: "pin-wrap" }, [el("span", { class: "pin-lbl", text: "pin" }), pin]),
+    ]);
+  }
+
+  function playerRow(id, name) {
+    var included = playerIncluded(id, name);
+    var cb = el("input", { type: "checkbox" }); cb.checked = included;
+    var pin = pinSelect(playerPin(id, name), function (v) { setPlayer(id, name, { pin: v }); }, !included);
+    var narr = el("input", {
+      type: "text", class: "pnarr", placeholder: "caption for this clip (optional)",
+      onInput: function (e) { setPlayer(id, name, { narrative: e.target.value }); },
+    });
+    narr.value = playerNarrative(id, name);
+    narr.style.display = included ? "" : "none";
+    cb.addEventListener("change", function () {
+      setPlayer(id, name, { include: cb.checked ? true : null });
+      pin.disabled = !cb.checked; if (!cb.checked) pin.value = "";
+      narr.style.display = cb.checked ? "" : "none";
+      syncRow(id); updateCounts();
+    });
+    return el("div", { class: "player-row" }, [
+      el("div", { class: "player-head" }, [
+        el("label", { class: "ctx-lbl" }, [cb, el("span", { text: " " + name })]),
+        el("span", { class: "pin-wrap" }, [el("span", { class: "pin-lbl", text: "pin" }), pin]),
+      ]),
+      narr,
+    ]);
+  }
+
+  function addPlayerControl(id) {
+    var current = clipPlayers(id);
+    var team = state.match.team;
+    // Players on the match's team first, then the rest of the club.
+    var onTeam = [], others = [];
+    state.roster.forEach(function (p) {
+      if (current.indexOf(p.name) >= 0) return;
+      (team && p.teams && p.teams.indexOf(team) >= 0 ? onTeam : others).push(p.name);
+    });
+    var sel = el("select", { class: "add-sel" });
+    sel.appendChild(el("option", { value: "", text: "＋ Add a player (e.g. fielder)…" }));
+    function group(label, names) {
+      if (!names.length) return;
+      var og = el("optgroup", { label: label });
+      names.forEach(function (n) { og.appendChild(el("option", { value: n, text: n })); });
+      sel.appendChild(og);
+    }
+    group(team ? team + " squad" : "Squad", onTeam);
+    group("Other club players", others);
+    sel.addEventListener("change", function () {
+      if (!sel.value) return;
+      setPlayer(id, sel.value, { include: true });
+      renderEditor(); syncRow(id); updateCounts();
+    });
+    return el("div", { class: "add-player" }, [sel]);
+  }
+
+  function tagsSection(id) {
+    var sec = el("div", { class: "tags-sec" });
+    rebuildTags(sec, id);
+    return sec;
+  }
+  function rebuildTags(sec, id) {
+    sec.innerHTML = "";
+    var chips = el("div", { class: "tags-edit" });
+    clipTags(id).forEach(function (t) {
+      chips.appendChild(el("span", { class: "tag-chip" }, [
+        el("span", { text: t }),
+        el("button", { class: "tag-x", text: "×", title: "Remove tag", onClick: function () { removeTag(id, t); rebuildTags(sec, id); syncRow(id); } }),
+      ]));
+    });
+    if (!clipTags(id).length) chips.appendChild(el("span", { class: "hint", text: "No tags yet." }));
+    sec.appendChild(chips);
+
+    var dl = el("datalist", { id: "tag-suggestions" });
+    allTags().forEach(function (t) { if (clipTags(id).indexOf(t) < 0) dl.appendChild(el("option", { value: t })); });
+    var input = el("input", { type: "text", class: "tag-inp", placeholder: "add a tag (e.g. diving catch)…", list: "tag-suggestions" });
+    function add() {
+      var v = normTag(input.value); if (!v) return;
+      addTag(id, v); rebuildTags(sec, id); syncRow(id);
+      sec.querySelector(".tag-inp").focus();
+    }
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    sec.appendChild(el("div", { class: "tag-add" }, [input, dl, el("button", { class: "mini", text: "Add", onClick: add })]));
+  }
+
+  // Single button cycling: play from start → set start → set end (→ repeat).
+  var CYCLE_LABELS = ["▶ Play from start", "① Set start point", "② Set end point"];
+  function timingRow(id) {
+    var cyc = el("button", { class: "btn sm cycle", text: CYCLE_LABELS[state.cycle] });
+    cyc.addEventListener("click", function () {
+      if (!state.player || !state.player.loadVideoById) return;
+      if (state.cycle === 0) {
+        // Play from the current start with no end cut-off, so you can watch on
+        // to find the end point.
+        state.player.loadVideoById({ videoId: state.match.video_id, startSeconds: effTrim(id, "start") });
+        state.cycle = 1;
+      } else if (state.cycle === 1) {
+        var s = currentTime(); if (s != null) { setTrim(id, "start", s); syncRow(id); }
+        state.cycle = 2;
+      } else {
+        var e = currentTime();
+        if (e != null && e > effTrim(id, "start")) {
+          setTrim(id, "end", e); syncRow(id);
+          state.player.pauseVideo();
+          state.cycle = 0;
+        }
+        // else: end is not after start — ignore, stay on "set end"
+      }
+      cyc.textContent = CYCLE_LABELS[state.cycle];
+    });
+    return el("div", { class: "timing" }, [
+      cyc,
+      el("button", { class: "mini", text: "Reset", title: "Reset start/end to the auto values",
+        onClick: function () { setTrim(id, "start", ev(id).start); setTrim(id, "end", ev(id).end); syncRow(id); } }),
+      el("button", { class: "mini", text: "Preview", title: "Play the trimmed clip start→end",
+        onClick: function () { playWindow(id); } }),
+    ]);
+  }
+
+  function renderEditor() {
+    var box = $("#editor"); box.innerHTML = "";
+    var id = state.selected;
+    if (id == null) { box.appendChild(el("p", { class: "hint", text: "Select a clip to tag and trim it." })); return; }
+
+    var narr = el("textarea", {
+      class: "narrative", rows: "2", placeholder: "Caption…",
+      onInput: function (e) { setBaseNarrative(id, e.target.value); syncRow(id); },
+    });
+    narr.value = baseNarrative(id);
+    box.appendChild(narr);
+
+    box.appendChild(timingRow(id));
+
+    box.appendChild(el("div", { class: "sec-label", text: "Include in" }));
+    CTXS.forEach(function (c) { box.appendChild(ctxRow(id, c[0], c[1])); });
+
+    box.appendChild(el("div", { class: "sec-label", text: "Players" }));
+    var wrap = el("div", { class: "players" });
+    clipPlayers(id).forEach(function (n) { wrap.appendChild(playerRow(id, n)); });
+    box.appendChild(wrap);
+    box.appendChild(addPlayerControl(id));
+
+    box.appendChild(el("div", { class: "sec-label", text: "Custom tags" }));
+    box.appendChild(tagsSection(id));
+  }
+
+  // ---- Import / export -------------------------------------------------
+  function exportOverlay() {
+    var blob = new Blob([JSON.stringify(state.edits, null, 2) + "\n"], { type: "application/json" });
+    var a = el("a", { href: URL.createObjectURL(blob), download: state.match.pc_match_id + ".curation.json" });
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  function importOverlay(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try { state.edits = JSON.parse(reader.result) || {}; state.selected = null; renderList(); renderEditor(); persistDraft(); }
+      catch (err) { alert("Could not parse curation file: " + err.message); }
+    };
+    reader.readAsText(file);
+  }
+
+  // ---- Wire up ---------------------------------------------------------
+  document.addEventListener("DOMContentLoaded", function () {
+    $("#export-btn").addEventListener("click", exportOverlay);
+    $("#discard-btn").addEventListener("click", discardDraft);
+    $("#import-input").addEventListener("change", function (e) {
+      if (e.target.files[0]) importOverlay(e.target.files[0]); e.target.value = "";
+    });
+    loadMatchList().catch(function (err) { $("#save-status").textContent = "Failed to load: " + err.message; });
+  });
+})();

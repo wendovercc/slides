@@ -50,6 +50,13 @@ jobs:
           PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
           PLAY_CRICKET_SITE_ID: ${{ secrets.PLAY_CRICKET_SITE_ID }}
 
+      # Results Vault token is self-generated; match ids come from fixtures.json
+      # (above), so this must run after fetch_fixtures.py. The Play Cricket token
+      # is optional — used only to attribute fielders to dismissals.
+      - run: python scripts/fetch_ball_events.py
+        env:
+          PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
+
       - run: python scripts/fetch_cs365_training.py
         env:
           CS365_USERNAME: ${{ secrets.CS365_USERNAME }}

@@ -17,6 +17,8 @@ CONTENT = ROOT / "content"
 FETCHED = CONTENT / "data" / "fetched"
 VIDEOS_CACHE    = CONTENT / "data" / "fetched" / "videos"
 VIDEO_MANIFEST  = CONTENT / "data" / "video_manifest.json"
+FETCHED_MATCHES = CONTENT / "data" / "fetched" / "matches"   # raw ball events (rebuilt each build)
+CURATION_DIR    = CONTENT / "data" / "matches"               # committed {id}.curation.json overlays
 TEMPLATES = ROOT / "templates"
 ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
@@ -523,6 +525,69 @@ def build_video_slide(slide):
     slide["duration"] = total_dur
     slide["panel_duration"] = total_dur + 30.0  # safety net; wcc-done fires first
     slide["_override_duration"] = True
+
+
+def build_curation(env):
+    """Publish the ball-events curation tool at /curate/ (unlisted, noindex).
+
+    Exposes each fetched match's raw events plus any committed curation overlay
+    as JSON the page loads, then renders the page. With no fetched match data the
+    step is a no-op (the tool only matters once fetch_ball_events.py has run).
+    """
+    raw_files = sorted(FETCHED_MATCHES.glob("*.json")) if FETCHED_MATCHES.exists() else []
+    if not raw_files:
+        return
+    out_dir = SITE / "curate"
+    data_dir = out_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    index = []
+    for f in raw_files:
+        try:
+            data = json.loads(f.read_text())
+        except Exception:
+            continue
+        pc_id = data.get("pc_match_id") or f.stem
+        overlay_path = CURATION_DIR / f"{pc_id}.curation.json"
+        overlay = {}
+        if overlay_path.exists():
+            try:
+                overlay = json.loads(overlay_path.read_text())
+            except Exception:
+                overlay = {}
+        data["curation"] = overlay
+        (data_dir / f"{pc_id}.json").write_text(json.dumps(data))
+        index.append({
+            "pc_match_id": pc_id,
+            "team": data.get("team"),
+            "date": data.get("date"),
+            "competition": data.get("competition"),
+            "home_name": data.get("home_name"),
+            "away_name": data.get("away_name"),
+            "n_events": len(data.get("events", [])),
+        })
+    index.sort(key=lambda m: (m.get("date") or ""), reverse=True)
+    (out_dir / "matches.json").write_text(json.dumps(index))
+
+    # Full club roster (names + teams) for the "add player" picker on the page.
+    roster_path = FETCHED / "player_stats_this_season.json"
+    roster = []
+    if roster_path.exists():
+        try:
+            players = json.loads(roster_path.read_text()).get("players", {})
+            seen = set()
+            for p in (players.values() if isinstance(players, dict) else players):
+                name = (p.get("name") or "").strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    roster.append({"name": name, "teams": p.get("teams") or []})
+            roster.sort(key=lambda r: r["name"])
+        except Exception:
+            roster = []
+    (out_dir / "roster.json").write_text(json.dumps(roster))
+
+    (out_dir / "index.html").write_text(env.get_template("curate/index.html").render())
+    print(f"  curation: {len(index)} match(es) → /curate/")
 
 
 def copy_assets():
@@ -1875,6 +1940,9 @@ if __name__ == "__main__":
 
     print("Building screen locations...")
     build_screen_locations(env, homepage_shows)
+
+    print("Building curation tool...")
+    build_curation(env)
 
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")

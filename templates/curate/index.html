@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Ball-events curation — Wendover CC</title>
+  <style>
+    @font-face { font-family: 'Lato'; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Lato'; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Lato'; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+    :root {
+      --navy-1: #0f2346; --navy-2: #0a1c3a; --gold: #d4af37; --ink-soft: #b4c8e4;
+      --panel: #12294f; --line: rgba(180,200,228,.18); --white: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--white);
+      background: linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    header {
+      padding: 10px 20px; border-bottom: 2px solid var(--gold);
+      display: flex; flex-wrap: nowrap; gap: 16px; align-items: center; flex-shrink: 0;
+      background: var(--navy-2); z-index: 5;
+    }
+    header h1 { font-size: 18px; font-weight: 900; margin: 0; letter-spacing: .01em; white-space: nowrap; }
+    header h1 span { color: var(--gold); }
+    #match-picker { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line);
+      background: var(--panel); color: var(--white); max-width: 42ch; }
+    .spacer { flex: 1; }
+    .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+    .btn-row { display: flex; align-items: center; gap: 10px; }
+    .save-status { color: var(--ink-soft); font-size: 12px; white-space: nowrap; }
+    .btn { font: inherit; font-weight: 700; padding: 7px 14px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--gold); background: var(--gold); color: var(--navy-2); }
+    .btn.ghost { background: transparent; color: var(--gold); }
+    main { display: grid; grid-template-columns: minmax(340px, 1fr) 760px; gap: 0;
+      align-items: stretch; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    #clip-list { border-right: 1px solid var(--line); height: 100%; overflow-y: auto; }
+    .clip-row {
+      display: grid; grid-template-columns: 22px 62px 44px 1fr auto 88px; align-items: center; gap: 10px;
+      padding: 9px 16px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 14px;
+    }
+    .chips { display: flex; gap: 4px; justify-content: flex-end; }
+    .chip { font-size: 10px; font-weight: 700; padding: 2px 5px; border-radius: 4px; background: rgba(180,200,228,.18); color: var(--ink-soft); }
+    .chip-match { background: rgba(212,175,55,.22); color: var(--gold); }
+    .chip-team { background: rgba(26,92,122,.5); color: #cfe6f2; }
+    .chip-novelty { background: rgba(139,26,26,.5); color: #f2cfcf; }
+    .chip-player { background: rgba(45,122,45,.45); color: #cfeccf; }
+    .chip-tag { background: rgba(122,92,0,.5); color: #eadfae; }
+    .clip-row:hover { background: rgba(180,200,228,.06); }
+    .clip-row.selected { background: rgba(212,175,55,.14); }
+    .clip-row.included { box-shadow: inset 3px 0 0 var(--gold); }
+    .clip-row .inc { width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer; }
+    .clip-row .ov { color: var(--ink-soft); font-variant-numeric: tabular-nums; font-size: 13px; }
+    .clip-row .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .clip-row .rng { color: var(--ink-soft); font-variant-numeric: tabular-nums; font-size: 12px; text-align: right; }
+    .badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+      padding: 2px 7px; border-radius: 999px; text-align: center; background: rgba(180,200,228,.15); }
+    .badge.type-wicket { background: #8b1a1a; }
+    .badge.type-six { background: #2d7a2d; }
+    .badge.type-four { background: #1a5c7a; }
+    aside { padding: 16px; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+    .player-wrap { position: relative; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; flex: 0 0 auto; }
+    .player-wrap iframe, #player { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    #editor { margin-top: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+    .inc-label { display: flex; align-items: center; gap: 6px; font-weight: 700; margin: 6px 0 12px; cursor: pointer; }
+    .inc-label input { width: 17px; height: 17px; accent-color: var(--gold); }
+    .narrative { width: 100%; font: inherit; padding: 8px; border-radius: 6px; resize: vertical;
+      border: 1px solid var(--line); background: var(--panel); color: var(--white); margin-bottom: 12px; }
+    .timing { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .timing .cycle { flex: 1; }
+    .btn.sm { padding: 7px 14px; font-size: 13px; }
+    .mini { font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 5px; cursor: pointer;
+      border: 1px solid var(--line); background: transparent; color: var(--ink-soft); }
+    .mini:hover { color: var(--white); border-color: var(--ink-soft); }
+    .sec-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+      color: var(--gold); margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+    .ctx-row, .player-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; }
+    .ctx-lbl { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .ctx-lbl input { width: 16px; height: 16px; accent-color: var(--gold); }
+    .pin-wrap { display: flex; align-items: center; gap: 5px; color: var(--ink-soft); font-size: 12px; }
+    .pin { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 5px;
+      border: 1px solid var(--line); background: var(--panel); color: var(--white); }
+    .pin:disabled { opacity: .4; }
+    .players { display: flex; flex-direction: column; gap: 4px; }
+    .player-row { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+    .pnarr { width: 100%; margin-top: 6px; font: inherit; font-size: 13px; padding: 5px 7px; border-radius: 5px;
+      border: 1px solid var(--line); background: var(--panel); color: var(--white); }
+    .tags-edit { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .tag-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 4px 3px 9px;
+      border-radius: 999px; background: rgba(122,92,0,.4); color: #eadfae; }
+    .tag-x { border: 0; background: transparent; color: #eadfae; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
+    .tag-x:hover { color: #fff; }
+    .tag-add { display: flex; gap: 6px; }
+    .tag-inp { flex: 1; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px;
+      border: 1px dashed var(--line); background: var(--panel); color: var(--white); }
+    .add-player { display: flex; gap: 6px; margin-top: 8px; }
+    .add-sel { flex: 1; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px;
+      border: 1px dashed var(--line); background: var(--panel); color: var(--white); }
+    .hint { color: var(--ink-soft); font-size: 13px; }
+    @media (max-width: 1100px) {
+      body { height: auto; display: block; overflow: auto; }
+      main { grid-template-columns: 1fr; overflow: visible; }
+      #clip-list, aside, #editor { height: auto; overflow: visible; }
+      aside { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Wendover<span>CC</span> · Clip curation</h1>
+    <select id="match-picker" aria-label="Match"></select>
+    <span class="spacer"></span>
+    <div class="actions">
+      <div class="btn-row">
+        <button id="discard-btn" class="btn ghost" hidden>Discard draft</button>
+        <label class="btn ghost" for="import-input">Import…</label>
+        <input id="import-input" type="file" accept="application/json" hidden>
+        <button id="export-btn" class="btn">Export curation.json</button>
+      </div>
+      <span id="save-status" class="save-status"></span>
+    </div>
+  </header>
+  <main>
+    <div id="clip-list"></div>
+    <aside>
+      <div class="player-wrap"><div id="player"></div></div>
+      <div id="editor"></div>
+    </aside>
+  </main>
+  <script src="https://www.youtube.com/iframe_api"></script>
+  <script src="/assets/js/curate.js"></script>
+</body>
+</html>
