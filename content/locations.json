@@ -60,7 +60,7 @@
       "id": "tring-road",
       "name": "Tring Road",
       "screen": true,
-      "slideshow": "open-day-2026-07",
+      "slideshow": "pavilion-auto",
       "pi_hostname": "wendovercc-1",
       "default_context": {
         "section": "all"

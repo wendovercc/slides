@@ -31,9 +31,9 @@ PAGE = b"""<!DOCTYPE html>
 <p id="msg"></p>
 <script>
 function restart() {
-  document.getElementById('msg').textContent = 'Restarting…';
+  document.getElementById('msg').textContent = 'Restarting...';
   fetch('/restart', { method: 'POST' })
-    .then(() => { document.getElementById('msg').textContent = 'Done — kiosk will be back in a few seconds.'; })
+    .then(() => { document.getElementById('msg').textContent = 'Done - kiosk will be back in a few seconds.'; })
     .catch(() => { document.getElementById('msg').textContent = 'Request failed — check the Pi is reachable.'; });
 }
 </script>
