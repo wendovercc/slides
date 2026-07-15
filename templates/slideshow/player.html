@@ -206,6 +206,7 @@
                     slug: s.slug,
                     duration: s.duration,
                     panel_duration: s.panel_duration,
+                    group: s._group || null,   // slide-set membership (drives hats later)
                     frame: document.getElementById(`frame-${s._i}`),
                 })),
                 onShow: idx => { _currentSlug = slides[idx].slug; if (PREVIEW) markCurrentSlide(idx); },

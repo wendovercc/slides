@@ -1,0 +1,86 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% from 'slides/_set_header.html' import set_header %}
+{% block title %}{{ slide.title }}{% endblock %}
+{#- Resulting league table — the final set step for league teams. Current table
+    (safe here: the result is already out), styled as the team slide's League tab. -#}
+{% block styles %}
+{% include 'slides/_set_header_styles.html' %}
+    .league-subtitle { font-size: var(--t-md); color: var(--text); margin-bottom: 1.2vh; letter-spacing: 0.04em; }
+    .table { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .league-grid {
+        display: grid;
+        grid-template-columns: 1fr repeat(var(--stat-cols, 7), 4.5vw);
+        gap: 0 0.5vw;
+        align-items: baseline;
+    }
+    .col-headers {
+        padding: 0.4vh 0 0.6vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
+        font-size: var(--t-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.55;
+    }
+    .col-num { text-align: right; }
+    .row { padding: 0.42vh 0; font-size: var(--t-md); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    .league-grid.row.highlight { background: rgba(212,175,55,0.2); color: #ffd966; font-weight: bold; }
+    .league-grid .name { display: flex; align-items: baseline; gap: 0.5vw; overflow: hidden; padding-right: 0.5vw; }
+    .name-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    /* Team designation ('- 1st XI') as a lighter sub, consistent with the meta. */
+    .team-desig { font-family: 'Lato', Arial, sans-serif; font-size: var(--t-xs); font-weight: normal; opacity: 0.6; margin-left: 0.5vw; }
+    /* Points won in this match, badged onto the two involved teams' rows —
+       coloured by result like the Result tab's pills (green win / red loss). */
+    .match-pts-badge {
+        margin-left: auto; flex-shrink: 0;
+        font-family: 'Lato', Arial, sans-serif;
+        font-weight: bold;
+        font-size: var(--t-sm);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-variant-numeric: tabular-nums;
+        padding: 0.2vh 0.7vw;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+    }
+    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
+    .result-A, .result-C, .result-NR { background: #4a3800; border: 1px solid #8c6800; color: #ffd966; }
+    .val { text-align: right; opacity: 0.7; font-variant-numeric: tabular-nums; }
+    .pts { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; color: var(--accent); }
+{% endblock %}
+{% block content %}
+    {{ set_header(slide) }}
+    {% set table = slide._league_data.league_table[0] %}
+    {% set stat_cols = table.headings_list|length - 1 %}
+    <div class="league-subtitle">{% if slide._league_name and slide._league_name != table.name %}{{ slide._league_name }} · {% endif %}{{ table.name }}</div>
+    <div class="table" style="--stat-cols: {{ stat_cols }}">
+        <div class="league-grid col-headers">
+            {% for key, label in table.headings_list %}
+            <span class="{% if key != 'column_1' %}col-num{% endif %}">{{ label }}</span>
+            {% endfor %}
+        </div>
+        {% for row in table.rows %}
+        <div class="league-grid row{% if row.team_id == slide._league_team_id %} highlight{% endif %}">
+            {% for key, label in table.headings_list %}
+                {% if key == 'column_1' %}
+                    {% set _np = row[key].split(' - ', 1) %}
+                    {% set _mp = none %}{% set _res = none %}
+                    {% if row.team_id == slide._league_team_id %}{% set _mp = slide._our_match_points %}{% set _res = slide._our_result %}
+                    {% elif row.team_id == slide._opp_team_id %}{% set _mp = slide._opp_match_points %}{% set _res = slide._opp_result %}{% endif %}
+                    <span class="name">
+                        <span class="name-text">{{ _np[0] }}{% if _np|length > 1 %}<span class="team-desig">{{ _np[1] }}</span>{% endif %}</span>
+                        {% if _mp is not none %}<span class="match-pts-badge{% if _res %} result-{{ _res }}{% endif %}">{{ _mp }} pts</span>{% endif %}
+                    </span>
+                {% elif label|lower == 'pts' %}
+                    <span class="pts">{{ row[key] }}</span>
+                {% else %}
+                    <span class="val">{{ row[key] }}</span>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+{% endblock %}

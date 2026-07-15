@@ -70,9 +70,9 @@
 
     /* ── Tab 1: League table ───────────────────────────────────────────── */
     .league-subtitle {
-        font-size: var(--t-sm);
-        letter-spacing: 0.06em;
-        opacity: 0.75;
+        font-size: var(--t-md);
+        color: var(--text);
+        letter-spacing: 0.04em;
         margin-bottom: 1.4vh;
         flex-shrink: 0;
     }
@@ -93,6 +93,8 @@
         text-overflow: ellipsis;
         padding-right: 0.5vw;
     }
+    /* Team designation ('- 1st XI') as a lighter sub, consistent with the meta. */
+    .team-desig { font-family: 'Lato', Arial, sans-serif; font-size: var(--t-xs); font-weight: normal; opacity: 0.6; margin-left: 0.5vw; }
 
     /* ── Tabs 4 & 5: Top batting / Top bowling — two stacked tables ─────── */
     .stacked {
@@ -499,7 +501,8 @@
                     <div class="league-grid row{% if row.team_id == slide._league_team_id %} highlight{% endif %}">
                         {% for key, label in table.headings_list %}
                             {% if key == 'column_1' %}
-                                <span class="name">{{ row[key] }}</span>
+                                {% set _np = row[key].split(' - ', 1) %}
+                                <span class="name">{{ _np[0] }}{% if _np|length > 1 %}<span class="team-desig">{{ _np[1] }}</span>{% endif %}</span>
                             {% elif label|lower == 'pts' %}
                                 <span class="pts">{{ row[key] }}</span>
                             {% else %}

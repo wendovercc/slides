@@ -1,0 +1,124 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% from 'slides/_set_header.html' import set_header %}
+{% block title %}{{ slide.title }}{% endblock %}
+{#- One innings splits into two full-width slides under the same strip step:
+    _mode 'batting' then 'bowling'. Both carry the innings headline (batting club
+    + gold readable score). -#}
+{% block styles %}
+{% include 'slides/_set_header_styles.html' %}
+    /* Innings headline — club name and score at the same size, score in gold. */
+    /* Club name stays flush left; the score (the innings result) is pushed to the right edge. */
+    .scoreline { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8vw; margin-bottom: 1.4vh; }
+    .sc-club { font-size: var(--t-md); font-weight: 700; }
+    .sc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+    .table { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .bat-grid  { grid-template-columns: 1.8fr 1.6fr 4vw 3vw 3vw 4vw 5vw; }
+    .bowl-grid { grid-template-columns: 1fr 6vw 5vw 5vw 5vw; }
+    .col-headers {
+        display: grid;
+        gap: 0 0.6vw;
+        padding: 0.4vh 0 0.6vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25);
+        font-size: var(--t-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        opacity: 0.55;
+    }
+    .col-num { text-align: right; }
+    .row {
+        display: grid;
+        gap: 0 0.6vw;
+        padding: 0.45vh 0;
+        font-size: var(--t-md);
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        align-items: baseline;
+    }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 0.4vw; }
+    .out {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        opacity: 0.5;
+        font-size: var(--t-sm);
+        font-family: 'Lato', Arial, sans-serif;
+    }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .num.dim { opacity: 0.45; }
+    .num.highlight { font-weight: bold; color: var(--accent); }
+    .not-out-star { opacity: 0.7; }
+    /* Extras — total from the innings object; the b/lb/w/nb breakdown sits in
+       the second column in the dim how-out style. */
+    .extras-row { border-top: 1px solid rgba(255,255,255,0.18); }
+    .extras-row .name { opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-sm); font-family: 'Lato', Arial, sans-serif; }
+    .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
+{% endblock %}
+{% block content %}
+    {{ set_header(slide) }}
+
+    <div class="scoreline">
+        <span class="sc-club">{{ slide._bat_club }}</span>
+        {% if slide._score_readable %}<span class="sc-score">{{ slide._score_readable }}</span>{% endif %}
+    </div>
+
+    {% if slide._mode == 'batting' %}
+    <div class="table">
+        <div class="col-headers bat-grid">
+            <span>Batting</span>
+            <span></span>
+            <span class="col-num">B</span>
+            <span class="col-num">4</span>
+            <span class="col-num">6</span>
+            <span class="col-num">SR</span>
+            <span class="col-num">R</span>
+        </div>
+        {% if slide._batting %}
+            {% for b in slide._batting %}
+            <div class="row bat-grid">
+                <span class="name">{{ b.name }}</span>
+                <span class="out">{{ b.how_out_abbr }}</span>
+                <span class="num dim">{{ b.balls or '' }}</span>
+                <span class="num dim">{{ b.fours or '' }}</span>
+                <span class="num dim">{{ b.sixes or '' }}</span>
+                <span class="num dim">{{ b.strike_rate or '' }}</span>
+                <span class="num highlight">{{ b.runs }}{% if b.not_out %}<span class="not-out-star">*</span>{% endif %}</span>
+            </div>
+            {% endfor %}
+            {% if slide._extras is not none %}
+            <div class="row bat-grid extras-row">
+                <span class="name">Extras</span>
+                <span class="out">{{ slide._extras_parts }}</span>
+                <span></span><span></span><span></span><span></span>
+                <span class="num highlight">{{ slide._extras }}</span>
+            </div>
+            {% endif %}
+        {% else %}
+            <div class="empty">No batting data</div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="table">
+        <div class="col-headers bowl-grid">
+            <span>Bowling · {{ slide._bowl_club }}</span>
+            <span class="col-num">O</span>
+            <span class="col-num">M</span>
+            <span class="col-num">R</span>
+            <span class="col-num">W</span>
+        </div>
+        {% if slide._bowling %}
+            {% for b in slide._bowling %}
+            <div class="row bowl-grid">
+                <span class="name">{{ b.name }}</span>
+                <span class="num">{{ b.overs_str }}</span>
+                <span class="num dim">{{ b.maidens }}</span>
+                <span class="num">{{ b.runs }}</span>
+                <span class="num highlight">{{ b.wickets }}</span>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty">No bowling data</div>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endblock %}

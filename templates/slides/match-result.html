@@ -1,0 +1,113 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% from 'slides/_set_header.html' import set_header %}
+{% from 'slides/_perf_icon.html' import perf_icon %}
+{% block title %}{{ slide.title }}{% endblock %}
+{% block styles %}
+{% include 'slides/_set_header_styles.html' %}
+    .no-match {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        font-size: var(--t-md); opacity: 0.5; letter-spacing: 0.06em;
+    }
+    /* Mirrors the Preview tale-of-the-tape: crest + name + label centred at the
+       top of each column, with the result/points graphic centred below. */
+    .result-columns { flex: 1; display: flex; gap: 2.5vw; min-height: 0; }
+    /* Standalone card (no sequence strip): add breathing room under the header
+       that the strip otherwise provides on the in-set Result step. */
+    .result-columns.no-strip { margin-top: 4vh; }
+    .team-col { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+    .col-divider { width: 1px; background: rgba(255,255,255,0.12); flex-shrink: 0; }
+    /* Crest block — shared look with match-intro: white circular badge, contained
+       so the full crest shows; the box stays fixed height when a crest is absent. */
+    .crest { height: 6vw; display: flex; align-items: center; justify-content: center; margin-top: 1vh; }
+    .crest img { width: 6vw; height: 6vw; border-radius: 50%; object-fit: contain; background: #fff; padding: 0.4vw; box-sizing: border-box; }
+    /* Club name only — the team designation lives in the header subtitle (our
+       side) and the right-hand meta (opposition), so it isn't repeated here. */
+    .tc-name { font-size: var(--t-md); font-weight: 900; line-height: 1.05; margin-top: 1.2vh; }
+    /* Score matches the innings scorecard headline: gold, same weight/size. */
+    .tc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; margin-top: 0.8vh; }
+    .tc-result-row { margin-top: 3vh; }
+    .result-pill {
+        font-weight: bold;
+        font-size: var(--t-sm);
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 0.35vh 0.9vw;
+        border-radius: 4px;
+    }
+    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
+    .result-A, .result-C, .result-NR { background: #4a3800; border: 1px solid #8c6800; color: #ffd966; }
+
+    /* Performers stay a left-aligned list (full column width) even though the
+       column above them is centred. */
+    .tc-performers {
+        width: 100%;
+        text-align: left;
+        margin-top: 6vh;
+        display: flex;
+        flex-direction: column;
+        gap: 1.1vh;
+    }
+    .match-hl { display: flex; flex-direction: column; }
+    .hl-line { display: grid; grid-template-columns: 2vw 1fr auto; gap: 0 0.6vw; align-items: center; font-size: var(--t-md); line-height: 1.1; }
+    .perf-icon { width: 1.7vw; height: 1.7vw; color: rgba(255,255,255,0.85); }
+    .perf-icon-cell { display: flex; align-items: center; justify-content: center; }
+    .hl-line .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.9; }
+    .pts { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; color: var(--accent); }
+    .hl-detail { padding-left: 2.6vw; font-family: 'Lato', Arial, sans-serif; font-size: var(--t-sm); opacity: 0.55; letter-spacing: 0.04em; margin-top: -0.1vh; }
+
+    /* Footer mirrors the Intro slide: the match outcome as the headline (white). */
+    .result-foot { flex-shrink: 0; text-align: center; padding-top: 1.6vh; margin-top: 1vh; border-top: 1px solid rgba(255,255,255,0.15); }
+    .result-summary { font-size: var(--t-md); font-weight: 700; }
+{% endblock %}
+{% block content %}
+    {{ set_header(slide) }}
+
+    {% if slide._no_match %}
+    <div class="no-match">No matches played yet</div>
+    {% else %}
+
+    {% set our_col = {"crest": slide._our_crest, "name": slide._our_name, "result": slide._our_result, "label": slide._our_result_label, "points": slide._our_points, "score": slide._our_score, "performers": slide._our_performers} %}
+    {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_name, "result": slide._opp_result, "label": slide._opp_result_label, "points": slide._opp_points, "score": slide._opp_score, "performers": slide._opp_performers} %}
+    {% set columns = [our_col, opp_col] if slide._our_left else [opp_col, our_col] %}
+
+    <div class="result-columns{% if slide._set_steps is not defined or not slide._set_steps %} no-strip{% endif %}">
+        {% for c in columns %}
+        <div class="team-col">
+            <div class="crest">
+                {% if c.crest %}<img src="{{ c.crest }}" alt="{{ c.name }}">{% endif %}
+            </div>
+            <div class="tc-name">{{ c.name }}</div>
+            {#- Score + result-pill rows always reserve their height (nbsp / hidden
+                placeholder) so an unpublished side still lines its performers up
+                with the other column. -#}
+            <div class="tc-score">{{ c.score or '&nbsp;' }}</div>
+            <div class="tc-result-row">
+                {% if c.result %}<span class="result-pill result-{{ c.result }}">{{ c.label }}{% if c.points is not none %} · {{ c.points }} pts{% endif %}</span>
+                {% else %}<span class="result-pill" style="visibility:hidden">&nbsp;</span>{% endif %}
+            </div>
+            <div class="tc-performers">
+                {% for h in c.performers %}
+                <div class="match-hl">
+                    <div class="hl-line">
+                        <span class="perf-icon-cell">{{ perf_icon(h.category) }}</span>
+                        <span class="name">{{ h.name }}</span>
+                        {% if h.primary %}<span class="pts">{{ h.primary }}</span>{% endif %}
+                    </div>
+                    {% if h.secondary %}<div class="hl-detail">{{ h.secondary }}</div>{% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% if not loop.last %}<div class="col-divider"></div>{% endif %}
+        {% endfor %}
+    </div>
+
+    {% if slide._result_desc %}
+    <div class="result-foot"><div class="result-summary">{{ slide._result_desc }}</div></div>
+    {% endif %}
+
+    {% endif %}
+{% endblock %}

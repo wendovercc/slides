@@ -662,7 +662,7 @@ def build_league_positions(slide, teams_by_id, stats_data):
             "cancelled": team_row.get("column_5", "0"),
             "abandoned": team_row.get("column_6", "0"),
             "is_top": pts_gap == 0 and leader_pts > 0,
-            "form": (form.get(team_id) or {}).get(str(team["play_cricket_league_id"]), (form.get(team_id) or {}).get("all", [])),
+            "form": (form.get(team_id) or {}).get(str(team["play_cricket_league_id"]), (form.get(team_id) or {}).get("all", []))[-5:],
             "pts_gap": pts_gap,
             "pts_pct": pts_pct,
             "leader_pts": leader_pts,
@@ -825,7 +825,7 @@ def build_next_match(slide, teams_by_id, fixtures_data, stats_data):
 
     # All-season form for our team (consistent with opposition form)
     form_data = (stats_data or {}).get("form", {}).get(team_id, {})
-    slide["_our_form"] = form_data.get("all", [])
+    slide["_our_form"] = form_data.get("all", [])[-5:]  # `all` holds 6 for the preview; team form shows 5
 
     # opposition_club_name comes from home/away_club_name in the match record;
     # opposition_name is sometimes just the team designation (e.g. "4th XI") not "Club - Team"
@@ -965,74 +965,138 @@ def fmt_innings_total(total):
     return score
 
 
-def build_last_match(slide, teams_by_id, fixtures_data):
-    team_id = slide.get("team")
-    data = (fixtures_data or {}).get("last_match", {}).get(team_id)
-
-    if not data:
-        slide["_no_match"] = True
-        return
-
-    slide["_no_match"] = False
-    slide["_match"] = data
-    slide["_date_formatted"] = fmt_match_date(data.get("match_date", ""))
-
-    league_name = teams_by_id.get(team_id, {}).get("league_name", "")
-    comp_name = data.get("competition_name", "") or ""
-    if league_name and comp_name and comp_name != league_name:
-        slide["_competition_display"] = f"{league_name} · {comp_name}"
+def fmt_innings_readable(total):
+    """Human-readable innings score, e.g. '280 for 7 off 45.0 overs',
+    '141 all out off 32.1 overs', '164 off 20.0 overs' (no wickets given)."""
+    if not total:
+        return ""
+    runs = total.get("runs", 0)
+    wickets = total.get("wickets")
+    overs = total.get("overs") or ""
+    if wickets is None or wickets == "":
+        score = f"{runs}"
+    elif int(wickets) >= 10:
+        score = f"{runs} all out"
     else:
-        slide["_competition_display"] = league_name or comp_name
-    slide["_result"] = data.get("result")
-    result_flip = {"W": "L", "L": "W"}
-    slide["_opp_result"] = result_flip.get(slide["_result"], slide["_result"])
-    slide["_our_points"] = data.get("our_points")
-    slide["_their_points"] = data.get("their_points")
-    slide["_our_total_str"] = fmt_innings_total(data.get("our_total"))
-    slide["_their_total_str"] = fmt_innings_total(data.get("their_total"))
+        score = f"{runs} for {int(wickets)}"
+    return f"{score} off {overs} overs" if overs else score
 
-    def fmt_batting(rows):
-        return [
-            {**b,
-             "how_out_abbr": format_dismissal(
-                 b.get("how_out", ""),
-                 b.get("fielder_name", ""),
-                 b.get("bowler_name", ""),
-             ),
-             "fours": b.get("fours", 0),
-             "sixes": b.get("sixes", 0),
-            }
-            for b in rows
-        ]
 
-    def fmt_bowling(rows):
-        return [
-            {**b, "overs_str": balls_to_overs(b["balls"]), "maidens": b.get("maidens", 0)}
-            for b in rows
-        ]
+def innings_extras(total, batting_rows):
+    """Extras total for the innings. Prefers the fetched breakdown's `total`;
+    falls back to (innings total − runs off the bat) for older data without a
+    breakdown. None if not derivable."""
+    if not total:
+        return None
+    ex = total.get("extras") or {}
+    if ex.get("total") is not None:
+        return int(ex["total"])
+    if not batting_rows:
+        return None
+    try:
+        return max(0, int(total.get("runs") or 0) - sum(int(b.get("runs") or 0) for b in batting_rows))
+    except (ValueError, TypeError):
+        return None
 
-    slide["_we_bat_first"] = data.get("we_bat_first", True)
-    slide["_our_batting"] = fmt_batting(data.get("our_batting", []))
-    slide["_our_bowling"] = fmt_bowling(data.get("our_bowling", []))
-    slide["_their_batting"] = fmt_batting(data.get("their_batting", []))
-    slide["_their_bowling"] = fmt_bowling(data.get("their_bowling", []))
 
-    opp_club = data.get("opposition_club_name", "") or ""
-    opp_full = data.get("opposition_name", "")
-    if opp_club:
-        slide["_opp_club_name"] = opp_club
-        slide["_opp_team_name"] = (
-            opp_full[len(opp_club) + 3:]
-            if opp_full.startswith(opp_club + " - ")
-            else opp_full
-        )
-    elif " - " in opp_full:
-        derived_club, _, opp_team_desig = opp_full.rpartition(" - ")
-        slide["_opp_club_name"] = derived_club
-        slide["_opp_team_name"] = opp_team_desig
-    else:
-        slide["_opp_club_name"] = opp_full
-        slide["_opp_team_name"] = ""
+# Scorecard extras notation, in the conventional order, omitting zero components.
+_EXTRAS_LABELS = [("byes", "b"), ("leg_byes", "lb"), ("wides", "w"),
+                  ("no_balls", "nb"), ("penalty", "p")]
+
+
+def extras_breakdown_str(total):
+    """"b 13, lb 1, w 10, nb 1" from a fetched innings total's breakdown. Empty
+    string when no breakdown is present or every component is zero."""
+    ex = (total or {}).get("extras") or {}
+    parts = [f"{abbr} {ex[key]}" for key, abbr in _EXTRAS_LABELS if ex.get(key)]
+    return ", ".join(parts)
+
+
+def team_performers(batting, bowling, opp_batting, max_extra=2):
+    """A team's headline performers from its own card: best batting + best bowling
+    always, then up to `max_extra` other notable ones (50+, 3+ wkt hauls, multi-
+    dismissal fielders). `opp_batting` is the batting card of the side this team
+    fielded against, used to credit fielders. Each is a highlight dict as built by
+    `_bat_highlight`/`_bowl_highlight`."""
+    bats = [b for b in (batting or []) if (b.get("runs") or 0) > 0 or (b.get("balls") or 0) > 0]
+    bowls = [b for b in (bowling or []) if (b.get("wickets") or 0) > 0 or (b.get("balls") or 0) > 0]
+
+    # Best batting + best bowling always shown (an all-rounder can appear as both).
+    out = []
+    if bats:
+        out.append(_bat_highlight("best_bat", max(bats, key=lambda b: (b.get("runs") or 0, -(b.get("balls") or 0)))))
+    if bowls:
+        out.append(_bowl_highlight("best_bowl", min(bowls, key=lambda b: (-(b.get("wickets") or 0), b.get("runs") or 0))))
+    seen = {(h.get("name") or "").strip() for h in out}
+
+    def add(hl):
+        name = (hl.get("name") or "").strip()
+        if name and name not in seen:
+            out.append(hl)
+            seen.add(name)
+
+    notable = []
+    for b in sorted(bats, key=lambda x: x.get("runs") or 0, reverse=True):
+        if (b.get("runs") or 0) >= 50:
+            notable.append(_bat_highlight("fifty", b))
+    for b in sorted(bowls, key=lambda x: (x.get("wickets") or 0, -(x.get("runs") or 0)), reverse=True):
+        if (b.get("wickets") or 0) >= 3:
+            notable.append(_bowl_highlight("haul", b))
+    # Fielders with 2+ dismissals, formatted like the fantasy 'Top players' cell
+    # (e.g. '3c 1ro' — catches / run-outs / stumpings, zeros omitted).
+    fielders = {}
+    for bat in (opp_batting or []):
+        ho = (bat.get("how_out") or "").strip().lower()
+        fielder = (bat.get("fielder_name") or "").strip()
+        if not fielder:
+            continue
+        key = "c" if ho == "ct" else "st" if ho == "st" else "ro" if "run out" in ho else None
+        if not key:
+            continue
+        f = fielders.setdefault(fielder, {"c": 0, "ro": 0, "st": 0, "n": 0})
+        f[key] += 1
+        f["n"] += 1
+    for name, f in sorted(fielders.items(), key=lambda x: x[1]["n"], reverse=True):
+        if f["n"] >= 2:
+            figure = " ".join(f"{f[k]}{k}" for k in ("c", "ro", "st") if f[k])
+            notable.append({"kind": "fielding", "category": "field", "name": name, "primary": figure, "secondary": ""})
+
+    for hl in notable:
+        if len(out) >= 2 + max_extra:
+            break
+        add(hl)
+    # Batters above bowlers above fielders (stable sort keeps best-first per group).
+    out.sort(key=lambda h: {"bat": 0, "bowl": 1, "field": 2}.get(h.get("category"), 3))
+    return out
+
+
+_RESULT_LABELS = {
+    "W": "Won", "L": "Lost", "D": "Drew", "T": "Tied",
+    "A": "Abandoned", "C": "Cancelled", "NR": "No Result",
+}
+
+
+def _fmt_batting_rows(rows):
+    out = []
+    for b in rows:
+        balls = b.get("balls") or 0
+        runs = b.get("runs") or 0
+        out.append({**b,
+            "how_out_abbr": format_dismissal(
+                b.get("how_out", ""), b.get("fielder_name", ""), b.get("bowler_name", ""),
+            ),
+            "fours": b.get("fours", 0),
+            "sixes": b.get("sixes", 0),
+            "strike_rate": f"{runs / balls * 100:.0f}" if balls else None,
+        })
+    return out
+
+
+def _fmt_bowling_rows(rows):
+    return [
+        {**b, "overs_str": balls_to_overs(b["balls"]), "maidens": b.get("maidens", 0)}
+        for b in rows
+    ]
 
 
 def _iso_from_dmy(s):
@@ -1076,6 +1140,36 @@ def _short_innings_total(total):
     else:
         score = f"{runs}/{int(wickets)}"
     return f"{score} ({overs})" if overs else score
+
+
+def result_summary(result, our_total, their_total, we_bat_first, our_club, opp_club):
+    """Human-readable match outcome, e.g. "Denham CC won by 139 runs" or
+    "Wendover CC won by 4 wickets". The margin type depends on which side the
+    winner batted: defending a total reads in runs, chasing reads in wickets.
+    Non-decision results get a plain phrase; "" when not derivable."""
+    plain = {"T": "Match tied", "D": "Match drawn", "A": "Match abandoned",
+             "C": "No result", "NR": "No result"}
+    if result in plain:
+        return plain[result]
+    if result not in ("W", "L") or not our_total or not their_total:
+        return ""
+    we_won = result == "W"
+    winner_club = our_club if we_won else opp_club
+    winner_total = our_total if we_won else their_total
+    loser_total = their_total if we_won else our_total
+    winner_bat_first = we_bat_first if we_won else not we_bat_first
+    try:
+        if winner_bat_first:
+            margin = int(winner_total.get("runs") or 0) - int(loser_total.get("runs") or 0)
+            unit = "run" if margin == 1 else "runs"
+        else:
+            margin = 10 - int(winner_total.get("wickets") or 0)
+            unit = "wicket" if margin == 1 else "wickets"
+    except (ValueError, TypeError):
+        return ""
+    if margin <= 0:
+        return ""
+    return f"{winner_club} won by {margin} {unit}"
 
 
 def _bat_highlight(kind, b):
@@ -1277,7 +1371,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
 
     # ── Tab 2: Results (most recent N) ─────────────────────────────────────
     form_data = (stats_data or {}).get("form", {}).get(team_id, {})
-    slide["_our_form"] = form_data.get("all", []) or []
+    slide["_our_form"] = (form_data.get("all", []) or [])[-5:]  # `all` holds 6 for the preview; team form shows 5
 
     recent = (fixtures_data.get("recent_matches") or {}).get(team_id) or []
     if not recent:
@@ -1704,9 +1798,6 @@ def build_slides(env):
         if slide.get("template") == "next-match":
             build_next_match(slide, teams_by_id, load_fixtures(), load_stats("this_season"))
 
-        if slide.get("template") == "last-match":
-            build_last_match(slide, teams_by_id, load_fixtures())
-
         if slide.get("template") == "schedule":
             training, all_fixtures, loc_lookup, loc_names = load_schedule_data()
             build_schedule(slide, teams_by_id, training, all_fixtures, loc_lookup, loc_names)
@@ -1793,9 +1884,381 @@ def build_slides(env):
 
 
 
-def build_slideshows(env, slide_meta):
-    # slide_meta (from build_slides) carries each slide's computed duration,
-    # active/expires, and a _skip flag for slides with no data this build.
+def team_preview_performers(stats, team_id, match, n_bat=2, n_bowl=2):
+    """Spoiler-safe Preview performers: the team's leading batters (by runs) and
+    bowlers (by wickets) this season, with THIS match's contribution *subtracted*
+    so the figures read as they stood going into the game. Anyone whose player id
+    is absent from this match's XI (batted or bowled) is flagged `out`.
+
+    Returns a list of performer dicts (batters then bowlers), each shaped for the
+    match-intro performer rows: category / name / primary / secondary / out.
+    Secondary stats are limited to subtractable aggregates (avg, SR, economy) —
+    max-style figures like HS/best can't be recovered pre-match from aggregates.
+    """
+    if not stats:
+        return []
+    # This match's per-player contribution + participants, keyed by player id.
+    bat_by_id = {b.get("id"): b for b in (match.get("our_batting") or []) if b.get("id")}
+    bowl_by_id = {b.get("id"): b for b in (match.get("our_bowling") or []) if b.get("id")}
+    played_ids = set(bat_by_id) | set(bowl_by_id)
+
+    def avg(runs, dismissals):
+        return f"{runs / dismissals:.1f}" if dismissals > 0 else "-"
+
+    bats, bowls = [], []
+    for pid, p in stats.get("players", {}).items():
+        block = get_leaderboard_block(p, team_id, None)
+        if not block:
+            continue
+        b, bw = block["batting"], block["bowling"]
+        mb, mbw = bat_by_id.get(pid), bowl_by_id.get(pid)
+        out = pid not in played_ids
+
+        # Pre-match batting (subtract this innings if they batted).
+        runs = b["runs"] - (int(mb["runs"] or 0) if mb else 0)
+        inns = b["innings"] - (1 if mb else 0)
+        nos = b["not_outs"] - (1 if mb and mb.get("not_out") else 0)
+        balls = b["balls"] - (int(mb.get("balls") or 0) if mb else 0)
+        if inns > 0 and runs >= 0:
+            sr = f"{runs / balls * 100:.0f}" if balls > 0 else "-"
+            bats.append({"category": "bat", "name": p["name"], "_rank": runs, "out": out,
+                         "primary": str(runs), "unit": "runs", "secondary": f"avg {avg(runs, inns - nos)} · SR {sr}"})
+
+        # Pre-match bowling (subtract this spell if they bowled).
+        wkts = bw["wickets"] - (int(mbw["wickets"] or 0) if mbw else 0)
+        bruns = bw["runs"] - (int(mbw["runs"] or 0) if mbw else 0)
+        bballs = bw["balls"] - (int(mbw.get("balls") or 0) if mbw else 0)
+        if wkts > 0:
+            econ = f"{bruns / (bballs / 6):.1f}" if bballs > 0 else "-"
+            bowls.append({"category": "bowl", "name": p["name"], "_rank": wkts, "out": out,
+                          "primary": str(wkts), "unit": "wkts", "secondary": f"avg {avg(bruns, wkts)} · econ {econ}"})
+
+    bats.sort(key=lambda x: -x["_rank"])
+    bowls.sort(key=lambda x: -x["_rank"])
+    return bats[:n_bat] + bowls[:n_bowl]
+
+
+def opp_preview_performers(opp_performers, n_bat=2, n_bowl=2):
+    """Shape the fetched opposition top performers (already pre-match, from
+    `fetch_opposition_data`) into the match-intro performer rows, mirroring our
+    side's `team_preview_performers` output. No `out` tag — spoiler-safe previews
+    don't assume the opposition XI."""
+    if not opp_performers:
+        return []
+
+    def fig(v):  # 1 dp to match our side's performer figures; "-" when absent
+        return f"{v:.1f}" if isinstance(v, (int, float)) else "-"
+
+    out = []
+    for b in (opp_performers.get("batting") or [])[:n_bat]:
+        hs = b.get("high_score")
+        secondary = f"avg {fig(b.get('average'))}"
+        if hs is not None:
+            secondary += f" · HS {hs}{'*' if b.get('high_score_not_out') else ''}"
+        out.append({"category": "bat", "name": b["name"], "out": False,
+                    "primary": str(b.get("runs", 0)), "unit": "runs", "secondary": secondary})
+    for b in (opp_performers.get("bowling") or [])[:n_bowl]:
+        out.append({"category": "bowl", "name": b["name"], "out": False,
+                    "primary": str(b.get("wickets", 0)), "unit": "wkts",
+                    "secondary": f"avg {fig(b.get('average'))} · econ {fig(b.get('economy'))}"})
+    return out
+
+
+def build_league_panel(team):
+    """Current league table for a team, with headings_list/rows prepared exactly
+    as the team slide's League tab. Returns (league_data, team_id_str, league_name)
+    or None when the team has no league table."""
+    league_id = team.get("play_cricket_league_id")
+    if not league_id:
+        return None
+    path = FETCHED / f"league_table_{league_id}.json"
+    if not path.exists():
+        return None
+    league_data = json.loads(path.read_text())
+    for table in league_data.get("league_table", []):
+        ordered = sorted(table["headings"].items(), key=lambda x: int(x[0].split("_")[1]))
+        ordered = [(k, v) for k, v in ordered if k == "column_1" or v.lower() not in LEAGUE_TABLE_EXCLUDED]
+        team_col = [(k, v) for k, v in ordered if k == "column_1"]
+        pts_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
+        rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
+        table["headings_list"] = team_col + rest_cols + pts_cols
+        table["rows"] = table["values"]
+    return league_data, str(team.get("play_cricket_team_id", "")), team.get("league_name", "")
+
+
+def build_match_packages(env, slide_meta):
+    """Generate the per-team 'latest match' package from Play Cricket data.
+
+    For every team with a completed last match, emits a slide *set*
+    `last-match-{team}` whose ordered members are, spoiler-safe:
+        intro → 1st-innings scorecard → 2nd-innings scorecard → result summary
+    A scorecard degrades out when its innings has no batting data; the result
+    summary (`last-match-result-{team}`, also referenced standalone for the light
+    'latest result' slot) degrades out when there is nothing to report. The intro
+    is spoiler-safe (no result, no league position). Per-innings clip reels slot
+    in between the scorecards in a later phase.
+
+    Renders each member slide, records its meta into `slide_meta`, and returns the
+    sets registry {set_slug: {members, group, active, expires}} for build_slideshows.
+    """
+    teams_by_id = load_teams()
+    config = load_config()
+    default_panel_duration = config.get("default_panel_duration", 20)
+
+    fixtures_path = FETCHED / "fixtures.json"
+    fixtures_data = json.loads(fixtures_path.read_text()) if fixtures_path.exists() else {}
+    last_matches = fixtures_data.get("last_match", {}) or {}
+    stats_path = FETCHED / "player_stats_this_season.json"
+    stats = json.loads(stats_path.read_text()) if stats_path.exists() else None
+
+    intro_tmpl = env.get_template("slides/match-intro.html")
+    sc_tmpl = env.get_template("slides/scorecard.html")
+    result_tmpl = env.get_template("slides/match-result.html")
+    league_tmpl = env.get_template("slides/match-league.html")
+
+    def emit(slug, template, slide):
+        slide["duration"] = default_panel_duration
+        slide["panel_duration"] = default_panel_duration
+        html = template.render(slide=slide, slug=slug)
+        out_dir = SITE / "slide" / slug
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "index.html").write_text(html)
+        slide_meta[slug] = {
+            "slide_active": True,
+            "slide_expires": None,
+            "duration": default_panel_duration,
+            "panel_duration": default_panel_duration,
+        }
+        print(f"  slide/{slug}")
+
+    sets = {}
+    for team_id, m in sorted(last_matches.items()):
+        team = teams_by_id.get(team_id, {})
+        title = team.get("name", team_id)
+
+        league_name = team.get("league_name", "")
+        comp_name = m.get("competition_name", "") or ""
+        if league_name and comp_name and comp_name != league_name:
+            competition_display = f"{league_name} · {comp_name}"
+        else:
+            competition_display = league_name or comp_name
+        opp_club, opp_team = _split_opp_name(
+            m.get("opposition_name", ""), m.get("opposition_club_name", "")
+        )
+        date_formatted = fmt_match_date(m.get("match_date", ""))
+        ground = m.get("ground_name") or ""
+        is_home = m.get("is_home", True)
+        we_bat_first = m.get("we_bat_first", True)
+        our_total_str = _short_innings_total(m.get("our_total"))
+        their_total_str = _short_innings_total(m.get("their_total"))
+        result = m.get("result")
+
+        our_batting = _fmt_batting_rows(m.get("our_batting", []) or [])
+        our_bowling = _fmt_bowling_rows(m.get("our_bowling", []) or [])
+        their_batting = _fmt_batting_rows(m.get("their_batting", []) or [])
+        their_bowling = _fmt_bowling_rows(m.get("their_bowling", []) or [])
+
+        # Each innings splits into two full-width slides under the same strip step
+        # (labels stay innings-level): batting then bowling. Both carry the innings
+        # headline (batting club + readable score).
+        # (batting_club, total, batting_rows, bowling_club, bowling_rows)
+        our_innings = ("Wendover CC", m.get("our_total"), our_batting, opp_club, their_bowling)
+        their_innings = (opp_club, m.get("their_total"), their_batting, "Wendover CC", our_bowling)
+        ordered = [our_innings, their_innings] if we_bat_first else [their_innings, our_innings]
+        labels = ["1st Innings", "2nd Innings"]
+        innings_present = []   # unique innings labels with any content (for the strip)
+        innings_members = []   # (slug, phase_label, slide_fields)
+        for i, (bat_club, total, batting, bowl_club, bowling) in enumerate(ordered):
+            if not batting and not bowling:
+                continue
+            label = labels[i]
+            innings_present.append(label)
+            scoreline = {"_bat_club": bat_club, "_score_readable": _short_innings_total(total)}
+            if batting:
+                innings_members.append((f"last-match-{team_id}-innings-{i + 1}-batting", label, {
+                    "_mode": "batting", "_batting": batting,
+                    "_extras": innings_extras(total, batting),
+                    "_extras_parts": extras_breakdown_str(total), **scoreline,
+                }))
+            if bowling:
+                innings_members.append((f"last-match-{team_id}-innings-{i + 1}-bowling", label, {
+                    "_mode": "bowling", "_bowling": bowling, "_bowl_club": bowl_club, **scoreline,
+                }))
+        has_result = bool(result or our_total_str or their_total_str)
+
+        # The three heading levels: Title (set label) + Subtitle (team · date) are
+        # constant across the set — kept data-driven so a later renderer (e.g. the
+        # MP4 export) can override them. The sequence strip is the third level: one
+        # step per *phase* (a phase can span a reel + its scorecard later). The
+        # result is the terminal payoff and doubles as the standalone latest-result
+        # slide, so it carries the shared header but no strip.
+        # League table is the final step for league teams (safe post-result).
+        league_panel = build_league_panel(team)
+        steps = (["Intro"] + innings_present
+                 + (["Result"] if has_result else [])
+                 + (["League"] if league_panel else []))
+        iso = _iso_from_dmy(m.get("match_date", ""))
+        if iso:
+            _dt = datetime.strptime(iso, "%Y-%m-%d")
+            date_short = _dt.strftime(f"%a {_dt.day} %b")
+        else:
+            date_short = ""
+        # Shared header fields. Subtitle is the team only; the match context (date,
+        # venue, opposition, ground) lives in the right-hand meta, mirroring the
+        # left side of the team slide's Schedule tile (right-aligned here).
+        set_meta_fields = {
+            "_set_date": date_short,
+            "_set_is_home": is_home,
+            "_set_opp_club": opp_club,
+            "_set_opp_team": opp_team,
+            "_set_ground": ground,
+        }
+        set_common = {"_set_title": "Last Match", "_set_subtitle": title, **set_meta_fields}
+
+        def with_strip(step_label):
+            return {**set_common, "_set_steps": steps, "_set_step": steps.index(step_label)}
+
+        members = []
+
+        # Preview = spoiler-safe tale of the tape. Our side is populated now; the
+        # opposition side (crest / form / top performers) needs new fetching and is
+        # rendered as a visible TODO. Pre-match form = the season stats form (sorted
+        # chronological, last 5) with THIS match — the newest entry — dropped. H2H =
+        # an earlier meeting this season vs the same opponent, if in recent history.
+        recent = (fixtures_data.get("recent_matches") or {}).get(team_id) or []
+        prior = [r for r in recent if r.get("match_id") != m.get("match_id")]
+        form_all = ((stats or {}).get("form", {}).get(team_id) or {}).get("all", [])
+        # Drop this match (the newest entry) when it produced a result, then show
+        # the most recent 5 available.
+        our_form = (form_all[:-1] if result else form_all)[-5:]
+        our_performers = team_preview_performers(stats, team_id, m)
+        opp_form = m.get("opposition_form") or []
+        opp_performers = opp_preview_performers(m.get("opposition_performers"))
+        opp_crest = m.get("opposition_crest")
+        h2h_match = next((r for r in prior
+                          if str(r.get("opposition_team_id")) == str(m.get("opposition_team_id"))), None)
+        h2h = ""
+        if h2h_match and h2h_match.get("result"):
+            h2h = f"Earlier this season · {_RESULT_LABELS.get(h2h_match['result'], h2h_match['result'])}"
+
+        # Toss line for the footer: prefer a clean constructed sentence (winner +
+        # bat/field), falling back to the API's raw text; empty when unknown.
+        toss_won_us = m.get("toss_won_by_us")
+        toss_bat = m.get("toss_elected_bat")
+        if toss_won_us is not None and toss_bat is not None:
+            toss_winner = "Wendover CC" if toss_won_us else opp_club
+            toss_line = f"{toss_winner} won the toss and elected to {'bat' if toss_bat else 'field'}"
+        else:
+            toss_line = m.get("toss_text") or ""
+
+        # When neither a scorecard nor a result is published (e.g. an unrecorded
+        # friendly), the intro footer says so in place of the toss headline.
+        if not innings_members and not has_result:
+            toss_line = "Match scorecard and result not available"
+
+        intro_slug = f"last-match-{team_id}-intro"
+        emit(intro_slug, intro_tmpl, {
+            "template": "match-intro", "title": title,
+            "_opp_club_name": opp_club,
+            "_our_crest": "/assets/images/wcc-logo.png",
+            "_our_form": our_form, "_our_performers": our_performers,
+            "_opp_crest": opp_crest, "_opp_form": opp_form, "_opp_performers": opp_performers,
+            "_division": competition_display, "_toss": toss_line, "_h2h": h2h,
+            # Intro lists the home team on the left.
+            "_our_left": is_home,
+            **with_strip("Intro"),
+        })
+        members.append(intro_slug)
+
+        for sc_slug, label, fields in innings_members:
+            emit(sc_slug, sc_tmpl, {
+                "template": "scorecard", "title": title,
+                **fields, **with_strip(label),
+            })
+            members.append(sc_slug)
+
+        # Result = two-column tale of the tape: a team-each-side comparison (crest,
+        # name, result pill + points + score + performers) over a footer margin line.
+        # Renders in two places from one field set: the in-set terminal step (with
+        # the sequence strip) and the standalone latest-result card (no strip).
+        opp_result = {"W": "L", "L": "W"}.get(result, result)
+        result_desc = result_summary(
+            result, m.get("our_total"), m.get("their_total"), we_bat_first, "Wendover CC", opp_club
+        )
+        set_result_fields = {
+            "_no_match": False,
+            "_result_desc": result_desc,
+            # Result lists the side that batted first on the left.
+            "_our_left": we_bat_first,
+            "_our_crest": "/assets/images/wcc-logo.png",
+            "_our_name": "Wendover CC",
+            "_our_result": result, "_our_result_label": _RESULT_LABELS.get(result, result),
+            "_our_points": m.get("our_points"),
+            "_our_score": _short_innings_total(m.get("our_total")),
+            "_our_performers": team_performers(our_batting, our_bowling, their_batting),
+            "_opp_crest": m.get("opposition_crest"),
+            "_opp_name": opp_club,
+            "_opp_result": opp_result, "_opp_result_label": _RESULT_LABELS.get(opp_result, opp_result),
+            "_opp_points": m.get("their_points"),
+            "_opp_score": _short_innings_total(m.get("their_total")),
+            "_opp_performers": team_performers(their_batting, their_bowling, our_batting),
+        }
+        if has_result:
+            set_result_slug = f"last-match-{team_id}-result"
+            emit(set_result_slug, result_tmpl, {
+                "template": "match-result", "title": title,
+                **set_result_fields, **with_strip("Result"),
+            })
+            members.append(set_result_slug)
+
+        # Standalone latest-result card for the results rotation — the same Result
+        # tale of the tape minus the sequence strip. Always emitted: when no result
+        # or scorecard is published it degrades to crests + team names with a footer
+        # note, so every team keeps a results-rotation slide.
+        emit(f"last-match-result-{team_id}", result_tmpl, {
+            "template": "match-result", "title": title,
+            "_set_title": "Last Match Result", "_set_subtitle": title,
+            **set_meta_fields, **set_result_fields,
+            "_result_desc": result_desc or "Match scorecard and result not available",
+        })
+
+        if league_panel:
+            league_data, league_team_id, league_name = league_panel
+            league_slug = f"last-match-{team_id}-league"
+            emit(league_slug, league_tmpl, {
+                "template": "match-league", "title": title,
+                "_league_data": league_data, "_league_team_id": league_team_id,
+                "_league_name": league_name,
+                # The two teams in this match, to badge their table rows with the
+                # points won here, coloured by result (team_id is a string in the
+                # league table rows).
+                "_opp_team_id": str(m.get("opposition_team_id") or ""),
+                "_our_match_points": m.get("our_points"),
+                "_opp_match_points": m.get("their_points"),
+                "_our_result": result,
+                "_opp_result": opp_result,
+                **with_strip("League"),
+            })
+            members.append(league_slug)
+
+        sets[f"last-match-{team_id}"] = {
+            "members": members,
+            "group": f"last-match-{team_id}",
+            "active": True,
+            "expires": None,
+        }
+
+    if sets:
+        print(f"  match packages: {len(sets)} team set(s)")
+    return sets
+
+
+def build_slideshows(env, slide_meta, sets=None):
+    # slide_meta (from build_slides/build_match_packages) carries each slide's
+    # computed duration, active/expires, and a _skip flag for slides with no data
+    # this build. `sets` maps a set slug to its ordered member slugs + group id;
+    # referencing a set injects its members contiguously (see below).
+    sets = sets or {}
     config = load_config()
     default_panel_duration = config.get("default_panel_duration", 20)
     preview_cfg = config.get("preview", {})
@@ -1809,11 +2272,36 @@ def build_slideshows(env, slide_meta):
         slug = show_path.stem
 
         # Merge each entry with its slide's computed meta (duration, active,
-        # expires). Drop slides skipped for lack of data. Both players read the
-        # derived `duration` from here — neither knows about panels.
+        # expires). A set reference expands to its members contiguously, each
+        # tagged with the group id and carrying any set-level expiry; entry-level
+        # keys (e.g. show_when) are inherited by every member. Unknown slugs and
+        # data-skipped slides are dropped. Both players read the derived
+        # `duration` from here — neither knows about panels.
         merged = []
         for entry in show.get("slides", []):
-            meta = slide_meta.get(entry["slug"], {})
+            entry_slug = entry.get("slug")
+
+            if entry_slug in sets:
+                s = sets[entry_slug]
+                if not s.get("active", True):
+                    continue
+                inherited = {k: v for k, v in entry.items() if k != "slug"}
+                for member_slug in s["members"]:
+                    meta = slide_meta.get(member_slug)
+                    if not meta or meta.get("_skip"):
+                        continue
+                    member_entry = {**inherited, **meta, "slug": member_slug, "_group": s["group"]}
+                    if s.get("expires") is not None:
+                        member_entry["expires"] = s["expires"]
+                        member_entry["slide_expires"] = s["expires"]
+                    member_entry.setdefault("duration", default_panel_duration)
+                    merged.append(member_entry)
+                continue
+
+            meta = slide_meta.get(entry_slug)
+            if meta is None:
+                print(f"  slideshow/{slug}: unknown slide '{entry_slug}' — skipped")
+                continue
             if meta.get("_skip"):
                 continue
             merged_entry = {**entry, **meta}
@@ -1932,8 +2420,11 @@ if __name__ == "__main__":
     print("Building slides...")
     slide_meta = build_slides(env)
 
+    print("Building match packages...")
+    sets = build_match_packages(env, slide_meta)
+
     print("Building slideshows...")
-    homepage_shows = build_slideshows(env, slide_meta)
+    homepage_shows = build_slideshows(env, slide_meta, sets)
 
     print("Building context calendar...")
     build_context_calendar()

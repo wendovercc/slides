@@ -1,27 +1,11 @@
 {
-  "title": "Last Match Results",
+  "title": "Match Features",
+  "description": "Full latest-match packages — intro, innings scorecards and result — for the senior sides.",
+  "homepage_rank": 3,
   "refresh_interval_seconds": 300,
   "slides": [
-    { "slug": "sponsors" },
-
     { "slug": "last-match-1st-xi" },
     { "slug": "last-match-2nd-xi" },
-    { "slug": "last-match-friendly-xi" },
-
-    { "slug": "last-match-u17-spitfires" },
-    { "slug": "last-match-u15-hurricanes" },
-    { "slug": "last-match-u15-spitfires" },
-    { "slug": "last-match-u14-hurricanes" },
-    { "slug": "last-match-u13-girls" },
-    { "slug": "last-match-u13-hurricanes" },
-    { "slug": "last-match-u13-spitfires" },
-    { "slug": "last-match-u12-hurricanes" },
-    { "slug": "last-match-u12-spitfires" },
-    { "slug": "last-match-u11-girls" },
-    { "slug": "last-match-u11-incredibles" },
-    { "slug": "last-match-u11-invincibles" },
-    { "slug": "last-match-u10-lightning" },
-    { "slug": "last-match-u10-thunder" },
-    { "slug": "last-match-u9" }
+    { "slug": "last-match-friendly-xi" }
   ]
 }

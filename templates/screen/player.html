@@ -372,6 +372,7 @@ async function init() {
             slug: s.slug,
             duration: s.duration,
             panel_duration: s.panel_duration,
+            group: s._group || null,   // slide-set membership (drives hats later)
             frame: frames[j],
         })),
         onShow: i => {

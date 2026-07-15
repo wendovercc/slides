@@ -1,0 +1,104 @@
+    /* Shared slide-set header (see _set_header.html). Title/subtitle match the
+       standard slide header; the sequence strip mirrors the carousel tab styling
+       so a set reads like the multi-panel slides. */
+    .set-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1.5vw; }
+    .set-heading { min-width: 0; }
+    .title {
+        font-size: var(--t-lg);
+        font-weight: bold;
+        line-height: 1.2;
+        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+    }
+    /* Subtitle: our team (gold) vs opposition (white), on one line. */
+    .subtitle {
+        font-size: var(--t-md);
+        margin-top: 0.3vh;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .subtitle .sub-team { color: var(--accent); font-weight: 700; }
+    .subtitle .sub-vs { color: var(--text); font-weight: normal; opacity: 0.6; margin: 0 0.3vw; }
+    .subtitle .sub-opp { color: var(--text); font-weight: 700; }
+    .subtitle .sub-opp-sub {
+        font-family: 'Lato', Arial, sans-serif;
+        font-size: var(--t-xs);
+        font-weight: normal;
+        opacity: 0.55;
+        margin-left: 0.5vw;
+    }
+    /* Right-hand meta — mirrors the left side of the team slide's Schedule tile
+       (meta-date + venue pill, opposition, ground badge), right-aligned and kept
+       no taller than the title+subtitle. */
+    /* Right-hand meta: date + home/away pill, then the ground badge, stacked from
+       the top and right-aligned. */
+    .set-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        text-align: right;
+        gap: 0.5vh;
+        flex-shrink: 0;
+        max-width: 40vw;
+        min-width: 0;
+    }
+    .set-meta .meta-row {
+        display: flex;
+        align-items: center;
+        gap: 0.6vw;
+        font-size: var(--t-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+    }
+    .set-meta .meta-date { color: var(--accent); font-weight: 700; }
+    .set-meta .home-pill, .set-meta .away-pill {
+        background: rgba(60,180,80,0.3);
+        border: 1px solid rgba(60,180,80,0.5);
+        border-radius: 4px;
+        padding: 0.1vh 0.55vw;
+    }
+    .set-meta .away-pill { background: rgba(180,100,40,0.3); border: 1px solid rgba(180,100,40,0.5); }
+    .set-meta .loc-badge {
+        display: inline-block;
+        max-width: 100%;
+        background: var(--accent);
+        color: var(--navy-1);
+        font-size: var(--t-xs);
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        padding: 0.2vh 0.7vw;
+        border-radius: 3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Sequence strip. One step is active per member; its underline fills over the
+       member's dwell (driven by set-nav.js) and freezes on pause via the base's
+       `body.paused .panel-tab.active::after` rule. `.panel-nav` bottom margin comes
+       from _base-sidebar.html — only the top margin/gap are set here. */
+    .set-nav { display: flex; gap: 2vw; margin-top: 1.5vh; align-items: flex-end; }
+    .set-nav .panel-tab {
+        font-size: var(--t-md);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        white-space: nowrap;
+        opacity: 0.35;
+        position: relative;
+        padding-bottom: 0.6vh;
+        transition: opacity 0.4s;
+    }
+    .set-nav .panel-tab.active { opacity: 1; }
+    .set-nav .panel-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 2px;
+        background: var(--accent);
+        transform-origin: left;
+        animation: panel-progress var(--panel-duration, 20s) linear forwards;
+    }
+    @keyframes panel-progress {
+        from { transform: scaleX(0); }
+        to   { transform: scaleX(1); }
+    }

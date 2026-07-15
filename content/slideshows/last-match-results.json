@@ -1,0 +1,25 @@
+{
+  "title": "Last Match Results",
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "last-match-result-1st-xi" },
+    { "slug": "last-match-result-2nd-xi" },
+    { "slug": "last-match-result-friendly-xi" },
+
+    { "slug": "last-match-result-u17-spitfires" },
+    { "slug": "last-match-result-u15-hurricanes" },
+    { "slug": "last-match-result-u15-spitfires" },
+    { "slug": "last-match-result-u14-hurricanes" },
+    { "slug": "last-match-result-u13-girls" },
+    { "slug": "last-match-result-u13-hurricanes" },
+    { "slug": "last-match-result-u13-spitfires" },
+    { "slug": "last-match-result-u12-hurricanes" },
+    { "slug": "last-match-result-u12-spitfires" },
+    { "slug": "last-match-result-u11-girls" },
+    { "slug": "last-match-result-u11-incredibles" },
+    { "slug": "last-match-result-u11-invincibles" },
+    { "slug": "last-match-result-u10-lightning" },
+    { "slug": "last-match-result-u10-thunder" },
+    { "slug": "last-match-result-u9" }
+  ]
+}

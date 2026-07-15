@@ -122,6 +122,14 @@
         }
         /* Interactive pause: freeze the active tab's gold underline at full width */
         body.paused .panel-tab.active::after { animation: none; transform: scaleX(1); }
+        /* Tab progress fill is turned off for now: the active tab reads as fully
+           underlined from the start (the same look as the paused state), and the
+           countdown moves to the interactive control bar rather than the wall.
+           Kept as a single specificity-winning override so the per-slide
+           `panel-progress` animations and @keyframes stay intact — delete these
+           two rules to bring the filling underline back. */
+        body .panel-tab.active::after,
+        body .set-nav .panel-tab.active::after { animation: none; transform: scaleX(1); }
         {% block styles %}{% endblock %}
     </style>
     <script src="/assets/js/slide-bridge.js"></script>

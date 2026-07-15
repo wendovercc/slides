@@ -238,3 +238,8 @@ these and adapt:
 - `templates/slides/team.html` — five-panel carousel with tabs hidden when
   their data is empty; reference for the tile-stack pattern (Form,
   Schedule).
+- `templates/slides/match-intro.html` · `scorecard.html` · `match-result.html`
+  — the generated match-package cards (plain single-panel, footer layout).
+  Reference for hero matchup layout, full-XI scorecard tables, and the
+  result-summary scoreline + star-performer cards. Generated per team by
+  `build_match_packages` (build.py) as the `last-match-{team}` slide set.

@@ -13,6 +13,7 @@ cleanly if absent so local builds work using committed data files.
 
 import json
 import os
+import re
 import sys
 import urllib.request
 from datetime import date, datetime, timezone
@@ -41,6 +42,31 @@ def api_get(path, api_token, **params):
     url = f"{API_BASE}/{path}?{query}"
     with urllib.request.urlopen(url, timeout=30) as resp:
         return json.loads(resp.read())
+
+
+def fetch_club_crest_urls(match_id):
+    """Scrape the public match page for the two team-header club crests.
+
+    The Play Cricket API carries no logos, but the public results page renders
+    each club's badge inside a `team-ttl` block (home first, then away). Returns
+    (home_url, away_url) — either may be None (club has no custom badge, or the
+    scrape failed). Best-effort: never raises.
+    """
+    url = f"https://play-cricket.com/website/results/{match_id}"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            html = resp.read().decode("utf-8", "ignore")
+    except Exception as e:
+        print(f"    WARNING: failed to fetch crest page {match_id}: {e}", file=sys.stderr)
+        return None, None
+    urls = []
+    for seg in html.split("team-ttl")[1:3]:
+        m = re.search(r'src="(https://[^"]*badge_image/[^"]+)"', seg[:500])
+        urls.append(m.group(1) if m else None)
+    while len(urls) < 2:
+        urls.append(None)
+    return urls[0], urls[1]
 
 
 def parse_date(date_str):
@@ -108,20 +134,28 @@ def derived_bowling(b):
     b["economy"] = round(b["runs"] / b["balls"] * 6, 2) if b["balls"] > 0 else None
 
 
-def determine_result_for_team(detail, their_team_id):
-    """Return W/L/D/T/A/C from the perspective of their_team_id."""
+def determine_result_for_team(detail, team_id):
+    """Return W/L/D/T/A/C/NR from the perspective of team_id."""
     result = (detail.get("result") or "").strip().upper()
     if result in ("A", "C", "D", "T", "NR"):
         return result
     if result == "W":
+        # `result_applied_to` is the winning team_id — the reliable signal.
+        # home/away_team_name are only designations ("1st XI"), so matching them
+        # against result_description gives false positives (both sides can be a
+        # "1st XI"); prefer the id, and fall back to the club name if it's absent.
+        applied_to = str(detail.get("result_applied_to") or "")
+        if applied_to:
+            return "W" if applied_to == str(team_id) else "L"
         home_team_id = str(detail.get("home_team_id", ""))
-        their_name = (
-            detail.get("home_team_name", "")
-            if their_team_id == home_team_id
-            else detail.get("away_team_name", "")
+        is_home = str(team_id) == home_team_id
+        club = (
+            detail.get("home_club_name", "")
+            if is_home
+            else detail.get("away_club_name", "")
         )
         result_desc = detail.get("result_description", "")
-        return "W" if (their_name and their_name in result_desc) else "L"
+        return "W" if (club and club in result_desc) else "L"
     return None
 
 
@@ -160,12 +194,13 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
         rows = []
         for bat in (inn or {}).get("bat", []):
             how_out = bat.get("how_out", "")
-            if (how_out or "").strip().lower() == "dnb":
+            if (how_out or "").strip().lower() in ("dnb", "did not bat"):
                 continue
             pid = str(bat.get("batsman_id", ""))
             if not pid or pid == "0":
                 continue
             rows.append({
+                "id": pid,
                 "name": bat.get("batsman_name", ""),
                 "runs": int(bat.get("runs") or 0),
                 "balls": int(bat.get("balls") or 0),
@@ -188,6 +223,7 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
                 continue
             if pid not in acc:
                 acc[pid] = {
+                    "id": pid,
                     "name": bowl.get("bowler_name", ""),
                     "wickets": 0, "runs": 0, "balls": 0, "maidens": 0,
                 }
@@ -205,10 +241,28 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
             "runs": inn.get("runs", 0),
             "wickets": inn.get("wickets"),
             "overs": inn.get("overs") or "",
+            # Extras breakdown straight from the innings object (strings in the
+            # API). `total` is the authoritative figure; the components sum to it.
+            "extras": {
+                "byes": int(inn.get("extra_byes") or 0),
+                "leg_byes": int(inn.get("extra_leg_byes") or 0),
+                "wides": int(inn.get("extra_wides") or 0),
+                "no_balls": int(inn.get("extra_no_balls") or 0),
+                "penalty": int(inn.get("extra_penalty_runs") or 0),
+                "total": int(inn.get("total_extras") or 0),
+            },
         }
 
     batted_first_id = str(detail.get("batted_first") or "")
     we_bat_first = batted_first_id == our_pc_id
+
+    # Toss: match_detail carries the winning team id plus a ready-made sentence.
+    # We keep the structured winner + decision (the toss winner batting first ⇒
+    # they elected to bat) for clean rendering, and the raw text as a fallback.
+    toss_won_by_id = str(detail.get("toss_won_by_team_id") or "")
+    toss_won_by_us = (toss_won_by_id == our_pc_id) if toss_won_by_id else None
+    toss_elected_bat = (toss_won_by_id == batted_first_id) if toss_won_by_id else None
+    toss_text = (detail.get("toss") or "").strip()
 
     points_by_team = {str(p.get("team_id", "")): p for p in (detail.get("points") or [])}
 
@@ -224,6 +278,7 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
 
     opp_club = (match.get("away_club_name", "") if is_home else match.get("home_club_name", "")) or ""
     opp_name = (match.get("away_team_name", "") if is_home else match.get("home_team_name", "")) or ""
+    opp_site_id = str(match.get("away_club_id", "") if is_home else match.get("home_club_id", "")) or ""
 
     return {
         "match_id": match_id,
@@ -235,6 +290,9 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
         "is_home": is_home,
         "result": result_char,
         "result_description": result_description,
+        "toss_won_by_us": toss_won_by_us,
+        "toss_elected_bat": toss_elected_bat,
+        "toss_text": toss_text,
         "opposition_name": opp_name,
         "opposition_club_name": opp_club,
         "we_bat_first": we_bat_first,
@@ -247,23 +305,37 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
         "our_points": calc_points(points_by_team.get(our_pc_id)),
         "their_points": calc_points(points_by_team.get(opp_id)),
         "opposition_team_id": opp_id,
+        "opposition_site_id": opp_site_id or None,
+        # Populated by the caller (spoiler-safe pre-match enrichment): crest URL,
+        # form going into the match, and top performers going into the match.
+        "opposition_crest": None,
+        "opposition_form": None,
+        "opposition_performers": None,
     }
 
 
-def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token):
-    """Fetch form and top player stats for a specific opposition team."""
+def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token, before_date=None):
+    """Fetch form and top player stats for a specific opposition team.
+
+    `before_date` bounds which of their matches count: by default every match up
+    to today (for upcoming-fixture previews). For a *last-match* preview pass the
+    match date so the figures are spoiler-safe — form and stats as they stood
+    going into the game (that match and anything after it excluded).
+    """
     try:
         data = api_get("matches.json", api_token, site_id=opp_site_id, season=season_year)
     except Exception as e:
         print(f"    WARNING: failed to fetch opposition matches: {e}", file=sys.stderr)
         return None
 
-    today = date.today()
+    cutoff = before_date or date.today()
+    strict = before_date is not None  # last-match preview excludes the match day itself
     their_matches = [
         m for m in data.get("matches", [])
         if (str(m.get("home_team_id", "")) == opp_team_id
             or str(m.get("away_team_id", "")) == opp_team_id)
-        and (parse_date(m.get("match_date", "")) or date.max) <= today
+        and ((parse_date(m.get("match_date", "")) or date.max) < cutoff if strict
+             else (parse_date(m.get("match_date", "")) or date.max) <= cutoff)
     ]
     their_matches_sorted = sorted(
         their_matches, key=lambda m: parse_date(m.get("match_date", "")) or date.min
@@ -298,7 +370,7 @@ def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token):
                 if batting_team_id == opp_team_id:
                     for bat in innings.get("bat", []):
                         how_out = bat.get("how_out", "")
-                        if (how_out or "").strip().lower() == "dnb":
+                        if (how_out or "").strip().lower() in ("dnb", "did not bat"):
                             continue
                         pid = str(bat.get("batsman_id", ""))
                         if not pid or pid == "0":
@@ -554,8 +626,9 @@ def main():
         fixtures[team_id] = fixture
 
     # Find most-recent completed matches per team — up to RECENT_MATCHES_N most
-    # recent, newest first. Index 0 backs the existing last-match slides;
-    # the full list backs the multi-result tab on the team-overview slide.
+    # recent, newest first. Index 0 (also surfaced as last_match) backs the
+    # generated match-package slides; the full list backs the multi-result tab
+    # on the team-overview slide.
     RECENT_MATCHES_N = 3
     recent_candidates = {tid: [] for tid in teams_by_id}
     for match in all_matches:
@@ -592,6 +665,33 @@ def main():
         if scorecards:
             recent_matches[team_id] = scorecards
             last_match[team_id] = scorecards[0]
+
+    # Enrich each team's last match with spoiler-safe opposition data for the
+    # Preview slide: crest (all teams) + pre-match form and performers (senior
+    # teams only — we don't surface junior opposition player names/stats). Form
+    # and performers are bounded to before the match date so they read as they
+    # stood going into the game. Cache by (site, team, match date).
+    print(f"  Enriching {len(last_match)} last-match preview(s) with opposition data...")
+    for team_id, lm in last_match.items():
+        home_url, away_url = fetch_club_crest_urls(lm.get("match_id"))
+        lm["opposition_crest"] = away_url if lm.get("is_home") else home_url
+
+        if team_id.startswith("u"):
+            continue
+        sid = lm.get("opposition_site_id")
+        otid = lm.get("opposition_team_id")
+        before = parse_date(lm.get("match_date", ""))
+        if not (sid and otid and before):
+            continue
+        key = (sid, otid, before)
+        if key not in opp_data_cache:
+            opp_data_cache[key] = fetch_opposition_data(
+                otid, sid, season_year, api_token, before_date=before
+            )
+        opp_data = opp_data_cache[key]
+        if opp_data:
+            lm["opposition_form"] = opp_data["form"]
+            lm["opposition_performers"] = opp_data["players"]
 
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(),

@@ -34,20 +34,32 @@
       // (overrides the kiosk `cursor:none` on both player and slide bases).
       'html,body{cursor:auto!important;}' +
       '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;}' +
-      '#wcc-bar{position:fixed;right:20vw;top:3vh;' +
-      'transform:translateX(12.5%);z-index:60;display:flex;gap:0.5vw;padding:0.5vw;' +
-      'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);' +
-      'border-radius:999px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
-      'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);}' +
-      '#wcc-bar button{width:3.5vw;height:3.5vw;border:none;border-radius:50%;background:transparent;' +
+      // Docked to the top, centred on the content column (the viewport minus the
+      // 20vw sidebar → 40vw), so it reads as centred over the slide rather than
+      // pushed right by the sidebar. It sits in the gap between the title/subtitle
+      // (left) and the set-meta (right), extending a touch below --safe-y without
+      // covering content (the strip sits lower). Flush to the top edge: no top
+      // border, only a slight corner round.
+      '#wcc-bar{position:fixed;top:0;left:40vw;' +
+      'transform:translateX(-50%);z-index:60;display:flex;gap:0.25vw;padding:0.3vw 0.25vw;' +
+      'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);border-top:none;' +
+      'border-radius:0 0 0.4vw 0.4vw;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
+      'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);overflow:hidden;}' +
+      '#wcc-bar button{width:2.3vw;height:2.3vw;border:none;border-radius:50%;background:transparent;' +
       'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;' +
       '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
       '#wcc-bar button:active{background:rgba(255,255,255,0.12);}' +
       '#wcc-bar button.primary{background:rgba(212,175,55,0.18);}' +
       '#wcc-bar button.primary:active{background:rgba(212,175,55,0.32);}' +
-      '#wcc-bar svg{width:1.75vw;height:1.75vw;fill:#fff;stroke:#fff;stroke-width:2;' +
+      '#wcc-bar svg{width:1.15vw;height:1.15vw;fill:#fff;stroke:#fff;stroke-width:2;' +
       'stroke-linejoin:round;stroke-linecap:round;}' +
-      '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}';
+      '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}' +
+      // Countdown for the current panel/slide. The wall's tab underline no longer
+      // fills, so the timer lives here — visible only while the control bar is.
+      '#wcc-bar-progress{position:absolute;left:0;right:0;bottom:0;height:0.22vw;' +
+      'background:rgba(212,175,55,0.16);}' +
+      '#wcc-bar-progress i{display:block;height:100%;background:#d4af37;' +
+      'transform-origin:left;transform:scaleX(0);}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
@@ -70,6 +82,7 @@
     var playing = true;
     var timer = null;
     var shownAt = 0;
+    var progressFill = null; // control-bar countdown fill (interactive only)
 
     function frameWin(i) { return items[i].frame.contentWindow; }
     function send(i, action, extra) {
@@ -83,6 +96,29 @@
       onShow(i);
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+
+    /* Control-bar countdown. Mirrors the interactive per-panel timer: fills over
+     * the dwell while playing, freezes where it is on pause, empties on nav. All
+     * no-ops until the bar exists, so kiosk (the wall) shows nothing. */
+    function progressRun(ms) {
+      if (!progressFill) return;
+      progressFill.style.transition = 'none';
+      progressFill.style.transform = 'scaleX(0)';
+      void progressFill.offsetWidth;                    // reflow → restart from empty
+      progressFill.style.transition = 'transform ' + ms + 'ms linear';
+      progressFill.style.transform = 'scaleX(1)';
+    }
+    function progressReset() {
+      if (!progressFill) return;
+      progressFill.style.transition = 'none';
+      progressFill.style.transform = 'scaleX(0)';
+    }
+    function progressFreeze() {
+      if (!progressFill) return;
+      var t = getComputedStyle(progressFill).transform; // matrix at current width
+      progressFill.style.transition = 'none';
+      progressFill.style.transform = (t && t !== 'none') ? t : 'scaleX(0)';
+    }
 
     /* ---- kiosk: whole-slide rotation, slides auto-rotate their own panels ----
      * Every slide's iframe loads at startup and begins auto-rotating its panels
@@ -106,14 +142,17 @@
     /* ---- interactive: player owns the per-panel timer ---- */
     function panelTimer() {
       clearTimer();
+      var ms = (items[current].panel_duration || 20) * 1000;
+      progressRun(ms);
       timer = setTimeout(function () {
         var count = counts[current] || 1;
         if (panelIndex < count - 1) {
           send(current, 'next-panel'); // echo updates panelIndex
+          panelTimer();                // re-arm for the next panel (restarts the fill)
         } else {
           fwdSlide();
         }
-      }, (items[current].panel_duration || 20) * 1000);
+      }, ms);
     }
     function applyState(panel) {
       var i = current;
@@ -124,6 +163,7 @@
         panelTimer();
       } else {
         send(i, 'pause');
+        progressReset();
         var idx = panel === 'last' ? (counts[i] != null ? counts[i] - 1 : 9999) : (panel || 0);
         send(i, 'goto-panel', { index: idx });
       }
@@ -136,15 +176,18 @@
       playing = p;
       updatePlayBtn();
       if (p) { send(current, 'resume'); panelTimer(); }
-      else { clearTimer(); send(current, 'pause'); }
+      else { clearTimer(); send(current, 'pause'); progressFreeze(); }
     }
+    // Manual nav preserves the play/pause state (so a paused wall stays paused
+    // when you step across slides, including between slide-set members). When
+    // playing, the per-panel timer restarts; when paused, applyState re-pauses
+    // the incoming slide.
     function next() {
       clearTimer();
       if (panelIndex < (counts[current] || 1) - 1) {
         send(current, 'next-panel');
-        if (playing) panelTimer();
+        if (playing) panelTimer(); else progressReset();
       } else {
-        if (!playing) { playing = true; updatePlayBtn(); }
         fwdSlide();
       }
     }
@@ -152,9 +195,8 @@
       clearTimer();
       if (panelIndex > 0) {
         send(current, 'prev-panel');
-        if (playing) panelTimer();
+        if (playing) panelTimer(); else progressReset();
       } else {
-        if (!playing) { playing = true; updatePlayBtn(); }
         backSlide();
       }
     }
@@ -185,6 +227,11 @@
       playBtn = button('pause', 'primary', function () { setPlaying(!playing); });
       bar.appendChild(playBtn);
       bar.appendChild(button('next', '', next));
+      var prog = document.createElement('div');
+      prog.id = 'wcc-bar-progress';
+      progressFill = document.createElement('i');
+      prog.appendChild(progressFill);
+      bar.appendChild(prog);
       document.body.appendChild(bar);
       updatePlayBtn();
     }

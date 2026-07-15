@@ -162,19 +162,27 @@ def ensure_competition_stats(team_stats, competition_id):
 
 
 def determine_result(detail, our_pc_team_id):
-    """Return the match result from our team's perspective: W/L/D/T/A/C or None."""
+    """Return the match result from our team's perspective: W/L/D/T/A/C/NR or None."""
     result = (detail.get("result") or "").strip().upper()
     if result in ("A", "C", "D", "T", "NR"):
         return result
     if result == "W":
+        # `result_applied_to` is the winning team_id — the reliable signal.
+        # home/away_team_name are only designations ("1st XI"), so matching them
+        # against result_description gives false positives (both sides can be a
+        # "1st XI"); prefer the id, and fall back to the club name if it's absent.
+        applied_to = str(detail.get("result_applied_to") or "")
+        if applied_to:
+            return "W" if applied_to == str(our_pc_team_id) else "L"
         home_team_id = str(detail.get("home_team_id", ""))
-        our_name = (
-            detail.get("home_team_name", "")
-            if our_pc_team_id == home_team_id
-            else detail.get("away_team_name", "")
+        is_home = str(our_pc_team_id) == home_team_id
+        club = (
+            detail.get("home_club_name", "")
+            if is_home
+            else detail.get("away_club_name", "")
         )
         result_desc = detail.get("result_description", "")
-        return "W" if (our_name and our_name in result_desc) else "L"
+        return "W" if (club and club in result_desc) else "L"
     return None
 
 
@@ -431,7 +439,9 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
 
     compute_all_derived(players)
 
-    # Build per-competition and all-match form, sorted by date, last 5 results each.
+    # Build per-competition and all-match form, sorted by date. Per-competition
+    # keeps the last 5; the all-match list keeps 6 so the match-preview slide can
+    # drop this match (spoiler) and still show 5. Team-slide consumers cap at 5.
     # Dates are dd/mm/yyyy strings — parse before sorting so they order
     # chronologically (lexical sort puts "06/06/2026" before "23/05/2026").
     def _parse_dmy(s):
@@ -450,7 +460,7 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
         for comp_id in by_comp:
             by_comp[comp_id] = by_comp[comp_id][-5:]
         form_trimmed[team_id] = {
-            "all": [r for _, r, _ in sorted_entries][-5:],
+            "all": [r for _, r, _ in sorted_entries][-6:],
             **by_comp,
         }
 

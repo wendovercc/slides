@@ -1,0 +1,42 @@
+{# Shared header for slide-set members (match package).
+   Three heading levels: Title (set label) + Subtitle (team) are constant across
+   the set; the sequence strip is the per-phase third level. The right-hand meta
+   mirrors the left side of the team slide's Schedule tile (date + venue pill,
+   opposition, ground badge), right-aligned. A member without `_set_steps` omits
+   the strip (e.g. the terminal result, also shown standalone). #}
+
+{% macro set_meta(slide) %}
+    <div class="set-meta">
+        <div class="meta-row">
+            {% if slide._set_date %}<span class="meta-date">{{ slide._set_date }}</span>{% endif %}
+            {% if slide._set_is_home %}<span class="home-pill">Home</span>{% else %}<span class="away-pill">Away</span>{% endif %}
+        </div>
+        {% if slide._set_ground %}
+        <div class="meta-where"><span class="loc-badge">{{ slide._set_ground }}</span></div>
+        {% endif %}
+    </div>
+{% endmacro %}
+
+{% macro set_header(slide) %}
+    <div class="set-header">
+        <div class="set-heading">
+            <div class="title">{{ slide._set_title }}</div>
+            {#- Subtitle: our team (gold) vs the opposition (white club + dim team
+                designation), the opposition detail having moved off the right meta. -#}
+            <div class="subtitle">
+                <span class="sub-team">{{ slide._set_subtitle }}</span>
+                {% if slide._set_opp_club %}<span class="sub-vs">vs</span> <span class="sub-opp">{{ slide._set_opp_club }}{% if slide._set_opp_team %}<span class="sub-opp-sub">{{ slide._set_opp_team }}</span>{% endif %}</span>{% endif %}
+            </div>
+        </div>
+        {{ set_meta(slide) }}
+    </div>
+    {% if slide._set_steps is defined and slide._set_steps %}
+    <nav class="panel-nav set-nav">
+        {% for step in slide._set_steps %}
+        <span class="panel-tab{% if loop.index0 == slide._set_step %} active{% endif %}">{{ step }}</span>
+        {% endfor %}
+    </nav>
+    <script>window.WCC_SET_NAV = { duration: {{ slide.duration }} };</script>
+    <script src="/assets/js/set-nav.js"></script>
+    {% endif %}
+{% endmacro %}
