@@ -243,3 +243,9 @@ these and adapt:
   Reference for hero matchup layout, full-XI scorecard tables, and the
   result-summary scoreline + star-performer cards. Generated per team by
   `build_match_packages` (build.py) as the `last-match-{team}` slide set.
+- The "tale of the tape" matchup (crest / form / season performers each side,
+  over a toss·division·h2h footer) lives in the shared `_tape.html` macro +
+  `_tape_styles.html`, both rendered under the `_set_header.html` header. The
+  last-match **intro** (in-set, with the sequence strip) and the standalone
+  **next-match** preview (`next-match.html`, populated by `build_next_match`)
+  both use it — reuse this partial rather than re-authoring the layout.

@@ -1,0 +1,56 @@
+{# Tale of the tape — the team-each-side matchup body (crest, form, season top
+   performers, and a footer of toss/division/head-to-head). Shared by the
+   last-match intro and the next-match preview. Styles live in _tape_styles.html;
+   the caller renders the header (set_header) above this. Reads from `slide`:
+     _our_left, _our_crest, _our_form, _our_performers,
+     _opp_crest, _opp_club_name, _opp_form, _opp_performers,
+     _toss, _division, _h2h #}
+{% from 'slides/_perf_icon.html' import perf_icon %}
+{% macro tape(slide) %}
+    {% set our_col = {"crest": slide._our_crest, "name": "Wendover CC", "form": slide._our_form, "performers": slide._our_performers} %}
+    {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_club_name, "form": slide._opp_form, "performers": slide._opp_performers} %}
+    {% set columns = [our_col, opp_col] if slide._our_left else [opp_col, our_col] %}
+
+    <div class="tape">
+        <div class="tape-cols">
+            {% for c in columns %}
+            <div class="tape-col">
+                <div class="crest">
+                    {% if c.crest %}<img src="{{ c.crest }}" alt="{{ c.name }}">{% endif %}
+                </div>
+                <div class="tc-name">{{ c.name }}</div>
+
+                <div class="stat">
+                    <div class="stat-label">Form</div>
+                    {% if c.form %}<div class="badges">{% for r in c.form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}</div>
+                    {% else %}<div class="stat-empty">—</div>{% endif %}
+                </div>
+
+                {% if c.performers %}
+                <div class="perf-list">
+                    {% for p in c.performers %}
+                    <div class="perf-row">
+                        <div class="perf-main">
+                            <span class="perf-icon-cell">{{ perf_icon(p.category) }}</span>
+                            <span class="perf-who"><span class="perf-name">{{ p.name }}</span>{% if p.out %}<span class="out-tag">OUT</span>{% endif %}</span>
+                            <span class="perf-fig">{{ p.primary }}{% if p.unit %}<span class="perf-unit">{{ p.unit }}</span>{% endif %}</span>
+                        </div>
+                        {% if p.secondary %}<div class="perf-sub">{{ p.secondary }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% if not loop.last %}<div class="tape-divider"></div>{% endif %}
+            {% endfor %}
+        </div>
+
+        {% if slide._toss or slide._division or slide._h2h %}
+        <div class="tape-foot">
+            {% if slide._toss %}<div class="toss">{{ slide._toss }}</div>{% endif %}
+            {% if slide._division %}<div class="division">{{ slide._division }}</div>{% endif %}
+            {% if slide._h2h %}<div class="h2h">{{ slide._h2h }}</div>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+{% endmacro %}

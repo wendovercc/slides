@@ -1,0 +1,53 @@
+    /* Tale of the tape — the team-each-side matchup shared by the last-match
+       intro and the next-match preview (see _tape.html). Include inside a
+       styles block, after _set_header_styles.html. */
+    .tape { flex: 1; display: flex; flex-direction: column; min-height: 0; margin-top: 2.5vh; }
+    .tape-cols { flex: 1; display: flex; gap: 2.5vw; min-height: 0; align-items: stretch; }
+    .tape-col { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 1.4vh; min-width: 0; }
+    .tape-divider { width: 1px; background: rgba(255,255,255,0.12); flex-shrink: 0; }
+
+    /* Crests sit in a white circular badge (matching Play Cricket), contained so
+       the full crest shows regardless of source aspect ratio. */
+    .crest { height: 6vw; display: flex; align-items: center; justify-content: center; margin-top: 1vh; }
+    .crest img { width: 6vw; height: 6vw; border-radius: 50%; object-fit: contain; background: #fff; padding: 0.4vw; box-sizing: border-box; }
+    /* Club name only — the team designation lives in the header subtitle (our
+       side) and the right-hand meta (opposition), so it isn't repeated here. */
+    .tc-name { font-size: var(--t-md); font-weight: 900; line-height: 1.05; }
+
+    .stat { display: flex; flex-direction: column; align-items: center; gap: 0.5vh; }
+    .stat-label { font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--accent); font-weight: 700; }
+    .badges { display: flex; gap: 0.5vw; }
+    .badge {
+        width: 2vw; height: 2vw; line-height: 2vw; text-align: center;
+        border-radius: 3px; font-family: 'Lato', Arial, sans-serif;
+        font-size: var(--t-sm); font-weight: bold;
+    }
+    .badge-W { background: var(--accent-win); color: #fff; }
+    .badge-L { background: var(--accent-loss); color: #fff; }
+    .badge-T { background: var(--accent-draw); color: #fff; }
+    .badge-D { background: #444; color: #ccc; }
+    .badge-A, .badge-C, .badge-NR { background: var(--accent-amber); color: #ffe; }
+    .stat-empty { font-size: var(--t-md); opacity: 0.35; }
+
+    /* Season performers — left-aligned list mirroring the Results tab (icon /
+       name / figure, dim sub-line). Extra top margin sets it apart from Form. */
+    .perf-list { width: 100%; text-align: left; margin-top: 2vh; display: flex; flex-direction: column; gap: 1.2vh; }
+    .perf-row { display: flex; flex-direction: column; }
+    .perf-main { display: grid; grid-template-columns: 2vw 1fr auto; gap: 0 0.6vw; align-items: center; font-size: var(--t-md); line-height: 1.1; }
+    .perf-icon { width: 1.7vw; height: 1.7vw; color: rgba(255,255,255,0.85); }
+    .perf-icon-cell { display: flex; align-items: center; justify-content: center; }
+    .perf-who { display: flex; align-items: center; gap: 0.7vw; min-width: 0; }
+    .perf-name { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.9; }
+    .perf-fig { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; color: var(--accent); }
+    .perf-unit { font-size: var(--t-sm); font-weight: normal; margin-left: 0.2vw; }
+    .perf-sub { padding-left: 2.6vw; font-family: 'Lato', Arial, sans-serif; font-size: var(--t-sm); opacity: 0.55; letter-spacing: 0.04em; margin-top: -0.1vh; }
+    /* Tag on a season leader who's absent from this match's XI — outlined in the
+       name's colour (gold reads poorly as a thin outline). */
+    .out-tag { flex-shrink: 0; font-family: 'Lato', Arial, sans-serif; font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.06em; color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.45); border-radius: 3px; padding: 0.05vh 0.35vw; line-height: 1.3; }
+
+    /* Footer: toss outcome is the headline (white), division/competition the
+       secondary gold line beneath it. */
+    .tape-foot { flex-shrink: 0; text-align: center; padding-top: 1.6vh; margin-top: 1vh; border-top: 1px solid rgba(255,255,255,0.15); }
+    .toss { font-size: var(--t-md); font-weight: 700; }
+    .division { font-size: var(--t-sm); color: var(--accent); margin-top: 0.5vh; }
+    .h2h { font-size: var(--t-sm); color: var(--muted); margin-top: 0.5vh; }

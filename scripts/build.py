@@ -812,108 +812,73 @@ def build_schedule(slide, teams_by_id, training_sessions, all_fixtures, location
 
 
 def build_next_match(slide, teams_by_id, fixtures_data, stats_data):
+    """Populate the Next Match preview: the spoiler-free pre-match tale of the
+    tape, mirroring the last-match intro (crest, pre-match form and season top
+    performers each side) but rendered standalone — no sequence strip and no
+    league table (the league lives on its own slides). Renders through the shared
+    _tape partial via next-match.html.
+
+    The opposition crest is only scraped for completed matches (from the match
+    page), so previews carry our crest and leave the opposition side crest-less.
+    """
     team_id = slide.get("team")
+    team = teams_by_id.get(team_id, {})
     fixture = (fixtures_data or {}).get("fixtures", {}).get(team_id)
 
     if not fixture:
         slide["_no_fixture"] = True
         return
-
     slide["_no_fixture"] = False
-    slide["_fixture"] = fixture
-    slide["_date_formatted"] = fmt_match_date(fixture.get("match_date", ""))
 
-    # All-season form for our team (consistent with opposition form)
-    form_data = (stats_data or {}).get("form", {}).get(team_id, {})
-    slide["_our_form"] = form_data.get("all", [])[-5:]  # `all` holds 6 for the preview; team form shows 5
+    title = slide.get("title", "")
+    opp_club, opp_team = _split_opp_name(
+        fixture.get("opposition_name", ""), fixture.get("opposition_club_name", "")
+    )
 
-    # opposition_club_name comes from home/away_club_name in the match record;
-    # opposition_name is sometimes just the team designation (e.g. "4th XI") not "Club - Team"
-    opp_club = fixture.get("opposition_club_name", "") or ""
-    opp_full = fixture.get("opposition_name", "")
-    if opp_club:
-        slide["_opp_club_name"] = opp_club
-        slide["_opp_team_name"] = (
-            opp_full[len(opp_club) + 3:]
-            if opp_full.startswith(opp_club + " - ")
-            else opp_full
-        )
-    elif " - " in opp_full:
-        derived_club, _, opp_team_desig = opp_full.rpartition(" - ")
-        slide["_opp_club_name"] = derived_club
-        slide["_opp_team_name"] = opp_team_desig
+    # Right-hand meta date: short weekday + day + month, with the start time
+    # appended (a preview wants the throw-up time, unlike the last-match header).
+    iso = _iso_from_dmy(fixture.get("match_date", ""))
+    if iso:
+        _dt = datetime.strptime(iso, "%Y-%m-%d")
+        date_short = _dt.strftime(f"%a {_dt.day} %b")
     else:
-        slide["_opp_club_name"] = opp_full
-        slide["_opp_team_name"] = ""
+        date_short = ""
+    if fixture.get("match_time"):
+        date_short = f"{date_short} · {fixture['match_time']}".lstrip(" ·")
 
-    # Our top batters and bowlers (all-season, team-specific)
-    slide["_our_players"] = {"batting": [], "bowling": []}
-    if stats_data:
-        batters, bowlers = [], []
-        for p in stats_data["players"].values():
-            block = get_leaderboard_block(p, team_id, None)
-            if not block:
-                continue
-            if block["batting"]["innings"] > 0:
-                batters.append((p["name"], block["batting"]))
-            if block["bowling"]["wickets"] > 0:
-                bowlers.append((p["name"], block["bowling"]))
-        batters.sort(key=lambda x: x[1]["runs"], reverse=True)
-        bowlers.sort(key=lambda x: x[1]["wickets"], reverse=True)
-        slide["_our_players"]["batting"] = [
-            {
-                "name": n,
-                "runs": b["runs"],
-                "average": b.get("average"),
-                "high_score": b["high_score"],
-                "high_score_not_out": bool(b["high_score_not_out"]) if b["high_score_not_out"] is not None else False,
-            }
-            for n, b in batters[:3]
-        ]
-        slide["_our_players"]["bowling"] = [
-            {
-                "name": n,
-                "wickets": b["wickets"],
-                "average": b.get("average"),
-                "best": b.get("best"),
-            }
-            for n, b in bowlers[:3]
-        ]
+    # Footer division line: league name, plus the competition when it differs.
+    league_name = team.get("league_name", "")
+    comp_name = fixture.get("competition_name", "") or ""
+    if league_name and comp_name and comp_name != league_name:
+        competition_display = f"{league_name} · {comp_name}"
+    else:
+        competition_display = league_name or comp_name
 
-    # League table for the middle column
-    team = teams_by_id.get(team_id, {})
-    league_id = team.get("play_cricket_league_id")
-    our_pc_id = str(team.get("play_cricket_team_id", ""))
-    opp_pc_id = fixture.get("opposition_team_id", "")
+    # `all` holds 6 for the last-match drop-this-match preview; a next match has
+    # nothing to drop, so show the most recent 5 as they stand.
+    our_form = ((stats_data or {}).get("form", {}).get(team_id, {}).get("all", []))[-5:]
 
-    slide["_league_rows"] = []
-    slide["_league_name"] = team.get("league_name", "")
-    slide["_division_name"] = ""
-
-    if league_id:
-        data_path = FETCHED / f"league_table_{league_id}.json"
-        if data_path.exists():
-            table_data = json.loads(data_path.read_text())
-            table = table_data.get("league_table", [{}])[0]
-            values = table.get("values", [])
-            headings = table.get("headings", {})
-            pts_col = next((k for k, v in headings.items() if v.lower() == "pts"), None)
-            slide["_division_name"] = table.get("name", "")
-            if not slide["_league_name"]:
-                slide["_league_name"] = slide["_division_name"]
-
-            for row in values:
-                tid = str(row.get("team_id", ""))
-                slide["_league_rows"].append({
-                    "position": row.get("position", ""),
-                    "name": row.get("column_1", ""),
-                    "played": row.get("column_2", "0"),
-                    "won": row.get("column_3", "0"),
-                    "lost": row.get("column_5", "0"),
-                    "pts": row.get(pts_col, "") if pts_col else "",
-                    "is_us": tid == our_pc_id,
-                    "is_opp": tid == opp_pc_id,
-                })
+    slide.update({
+        "_set_title": "Next Match",
+        "_set_subtitle": title,
+        "_set_date": date_short,
+        "_set_is_home": fixture.get("is_home", True),
+        "_set_opp_club": opp_club,
+        "_set_opp_team": opp_team,
+        "_set_ground": fixture.get("ground_name") or "",
+        # Tale of the tape. Home team on the left, as the last-match intro.
+        "_our_left": fixture.get("is_home", True),
+        "_our_crest": "/assets/images/wcc-logo.png",
+        "_our_form": our_form,
+        "_our_performers": team_current_performers(stats_data, team_id),
+        "_opp_crest": None,
+        "_opp_club_name": opp_club,
+        "_opp_form": fixture.get("opposition_form") or [],
+        "_opp_performers": opp_preview_performers(fixture.get("opposition_players")),
+        "_division": competition_display,
+        "_toss": "",   # no toss before the match
+        "_h2h": "",
+    })
 
 
 def format_dismissal(how_out, fielder_name="", bowler_name=""):
@@ -1932,6 +1897,40 @@ def team_preview_performers(stats, team_id, match, n_bat=2, n_bowl=2):
             econ = f"{bruns / (bballs / 6):.1f}" if bballs > 0 else "-"
             bowls.append({"category": "bowl", "name": p["name"], "_rank": wkts, "out": out,
                           "primary": str(wkts), "unit": "wkts", "secondary": f"avg {avg(bruns, wkts)} · econ {econ}"})
+
+    bats.sort(key=lambda x: -x["_rank"])
+    bowls.sort(key=lambda x: -x["_rank"])
+    return bats[:n_bat] + bowls[:n_bowl]
+
+
+def team_current_performers(stats, team_id, n_bat=2, n_bowl=2):
+    """Season-to-date leading batters (by runs) and bowlers (by wickets) for the
+    Next Match preview, shaped for the shared tale-of-the-tape performer rows.
+    Like team_preview_performers but with nothing to subtract (the match hasn't
+    happened) and no `out` tag (the XI is unknown), so the figures read as the
+    current season totals."""
+    if not stats:
+        return []
+
+    def avg(runs, dismissals):
+        return f"{runs / dismissals:.1f}" if dismissals > 0 else "-"
+
+    bats, bowls = [], []
+    for p in stats.get("players", {}).values():
+        block = get_leaderboard_block(p, team_id, None)
+        if not block:
+            continue
+        b, bw = block["batting"], block["bowling"]
+        if b["innings"] > 0:
+            sr = f"{b['runs'] / b['balls'] * 100:.0f}" if b["balls"] > 0 else "-"
+            bats.append({"category": "bat", "name": p["name"], "_rank": b["runs"], "out": False,
+                         "primary": str(b["runs"]), "unit": "runs",
+                         "secondary": f"avg {avg(b['runs'], b['innings'] - b['not_outs'])} · SR {sr}"})
+        if bw["wickets"] > 0:
+            econ = f"{bw['runs'] / (bw['balls'] / 6):.1f}" if bw["balls"] > 0 else "-"
+            bowls.append({"category": "bowl", "name": p["name"], "_rank": bw["wickets"], "out": False,
+                          "primary": str(bw["wickets"]), "unit": "wkts",
+                          "secondary": f"avg {avg(bw['runs'], bw['wickets'])} · econ {econ}"})
 
     bats.sort(key=lambda x: -x["_rank"])
     bowls.sort(key=lambda x: -x["_rank"])

@@ -2,8 +2,6 @@
   "title": "Upcoming Matches",
   "refresh_interval_seconds": 300,
   "slides": [
-    { "slug": "sponsors" },
-
     { "slug": "next-match-1st-xi" },
     { "slug": "next-match-2nd-xi" },
     { "slug": "next-match-friendly-xi" },
