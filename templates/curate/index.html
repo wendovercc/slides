@@ -48,6 +48,7 @@
     .chip-team { background: rgba(26,92,122,.5); color: #cfe6f2; }
     .chip-novelty { background: rgba(139,26,26,.5); color: #f2cfcf; }
     .chip-player { background: rgba(45,122,45,.45); color: #cfeccf; }
+    .chip-card { background: rgba(120,80,160,.5); color: #e5d4f2; }
     .chip-tag { background: rgba(122,92,0,.5); color: #eadfae; }
     .clip-row:hover { background: rgba(180,200,228,.06); }
     .clip-row.selected { background: rgba(212,175,55,.14); }
@@ -69,8 +70,31 @@
     .inc-label input { width: 17px; height: 17px; accent-color: var(--gold); }
     .narrative { width: 100%; font: inherit; padding: 8px; border-radius: 6px; resize: vertical;
       border: 1px solid var(--line); background: var(--panel); color: var(--white); margin-bottom: 12px; }
-    .timing { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .timing-block { margin-bottom: 14px; }
+    .timing { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
     .timing .cycle { flex: 1; }
+    /* Ghost while just playing; solid gold (= the scrubber action bar) when the next tap sets an action point. */
+    .btn.cycle-0 { background: transparent; color: var(--gold); }
+    .btn.cycle-1, .btn.cycle-2 { background: var(--gold); color: var(--navy-2); }
+    .scrubber { margin-bottom: 9px; }
+    .scrub-track { position: relative; height: 34px; border-radius: 6px; background: rgba(180,200,228,.08);
+      border: 1px solid var(--line); touch-action: none; user-select: none; cursor: pointer; }
+    .scrub-shown { position: absolute; top: 0; bottom: 0; background: rgba(180,200,228,.10); }
+    .scrub-pre, .scrub-post { position: absolute; top: 0; bottom: 0; background: rgba(120,80,160,.28); }
+    .scrub-action { position: absolute; top: 0; bottom: 0; background: rgba(212,175,55,.28);
+      border-left: 2px solid var(--gold); border-right: 2px solid var(--gold); }
+    .scrub-h { position: absolute; top: -3px; bottom: -3px; width: 10px; margin-left: -5px; border-radius: 3px;
+      cursor: ew-resize; box-shadow: 0 0 0 1px rgba(10,28,58,.6); }
+    .scrub-act { background: var(--gold); }
+    .scrub-out { background: #9a6fc4; }
+    .scrub-playhead { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px;
+      background: #fff; box-shadow: 0 0 3px rgba(0,0,0,.6); display: none; pointer-events: none; }
+    .scrub-labels { margin-top: 5px; font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+    .shift-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-shrink: 0; }
+    .shift-bar label { font-size: 12px; color: var(--ink-soft); white-space: nowrap; }
+    #shift-input { width: 9ch; font: inherit; font-size: 13px; padding: 5px 8px; border-radius: 5px;
+      border: 1px solid var(--line); background: var(--panel); color: var(--white); font-variant-numeric: tabular-nums; }
+    #shift-input:disabled { opacity: .4; }
     .btn.sm { padding: 7px 14px; font-size: 13px; }
     .mini { font: inherit; font-size: 12px; padding: 5px 9px; border-radius: 5px; cursor: pointer;
       border: 1px solid var(--line); background: transparent; color: var(--ink-soft); }
@@ -99,6 +123,15 @@
     .add-player { display: flex; gap: 6px; margin-top: 8px; }
     .add-sel { flex: 1; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px;
       border: 1px dashed var(--line); background: var(--panel); color: var(--white); }
+    .cards-sec { display: flex; flex-direction: column; gap: 4px; }
+    .card-at-lbl { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin: 8px 0 2px; }
+    .card-list { display: flex; flex-direction: column; gap: 6px; }
+    .card-row { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .card-type { font-weight: 700; font-size: 13px; }
+    .card-player-sel { width: 100%; margin-top: 6px; font: inherit; font-size: 13px; padding: 6px 8px;
+      border-radius: 5px; border: 1px solid var(--line); background: var(--panel); color: var(--white); }
+    .add-card { display: flex; gap: 6px; }
     .hint { color: var(--ink-soft); font-size: 13px; }
     @media (max-width: 1100px) {
       body { height: auto; display: block; overflow: auto; }
@@ -126,6 +159,10 @@
   <main>
     <div id="clip-list"></div>
     <aside>
+      <div class="shift-bar">
+        <label for="shift-input">Shift (+/- seconds)</label>
+        <input id="shift-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0" disabled>
+      </div>
       <div class="player-wrap"><div id="player"></div></div>
       <div id="editor"></div>
     </aside>
