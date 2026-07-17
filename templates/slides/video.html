@@ -26,6 +26,12 @@
             --t-sm:         1.2vw;
             --t-xs:         0.9vw;
             --t-xxs:        0.7vw;
+            /* Reel highlights-bug cover (top-left square). Nudge these to line the
+               square up exactly with the Frogbox HIGHLIGHTS/QR graphic on the wall:
+               --reel-tag-size grows/shrinks the square, top/left shift it. */
+            --reel-tag-size: 11vw;
+            --reel-tag-top:  0px;
+            --reel-tag-left: 0px;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body {
@@ -48,11 +54,6 @@
             font-size: 1.6vw; color: var(--muted); margin-top: 0.5vh;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        #video-progress {
-            position: fixed; top: 0; left: 0; right: 0; height: 4px;
-            background: var(--accent); transform-origin: left; transform: scaleX(0);
-            z-index: 10;
-        }
         .overlay-logo {
             position: fixed; top: 2vh; right: 2vw;
             height: 16vh; width: auto; object-fit: contain;
@@ -64,6 +65,53 @@
             width: 100%; height: 100%; background: var(--bg);
             display: flex; align-items: center; justify-content: center;
             font-size: var(--t-xl); font-weight: 700; text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        }
+        /* Reel tag: pinned top-left, conceals the Frogbox "HIGHLIGHTS"/QR bug.
+           A solid square carries the batting team's crest with the innings label
+           below it; a per-clip caption sits above and breaks out to the right as
+           wide as the text needs (a spoiler for the current ball only). No fade —
+           these clips are too short for it. The square's size/position are tunable
+           so it lines up with the bug on the wall; card overlays will later extend
+           it downward. */
+        .reel-tag {
+            position: fixed;
+            top: var(--reel-tag-top, 0px); left: var(--reel-tag-left, 0px);
+            display: flex; flex-direction: column; align-items: flex-start; z-index: 10;
+        }
+        .reel-tag-caption {
+            background: var(--navy-2); color: var(--text);
+            font-size: var(--t-xs); font-weight: 700; line-height: 1.2;
+            padding: 0.6vh 0.8vw; box-sizing: border-box;
+            width: max-content; min-width: var(--reel-tag-size, 11vw); max-width: 70vw;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            /* Only the corner that juts into the screen rounds; top/left stay flush. */
+            border-bottom-right-radius: 0.8vw;
+        }
+        .reel-tag-square {
+            position: relative;
+            width: var(--reel-tag-size, 11vw); aspect-ratio: 1;
+            background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 1.6vh; padding: 3vh 0.4vw 1vh; box-sizing: border-box;
+            border-bottom-right-radius: 0.8vw;
+        }
+        /* Ball-outcome badge (Wicket / Six / Four …), styled like the slides' venue
+           pill: navy on gold. Pinned top-left in the square's existing headroom so
+           the crest stays put; hidden for 'other' balls. */
+        .reel-tag-badge {
+            position: absolute; top: 0.8vh; left: 0.8vw;
+            background: var(--accent); color: var(--navy-1);
+            font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 0.2vh 0.7vw; border-radius: 3px;
+        }
+        .reel-tag-crest {
+            width: 5vw; height: 5vw; border-radius: 50%; object-fit: contain;
+            background: #fff; padding: 0.4vw; box-sizing: border-box;
+        }
+        .reel-tag-label {
+            font-size: var(--t-xs); font-weight: 900; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text); text-align: center; line-height: 1.1;
         }
 
         {% else %}
@@ -105,11 +153,6 @@
         }
         .video-wrap { width: 100%; aspect-ratio: 16 / 9; flex-shrink: 0; overflow: hidden; position: relative; }
         .video-wrap video { position: absolute; inset: 0; width: 100%; height: 100%; }
-        #video-progress {
-            position: absolute; top: 0; left: 0; right: 0; height: 4px;
-            background: var(--accent); transform-origin: left; transform: scaleX(0);
-            z-index: 10;
-        }
         .video-fallback {
             width: 100%; height: 100%; min-height: 20vh;
             background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
@@ -124,18 +167,28 @@
 {% if slide.layout is defined and slide.layout == 'fullbleed' %}
     {% set has_video = slide.videos is defined and slide.videos and slide.videos[0]._video_src %}
     {% if has_video %}
-    <div id="video-progress"></div>
     {% for v in slide.videos %}{% if v._video_src %}
     <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto"{% if not loop.first %} style="display:none"{% endif %}>
         <source src="{{ v._video_src }}" type="video/mp4">
     </video>
     {% endif %}{% endfor %}
+    {% if slide.reel is defined and slide.reel %}
+    <div class="reel-tag">
+        <div id="reel-caption" class="reel-tag-caption" style="display:none"></div>
+        <div class="reel-tag-square">
+            <span id="reel-badge" class="reel-tag-badge" style="display:none"></span>
+            {% if slide._bat_crest %}<img class="reel-tag-crest" src="{{ slide._bat_crest }}" alt="">{% endif %}
+            {% if slide._innings_label %}<div class="reel-tag-label">{{ slide._innings_label }}</div>{% endif %}
+        </div>
+    </div>
+    {% else %}
     <div id="overlay" class="overlay">
         {% if slide.title is defined %}<div class="overlay-title">{{ slide.title }}</div>{% endif %}
         <div id="overlay-body" class="overlay-body"></div>
     </div>
     {% if slide.logo is defined and slide.logo %}
     <img class="overlay-logo" src="/assets/images/wcc-logo.png" alt="Wendover CC">
+    {% endif %}
     {% endif %}
     {% else %}
     <div class="fallback">{{ slide.title }}</div>
@@ -147,7 +200,6 @@
             {% if slide.title is defined %}<div class="slide-heading">{{ slide.title }}</div>{% endif %}
             <div id="body-slot" class="slide-body" style="display:none"></div>
             <div class="video-wrap">
-                <div id="video-progress"></div>
                 {% for v in slide.videos %}{% if v._video_src %}
                 <video data-idx="{{ loop.index0 }}" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto"{% if not loop.first %} style="display:none"{% endif %}>
                     <source src="{{ v._video_src }}" type="video/mp4">
@@ -179,7 +231,12 @@
     var videoEls = Array.from(document.querySelectorAll('video[data-idx]'));
     var count = videoEls.length;
     var current = 0;
-    var progressEl = document.getElementById('video-progress');
+    // The bridge sets body.paused on an explicit user pause; a clip we navigate to
+    // while paused should hold its first frame rather than start playing.
+    function isPaused() { return document.body.classList.contains('paused'); }
+    // Reel per-clip caption + ball-outcome badge (null on non-reel slides).
+    var captionEl = document.getElementById('reel-caption');
+    var badgeEl = document.getElementById('reel-badge');
     {% if slide.layout is defined and slide.layout == 'fullbleed' %}
     var overlayEl = document.getElementById('overlay');
     var bodyEl = document.getElementById('overlay-body');
@@ -194,13 +251,18 @@
     function showVideo(i) {
         videoEls.forEach(function (v) { v.style.display = 'none'; v.pause(); });
         current = i;
-        if (progressEl) progressEl.style.transform = 'scaleX(0)';
         var v = videoEls[i];
         if (!v) return;
         v.style.display = 'block';
         v.currentTime = 0;
-        v.play();
+        if (isPaused()) v.pause(); else v.play();
         var body = VIDEOS[i] && VIDEOS[i].body;
+        if (captionEl) { captionEl.textContent = body || ''; captionEl.style.display = body ? '' : 'none'; }
+        if (badgeEl) {
+            var ty = VIDEOS[i] && VIDEOS[i].type;
+            if (ty && ty !== 'other') { badgeEl.textContent = ty.charAt(0).toUpperCase() + ty.slice(1); badgeEl.style.display = ''; }
+            else { badgeEl.style.display = 'none'; }
+        }
         if (bodyEl) bodyEl.textContent = body || '';
         {% if slide.layout is defined and slide.layout == 'fullbleed' %}
         if (overlayEl) {
@@ -222,11 +284,6 @@
     }
 
     videoEls.forEach(function (v) {
-        v.addEventListener('timeupdate', function () {
-            if (+v.dataset.idx !== current || !progressEl) return;
-            var ratio = v.duration ? v.currentTime / v.duration : 0;
-            progressEl.style.transform = 'scaleX(' + ratio + ')';
-        });
         v.addEventListener('ended', function () {
             var i = +v.dataset.idx;
             if (i !== current) return;

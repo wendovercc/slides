@@ -12,6 +12,8 @@ from pathlib import Path
 import qrcode
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
+import ball_events
+
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
 FETCHED = CONTENT / "data" / "fetched"
@@ -2045,6 +2047,25 @@ def build_league_panel(team):
     return league_data, str(team.get("play_cricket_team_id", "")), team.get("league_name", "")
 
 
+def _chrono_innings_ids(merged):
+    """Ball-event innings ids ordered by first real-world clip time (1st, 2nd, …).
+
+    A positional innings index (0 = batted first) maps to the same innings the
+    scorecard shows, so reel clips land under the right innings phase.
+    """
+    if not merged:
+        return []
+    firsts = {}
+    for e in merged.get("events", []):
+        inn = e.get("innings")
+        if inn is None:
+            continue
+        dt = e.get("dt_unix") or 0
+        if inn not in firsts or dt < firsts[inn]:
+            firsts[inn] = dt
+    return sorted(firsts, key=lambda inn: firsts[inn])
+
+
 def build_match_packages(env, slide_meta):
     """Generate the per-team 'latest match' package from Play Cricket data.
 
@@ -2074,6 +2095,7 @@ def build_match_packages(env, slide_meta):
     sc_tmpl = env.get_template("slides/scorecard.html")
     result_tmpl = env.get_template("slides/match-result.html")
     league_tmpl = env.get_template("slides/match-league.html")
+    video_tmpl = env.get_template("slides/video.html")
 
     def emit(slug, template, slide):
         slide["duration"] = default_panel_duration
@@ -2112,6 +2134,12 @@ def build_match_packages(env, slide_meta):
         their_total_str = _short_innings_total(m.get("their_total"))
         result = m.get("result")
 
+        # Curated highlight clips for this match (None for teams with no ball-event
+        # fetch/curation). `innings_ids_chrono[i]` is the ball-event innings id for
+        # the i-th scorecard innings, so reels attach to the right phase.
+        merged = ball_events.load_merged(str(m.get("match_id") or ""))
+        innings_ids_chrono = _chrono_innings_ids(merged)
+
         our_batting = _fmt_batting_rows(m.get("our_batting", []) or [])
         our_bowling = _fmt_bowling_rows(m.get("our_bowling", []) or [])
         their_batting = _fmt_batting_rows(m.get("their_batting", []) or [])
@@ -2126,21 +2154,23 @@ def build_match_packages(env, slide_meta):
         ordered = [our_innings, their_innings] if we_bat_first else [their_innings, our_innings]
         labels = ["1st Innings", "2nd Innings"]
         innings_present = []   # unique innings labels with any content (for the strip)
-        innings_members = []   # (slug, phase_label, slide_fields)
+        innings_members = []   # (innings_idx, slug, phase_label, slide_fields)
+        innings_bat_club = {}  # innings_idx -> batting club (for the reel title)
         for i, (bat_club, total, batting, bowl_club, bowling) in enumerate(ordered):
             if not batting and not bowling:
                 continue
             label = labels[i]
             innings_present.append(label)
+            innings_bat_club[i] = bat_club
             scoreline = {"_bat_club": bat_club, "_score_readable": _short_innings_total(total)}
             if batting:
-                innings_members.append((f"last-match-{team_id}-innings-{i + 1}-batting", label, {
+                innings_members.append((i, f"last-match-{team_id}-innings-{i + 1}-batting", label, {
                     "_mode": "batting", "_batting": batting,
                     "_extras": innings_extras(total, batting),
                     "_extras_parts": extras_breakdown_str(total), **scoreline,
                 }))
             if bowling:
-                innings_members.append((f"last-match-{team_id}-innings-{i + 1}-bowling", label, {
+                innings_members.append((i, f"last-match-{team_id}-innings-{i + 1}-bowling", label, {
                     "_mode": "bowling", "_bowling": bowling, "_bowl_club": bowl_club, **scoreline,
                 }))
         has_result = bool(result or our_total_str or their_total_str)
@@ -2176,6 +2206,47 @@ def build_match_packages(env, slide_meta):
 
         def with_strip(step_label):
             return {**set_common, "_set_steps": steps, "_set_step": steps.index(step_label)}
+
+        # Per-innings highlight reel: the curated match clips for one innings, in
+        # chronological order, as a single fullbleed video slide slotted before that
+        # innings' scorecards (same phase step). Only clips already synced to R2 (i.e.
+        # resolved in the video manifest) are kept — an innings with none is skipped,
+        # so a build with an empty manifest degrades to the scorecards-only set.
+        def emit_reel(innings_idx, label):
+            if innings_idx >= len(innings_ids_chrono):
+                return None
+            clips = list(reversed(ball_events.select(
+                merged, "match", innings=innings_ids_chrono[innings_idx])))
+            if not clips:
+                return None
+            slug = f"last-match-{team_id}-innings-{innings_idx + 1}-reel"
+            # A solid top-left tag conceals the Frogbox HIGHLIGHTS/QR bug and shows
+            # the innings + the batting team's crest (WCC's for our innings, the
+            # opposition's otherwise) — the same crest used on the intro/result.
+            bat_club = innings_bat_club.get(innings_idx, "")
+            bat_crest = ("/assets/images/wcc-logo.png"
+                         if "wendover" in bat_club.lower() else m.get("opposition_crest"))
+            slide = {
+                "template": "video", "layout": "fullbleed", "reel": True,
+                "title": f"{label} Highlights",  # page <title> only; not shown on the wall
+                "_innings_label": label, "_bat_crest": bat_crest,
+                "videos": [{"url": c["url"], "start": c["start"], "end": c["end"],
+                            "body": c["body"], "type": c["type"]} for c in clips],
+            }
+            build_video_slide(slide)
+            slide["videos"] = [v for v in slide["videos"] if v.get("_video_src")]
+            if not slide["videos"]:
+                return None
+            build_video_slide(slide)  # recompute duration for the resolved-only set
+            out_dir = SITE / "slide" / slug
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "index.html").write_text(video_tmpl.render(slide=slide, slug=slug))
+            slide_meta[slug] = {
+                "slide_active": True, "slide_expires": None,
+                "duration": slide["duration"], "panel_duration": slide["panel_duration"],
+            }
+            print(f"  slide/{slug} — reel ({len(slide['videos'])} clips, {slide['duration']:.0f}s)")
+            return slug
 
         members = []
 
@@ -2229,7 +2300,13 @@ def build_match_packages(env, slide_meta):
         })
         members.append(intro_slug)
 
-        for sc_slug, label, fields in innings_members:
+        reeled = set()
+        for i, sc_slug, label, fields in innings_members:
+            if i not in reeled:
+                reeled.add(i)
+                reel_slug = emit_reel(i, label)
+                if reel_slug:
+                    members.append(reel_slug)
             emit(sc_slug, sc_tmpl, {
                 "template": "scorecard", "title": title,
                 **fields, **with_strip(label),

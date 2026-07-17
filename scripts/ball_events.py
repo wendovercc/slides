@@ -229,6 +229,7 @@ def select(merged, context, *, player=None, role=None, tag=None, innings=None, c
         "body": e["narrative"] or e.get("title") or "",
         "innings": e.get("innings"),
         "id": e.get("id"),
+        "type": e.get("type"),
         "cards": e.get("cards") or [],
     } for e in ordered]
     return items[:cap] if cap else items

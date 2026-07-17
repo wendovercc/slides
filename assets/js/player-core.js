@@ -157,9 +157,13 @@
     function applyState(panel) {
       var i = current;
       send(i, 'take-over');
+      // Back-nav asks for the incoming slide's last panel; honour it whether
+      // playing or paused (previously the playing path always reset to panel 0,
+      // so stepping back into a multi-clip reel jumped to the first clip).
+      var last = panel === 'last' && counts[i] != null ? counts[i] - 1 : null;
       if (playing) {
-        panelIndex = 0;
-        send(i, 'reset');
+        if (last != null) { panelIndex = last; send(i, 'goto-panel', { index: last }); }
+        else { panelIndex = 0; send(i, 'reset'); }
         panelTimer();
       } else {
         send(i, 'pause');
