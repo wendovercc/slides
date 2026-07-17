@@ -48,7 +48,18 @@
            at the bottom, below the frame, instead of pushing the video away from the
            overlays pinned at the top. */
         html, body { background: var(--bg); display: flex; align-items: flex-start; }
-        .clip { width: 100%; height: auto; display: block; }
+        /* Clips are stacked (all top-docked) so consecutive reels cross-dissolve
+           instead of hard-cutting: only the .active clip is opaque. Fading the
+           incoming clip up over the outgoing also hides the brief undecoded /
+           first-frame flash at a boundary — most visible with the pad-widened R2
+           clip bounds. JS gates the fade on the incoming clip's first painted
+           frame, so we never dissolve into a blank decode. */
+        .clip {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: auto; display: block;
+            opacity: 0; transition: opacity 0.5s ease; z-index: 0;
+        }
+        .clip.active { opacity: 1; z-index: 1; }
         .overlay {
             position: fixed; top: 0; left: 0; right: 0;
             padding: var(--safe-y) var(--safe-x) 4vh;
@@ -233,7 +244,7 @@
     {% set has_video = slide.videos is defined and slide.videos and slide.videos[0]._video_src %}
     {% if has_video %}
     {% for v in slide.videos %}{% if v._video_src %}
-    <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto"{% if not loop.first %} style="display:none"{% endif %}>
+    <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto">
         <source src="{{ v._video_src }}" type="video/mp4">
     </video>
     {% endif %}{% endfor %}
@@ -395,14 +406,57 @@
     var bodyEl = document.getElementById('body-slot');
     {% endif %}
 
+    // Fullbleed reels cross-dissolve between clips; the sidebar frame keeps the
+    // simple display swap (single video box, one clip at a time).
+    var CROSSFADE = {{ (slide.layout is defined and slide.layout == 'fullbleed') | tojson }};
+    var FADE_MS = 500;                 // must match the .clip opacity transition
+    var showToken = 0;
+
+    // Reveal the target clip only once it has actually painted a frame, dissolving
+    // it up over the outgoing clip. Gating on the first frame (requestVideoFrameCallback,
+    // or 'seeked' when paused) means the fade never opens on a blank decode or the
+    // boundary flash, and the overlap softens the cut.
+    function crossfadeTo(v, prev) {
+        var tok = ++showToken, done = false;
+        videoEls.forEach(function (x) { if (x !== v && x !== prev) { x.classList.remove('active'); x.pause(); } });
+        v.currentTime = 0;
+        var reveal = function () {
+            if (done || tok !== showToken) return;
+            done = true;
+            v.classList.add('active');
+            if (prev && prev !== v) {
+                prev.classList.remove('active');
+                setTimeout(function () {
+                    if (tok === showToken && !prev.classList.contains('active')) { prev.pause(); prev.currentTime = 0; }
+                }, FADE_MS);
+            }
+        };
+        if (isPaused()) {
+            v.pause();
+            var onSeek = function () { v.removeEventListener('seeked', onSeek); reveal(); };
+            v.addEventListener('seeked', onSeek);
+        } else {
+            var p = v.play();
+            if (p && p.catch) p.catch(function () {});
+            if (v.requestVideoFrameCallback) { v.requestVideoFrameCallback(function () { reveal(); }); }
+            else { var onPlaying = function () { v.removeEventListener('playing', onPlaying); reveal(); }; v.addEventListener('playing', onPlaying); }
+        }
+        setTimeout(reveal, 150);       // safety net if the frame/seek callback never fires
+    }
+
     function showVideo(i) {
-        videoEls.forEach(function (v) { v.style.display = 'none'; v.pause(); });
+        var prev = videoEls[current];
         current = i;
         var v = videoEls[i];
         if (!v) return;
-        v.style.display = 'block';
-        v.currentTime = 0;
-        if (isPaused()) v.pause(); else v.play();
+        if (CROSSFADE) {
+            crossfadeTo(v, prev);
+        } else {
+            videoEls.forEach(function (x) { x.style.display = 'none'; x.pause(); });
+            v.style.display = 'block';
+            v.currentTime = 0;
+            if (isPaused()) v.pause(); else v.play();
+        }
         var body = VIDEOS[i] && VIDEOS[i].body;
         setBallCaption();
         if (bodyEl) bodyEl.textContent = body || '';

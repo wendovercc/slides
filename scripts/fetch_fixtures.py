@@ -15,12 +15,22 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
+ASSETS = ROOT / "assets"
+# Committed crest cache + downloaded badges. The crest scrape (below) only works
+# off a residential IP — it is blocked from CI runner IPs — and content/data/fetched/
+# is gitignored, so production would otherwise never get a crest. These two paths
+# are BOTH tracked in git: the cache carries the scraped S3 URL across builds, and
+# the localised images let the wall render crests without hotlinking S3 (or needing
+# the scrape) in CI. Refreshed by a local build + commit; CI reuses the committed copies.
+CREST_CACHE = CONTENT / "data" / "crests.json"
+CREST_DIR = ASSETS / "images" / "crests"
 API_BASE = "http://play-cricket.com/api/v2"
 MAX_OPP_MATCHES = 10
 
@@ -67,6 +77,89 @@ def fetch_club_crest_urls(match_id):
     while len(urls) < 2:
         urls.append(None)
     return urls[0], urls[1]
+
+
+def _slugify(text):
+    slug = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return slug or "crest"
+
+
+def load_crest_cache():
+    try:
+        return json.loads(CREST_CACHE.read_text())
+    except Exception:
+        return {}
+
+
+def save_crest_cache(cache):
+    CREST_CACHE.parent.mkdir(parents=True, exist_ok=True)
+    CREST_CACHE.write_text(json.dumps(cache, indent=2, sort_keys=True) + "\n")
+
+
+def _existing_crest_asset(slug):
+    """Return the public /assets path of an already-committed crest for slug
+    (any image extension), or None. Lets CI reuse committed badges without the
+    scrape or a network round-trip."""
+    for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+        if (CREST_DIR / f"{slug}{ext}").exists():
+            return f"/assets/images/crests/{slug}{ext}"
+    return None
+
+
+def _download_crest(url, slug):
+    """Download url into assets/images/crests/<slug>.<ext> and return its public
+    /assets path. Skips the fetch if the file is already committed (the CI path);
+    returns None on failure so the caller can fall back to the raw URL."""
+    ext = os.path.splitext(urllib.parse.urlparse(url).path)[1].lower()
+    if ext not in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+        ext = ".png"
+    dest = CREST_DIR / f"{slug}{ext}"
+    public = f"/assets/images/crests/{dest.name}"
+    if dest.exists():
+        return public
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = resp.read()
+    except Exception as e:
+        print(f"    WARNING: failed to download crest {url}: {e}", file=sys.stderr)
+        return None
+    CREST_DIR.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return public
+
+
+def resolve_opposition_crest(lm, cache):
+    """Return a stable /assets crest path for lm's opposition, updating the
+    committed cache + localised image as a side effect.
+
+    Three layers, in order of reliability: a fresh scrape (works only off a
+    residential IP) refreshes the cache; the committed cache URL is the fallback
+    when the scrape is blocked (CI); the downloaded local asset is preferred over
+    the raw S3 URL so the wall never hotlinks. Keyed by club id so a club's crest
+    is fetched once regardless of which XI we played."""
+    key = str(lm.get("opposition_site_id") or lm.get("opposition_club_name")
+              or lm.get("opposition_name") or "").strip()
+    if not key:
+        return None
+    slug = _slugify(lm.get("opposition_club_name") or lm.get("opposition_name") or key)
+    # Already localised (committed asset)? Use it and skip the scrape entirely — this
+    # keeps CI fast and scrape-free. Delete the image to force a re-fetch if a club
+    # changes its badge.
+    existing = _existing_crest_asset(slug)
+    if existing:
+        return existing
+    # New opponent, no committed image yet: scrape (works only off a residential IP),
+    # refresh the cache, then localise from the scraped-or-cached URL.
+    home_url, away_url = fetch_club_crest_urls(lm.get("match_id"))
+    url = away_url if lm.get("is_home") else home_url
+    if url:
+        cache[key] = url          # scrape succeeded — refresh the committed cache
+    else:
+        url = cache.get(key)      # blocked (CI) — fall back to the committed URL
+    if not url:
+        return None
+    return _download_crest(url, slug) or url
 
 
 def parse_date(date_str):
@@ -672,9 +765,9 @@ def main():
     # and performers are bounded to before the match date so they read as they
     # stood going into the game. Cache by (site, team, match date).
     print(f"  Enriching {len(last_match)} last-match preview(s) with opposition data...")
+    crest_cache = load_crest_cache()
     for team_id, lm in last_match.items():
-        home_url, away_url = fetch_club_crest_urls(lm.get("match_id"))
-        lm["opposition_crest"] = away_url if lm.get("is_home") else home_url
+        lm["opposition_crest"] = resolve_opposition_crest(lm, crest_cache)
 
         if team_id.startswith("u"):
             continue
@@ -692,6 +785,7 @@ def main():
         if opp_data:
             lm["opposition_form"] = opp_data["form"]
             lm["opposition_performers"] = opp_data["players"]
+    save_crest_cache(crest_cache)
 
     out = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
