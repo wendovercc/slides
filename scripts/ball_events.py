@@ -262,6 +262,15 @@ def _name_key(name):
     return (parts[-1].lower(), parts[0][:1].lower())
 
 
+def _abbrev_name(name):
+    """Frogbox-style short name: first initial + the rest ("Harry Godden" ->
+    "H Godden", "Solomon Methari" -> "S Methari"). Left as-is if it's a single word."""
+    parts = (name or "").split()
+    if len(parts) < 2:
+        return name or ""
+    return f"{parts[0][0]} {' '.join(parts[1:])}"
+
+
 def _trim_num(value, digits=1):
     """Format a number without trailing .0 (39.88 -> '39.9', 122.0 -> '122')."""
     if value is None:
@@ -322,10 +331,13 @@ def _resolve_new_batsman(card, scorecard, player_stats, team_id):
         stats.append({"v": str(fifties), "l": "50s"})
     if hundreds > 0:
         stats.append({"v": str(hundreds), "l": "100s"})
-    # `caption` fills the reel's caption slot while the card is up, in place of the
-    # ball's own caption. For a *pre* card it's spoiler-free (the ball's outcome is
-    # held back until the action starts); for a post card it just labels the moment.
-    return {"name": rec.get("name"), "caption": f"New batsman — {rec.get('name')}",
+    # While the card is up it takes over the reel's caption slot (a Frogbox-style
+    # narrative line) and the badge (the card's kind, not the ball's outcome). The
+    # pre card is spoiler-free — the ball's own caption/outcome only appear once the
+    # action starts.
+    name = rec.get("name")
+    return {"name": name, "badge": "New batsman",
+            "caption": f"{_abbrev_name(name)} at the crease",
             "sublabel": "This season", "stats": stats}
 
 
@@ -354,8 +366,10 @@ def _resolve_dismissal(card, scorecard, player_stats, team_id):
     if sr is not None:
         stats.append({"v": sr, "l": "SR"})
     how = (row.get("how_out") or "").strip().lower()
+    name = row.get("name")
     return {
-        "name": row.get("name"), "caption": f"Batsman dismissed — {row.get('name')}",
+        "name": name, "badge": "Batsman innings",
+        "caption": f"{_abbrev_name(name)} heads to the pavilion",
         "headline": headline,
         "sublabel": _HOW_OUT.get(how, how) if not row.get("not_out") else "not out",
         "stats": stats,
@@ -375,7 +389,7 @@ def resolve_cards(clip, *, scorecard=None, player_stats=None, team_id=None):
     ``scorecard`` is this match's built scorecard (for the innings summary + the
     new-batsman match subtraction); ``player_stats`` is player_stats_this_season and
     ``team_id`` the reel's team slug (for the new-batsman season line). Returns a list
-    of ``{at, type, name, caption?, headline?, sublabel?, stats:[{v,l}]}`` in the
+    of ``{at, type, name, caption?, badge?, headline?, sublabel?, stats:[{v,l}]}`` in the
     clip's card order; a card whose subject can't be resolved is omitted (a warning is
     the caller's to log). Unknown card types are skipped.
     """

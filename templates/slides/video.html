@@ -32,9 +32,6 @@
             --reel-tag-size: 11vw;
             --reel-tag-top:  0px;
             --reel-tag-left: 0px;
-            /* Widened width of the panel while a flashcard is showing (it grows
-               from --reel-tag-size to this). Tune for the card stat row to breathe. */
-            --reel-card-w:   24vw;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body {
@@ -88,31 +85,40 @@
         }
         /* Caption sits directly on top of the panel and must read as its lid: no
            rounded corner between them, and at least as wide as the panel below so
-           there's no notch/seam. min-width tracks the panel — it widens to
-           --reel-card-w in lockstep when a card opens (see .reel-tag.card-open). */
+           there's no notch/seam. Its resting min-width is the square; while a card is
+           open, JS sets min-width to the (content-sized) panel's measured width. */
         .reel-tag-caption {
             background: var(--navy-2); color: var(--text);
             font-size: var(--t-xs); font-weight: 700; line-height: 1.2;
             padding: 0.6vh 0.8vw; box-sizing: border-box;
             width: max-content; min-width: var(--reel-tag-size, 11vw); max-width: 70vw;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            transition: min-width 0.45s ease;
         }
+        /* Round the caption's outer bottom-right corner only when it OVERHANGS the
+           card below (that corner then sits over video). When the caption is flush with
+           the card, keep it square so there's no notch. JS toggles this by measuring. */
+        .reel-tag-caption.caption-wide { border-bottom-right-radius: 0.8vw; }
         /* One navy panel holding the square (badge/crest/innings) and, below it, the
-           flashcard. It IS the card: adding .show widens it from the square's width to
-           --reel-card-w and the card grows in, so the single gold bottom-border simply
+           flashcard. It IS the card: .card-open sizes it to the card content (floored
+           at the square) and the card grows in, so the single gold bottom-border simply
            drops down — no seam, no gap, no second box. */
         .reel-panel {
             position: relative;
             width: var(--reel-tag-size, 11vw); overflow: hidden;
             background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
             border-bottom-right-radius: 0.8vw;
-            transition: width 0.45s ease;
         }
-        .reel-tag.card-open .reel-panel { width: var(--reel-card-w, 24vw); }
-        .reel-tag.card-open .reel-tag-caption { min-width: var(--reel-card-w, 24vw); }
+        /* While a card is up the panel sizes to the card's content — as wide and tall
+           as it needs — but never smaller than the square (min-width / min-height), so
+           it keeps covering the Frogbox graphic. A max-width caps a pathologically long
+           line. The caption's width is matched to the panel in JS so it's never
+           narrower than the card below it. (Transitions are removed for now.) */
+        .reel-tag.card-open .reel-panel {
+            width: max-content; min-width: var(--reel-tag-size);
+            max-width: 42vw; min-height: var(--reel-tag-size);
+        }
         .reel-tag-square {
-            position: relative;
+            position: relative; overflow: hidden;
             width: 100%; height: var(--reel-tag-size, 11vw);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             gap: 1.6vh; padding: 3vh 0.4vw 1vh; box-sizing: border-box;
@@ -141,11 +147,16 @@
            panel's .show class, which both widens the panel and grows this in. */
         .reel-card {
             padding: 0 1.1vw; max-height: 0; opacity: 0;
-            transition: max-height 0.45s ease, opacity 0.3s ease, padding 0.45s ease;
         }
         .reel-tag.card-open .reel-card {
-            max-height: 40vh; opacity: 1; padding: 0.4vh 1.1vw 1.6vh;
+            max-height: 40vh; opacity: 1; padding: 1.8vh 1.1vw 1.6vh;
         }
+        /* While a card is up its content REPLACES the crest + innings label: the
+           square collapses to just the badge's headroom and the crest/innings hide, so
+           the card sits directly under the badge. (Transitions removed for now.) */
+        .reel-tag.card-open .reel-tag-square { height: 3.4vh; }
+        .reel-tag.card-open .reel-tag-crest,
+        .reel-tag.card-open .reel-tag-label { display: none; }
         .reel-card-name {
             font-size: var(--t-sm); font-weight: 900; text-transform: uppercase;
             letter-spacing: 0.03em; color: var(--text); line-height: 1.1;
@@ -352,13 +363,25 @@
         // caption above it to match, so the two read as one block.
         if (hit) { renderCard(hit); if (tagEl) tagEl.classList.add('card-open'); }
         else if (tagEl) { tagEl.classList.remove('card-open'); }
-        // A card's caption replaces the ball's own in the caption slot. A pre card is
-        // spoiler-free, so it also hides the outcome badge until the action starts; a
-        // post card keeps the (already-revealed) outcome badge alongside its caption.
+        // The panel is content-sized while open; match the caption's min-width to it
+        // (reading offsetWidth forces the reflow) so the caption is never narrower than
+        // the card below — reset to the CSS default (square width) when there's no card.
+        if (captionEl) captionEl.style.minWidth = (hit && panelEl) ? panelEl.offsetWidth + 'px' : '';
+        // While a card is up it takes over both the caption slot (a narrative line)
+        // and the badge (the card's kind, e.g. NEW BATSMAN — not the ball outcome).
+        // Off a card, the ball's own caption + outcome badge show (setBallCaption).
         setBallCaption();
-        if (hit && hit.caption && captionEl) {
-            captionEl.textContent = hit.caption; captionEl.style.display = '';
-            if (hit.at === 'pre' && badgeEl) badgeEl.style.display = 'none';
+        if (hit) {
+            if (hit.caption && captionEl) { captionEl.textContent = hit.caption; captionEl.style.display = ''; }
+            if (badgeEl) {
+                if (hit.badge) { badgeEl.textContent = hit.badge; badgeEl.style.display = ''; }
+                else { badgeEl.style.display = 'none'; }
+            }
+        }
+        // Round the caption's bottom-right corner only when it overhangs the card
+        // (measured after its text + min-width are set); flush stays square (no notch).
+        if (captionEl && panelEl) {
+            captionEl.classList.toggle('caption-wide', captionEl.offsetWidth > panelEl.offsetWidth + 1);
         }
     }
     {% if slide.layout is defined and slide.layout == 'fullbleed' %}
