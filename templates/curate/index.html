@@ -70,9 +70,10 @@
     .inc-label input { width: 17px; height: 17px; accent-color: var(--gold); }
     .narrative { width: 100%; font: inherit; padding: 8px; border-radius: 6px; resize: vertical;
       border: 1px solid var(--line); background: var(--panel); color: var(--white); margin-bottom: 12px; }
-    .timing-block { margin-bottom: 14px; }
-    .timing { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-    .timing .cycle { flex: 1; }
+    .timing-block { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .timing-block .scrubber { flex: 1 1 auto; min-width: 90px; margin-bottom: 0; }
+    .timing-block .cycle { flex: 0 0 auto; white-space: nowrap; }
+    .timing-block .mini { flex: 0 0 auto; white-space: nowrap; }
     /* Ghost while just playing; solid gold (= the scrubber action bar) when the next tap sets an action point. */
     .btn.cycle-0 { background: transparent; color: var(--gold); }
     .btn.cycle-1, .btn.cycle-2 { background: var(--gold); color: var(--navy-2); }
@@ -108,23 +109,29 @@
     .pin { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 5px;
       border: 1px solid var(--line); background: var(--panel); color: var(--white); }
     .pin:disabled { opacity: .4; }
-    .players { display: flex; flex-direction: column; gap: 4px; }
-    .player-row { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
-    .pnarr { width: 100%; margin-top: 6px; font: inherit; font-size: 13px; padding: 5px 7px; border-radius: 5px;
-      border: 1px solid var(--line); background: var(--panel); color: var(--white); }
-    .tags-edit { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .ed-cols { display: grid; grid-template-columns: 3fr 2fr; gap: 18px; align-items: start; }
+    .ed-col { min-width: 0; }
+    .ed-col .sec-label { margin-top: 8px; }
+    .roles-sec { display: flex; flex-direction: column; gap: 3px; }
+    .role-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 0; }
+    .role-lbl { font-weight: 700; font-size: 13px; flex: 0 0 6ch; color: var(--ink-soft); }
+    .role-row .add-sel { flex: 0 1 auto; width: auto; min-width: 9ch; max-width: 18ch; margin: 0; padding: 4px 6px; }
+    .role-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 4px 3px 9px;
+      border-radius: 999px; background: rgba(45,122,45,.32); color: #cfeccf; }
+    .tags-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .tag-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 4px 3px 9px;
       border-radius: 999px; background: rgba(122,92,0,.4); color: #eadfae; }
     .tag-x { border: 0; background: transparent; color: #eadfae; cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
     .tag-x:hover { color: #fff; }
-    .tag-add { display: flex; gap: 6px; }
-    .tag-inp { flex: 1; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px;
+    .tag-add { display: inline-flex; gap: 6px; flex: 1 1 12ch; }
+    .tag-inp { flex: 1; min-width: 8ch; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px;
       border: 1px dashed var(--line); background: var(--panel); color: var(--white); }
     .add-player { display: flex; gap: 6px; margin-top: 8px; }
     .add-sel { flex: 1; font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 5px;
       border: 1px dashed var(--line); background: var(--panel); color: var(--white); }
-    .cards-sec { display: flex; flex-direction: column; gap: 4px; }
-    .card-at-lbl { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin: 8px 0 2px; }
+    .cards-sec { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+    .card-col { min-width: 0; }
+    .card-at-lbl { font-size: 12px; font-weight: 700; color: var(--ink-soft); margin: 0 0 4px; }
     .card-list { display: flex; flex-direction: column; gap: 6px; }
     .card-row { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
     .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -138,6 +145,7 @@
       main { grid-template-columns: 1fr; overflow: visible; }
       #clip-list, aside, #editor { height: auto; overflow: visible; }
       aside { display: block; }
+      .ed-cols, .cards-sec { grid-template-columns: 1fr; }
     }
   </style>
 </head>

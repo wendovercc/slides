@@ -11,15 +11,20 @@ by ``build.py`` (reel generation) and by ``fetch_videos.py`` / ``sync_videos.py`
 The overlay stores only what differs from the fetched defaults, keyed by clip id:
 
     { "start": N, "end": N, "narrative": "base caption",
-      "match":   {"include": true, "pin": 1-5},
-      "team":    {"include": true, "pin": ...},
-      "novelty": {"include": true, "pin": ...},
-      "players": { "<Full Name>": {"include": true, "pin": ..., "narrative": "..."} },
+      "match":   {"include": true},
+      "players": { "<Full Name>": ["batter", "bowler", "fielder", "other"] },
       "tags":    ["diving catch", "last ball"] }
 
+`/curate` is now scoped to match highlights only: a single ``match`` include per clip
+(no reordering — the reel is newest-first). The ``players`` map records the role(s) each
+Wendover player played in the clip; roles are auto-derived at fetch time (batter / bowler
+/ fielder) and the overlay stores only *corrections* — a name → role-list override, an
+empty list to drop an auto-tagged player, or a hand-added name (``other`` is manual-only).
+These role tags carry no weight in the match reel; they exist to power the later
+cross-match player / role / team filtering.
+
 ``load_merged`` applies that overlay onto the raw events; ``select`` queries the merged
-list for one context (match / team / novelty / players / tags), newest-first with pins
-1-5 holding fixed positions, capped at N.
+list for one context (match / players / tags), newest-first, capped at N.
 """
 
 import json
@@ -29,9 +34,12 @@ ROOT = Path(__file__).parent.parent
 FETCHED_MATCHES = ROOT / "content" / "data" / "fetched" / "matches"
 CURATION_DIR = ROOT / "content" / "data" / "matches"
 
-# One-per-clip contexts (each an include + optional pin). `players` and `tags`
-# are handled separately because they fan out per clip.
-CLIP_CONTEXTS = ("match", "team", "novelty")
+# One-per-clip include contexts. `players` (role tags) and `tags` are handled
+# separately because they fan out per clip. `match` is the sole reel context now.
+CLIP_CONTEXTS = ("match",)
+# The roles a Wendover player can be auto-tagged with on a clip; `other` is a
+# manual-only bucket added in curation, never derived.
+PLAYER_ROLES = ("batter", "bowler", "fielder", "other")
 
 
 def _load_json(path):
@@ -68,22 +76,25 @@ def load_merged(pc_id, *, fetched_dir=FETCHED_MATCHES, curation_dir=CURATION_DIR
         contexts = {}
         for ctx in CLIP_CONTEXTS:
             c = o.get(ctx)
-            contexts[ctx] = {
-                "include": bool(c and c.get("include")),
-                "pin": c.get("pin") if c else None,
-            }
+            contexts[ctx] = {"include": bool(c and c.get("include"))}
 
-        # Players: fetched our_players default to not-included; the overlay adds
-        # inclusion, pins, per-player narratives and any hand-added names.
+        # Players: fetched our_players carry auto-derived roles; the overlay
+        # stores corrections as name → role-list (empty list = drop the auto
+        # tag, a new name = hand-added). Effective roles = override ?? default.
         players = {}
-        for name in ev.get("our_players", []) or []:
-            players[name] = {"include": False, "pin": None, "narrative": None}
+        for entry in ev.get("our_players", []) or []:
+            # Tolerate the legacy flat-string shape (name only, no roles).
+            name = entry if isinstance(entry, str) else entry.get("name")
+            roles = [] if isinstance(entry, str) else list(entry.get("roles") or [])
+            if name:
+                players[name] = {"roles": roles}
         for name, rec in (o.get("players") or {}).items():
-            entry = players.setdefault(name, {"include": False, "pin": None, "narrative": None})
-            entry["include"] = bool(rec.get("include"))
-            entry["pin"] = rec.get("pin")
-            if rec.get("narrative") is not None:
-                entry["narrative"] = rec["narrative"]
+            roles = list(rec or [])
+            if roles:
+                players[name] = {"roles": roles}
+            else:
+                players.pop(name, None)  # explicit empty override drops the player
+        players = {n: v for n, v in players.items() if v["roles"]}
 
         merged_events.append({
             **ev,
@@ -107,33 +118,14 @@ def _newest_first(events):
     )
 
 
-def _apply_pins(unpinned_newest_first, pinned):
-    """Interleave pinned clips (1-indexed target positions) into the newest-first list.
+def select(merged, context, *, player=None, role=None, tag=None, innings=None, cap=None):
+    """Ordered clip list for one context: newest-first, capped at N.
 
-    A clip pinned to position *p* holds slot *p*; everything else fills the gaps in
-    newest-first order. Pins that can't be honoured (position beyond the clip count)
-    settle at the end. Duplicate pins: last writer wins.
-    """
-    out = []
-    queue = list(unpinned_newest_first)
-    pos = 1
-    max_pin = max(pinned) if pinned else 0
-    while queue or pos <= max_pin:
-        if pos in pinned:
-            out.append(pinned[pos])
-        elif queue:
-            out.append(queue.pop(0))
-        pos += 1
-    return out
-
-
-def select(merged, context, *, player=None, tag=None, innings=None, cap=None):
-    """Ordered clip list for one context: newest-first, pins fixed, capped at N.
-
-    ``context`` is one of ``match`` / ``team`` / ``novelty`` / ``players`` / ``tags``.
-    ``players`` needs ``player`` (full name); ``tags`` needs ``tag``. ``innings`` filters
-    to a single innings id. Each returned clip is ``{url, start, end, body, innings, id}``
-    where ``body`` = per-player narrative ?? base narrative ?? event title.
+    ``context`` is one of ``match`` / ``players`` / ``tags``. ``players`` needs
+    ``player`` (full name) and optionally ``role`` (batter / bowler / fielder /
+    other; ``None`` = any role); ``tags`` needs ``tag``. ``innings`` filters to a
+    single innings id. Each returned clip is ``{url, start, end, body, innings, id}``
+    where ``body`` = base narrative ?? event title.
     """
     events = merged.get("events", []) if merged else []
     if innings is not None:
@@ -141,47 +133,31 @@ def select(merged, context, *, player=None, tag=None, innings=None, cap=None):
 
     def included(e):
         if context in CLIP_CONTEXTS:
-            c = e["contexts"][context]
-            return c["include"], c["pin"], e["narrative"]
+            return e["contexts"][context]["include"]
         if context == "players":
             rec = e["players"].get(player)
             if not rec:
-                return False, None, e["narrative"]
-            body = rec["narrative"] if rec.get("narrative") else e["narrative"]
-            return rec["include"], rec["pin"], body
+                return False
+            return (role in rec["roles"]) if role else bool(rec["roles"])
         if context == "tags":
-            return (tag in e["tags"]), None, e["narrative"]
+            return tag in e["tags"]
         raise ValueError(f"unknown context: {context}")
 
-    chosen = []
-    for e in events:
-        inc, pin, body = included(e)
-        if inc:
-            chosen.append((e, pin, body or e.get("title") or ""))
-
-    pinned = {}
-    unpinned = []
-    for e, pin, body in chosen:
-        item = {
-            "url": e.get("youtube_url"),
-            "start": e.get("start"),
-            "end": e.get("end"),
-            "body": body,
-            "innings": e.get("innings"),
-            "id": e.get("id"),
-        }
-        if isinstance(pin, int) and 1 <= pin <= 5:
-            pinned[pin] = item
-        else:
-            unpinned.append((e, item))
-
-    ordered_unpinned = [item for _, item in sorted(
-        [(e, item) for e, item in unpinned],
-        key=lambda pair: (pair[0].get("dt_unix") or 0, pair[0].get("over") or 0, pair[0].get("ball") or 0),
+    chosen = [e for e in events if included(e)]
+    ordered = sorted(
+        chosen,
+        key=lambda e: (e.get("dt_unix") or 0, e.get("over") or 0, e.get("ball") or 0),
         reverse=True,
-    )]
-    ordered = _apply_pins(ordered_unpinned, pinned)
-    return ordered[:cap] if cap else ordered
+    )
+    items = [{
+        "url": e.get("youtube_url"),
+        "start": e.get("start"),
+        "end": e.get("end"),
+        "body": e["narrative"] or e.get("title") or "",
+        "innings": e.get("innings"),
+        "id": e.get("id"),
+    } for e in ordered]
+    return items[:cap] if cap else items
 
 
 if __name__ == "__main__":

@@ -527,6 +527,56 @@ def build_video_slide(slide):
     slide["_override_duration"] = True
 
 
+def _curation_scorecards():
+    """Index the recent scorecards in fixtures.json by match_id (as a string).
+
+    Draws from both ``last_match`` (one per team) and ``recent_matches`` (a list
+    per team), so a just-played match can be looked up while it's still in the
+    retention window. Older matches roll off — callers fall back to the roster.
+    """
+    path = FETCHED / "fixtures.json"
+    if not path.exists():
+        return {}
+    try:
+        fx = json.loads(path.read_text())
+    except Exception:
+        return {}
+    by_id = {}
+    for last in (fx.get("last_match") or {}).values():
+        mid = last.get("match_id")
+        if mid is not None:
+            by_id[str(mid)] = last
+    for recents in (fx.get("recent_matches") or {}).values():
+        for sc in recents or []:
+            mid = sc.get("match_id")
+            if mid is not None:
+                by_id.setdefault(str(mid), sc)
+    return by_id
+
+
+def _match_squad(scorecard):
+    """Wendover players who appeared in a match, for the role-tag picker.
+
+    ``our_batting`` + ``our_bowling`` are always Wendover; for an intra-club game
+    the opposition is also Wendover, so ``their_*`` count too. Returns names in a
+    stable, de-duplicated order, or ``[]`` when no scorecard is available.
+    """
+    if not scorecard:
+        return []
+    blocks = ["our_batting", "our_bowling"]
+    if "wendover" in (scorecard.get("opposition_club_name") or "").lower():
+        blocks += ["their_batting", "their_bowling"]
+    seen, squad = set(), []
+    for key in blocks:
+        for row in scorecard.get(key) or []:
+            name = (row.get("name") or "").strip()
+            if name and name not in seen:
+                seen.add(name)
+                squad.append(name)
+    squad.sort()
+    return squad
+
+
 def build_curation(env):
     """Publish the ball-events curation tool at /curate/ (unlisted, noindex).
 
@@ -540,6 +590,10 @@ def build_curation(env):
     out_dir = SITE / "curate"
     data_dir = out_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+
+    # Scorecards, keyed by match_id, so each match's role-tag player list is the
+    # actual playing XI (from Play Cricket) rather than the whole club roster.
+    scorecards = _curation_scorecards()
 
     index = []
     for f in raw_files:
@@ -556,6 +610,7 @@ def build_curation(env):
             except Exception:
                 overlay = {}
         data["curation"] = overlay
+        data["squad"] = _match_squad(scorecards.get(str(pc_id)))
         (data_dir / f"{pc_id}.json").write_text(json.dumps(data))
         index.append({
             "pc_match_id": pc_id,

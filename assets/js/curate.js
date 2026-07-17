@@ -1,21 +1,26 @@
-/* Ball-events curation tool.
+/* Match-highlights curation tool.
  *
  * Loads a match's fetched clip events, plays each against the YouTube stream,
- * and tags clips for the slide contexts that will consume them (Model A):
- *   - match / team / novelty : one-per-clip, each an include + optional pin (1-5)
- *   - players                : per-(clip, player) include + pin + optional caption
- * Plus a base narrative, the start/end trim, and optional data-driven flashcards
- * (a `cards` beat before/after the action, resolved to real figures at build time).
+ * and curates the match-highlights reel:
+ *   - include        : a single per-clip tick (the reel is newest-first, no reorder)
+ *   - player roles   : which Wendover players batted / bowled / fielded (/ other) in
+ *                      the clip — auto-seeded from the fetched data, correctable here.
+ *                      These tag every clip (included or not) to power the later
+ *                      cross-match player/role filtering; they don't affect the reel.
+ * Plus a base narrative, the start/end trim, custom tags, and optional data-driven
+ * flashcards (a `cards` beat before/after the action, resolved at build time).
  * Exports a {pc_match_id}.curation.json overlay to commit into content/data/matches/.
  *
  * The working state (`edits`) IS the overlay: it holds only what differs from the
- * fetched defaults, keyed by clip id. Slide selection (newest-first, pins fixed)
- * happens later in build.py — this tool only records intent.
+ * fetched defaults, keyed by clip id. Player roles store only *corrections* to the
+ * auto tags (a name → role-list override, [] to drop an auto tag, a new name to add).
  */
 (function () {
   "use strict";
 
-  var CTXS = [["match", "Match highlights"], ["team", "Team reel"], ["novelty", "Club novelty"]];
+  // Rows rendered in the "Tagged players" section. `other` is still a valid role
+  // in the data model (see ball_events PLAYER_ROLES) — just not surfaced for now.
+  var ROLES = [["batter", "Batters"], ["bowler", "Bowler"], ["fielder", "Fielders"]];
 
   // Flashcard registry (v1). Each type is a solid full-frame beat inserted before
   // (`pre`) or after (`post`) the action; the editor only picks a type + player,
@@ -25,9 +30,13 @@
   // (pre) / lead-out (post) of footage the card overlays. Editable per clip.
   var CARD_TYPES = [
     { key: "new_batsman", at: "pre", label: "New batsman — season stats", dwell: 4,
-      player: function (e) { return e.batter || ""; } },
+      // Prefer the full roster name for our own batter; fall back to the
+      // abbreviated scorecard name for the opposition.
+      player: function (e) { return e.batter_our_player || e.batter || ""; } },
     { key: "dismissal_summary", at: "post", label: "Dismissal — innings summary", dwell: 5,
-      player: function (e) { return e.dismissed_batter || ""; } },
+      // Prefer the full roster name for our own batters; fall back to the
+      // abbreviated scorecard name for the opposition.
+      player: function (e) { return e.dismissed_our_player || e.dismissed_batter || ""; } },
   ];
   function cardType(key) {
     for (var i = 0; i < CARD_TYPES.length; i++) if (CARD_TYPES[i].key === key) return CARD_TYPES[i];
@@ -44,7 +53,8 @@
   // ---- State -----------------------------------------------------------
   var LS_PREFIX = "wcc-curate:";
   var state = {
-    match: null, byId: {}, edits: {}, committed: {}, selected: null, player: null, roster: [], cycle: 0,
+    match: null, byId: {}, edits: {}, committed: {}, selected: null, player: null,
+    roster: [], squad: [], cycle: 0,
   };
 
   // ---- DOM helpers -----------------------------------------------------
@@ -121,19 +131,40 @@
   function shownStart(id) { return effTrim(id, "start") - effPre(id); }
   function shownEnd(id) { return effTrim(id, "end") + effPost(id); }
 
-  function ctxObj(id, ctx) { var e = state.edits[id]; return (e && e[ctx]) || null; }
-  function ctxIncluded(id, ctx) { var c = ctxObj(id, ctx); return !!(c && c.include); }
-  function ctxPin(id, ctx) { var c = ctxObj(id, ctx); return c && c.pin != null ? c.pin : null; }
+  function ctxIncluded(id, ctx) { var e = state.edits[id]; return !!(e && e[ctx] && e[ctx].include); }
 
-  function playerRec(id, name) { var e = state.edits[id]; return (e && e.players && e.players[name]) || null; }
-  function playerIncluded(id, name) { var r = playerRec(id, name); return !!(r && r.include); }
-  function playerPin(id, name) { var r = playerRec(id, name); return r && r.pin != null ? r.pin : null; }
-  function playerNarrative(id, name) { var r = playerRec(id, name); return r && r.narrative != null ? r.narrative : ""; }
+  // Player roles: fetched `our_players` seed the defaults; the overlay's
+  // `players` map (name → role-list) overrides them, with [] meaning "drop the
+  // auto tag". `fetchedRoles` returns the auto default (null = not auto-tagged).
+  function fetchedRoles(id, name) {
+    var ps = ev(id).our_players || [];
+    for (var i = 0; i < ps.length; i++) {
+      var p = ps[i], nm = (typeof p === "string") ? p : p.name;
+      if (nm === name) return (typeof p === "string") ? [] : (p.roles || []).slice();
+    }
+    return null;
+  }
+  function effRoles(id, name) {
+    var e = state.edits[id];
+    if (e && e.players && e.players[name] !== undefined) return e.players[name].slice();
+    return fetchedRoles(id, name) || [];
+  }
+  // Every Wendover name on this clip (auto + hand-added) that still holds a role.
   function clipPlayers(id) {
-    var names = (ev(id).our_players || []).slice();
+    var names = [];
+    (ev(id).our_players || []).forEach(function (p) { names.push(typeof p === "string" ? p : p.name); });
     var e = state.edits[id];
     if (e && e.players) Object.keys(e.players).forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
-    return names;
+    return names.filter(function (n) { return effRoles(id, n).length > 0; });
+  }
+  function playersInRole(id, role) {
+    return clipPlayers(id).filter(function (n) { return effRoles(id, n).indexOf(role) >= 0; });
+  }
+  // Names offered by the add-player picker: the match squad (Play Cricket XI),
+  // or the club roster if the scorecard has rolled off.
+  function squadNames() {
+    if (state.squad && state.squad.length) return state.squad;
+    return state.roster.map(function (p) { return p.name; });
   }
   function clipCards(id) { var e = state.edits[id]; return (e && e.cards) || []; }
   function cardsAt(id, at) { return clipCards(id).filter(function (c) { return c.at === at; }); }
@@ -150,13 +181,10 @@
   function cleanup(id) {
     var e = state.edits[id];
     if (e) {
-      ["match", "team", "novelty"].forEach(function (c) {
-        if (e[c] && !e[c].include && e[c].pin == null) delete e[c];
-      });
-      if (e.players) {
-        Object.keys(e.players).forEach(function (n) { if (!Object.keys(e.players[n]).length) delete e.players[n]; });
-        if (!Object.keys(e.players).length) delete e.players;
-      }
+      if (e.match && !e.match.include) delete e.match;
+      // An empty `players` map is dropped, but a `name: []` inside it is a
+      // meaningful "drop the auto tag" marker — keep those.
+      if (e.players && !Object.keys(e.players).length) delete e.players;
       if (e.tags && !e.tags.length) delete e.tags;
       if (e.cards && !e.cards.length) delete e.cards;
       if (!Object.keys(e).length) delete state.edits[id];
@@ -215,20 +243,30 @@
     else if (e[ctx]) { delete e[ctx].include; }
     cleanup(id);
   }
-  function setCtxPin(id, ctx, pin) {
-    var e = edit(id); e[ctx] = e[ctx] || {};
-    if (pin) e[ctx].pin = pin; else delete e[ctx].pin;
+  // Set a player's effective role-list on a clip, storing only the diff vs the
+  // fetched auto tags: no override when it matches the default, an explicit []
+  // to drop an auto-tagged player, and the override dropped entirely when a
+  // hand-added player is cleared.
+  function setPlayerRoles(id, name, roles) {
+    var def = fetchedRoles(id, name), isDefault = def !== null;
+    if (!def) def = [];
+    var same = roles.length === def.length && roles.every(function (r) { return def.indexOf(r) >= 0; });
+    var e = edit(id);
+    if (same || (roles.length === 0 && !isDefault)) {
+      if (e.players) delete e.players[name];
+    } else {
+      e.players = e.players || {};
+      e.players[name] = roles;
+    }
     cleanup(id);
   }
-  function setPlayer(id, name, patch) {
-    var e = edit(id); e.players = e.players || {};
-    var r = e.players[name] || (e.players[name] = {});
-    Object.keys(patch).forEach(function (k) {
-      var v = patch[k];
-      if (v == null || v === false || (k === "narrative" && !v)) delete r[k];
-      else r[k] = v;
-    });
-    cleanup(id);
+  function addPlayerRole(id, name, role) {
+    var roles = effRoles(id, name);
+    if (roles.indexOf(role) < 0) roles.push(role);
+    setPlayerRoles(id, name, roles);
+  }
+  function removePlayerRole(id, name, role) {
+    setPlayerRoles(id, name, effRoles(id, name).filter(function (r) { return r !== role; }));
   }
   function addTag(id, tag) {
     if (!tag) return;
@@ -281,6 +319,7 @@
     return fetch("data/" + id + ".json").then(function (r) { return r.json(); }).then(function (data) {
       state.match = data; state.byId = {};
       (data.events || []).forEach(function (e) { state.byId[e.id] = e; });
+      state.squad = data.squad || [];
       state.committed = data.curation || {};
       // Prefer a locally-saved draft (may contain unexported work) over committed.
       var draft = null;
@@ -309,24 +348,18 @@
   // ---- Clip list -------------------------------------------------------
   function chipsFor(id) {
     var chips = [];
-    if (ctxIncluded(id, "match")) chips.push(chip("M", ctxPin(id, "match"), "match"));
-    if (ctxIncluded(id, "team")) chips.push(chip("T", ctxPin(id, "team"), "team"));
-    if (ctxIncluded(id, "novelty")) chips.push(chip("N", ctxPin(id, "novelty"), "novelty"));
-    var np = clipPlayers(id).filter(function (n) { return playerIncluded(id, n); }).length;
-    if (np) chips.push(chip("\u{1F464}" + np, null, "player"));
+    var np = clipPlayers(id).length;
+    if (np) chips.push(chip("\u{1F464}" + np, "player"));
     var nc = clipCards(id).length;
-    if (nc) chips.push(chip("\u{1F0CF}" + nc, null, "card"));
+    if (nc) chips.push(chip("\u{1F0CF}" + nc, "card"));
     var nt = clipTags(id).length;
-    if (nt) chips.push(chip("\u{1F3F7}" + nt, null, "tag"));
+    if (nt) chips.push(chip("\u{1F3F7}" + nt, "tag"));
     return el("span", { class: "chips" }, chips);
   }
-  function chip(label, pin, cls) {
-    return el("span", { class: "chip chip-" + cls, text: pin ? label + pin : label });
+  function chip(label, cls) {
+    return el("span", { class: "chip chip-" + cls, text: label });
   }
-  function anyIncluded(id) {
-    return ctxIncluded(id, "match") || ctxIncluded(id, "team") || ctxIncluded(id, "novelty") ||
-      clipPlayers(id).some(function (n) { return playerIncluded(id, n); });
-  }
+  function anyIncluded(id) { return ctxIncluded(id, "match"); }
 
   function renderList() {
     var list = $("#clip-list"); list.innerHTML = "";
@@ -387,86 +420,69 @@
   }
 
   // ---- Editor ----------------------------------------------------------
-  function pinSelect(current, onChange, disabled) {
-    var sel = el("select", { class: "pin" });
-    [["", "–"], ["1", "1"], ["2", "2"], ["3", "3"], ["4", "4"], ["5", "5"]].forEach(function (o) {
-      var op = el("option", { value: o[0], text: o[1] });
-      if (String(current || "") === o[0]) op.selected = true;
-      sel.appendChild(op);
-    });
-    sel.disabled = !!disabled;
-    sel.addEventListener("change", function () { onChange(sel.value ? parseInt(sel.value, 10) : null); });
-    return sel;
-  }
-
-  function ctxRow(id, ctx, label) {
-    var cb = el("input", { type: "checkbox" }); cb.checked = ctxIncluded(id, ctx);
-    var pin = pinSelect(ctxPin(id, ctx), function (v) { setCtxPin(id, ctx, v); syncRow(id); }, !cb.checked);
-    cb.addEventListener("change", function () {
-      setCtxInclude(id, ctx, cb.checked);
-      pin.disabled = !cb.checked; if (!cb.checked) pin.value = "";
-      syncRow(id); updateCounts();
-    });
-    return el("div", { class: "ctx-row" }, [
-      el("label", { class: "ctx-lbl" }, [cb, el("span", { text: " " + label })]),
-      el("span", { class: "pin-wrap" }, [el("span", { class: "pin-lbl", text: "pin" }), pin]),
-    ]);
-  }
-
-  function playerRow(id, name) {
-    var included = playerIncluded(id, name);
-    var cb = el("input", { type: "checkbox" }); cb.checked = included;
-    var pin = pinSelect(playerPin(id, name), function (v) { setPlayer(id, name, { pin: v }); }, !included);
-    var narr = el("input", {
-      type: "text", class: "pnarr", placeholder: "caption for this clip (optional)",
-      onInput: function (e) { setPlayer(id, name, { narrative: e.target.value }); },
-    });
-    narr.value = playerNarrative(id, name);
-    narr.style.display = included ? "" : "none";
-    cb.addEventListener("change", function () {
-      setPlayer(id, name, { include: cb.checked ? true : null });
-      pin.disabled = !cb.checked; if (!cb.checked) pin.value = "";
-      narr.style.display = cb.checked ? "" : "none";
-      syncRow(id); updateCounts();
-    });
-    return el("div", { class: "player-row" }, [
-      el("div", { class: "player-head" }, [
-        el("label", { class: "ctx-lbl" }, [cb, el("span", { text: " " + name })]),
-        el("span", { class: "pin-wrap" }, [el("span", { class: "pin-lbl", text: "pin" }), pin]),
-      ]),
-      narr,
-    ]);
-  }
-
-  function addPlayerControl(id) {
-    var current = clipPlayers(id);
-    var team = state.match.team;
-    // Players on the match's team first, then the rest of the club.
-    var onTeam = [], others = [];
-    state.roster.forEach(function (p) {
-      if (current.indexOf(p.name) >= 0) return;
-      (team && p.teams && p.teams.indexOf(team) >= 0 ? onTeam : others).push(p.name);
+  // One role's row: the players tagged with it as removable chips, plus an
+  // add-player picker drawn from the match squad (minus those already tagged).
+  function roleRow(id, roleKey, label) {
+    var names = playersInRole(id, roleKey);
+    var chips = names.map(function (n) {
+      return el("span", { class: "role-chip" }, [
+        el("span", { text: n }),
+        el("button", { class: "tag-x", text: "×", title: "Remove " + n + " from " + label,
+          onClick: function () { removePlayerRole(id, n, roleKey); renderEditor(); syncRow(id); } }),
+      ]);
     });
     var sel = el("select", { class: "add-sel" });
-    sel.appendChild(el("option", { value: "", text: "＋ Add a player (e.g. fielder)…" }));
-    function group(label, names) {
-      if (!names.length) return;
-      var og = el("optgroup", { label: label });
-      names.forEach(function (n) { og.appendChild(el("option", { value: n, text: n })); });
-      sel.appendChild(og);
-    }
-    group(team ? team + " squad" : "Squad", onTeam);
-    group("Other club players", others);
+    sel.appendChild(el("option", { value: "", text: "＋ add…" }));
+    squadNames().forEach(function (n) {
+      if (names.indexOf(n) < 0) sel.appendChild(el("option", { value: n, text: n }));
+    });
     sel.addEventListener("change", function () {
       if (!sel.value) return;
-      setPlayer(id, sel.value, { include: true });
-      renderEditor(); syncRow(id); updateCounts();
+      addPlayerRole(id, sel.value, roleKey); renderEditor(); syncRow(id);
     });
-    return el("div", { class: "add-player" }, [sel]);
+
+    // Everything on one wrapping line: label · chips · add picker.
+    return el("div", { class: "role-row" }, [
+      el("span", { class: "role-lbl", text: label }),
+    ].concat(chips, [sel]));
+  }
+
+  // Bowler is (almost) always one player, so a single dropdown replaces the
+  // chip+picker: selecting a name becomes the sole bowler, "— none —" clears it.
+  function bowlerRow(id, roleKey, label) {
+    var names = playersInRole(id, roleKey), current = names[0] || "";
+    var sel = el("select", { class: "add-sel" });
+    sel.appendChild(el("option", { value: "", text: "— none —" }));
+    var opts = squadNames().slice();
+    if (current && opts.indexOf(current) < 0) opts.unshift(current);
+    opts.forEach(function (n) {
+      var o = el("option", { value: n, text: n }); if (n === current) o.selected = true; sel.appendChild(o);
+    });
+    sel.addEventListener("change", function () {
+      names.forEach(function (n) { removePlayerRole(id, n, roleKey); });  // clear the old bowler(s)
+      if (sel.value) addPlayerRole(id, sel.value, roleKey);
+      renderEditor(); syncRow(id);
+    });
+    return el("div", { class: "role-row" }, [el("span", { class: "role-lbl", text: label }), sel]);
+  }
+  // A role only applies to the side Wendover was on for this clip: Batters when
+  // we batted, Bowler/Fielders when we bowled (both, for an intra-club game). An
+  // unknown team shows the row; a row that already has players is never hidden.
+  function roleApplies(id, roleKey) {
+    var e = ev(id), team = (roleKey === "batter") ? e.batting_team : e.bowling_team;
+    return !team || /wendover/i.test(team);
+  }
+  function rolesSection(id) {
+    var rows = [];
+    ROLES.forEach(function (r) {
+      if (!roleApplies(id, r[0]) && !playersInRole(id, r[0]).length) return;
+      rows.push(r[0] === "bowler" ? bowlerRow(id, r[0], r[1]) : roleRow(id, r[0], r[1]));
+    });
+    return el("div", { class: "roles-sec" }, rows);
   }
 
   // Grouped roster select (squad first, then the rest of the club), preselecting
-  // `selected`. Unlike addPlayerControl this offers the whole roster and keeps an
+  // `selected`. Unlike the role picker this offers the whole roster and keeps an
   // off-roster subject (e.g. opposition batsman) visible.
   function rosterSelect(selected, onChange) {
     var sel = el("select", { class: "card-player-sel" });
@@ -524,11 +540,11 @@
   }
 
   function cardsSection(id) {
+    // One pre + one post card per clip (v1), as two columns. No headings — the
+    // add-picker placeholder ("pre-action" / "post-action") says which is which.
     return el("div", { class: "cards-sec" }, [
-      el("div", { class: "card-at-lbl", text: "Before the action" }),
-      cardListFor(id, "pre", "＋ Add a pre-action card…"),
-      el("div", { class: "card-at-lbl", text: "After the action" }),
-      cardListFor(id, "post", "＋ Add a post-action card…"),
+      el("div", { class: "card-col" }, [cardListFor(id, "pre", "＋ Add a pre-action card…")]),
+      el("div", { class: "card-col" }, [cardListFor(id, "post", "＋ Add a post-action card…")]),
     ]);
   }
 
@@ -539,26 +555,26 @@
   }
   function rebuildTags(sec, id) {
     sec.innerHTML = "";
-    var chips = el("div", { class: "tags-edit" });
+    // Chips and the add-tag controls share one wrapping row to save vertical space.
+    var row = el("div", { class: "tags-edit" });
     clipTags(id).forEach(function (t) {
-      chips.appendChild(el("span", { class: "tag-chip" }, [
+      row.appendChild(el("span", { class: "tag-chip" }, [
         el("span", { text: t }),
         el("button", { class: "tag-x", text: "×", title: "Remove tag", onClick: function () { removeTag(id, t); rebuildTags(sec, id); syncRow(id); } }),
       ]));
     });
-    if (!clipTags(id).length) chips.appendChild(el("span", { class: "hint", text: "No tags yet." }));
-    sec.appendChild(chips);
 
     var dl = el("datalist", { id: "tag-suggestions" });
     allTags().forEach(function (t) { if (clipTags(id).indexOf(t) < 0) dl.appendChild(el("option", { value: t })); });
-    var input = el("input", { type: "text", class: "tag-inp", placeholder: "add a tag (e.g. diving catch)…", list: "tag-suggestions" });
+    var input = el("input", { type: "text", class: "tag-inp", placeholder: "add a tag…", list: "tag-suggestions" });
     function add() {
       var v = normTag(input.value); if (!v) return;
       addTag(id, v); rebuildTags(sec, id); syncRow(id);
       sec.querySelector(".tag-inp").focus();
     }
     input.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); add(); } });
-    sec.appendChild(el("div", { class: "tag-add" }, [input, dl, el("button", { class: "mini", text: "Add", onClick: add })]));
+    row.appendChild(el("span", { class: "tag-add" }, [input, dl, el("button", { class: "mini", text: "Add", onClick: add })]));
+    sec.appendChild(row);
   }
 
   // ---- Preview + moving playhead --------------------------------------
@@ -619,9 +635,9 @@
     var cyc = $(".cycle");
     if (cyc) { cyc.textContent = CYCLE_LABELS[n]; cyc.className = "btn sm cycle cycle-" + n; }
   }
-  function timingRow(id) {
-    // State-coloured: ghost while just playing, solid gold (= the action bar) once
-    // the next tap places an action point.
+  // The state-coloured cycle button: ghost while just playing, solid gold (= the
+  // action bar) once the next tap places an action point. Sits beside the scrubber.
+  function cycleButton(id) {
     var cyc = el("button", { class: "btn sm cycle cycle-" + state.cycle, text: CYCLE_LABELS[state.cycle] });
     cyc.addEventListener("click", function () {
       if (!state.player || !state.player.loadVideoById) return;
@@ -643,13 +659,7 @@
         // else: end is not after start — ignore, stay on "set end"
       }
     });
-    return el("div", { class: "timing" }, [
-      cyc,
-      el("button", { class: "mini", text: "Reset", title: "Reset action to the full auto clip",
-        onClick: function () { setTrim(id, "start", null); setTrim(id, "end", null); syncRow(id); renderEditor(); } }),
-      el("button", { class: "mini", text: "Preview", title: "Play the shown clip (with card pads)",
-        onClick: function () { previewShown(id); } }),
-    ]);
+    return cyc;
   }
 
   // Visual timeline: track = the full fetched clip (offset-corrected) so context
@@ -679,7 +689,6 @@
     var hOut = hasPost ? el("div", { class: "scrub-h scrub-out", title: "Lead-out (post-card)" }) : null;
     [shown, preZone, postZone, action, playhead, hIn, hAs, hAe, hOut].forEach(function (n) { if (n) track.appendChild(n); });
 
-    var lbl = el("div", { class: "scrub-labels" });
     function paint() {
       var a0 = effTrim(id, "start"), a1 = effTrim(id, "end"), s0 = shownStart(id), s1 = shownEnd(id);
       shown.style.left = pct(s0) + "%"; shown.style.width = (pct(s1) - pct(s0)) + "%";
@@ -687,10 +696,6 @@
       hAs.style.left = pct(a0) + "%"; hAe.style.left = pct(a1) + "%";
       if (hasPre) { preZone.style.left = pct(s0) + "%"; preZone.style.width = (pct(a0) - pct(s0)) + "%"; hIn.style.left = pct(s0) + "%"; }
       if (hasPost) { postZone.style.left = pct(a1) + "%"; postZone.style.width = (pct(s1) - pct(a1)) + "%"; hOut.style.left = pct(s1) + "%"; }
-      lbl.textContent = "shown " + fmtTime(s0) + "–" + fmtTime(s1) +
-        " · action " + fmtTime(a0) + "–" + fmtTime(a1) +
-        (effPre(id) ? " · pre " + effPre(id) + "s" : "") +
-        (effPost(id) ? " · post " + effPost(id) + "s" : "");
     }
     paint();
     state.scrub = { playhead: playhead, pct: pct };
@@ -732,11 +737,20 @@
       if (state.cycle === 0) setCycle(1);
     });
 
-    return el("div", { class: "scrubber" }, [track, lbl]);
+    return el("div", { class: "scrubber" }, [track]);
   }
 
   function timingBlock(id) {
-    return el("div", { class: "timing-block" }, [timingRow(id), buildScrubber(id)]);
+    // Scrubber + all controls on one row to save vertical space: the scrubber
+    // takes the remaining width, the buttons sit at their natural size.
+    return el("div", { class: "timing-block" }, [
+      buildScrubber(id),
+      cycleButton(id),
+      el("button", { class: "mini", text: "Reset", title: "Reset action to the full auto clip",
+        onClick: function () { setTrim(id, "start", null); setTrim(id, "end", null); syncRow(id); renderEditor(); } }),
+      el("button", { class: "mini", text: "Preview", title: "Play the shown clip (with card pads)",
+        onClick: function () { previewShown(id); } }),
+    ]);
   }
 
   // Frogbox drift lives in the "Shift" box above the video (out of the way — set
@@ -766,20 +780,20 @@
 
     box.appendChild(timingBlock(id));
 
-    box.appendChild(el("div", { class: "sec-label", text: "Include in" }));
-    CTXS.forEach(function (c) { box.appendChild(ctxRow(id, c[0], c[1])); });
-
-    box.appendChild(el("div", { class: "sec-label", text: "Players" }));
-    var wrap = el("div", { class: "players" });
-    clipPlayers(id).forEach(function (n) { wrap.appendChild(playerRow(id, n)); });
-    box.appendChild(wrap);
-    box.appendChild(addPlayerControl(id));
+    // Tagged players | Tags, side by side.
+    box.appendChild(el("div", { class: "ed-cols" }, [
+      el("div", { class: "ed-col" }, [
+        el("div", { class: "sec-label", text: "Tagged players" }),
+        rolesSection(id),
+      ]),
+      el("div", { class: "ed-col" }, [
+        el("div", { class: "sec-label", text: "Tags" }),
+        tagsSection(id),
+      ]),
+    ]));
 
     box.appendChild(el("div", { class: "sec-label", text: "Flashcards" }));
     box.appendChild(cardsSection(id));
-
-    box.appendChild(el("div", { class: "sec-label", text: "Custom tags" }));
-    box.appendChild(tagsSection(id));
   }
 
   // ---- Import / export -------------------------------------------------

@@ -418,11 +418,29 @@ def match_player(roster: list, first, last, prefer_team=None):
 
 
 def event_our_players(clip: dict, roster: list, prefer_team=None, fielders=None) -> list:
-    out = []
+    """Return the Wendover players involved in a clip, each tagged with the
+    role(s) they played in it: ``[{"name": ..., "roles": ["bowler", ...]}]``.
+
+    Roles are the auto-derivable ones — ``batter`` / ``bowler`` / ``fielder``
+    (``other`` is a manual-only bucket added in curation). One player can hold
+    more than one role on a clip (e.g. caught-and-bowled → bowler + fielder).
+    For intra-club games both sides are Wendover, so the batting *and* bowling
+    branches both contribute. Order of first appearance is preserved.
+    """
+    order = []
+    roles = {}
+
+    def add(name, role):
+        if not name:
+            return
+        if name not in roles:
+            roles[name] = []
+            order.append(name)
+        if role not in roles[name]:
+            roles[name].append(role)
+
     if is_wendover(clip.get("bowling_team_name")):
-        p = match_player(roster, clip.get("bowler_first_name"), clip.get("bowler_last_name"), prefer_team)
-        if p:
-            out.append(p)
+        add(match_player(roster, clip.get("bowler_first_name"), clip.get("bowler_last_name"), prefer_team), "bowler")
         # Frogbox omits the fielder; recover it from the scorecard (catches,
         # stumpings, run-outs) — Wendover is fielding here, so it's one of ours.
         if fielders:
@@ -431,17 +449,13 @@ def event_our_players(clip: dict, roster: list, prefer_team=None, fielders=None)
             if fname:
                 parts = fname.split()
                 f = match_player(roster, parts[0], parts[-1], prefer_team) if len(parts) >= 2 else None
-                if f:
-                    out.append(f)
+                add(f, "fielder")
     if is_wendover(clip.get("batting_team_name")):
-        p = match_player(roster, clip.get("batter_first_name"), clip.get("batter_last_name"), prefer_team)
-        if p:
-            out.append(p)
-        d = match_player(roster, clip.get("dismissed_batter_first_name"),
-                         clip.get("dismissed_batter_last_name"), prefer_team)
-        if d:
-            out.append(d)
-    return list(dict.fromkeys(out))  # dedupe, preserve order
+        add(match_player(roster, clip.get("batter_first_name"), clip.get("batter_last_name"), prefer_team), "batter")
+        add(match_player(roster, clip.get("dismissed_batter_first_name"),
+                         clip.get("dismissed_batter_last_name"), prefer_team), "batter")
+
+    return [{"name": name, "roles": roles[name]} for name in order]
 
 
 # ---------------------------------------------------------------------------
@@ -483,9 +497,19 @@ def build_events(clips, anchor_unix, youtube_url, roster, team, fielders, args):
             "ball": find(clip, "ball_no", "ball"),
             "innings": find(clip, "innings_id", "innings"),
             "batter": format_name(clip.get("batter_first_name"), clip.get("batter_last_name")),
+            # Full roster name of the batter when it's one of ours (else None) — the
+            # default subject for the pre-action "new batsman" card, since `batter`
+            # itself is only the abbreviated scorecard name.
+            "batter_our_player": match_player(roster, clip.get("batter_first_name"),
+                                              clip.get("batter_last_name"), team),
             "bowler": format_name(clip.get("bowler_first_name"), clip.get("bowler_last_name")),
             "dismissed_batter": format_name(clip.get("dismissed_batter_first_name"),
                                             clip.get("dismissed_batter_last_name")),
+            # Full roster name of the dismissed batter when it's one of ours (else
+            # None) — a clean default subject for the post-action dismissal card,
+            # since `dismissed_batter` itself is only the abbreviated scorecard name.
+            "dismissed_our_player": match_player(roster, clip.get("dismissed_batter_first_name"),
+                                                 clip.get("dismissed_batter_last_name"), team),
             "batting_team": clip.get("batting_team_name"),
             "bowling_team": clip.get("bowling_team_name"),
             "our_players": event_our_players(clip, roster, team, fielders),
