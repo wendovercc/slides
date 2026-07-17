@@ -1,5 +1,7 @@
 {
-  "title": "Last Match Results",
+  "title": "Match Results",
+  "description": "Match results for the latest senior and junior games",
+  "homepage_rank": 4,
   "refresh_interval_seconds": 300,
   "slides": [
     { "slug": "last-match-result-1st-xi" },

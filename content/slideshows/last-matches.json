@@ -1,6 +1,6 @@
 {
-  "title": "Match Features",
-  "description": "Full latest-match packages — intro, innings scorecards and result — for the senior sides.",
+  "title": "Match Highlights",
+  "description": "Full scorecards, highlights and match analysis for the latest senior games",
   "homepage_rank": 3,
   "refresh_interval_seconds": 300,
   "slides": [
