@@ -2226,12 +2226,32 @@ def build_match_packages(env, slide_meta):
             bat_club = innings_bat_club.get(innings_idx, "")
             bat_crest = ("/assets/images/wcc-logo.png"
                          if "wendover" in bat_club.lower() else m.get("opposition_crest"))
+            # Resolve each clip's cards to rendered content and place them on the
+            # played clip's timeline. The R2 file is trimmed to the *played* bounds,
+            # so t=0 is `start`: a pre card sits over the lead-in [0, action_start],
+            # a post card over the lead-out [action_end, end] (clip-relative seconds).
+            # An unresolvable card (subject not found in stats/scorecard) is dropped.
+            videos = []
+            for c in clips:
+                cards = []
+                resolved = ball_events.resolve_cards(c, scorecard=m, player_stats=stats, team_id=team_id)
+                if len(resolved) < len(c.get("cards") or []):
+                    print(f"    ! {slug}: dropped {len(c['cards']) - len(resolved)} "
+                          f"unresolvable card(s) on clip {c.get('id')}")
+                for rc in resolved:
+                    if rc["at"] == "pre":
+                        window = [0, round(c["action_start"] - c["start"], 3)]
+                    else:
+                        window = [round(c["action_end"] - c["start"], 3),
+                                  round(c["end"] - c["start"], 3)]
+                    cards.append({**rc, "window": window})
+                videos.append({"url": c["url"], "start": c["start"], "end": c["end"],
+                               "body": c["body"], "type": c["type"], "cards": cards})
             slide = {
                 "template": "video", "layout": "fullbleed", "reel": True,
                 "title": f"{label} Highlights",  # page <title> only; not shown on the wall
                 "_innings_label": label, "_bat_crest": bat_crest,
-                "videos": [{"url": c["url"], "start": c["start"], "end": c["end"],
-                            "body": c["body"], "type": c["type"]} for c in clips],
+                "videos": videos,
             }
             build_video_slide(slide)
             slide["videos"] = [v for v in slide["videos"] if v.get("_video_src")]

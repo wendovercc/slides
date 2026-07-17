@@ -235,6 +235,161 @@ def select(merged, context, *, player=None, role=None, tag=None, innings=None, c
     return items[:cap] if cap else items
 
 
+# ── Card resolution ─────────────────────────────────────────────────────────
+# A curation card carries only intent — {at, type, player}. The figures are
+# resolved here at build time from the same season stats / scorecard the slides
+# use, mirroring how `select` turns a clip into rendered content. The result is a
+# small template-ready dict per card (name + optional headline + labelled stats),
+# so wording/layout stay in `video.html`.
+
+# Scorecard `how_out` codes → readable dismissal text for the summary card.
+_HOW_OUT = {
+    "b": "bowled", "ct": "caught", "lbw": "lbw", "st": "stumped",
+    "run out": "run out", "hw": "hit wicket", "ro": "run out",
+}
+
+
+def _name_key(name):
+    """(last, first-initial) from a name — tolerant of abbreviated first names.
+
+    Matches the curation card's subject ("S Methari" / "Harry Godden") against a
+    stats/scorecard row's full name ("Solomon Methari"). Same key shape as
+    fetch_ball_events._name_key.
+    """
+    parts = (name or "").split()
+    if len(parts) < 2:
+        return None
+    return (parts[-1].lower(), parts[0][:1].lower())
+
+
+def _trim_num(value, digits=1):
+    """Format a number without trailing .0 (39.88 -> '39.9', 122.0 -> '122')."""
+    if value is None:
+        return None
+    s = f"{float(value):.{digits}f}".rstrip("0").rstrip(".")
+    return s or "0"
+
+
+def _resolve_new_batsman(card, scorecard, player_stats, team_id):
+    """Pre-match batting form for a Wendover batter, matching the intro slide.
+
+    The figures mirror ``build.team_preview_performers``: the player's stats for
+    THIS TEAM across all competitions (``by_team[team_id].all`` — the same block
+    ``get_leaderboard_block(p, team_id, None)`` returns), with this match's own
+    contribution *subtracted* so the card reads as the form they brought into the
+    game (not the season-plus-this-innings total). Only runs / avg / SR are shown —
+    max-style figures (HS, 50s) can't be recovered pre-match from aggregates, so the
+    intro omits them and so do we. Returns None (card dropped) when the batter has no
+    block for this team or no prior innings once this match is removed.
+    """
+    key = _name_key(card.get("player"))
+    if not key or not player_stats:
+        return None
+    players = player_stats.get("players") or {}
+    rows = players.values() if isinstance(players, dict) else players
+    rec = next((p for p in rows if _name_key(p.get("name")) == key), None)
+    if not rec:
+        return None
+    block = (((rec.get("stats") or {}).get("by_team") or {}).get(team_id or "") or {}).get("all")
+    bat = (block or {}).get("batting")
+    if not bat or not bat.get("innings"):
+        return None
+
+    # Subtract this match's innings for the player (found by play-cricket id, as the
+    # intro does), so the line is their form coming into the game.
+    pid = str(rec.get("id"))
+    mb = next((r for r in (scorecard.get("our_batting") or []) if scorecard
+               and str(r.get("id")) == pid), None)
+    runs = bat["runs"] - (int(mb.get("runs") or 0) if mb else 0)
+    inns = bat["innings"] - (1 if mb else 0)
+    nos = bat["not_outs"] - (1 if mb and mb.get("not_out") else 0)
+    balls = bat["balls"] - (int(mb.get("balls") or 0) if mb else 0)
+    if inns <= 0 or runs < 0:
+        return None
+
+    outs = inns - nos
+    stats = [{"v": str(runs), "l": "runs"}]
+    if outs > 0:
+        stats.append({"v": f"{runs / outs:.1f}", "l": "avg"})
+    if balls > 0:
+        stats.append({"v": f"{runs / balls * 100:.0f}", "l": "SR"})
+    # 50s / 100s are counts, so (unlike HS, a max) they subtract cleanly: drop this
+    # match's innings if it was a fifty / hundred. Shown only when non-zero.
+    match_runs = int(mb.get("runs") or 0) if mb else None
+    fifties = bat.get("fifties", 0) - (1 if match_runs is not None and 50 <= match_runs < 100 else 0)
+    hundreds = bat.get("hundreds", 0) - (1 if match_runs is not None and match_runs >= 100 else 0)
+    if fifties > 0:
+        stats.append({"v": str(fifties), "l": "50s"})
+    if hundreds > 0:
+        stats.append({"v": str(hundreds), "l": "100s"})
+    # `caption` fills the reel's caption slot while the card is up, in place of the
+    # ball's own caption. For a *pre* card it's spoiler-free (the ball's outcome is
+    # held back until the action starts); for a post card it just labels the moment.
+    return {"name": rec.get("name"), "caption": f"New batsman — {rec.get('name')}",
+            "sublabel": "This season", "stats": stats}
+
+
+def _resolve_dismissal(card, scorecard, player_stats, team_id):
+    """Innings-summary line for a dismissed batter, from the match scorecard.
+
+    Searches both batting cards (ours + opposition) by name; returns None when the
+    subject isn't found (e.g. the scorecard has rolled off) so the card is dropped.
+    """
+    key = _name_key(card.get("player"))
+    if not key or not scorecard:
+        return None
+    rows = (scorecard.get("our_batting") or []) + (scorecard.get("their_batting") or [])
+    row = next((r for r in rows if _name_key(r.get("name")) == key), None)
+    if not row:
+        return None
+    runs, balls = row.get("runs"), row.get("balls")
+    if runs is None:
+        return None
+    headline = f"{runs} ({balls})" if balls else str(runs)
+    sr = _trim_num(runs / balls * 100, 0) if balls else None
+    stats = [
+        {"v": str(row.get("fours", 0)), "l": "fours"},
+        {"v": str(row.get("sixes", 0)), "l": "sixes"},
+    ]
+    if sr is not None:
+        stats.append({"v": sr, "l": "SR"})
+    how = (row.get("how_out") or "").strip().lower()
+    return {
+        "name": row.get("name"), "caption": f"Batsman dismissed — {row.get('name')}",
+        "headline": headline,
+        "sublabel": _HOW_OUT.get(how, how) if not row.get("not_out") else "not out",
+        "stats": stats,
+    }
+
+
+_CARD_RESOLVERS = {
+    "new_batsman": _resolve_new_batsman,
+    "dismissal_summary": _resolve_dismissal,
+}
+
+
+def resolve_cards(clip, *, scorecard=None, player_stats=None, team_id=None):
+    """Turn a clip's card refs into rendered content, dropping the unresolvable.
+
+    ``clip`` is a `select()` item (carries ``cards`` + played/action bounds).
+    ``scorecard`` is this match's built scorecard (for the innings summary + the
+    new-batsman match subtraction); ``player_stats`` is player_stats_this_season and
+    ``team_id`` the reel's team slug (for the new-batsman season line). Returns a list
+    of ``{at, type, name, caption?, headline?, sublabel?, stats:[{v,l}]}`` in the
+    clip's card order; a card whose subject can't be resolved is omitted (a warning is
+    the caller's to log). Unknown card types are skipped.
+    """
+    out = []
+    for card in clip.get("cards") or []:
+        resolver = _CARD_RESOLVERS.get(card.get("type"))
+        if not resolver:
+            continue
+        content = resolver(card, scorecard, player_stats, team_id)
+        if content:
+            out.append({"at": card.get("at"), "type": card.get("type"), **content})
+    return out
+
+
 def collect_curated_clips(*, fetched_dir=FETCHED_MATCHES, curation_dir=CURATION_DIR):
     """Every curated match-reel clip across all fetched matches, de-duplicated.
 

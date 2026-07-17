@@ -32,6 +32,9 @@
             --reel-tag-size: 11vw;
             --reel-tag-top:  0px;
             --reel-tag-left: 0px;
+            /* Widened width of the panel while a flashcard is showing (it grows
+               from --reel-tag-size to this). Tune for the card stat row to breathe. */
+            --reel-card-w:   24vw;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body {
@@ -78,22 +81,36 @@
             top: var(--reel-tag-top, 0px); left: var(--reel-tag-left, 0px);
             display: flex; flex-direction: column; align-items: flex-start; z-index: 10;
         }
+        /* Caption sits directly on top of the panel and must read as its lid: no
+           rounded corner between them, and at least as wide as the panel below so
+           there's no notch/seam. min-width tracks the panel — it widens to
+           --reel-card-w in lockstep when a card opens (see .reel-tag.card-open). */
         .reel-tag-caption {
             background: var(--navy-2); color: var(--text);
             font-size: var(--t-xs); font-weight: 700; line-height: 1.2;
             padding: 0.6vh 0.8vw; box-sizing: border-box;
             width: max-content; min-width: var(--reel-tag-size, 11vw); max-width: 70vw;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            /* Only the corner that juts into the screen rounds; top/left stay flush. */
-            border-bottom-right-radius: 0.8vw;
+            transition: min-width 0.45s ease;
         }
+        /* One navy panel holding the square (badge/crest/innings) and, below it, the
+           flashcard. It IS the card: adding .show widens it from the square's width to
+           --reel-card-w and the card grows in, so the single gold bottom-border simply
+           drops down — no seam, no gap, no second box. */
+        .reel-panel {
+            position: relative;
+            width: var(--reel-tag-size, 11vw); overflow: hidden;
+            background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
+            border-bottom-right-radius: 0.8vw;
+            transition: width 0.45s ease;
+        }
+        .reel-tag.card-open .reel-panel { width: var(--reel-card-w, 24vw); }
+        .reel-tag.card-open .reel-tag-caption { min-width: var(--reel-card-w, 24vw); }
         .reel-tag-square {
             position: relative;
-            width: var(--reel-tag-size, 11vw); aspect-ratio: 1;
-            background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
+            width: 100%; height: var(--reel-tag-size, 11vw);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             gap: 1.6vh; padding: 3vh 0.4vw 1vh; box-sizing: border-box;
-            border-bottom-right-radius: 0.8vw;
         }
         /* Ball-outcome badge (Wicket / Six / Four …), styled like the slides' venue
            pill: navy on gold. Pinned top-left in the square's existing headroom so
@@ -112,6 +129,38 @@
         .reel-tag-label {
             font-size: var(--t-xs); font-weight: 900; text-transform: uppercase;
             letter-spacing: 0.08em; color: var(--text); text-align: center; line-height: 1.1;
+        }
+        /* Flashcard content = the lower region of the panel, revealed while a clip's
+           lead-in (pre) or lead-out (post) card is active. No box of its own — it
+           shares the panel's navy fill and single gold bottom-border. JS toggles the
+           panel's .show class, which both widens the panel and grows this in. */
+        .reel-card {
+            padding: 0 1.1vw; max-height: 0; opacity: 0;
+            transition: max-height 0.45s ease, opacity 0.3s ease, padding 0.45s ease;
+        }
+        .reel-tag.card-open .reel-card {
+            max-height: 40vh; opacity: 1; padding: 0.4vh 1.1vw 1.6vh;
+        }
+        .reel-card-name {
+            font-size: var(--t-sm); font-weight: 900; text-transform: uppercase;
+            letter-spacing: 0.03em; color: var(--text); line-height: 1.1;
+        }
+        .reel-card-headline {
+            font-size: var(--t-md); font-weight: 900; color: var(--accent);
+            line-height: 1.05; margin-top: 0.4vh;
+        }
+        .reel-card-sub {
+            font-size: var(--t-xs); color: var(--muted); margin-top: 0.4vh;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .reel-card-stats {
+            display: flex; flex-wrap: wrap; gap: 0.6vh 1.2vw; margin-top: 1.1vh;
+        }
+        .reel-card-stat { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
+        .reel-card-stat .v { font-size: var(--t-sm); font-weight: 900; color: var(--text); }
+        .reel-card-stat .l {
+            font-size: var(--t-xxs); color: var(--muted); text-transform: uppercase;
+            letter-spacing: 0.06em; margin-top: 0.4vh;
         }
 
         {% else %}
@@ -175,10 +224,18 @@
     {% if slide.reel is defined and slide.reel %}
     <div class="reel-tag">
         <div id="reel-caption" class="reel-tag-caption" style="display:none"></div>
-        <div class="reel-tag-square">
-            <span id="reel-badge" class="reel-tag-badge" style="display:none"></span>
-            {% if slide._bat_crest %}<img class="reel-tag-crest" src="{{ slide._bat_crest }}" alt="">{% endif %}
-            {% if slide._innings_label %}<div class="reel-tag-label">{{ slide._innings_label }}</div>{% endif %}
+        <div id="reel-panel" class="reel-panel">
+            <div class="reel-tag-square">
+                <span id="reel-badge" class="reel-tag-badge" style="display:none"></span>
+                {% if slide._bat_crest %}<img class="reel-tag-crest" src="{{ slide._bat_crest }}" alt="">{% endif %}
+                {% if slide._innings_label %}<div class="reel-tag-label">{{ slide._innings_label }}</div>{% endif %}
+            </div>
+            <div id="reel-card" class="reel-card">
+                <div class="reel-card-name"></div>
+                <div class="reel-card-headline" style="display:none"></div>
+                <div class="reel-card-sub" style="display:none"></div>
+                <div class="reel-card-stats"></div>
+            </div>
         </div>
     </div>
     {% else %}
@@ -237,6 +294,68 @@
     // Reel per-clip caption + ball-outcome badge (null on non-reel slides).
     var captionEl = document.getElementById('reel-caption');
     var badgeEl = document.getElementById('reel-badge');
+    // Reel flashcard: a data card shown over the current clip's lead-in / lead-out.
+    // The whole panel grows to become the card, so .show toggles on the panel.
+    var cardEl = document.getElementById('reel-card');
+    var panelEl = document.getElementById('reel-panel');
+    var tagEl = document.querySelector('.reel-tag');
+    var activeCardKey = null;
+
+    // Default caption slot + outcome badge for the current clip (the ball's own
+    // outcome). A pre card overrides these until the action starts (see updateCard).
+    function setBallCaption() {
+        var v = VIDEOS[current] || {};
+        if (captionEl) { captionEl.textContent = v.body || ''; captionEl.style.display = v.body ? '' : 'none'; }
+        if (badgeEl) {
+            var ty = v.type;
+            if (ty && ty !== 'other') { badgeEl.textContent = ty.charAt(0).toUpperCase() + ty.slice(1); badgeEl.style.display = ''; }
+            else { badgeEl.style.display = 'none'; }
+        }
+    }
+
+    function renderCard(card) {
+        cardEl.querySelector('.reel-card-name').textContent = card.name || '';
+        var hl = cardEl.querySelector('.reel-card-headline');
+        hl.textContent = card.headline || ''; hl.style.display = card.headline ? '' : 'none';
+        var sub = cardEl.querySelector('.reel-card-sub');
+        sub.textContent = card.sublabel || ''; sub.style.display = card.sublabel ? '' : 'none';
+        var stats = cardEl.querySelector('.reel-card-stats');
+        stats.innerHTML = '';
+        (card.stats || []).forEach(function (s) {
+            var d = document.createElement('div'); d.className = 'reel-card-stat';
+            var v = document.createElement('span'); v.className = 'v'; v.textContent = s.v;
+            var l = document.createElement('span'); l.className = 'l'; l.textContent = s.l;
+            d.appendChild(v); d.appendChild(l); stats.appendChild(d);
+        });
+    }
+
+    // Show/hide the flashcard for the current playhead: a card is on-screen while
+    // currentTime is inside its window. Pre and post windows never overlap, so the
+    // action gap between them retracts the card and the next one drops in fresh.
+    function updateCard(v) {
+        if (!panelEl) return;
+        var cards = (VIDEOS[current] && VIDEOS[current].cards) || [];
+        var t = v.currentTime, hit = null;
+        for (var j = 0; j < cards.length; j++) {
+            var w = cards[j].window || [0, 0];
+            if (t >= w[0] && t <= w[1]) { hit = cards[j]; break; }
+        }
+        var key = hit ? (hit.at + ':' + hit.type) : null;
+        if (key === activeCardKey) return;
+        activeCardKey = key;
+        // .card-open (on the tag root) grows the panel into the card and widens the
+        // caption above it to match, so the two read as one block.
+        if (hit) { renderCard(hit); if (tagEl) tagEl.classList.add('card-open'); }
+        else if (tagEl) { tagEl.classList.remove('card-open'); }
+        // A card's caption replaces the ball's own in the caption slot. A pre card is
+        // spoiler-free, so it also hides the outcome badge until the action starts; a
+        // post card keeps the (already-revealed) outcome badge alongside its caption.
+        setBallCaption();
+        if (hit && hit.caption && captionEl) {
+            captionEl.textContent = hit.caption; captionEl.style.display = '';
+            if (hit.at === 'pre' && badgeEl) badgeEl.style.display = 'none';
+        }
+    }
     {% if slide.layout is defined and slide.layout == 'fullbleed' %}
     var overlayEl = document.getElementById('overlay');
     var bodyEl = document.getElementById('overlay-body');
@@ -257,13 +376,13 @@
         v.currentTime = 0;
         if (isPaused()) v.pause(); else v.play();
         var body = VIDEOS[i] && VIDEOS[i].body;
-        if (captionEl) { captionEl.textContent = body || ''; captionEl.style.display = body ? '' : 'none'; }
-        if (badgeEl) {
-            var ty = VIDEOS[i] && VIDEOS[i].type;
-            if (ty && ty !== 'other') { badgeEl.textContent = ty.charAt(0).toUpperCase() + ty.slice(1); badgeEl.style.display = ''; }
-            else { badgeEl.style.display = 'none'; }
-        }
+        setBallCaption();
         if (bodyEl) bodyEl.textContent = body || '';
+        // Reset the flashcard, then evaluate at t=0 so a pre-card is already showing
+        // as the clip opens (and stays shown if paused on the first frame) — this
+        // also swaps in the pre-card's spoiler-free caption over the ball caption set
+        // just above.
+        if (panelEl) { activeCardKey = null; if (tagEl) tagEl.classList.remove('card-open'); updateCard(v); }
         {% if slide.layout is defined and slide.layout == 'fullbleed' %}
         if (overlayEl) {
             overlayEl.classList.remove('faded');
@@ -284,6 +403,9 @@
     }
 
     videoEls.forEach(function (v) {
+        v.addEventListener('timeupdate', function () {
+            if (+v.dataset.idx === current) updateCard(v);
+        });
         v.addEventListener('ended', function () {
             var i = +v.dataset.idx;
             if (i !== current) return;
