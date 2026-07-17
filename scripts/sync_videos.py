@@ -6,6 +6,9 @@ Downloads and trims new/changed clips via yt-dlp + ffmpeg, uploads to R2,
 removes clips no longer referenced by any slide, and updates
 content/data/video_manifest.json (committed to the repo).
 
+Pass --dry-run (or -n) to print the reconcile plan (what would upload / delete)
+without downloading, uploading, deleting, or writing the manifest.
+
 Required in .env:
     R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
     R2_BUCKET, R2_BASE_URL
@@ -20,6 +23,8 @@ import sys
 from pathlib import Path
 
 import boto3
+
+import ball_events
 
 ROOT    = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
@@ -55,9 +60,23 @@ def fingerprint(url: str, start, end) -> str:
 
 
 def collect_clips() -> list:
-    """Return deduplicated list of {url, start, end, fp} from all video slides."""
+    """Return deduplicated {url, start, end, fp} clips referenced anywhere.
+
+    Two sources, unioned and de-duplicated on fingerprint: hand-authored ``video``
+    slide configs in ``content/slides``, and the curated match reels from
+    ``ball_events.collect_curated_clips()`` (each at its pad-widened bounds). This
+    is the referenced set the sync uploads and prunes R2 against.
+    """
     seen = set()
     clips = []
+    def add(url, start, end):
+        if not url:
+            return
+        fp = fingerprint(url, start, end)
+        if fp not in seen:
+            seen.add(fp)
+            clips.append({"url": url, "start": start, "end": end, "fp": fp})
+
     for path in sorted((CONTENT / "slides").glob("*.json")):
         try:
             slide = json.loads(path.read_text())
@@ -68,13 +87,11 @@ def collect_clips() -> list:
         for v in slide.get("videos", []):
             if "url" not in v:
                 continue
-            url   = v["url"]
-            start = v.get("start")
-            end   = v.get("end")
-            fp    = fingerprint(url, start, end)
-            if fp not in seen:
-                seen.add(fp)
-                clips.append({"url": url, "start": start, "end": end, "fp": fp})
+            add(v["url"], v.get("start"), v.get("end"))
+
+    for c in ball_events.collect_curated_clips():
+        add(c["url"], c["start"], c["end"])
+
     return clips
 
 
@@ -169,6 +186,7 @@ def probe_duration(path: Path, fallback: float) -> float:
 
 
 def main():
+    dry_run = "--dry-run" in sys.argv or "-n" in sys.argv
     load_dotenv()
     CACHE.mkdir(parents=True, exist_ok=True)
 
@@ -184,6 +202,21 @@ def main():
 
     to_upload = referenced_fps - r2_fps
     to_delete = r2_fps - referenced_fps
+
+    # Dry run: report the reconcile plan (what would upload / delete) using only the
+    # read-only R2 listing above — no download, upload, delete, or manifest write.
+    if dry_run:
+        print("\n  DRY RUN — no changes will be made\n")
+        print(f"  would upload {len(to_upload)}:")
+        for c in sorted(clips, key=lambda c: c["fp"]):
+            if c["fp"] in to_upload:
+                print(f"    + {c['fp']}  {c['url']}  {c['start']}–{c['end']}")
+        print(f"  would delete {len(to_delete)} (in R2, no longer referenced):")
+        for fp in sorted(to_delete):
+            print(f"    - {fp}.mp4")
+        print(f"\n  {len(to_upload)} to upload, "
+              f"{len(referenced_fps) - len(to_upload)} already in R2, {len(to_delete)} to remove")
+        return 0
 
     # Load existing manifest so we preserve duration for clips already in R2
     manifest = {}

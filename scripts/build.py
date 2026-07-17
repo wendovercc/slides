@@ -641,6 +641,11 @@ def build_curation(env):
             roster = []
     (out_dir / "roster.json").write_text(json.dumps(roster))
 
+    # Card registry (types + default pad seconds) — the single source of truth the
+    # page's card pickers read, so the JS never hard-codes the defaults that
+    # ball_events.py also relies on.
+    (out_dir / "card_types.json").write_text(json.dumps(load_config().get("card_types") or []))
+
     (out_dir / "index.html").write_text(env.get_template("curate/index.html").render())
     print(f"  curation: {len(index)} match(es) → /curate/")
 

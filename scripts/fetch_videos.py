@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import ball_events
+
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
 VIDEOS_DIR = CONTENT / "data" / "fetched" / "videos"
@@ -44,9 +46,22 @@ def fingerprint(url: str, start, end) -> str:
 
 
 def collect_clips() -> list:
-    """Return a deduplicated list of {url, start, end, fp} dicts from all video slides."""
+    """Return a deduplicated {url, start, end, fp} list of every referenced clip.
+
+    Unions hand-authored ``video`` slide configs in ``content/slides`` with the
+    curated match reels from ``ball_events.collect_curated_clips()`` (pad-widened
+    bounds), de-duplicated on fingerprint.
+    """
     seen = set()
     clips = []
+    def add(url, start, end):
+        if not url:
+            return
+        fp = fingerprint(url, start, end)
+        if fp not in seen:
+            seen.add(fp)
+            clips.append({"url": url, "start": start, "end": end, "fp": fp})
+
     for path in sorted((CONTENT / "slides").glob("*.json")):
         try:
             slide = json.loads(path.read_text())
@@ -54,16 +69,11 @@ def collect_clips() -> list:
             continue
         if slide.get("template") != "video":
             continue
-
         for v in slide.get("videos", []):
-            url = v.get("url", "")
-            if url:
-                start = v.get("start")
-                end = v.get("end")
-                fp = fingerprint(url, start, end)
-                if fp not in seen:
-                    seen.add(fp)
-                    clips.append({"url": url, "start": start, "end": end, "fp": fp})
+            add(v.get("url", ""), v.get("start"), v.get("end"))
+
+    for c in ball_events.collect_curated_clips():
+        add(c["url"], c["start"], c["end"])
 
     return clips
 

@@ -22,22 +22,26 @@
   // in the data model (see ball_events PLAYER_ROLES) — just not surfaced for now.
   var ROLES = [["batter", "Batters"], ["bowler", "Bowler"], ["fielder", "Fielders"]];
 
-  // Flashcard registry (v1). Each type is a solid full-frame beat inserted before
-  // (`pre`) or after (`post`) the action; the editor only picks a type + player,
-  // the figures are resolved from Play Cricket data at build time. `player(ev)`
-  // is the sensible default subject for a fresh card on a given clip.
-  // `dwell` = default seconds the card is on screen, which is also the lead-in
-  // (pre) / lead-out (post) of footage the card overlays. Editable per clip.
-  var CARD_TYPES = [
-    { key: "new_batsman", at: "pre", label: "New batsman — season stats", dwell: 4,
-      // Prefer the full roster name for our own batter; fall back to the
-      // abbreviated scorecard name for the opposition.
-      player: function (e) { return e.batter_our_player || e.batter || ""; } },
-    { key: "dismissal_summary", at: "post", label: "Dismissal — innings summary", dwell: 5,
-      // Prefer the full roster name for our own batters; fall back to the
-      // abbreviated scorecard name for the opposition.
-      player: function (e) { return e.dismissed_our_player || e.dismissed_batter || ""; } },
-  ];
+  // Flashcard registry. Each type is a card overlaid on lead-in (`pre`) / lead-out
+  // (`post`) footage around the action; the editor only picks a type + player, the
+  // figures are resolved from Play Cricket data at build time. `dwell` = default
+  // seconds the card shows, which is also how far the played clip is widened beyond
+  // the action point. The registry (key / at / label / dwell) is loaded from
+  // `card_types.json` at startup — the same central config ball_events.py reads —
+  // so the pad defaults live in exactly one place. Populated by buildCardTypes().
+  var CARD_TYPES = [];
+  // Maps a config `subject` to the sensible default player for a fresh card on a
+  // clip: prefer the full roster name, fall back to the abbreviated scorecard name.
+  var CARD_SUBJECTS = {
+    batter:    function (e) { return e.batter_our_player || e.batter || ""; },
+    dismissed: function (e) { return e.dismissed_our_player || e.dismissed_batter || ""; },
+  };
+  function buildCardTypes(config) {
+    CARD_TYPES = (config || []).map(function (c) {
+      return { key: c.key, at: c.at, label: c.label, dwell: c.dwell,
+               player: CARD_SUBJECTS[c.subject] || function () { return ""; } };
+    });
+  }
   function cardType(key) {
     for (var i = 0; i < CARD_TYPES.length; i++) if (CARD_TYPES[i].key === key) return CARD_TYPES[i];
     return null;
@@ -298,8 +302,9 @@
     return Promise.all([
       fetch("matches.json").then(function (r) { return r.json(); }),
       fetch("roster.json").then(function (r) { return r.json(); }).catch(function () { return []; }),
+      fetch("card_types.json").then(function (r) { return r.json(); }).catch(function () { return []; }),
     ]).then(function (res) {
-      var matches = res[0]; state.roster = res[1] || [];
+      var matches = res[0]; state.roster = res[1] || []; buildCardTypes(res[2] || []);
       var sel = $("#match-picker"); sel.innerHTML = "";
       if (!matches.length) { sel.appendChild(el("option", { text: "No matches available", value: "" })); return; }
       matches.forEach(function (m) {

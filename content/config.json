@@ -27,5 +27,9 @@
     { "type": "youtube", "title": "Live Streams", "url": "https://www.youtube.com/@Wendovercclive", "handle": "Wendovercclive", "channel_id": "UCbOTi2XUTaVHtQC7ca7Ac8Q" },
     { "type": "external", "url": "https://www.wendovercc.org", "title": "Club Website", "description": "wendovercc.org" },
     { "type": "external", "url": "https://wendovercc.play-cricket.com/home", "title": "Play Cricket", "description": "wendovercc.play-cricket.com" }
+  ],
+  "card_types": [
+    { "key": "new_batsman",       "at": "pre",  "label": "New batsman — season stats",  "dwell": 4, "subject": "batter" },
+    { "key": "dismissal_summary", "at": "post", "label": "Dismissal — innings summary", "dwell": 5, "subject": "dismissed" }
   ]
 }
