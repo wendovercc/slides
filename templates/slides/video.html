@@ -45,7 +45,12 @@
 
         {% if slide.layout is defined and slide.layout == 'fullbleed' %}
         /* ── Fullbleed mode ── */
-        html, body { background: var(--bg); display: flex; align-items: flex-end; }
+        /* Dock the video to the TOP so it shares an origin with the fixed top-left
+           overlays (reel tag / title banner / logo). On the 16:9 wall the video fills
+           the height and this is moot; on any other aspect the letterbox fill lands
+           at the bottom, below the frame, instead of pushing the video away from the
+           overlays pinned at the top. */
+        html, body { background: var(--bg); display: flex; align-items: flex-start; }
         .clip { width: 100%; height: auto; display: block; }
         .overlay {
             position: fixed; top: 0; left: 0; right: 0;
