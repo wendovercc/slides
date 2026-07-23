@@ -189,6 +189,7 @@
 </div>
 <script src="/assets/js/context.js"></script>
 <script src="/assets/js/video-cache.js"></script>
+<script src="/assets/js/preload-gate.js"></script>
 <script src="/assets/js/player-core.js"></script>
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
@@ -325,6 +326,22 @@ function markCurrentSlide(shownSlides, currentIdx) {
     });
 }
 
+function startReloadTicker(reloadMs) {
+    const reloadEl = document.getElementById('about-reload');
+    const reloadAt = Date.now() + reloadMs;
+    const tick = () => {
+        if (!reloadEl) return;
+        const ms = reloadAt - Date.now();
+        if (ms > 0) {
+            reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
+            setTimeout(tick, 1000);
+        } else {
+            reloadEl.textContent = 'reload queued — waiting for cycle end';
+        }
+    };
+    tick();
+}
+
 async function init() {
     const today = new Date().toISOString().slice(0, 10);
 
@@ -348,18 +365,6 @@ async function init() {
     const show = await fetch(`/slideshow/${slideshowSlug}/data.json`).then(r => r.json());
     const slides = slidesForCtx(show, context, today);
 
-    // Prime the video cache in the background from the slideshow's build-time
-    // precache manifest. Slides play from the network <source> until a clip is
-    // stored, then off local bytes — so re-downloads fade out over the first loops
-    // (the hard loading gate that waits for this is Phase 2). See
-    // docs/player-offline-architecture.md.
-    if (window.WccVideoCache && WccVideoCache.supported) {
-        fetch(`/slideshow/${slideshowSlug}/precache.json`)
-            .then(r => r.json())
-            .then(pc => WccVideoCache.prime(pc.videos || []))
-            .catch(() => {});
-    }
-
     if (PREVIEW) {
         const nextCtxs = WccContext.findNextContexts(calendar, LOCATION_ID);
         renderPanel(loc, context, slideshowSlug, show, nextCtxs, today, contextEnd);
@@ -367,49 +372,69 @@ async function init() {
 
     if (slides.length === 0) return;
 
-    slides.forEach(s => {
+    const CACHE_OK = !!(window.WccVideoCache && WccVideoCache.supported);
+
+    // Create every slide iframe up front (hidden by default: iframe{opacity:0}).
+    // frames[] stays index-aligned with slides[]. The gate awaits their load events.
+    const frames = slides.map(s => {
         const f = document.createElement('iframe');
         f.src = `/slide/${s.slug}/`;
         document.body.appendChild(f);
+        return f;
     });
     applyDebugScale();
-
-    const frames = document.querySelectorAll('iframe');
 
     const reloadMs = show.refresh_interval_seconds * 1000;
     let reloadPending = false;
     setTimeout(() => { reloadPending = true; }, reloadMs);
 
-    WccPlayer.start({
-        items: slides.map((s, j) => ({
-            slug: s.slug,
-            duration: s.duration,
-            panel_duration: s.panel_duration,
-            group: s._group || null,   // slide-set membership (drives hats later)
-            frame: frames[j],
-        })),
-        onShow: i => {
-            _currentSlug = slides[i].slug;
-            if (PREVIEW) markCurrentSlide(slides, i);
-        },
-        shouldReloadNow: () => reloadPending,
-    });
-
-    if (PREVIEW) {
-        const reloadEl = document.getElementById('about-reload');
-        const reloadAt = Date.now() + reloadMs;
-        const tickReload = () => {
-            if (!reloadEl) return;
-            const ms = reloadAt - Date.now();
-            if (ms > 0) {
-                reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
-                setTimeout(tickReload, 1000);
-            } else {
-                reloadEl.textContent = 'reload queued — waiting for cycle end';
-            }
-        };
-        tickReload();
+    function startPlayer(finalSlides) {
+        WccPlayer.start({
+            items: finalSlides.map(s => ({
+                slug: s.slug,
+                duration: s.duration,
+                panel_duration: s.panel_duration,
+                group: s._group || null,   // slide-set membership (drives hats later)
+                frame: frames[slides.indexOf(s)],
+            })),
+            onShow: i => {
+                _currentSlug = finalSlides[i].slug;
+                if (PREVIEW) markCurrentSlide(finalSlides, i);
+            },
+            shouldReloadNow: () => reloadPending,
+        });
+        if (PREVIEW) startReloadTicker(reloadMs);
     }
+
+    // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
+    // today's behaviour: prime in the background, start immediately, no gate.
+    if (PREVIEW || !CACHE_OK) {
+        if (CACHE_OK) {
+            fetch(`/slideshow/${slideshowSlug}/precache.json`)
+                .then(r => r.json())
+                .then(pc => WccVideoCache.prime(pc.videos || []))
+                .catch(() => {});
+        }
+        startPlayer(slides);
+        return;
+    }
+
+    // Watch mode (the walls): the hard loading gate. Nothing is revealed until every
+    // clip is stored (or has exhausted bounded retries) AND every iframe has loaded.
+    let precache = { videos: [] };
+    try { precache = await fetch(`/slideshow/${slideshowSlug}/precache.json`).then(r => r.json()); } catch (e) {}
+    const { failed } = await WccPreloadGate.run({ videos: precache.videos || [], frames });
+
+    // Drop any video slide whose clip(s) didn't store, so the show never opens on a
+    // clip that can't play (a later refresh — Phase 3 — picks it back up). Never blank
+    // the wall: if that would drop every slide, keep them all (network fallback).
+    let kept = slides.filter(s => (s._videos || []).every(u => !failed.has(u)));
+    if (kept.length === 0) kept = slides;
+    if (kept.length < slides.length) {
+        console.warn(`[preload] dropped ${slides.length - kept.length} slide(s) with unstored clips`);
+    }
+
+    startPlayer(kept);
 }
 
 init();

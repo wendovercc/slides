@@ -261,7 +261,7 @@ Ordered so each phase ships independently and de-risks the next.
 |-------|-------|-------|
 | **0** | Move Pi `--user-data-dir` to SD card; confirm R2 headers via `curl` from a Pi; enable **R2 CORS**. No app code. | Kills the daily cold start immediately; validates the cache hypothesis; unblocks the fetch route. **R2 CORS DONE (2026-07-23); Pi `--user-data-dir` move + Pi `curl` confirmation still pending.** |
 | **1** | `build.py` emits `precache.json`; player fetch-to-Cache-API of all clips; video slides play from an object URL (fall back to network URL on miss). **Built 2026-07-23 (`scripts/build.py`, `assets/js/video-cache.js`, both players, `slides/video.html`); runtime-verified pending a browser test with CORS live.** | No re-downloads, no un-primed playback — the core fix. |
-| **2** | The **loading gate** + branded progress screen; iframes loaded hidden; rotation starts only when all clips stored *and* iframes loaded; per-clip failure policy. | The "Preparing slideshow" experience the walls show. |
+| **2** | The **loading gate** + branded progress screen; iframes loaded hidden; rotation starts only when all clips stored *and* iframes loaded; per-clip failure policy. **Built 2026-07-23. Shared module `assets/js/preload-gate.js` (`WccPreloadGate.run`, self-injecting styles) + `primeWithRetry` in `video-cache.js`; wired into BOTH players (`screen/player.html` = walls, `slideshow/player.html` = interactive iPad), same code path. Failure policy = recommended one (Open decision 1): non-video/shell blocking, video clips retry with backoff then their slide is dropped; never blanks the show; 120 s absolute cap. Preview + no-cache browsers keep the ungated path.** | The "Preparing slideshow" experience the walls show. |
 | **3** | Version-stamped background download + cache swap at cycle boundary; prune superseded clips. | App-controlled refresh; blind reload retired. |
 
 ### Deferred (non-blocking)
@@ -272,6 +272,12 @@ Ordered so each phase ships independently and de-risks the next.
 - OS-level systemd prefetch → localhost as a Pi-only belt-and-braces net.
 - Same-origin video proxy (if R2 CORS proves troublesome).
 - Cache-hit / bytes-saved telemetry in the preview `#dbg` panel.
+- **Suppress hidden-iframe playback during the gate.** Behind the Phase 2 loading
+  screen the slide `<video>`s still auto-play, so on a *cold* cache they briefly
+  fetch their network `<source>` in parallel with the prime — a one-time
+  double-fetch on first boot only (a warm cache resolves object URLs and aborts the
+  network preload, and Phase 0 SD persistence makes warm the normal case). Fix by
+  holding the slides idle (`preload="none"` / paused) until the gate opens.
 
 ### Rejected
 

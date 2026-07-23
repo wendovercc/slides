@@ -244,8 +244,12 @@
 {% if slide.layout is defined and slide.layout == 'fullbleed' %}
     {% set has_video = slide.videos is defined and slide.videos and slide.videos[0]._video_src %}
     {% if has_video %}
+    {# preload="none": don't let the browser eagerly download every clip's network
+       <source> on parse — a reel has many, and that races/duplicates the cache prime.
+       ensurePlayable points the active clip at cached bytes (or the network source on
+       miss) and playback loads it on demand. See docs/player-offline-architecture.md. #}
     {% for v in slide.videos %}{% if v._video_src %}
-    <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto">
+    <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="none">
         <source src="{{ v._video_src }}" type="video/mp4">
     </video>
     {% endif %}{% endfor %}
@@ -286,7 +290,7 @@
             <div id="body-slot" class="slide-body" style="display:none"></div>
             <div class="video-wrap">
                 {% for v in slide.videos %}{% if v._video_src %}
-                <video data-idx="{{ loop.index0 }}" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="auto"{% if not loop.first %} style="display:none"{% endif %}>
+                <video data-idx="{{ loop.index0 }}" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="none"{% if not loop.first %} style="display:none"{% endif %}>
                     <source src="{{ v._video_src }}" type="video/mp4">
                 </video>
                 {% endif %}{% endfor %}
