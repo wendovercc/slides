@@ -1,0 +1,8 @@
+{
+  "title": "Video Test",
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "cotswold-archaeology" },
+    { "slug": "match-denham-cc" }
+  ]
+}

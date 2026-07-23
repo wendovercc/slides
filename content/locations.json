@@ -60,7 +60,7 @@
       "id": "tring-road",
       "name": "Tring Road",
       "screen": true,
-      "slideshow": "pavilion-auto",
+      "slideshow": "video-test",
       "pi_hostname": "wendovercc-1",
       "default_context": {
         "section": "all"
