@@ -10,8 +10,14 @@
         body:not(.preview) { cursor: none; }
         iframe {
             position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
+            /* Letterbox: always render the 16:9 TV layout, centred, with black
+               bars on any non-16:9 viewport (iPad/desktop) rather than stretching
+               the slide's vw/vh grid vertically. On a 16:9 wall this fills the
+               screen exactly (no bars), so kiosk playback is unchanged. */
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(100vw, 177.78vh);
+            height: min(56.25vw, 100vh);
             border: none;
             opacity: 0;
             transition: opacity 0.8s ease;

@@ -34,29 +34,33 @@
       // (overrides the kiosk `cursor:none` on both player and slide bases).
       'html,body{cursor:auto!important;}' +
       '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;}' +
-      // Docked to the top, centred on the content column (the viewport minus the
-      // 20vw sidebar → 40vw), so it reads as centred over the slide rather than
-      // pushed right by the sidebar. It sits in the gap between the title/subtitle
-      // (left) and the set-meta (right), extending a touch below --safe-y without
-      // covering content (the strip sits lower). Flush to the top edge: no top
-      // border, only a slight corner round.
-      '#wcc-bar{position:fixed;top:0;left:40vw;' +
-      'transform:translateX(-50%);z-index:60;display:flex;gap:0.25vw;padding:0.3vw 0.25vw;' +
+      // Docked to the top edge of the whole viewport and centred on the full
+      // screen (not the content column). With the players now letterboxing the
+      // 16:9 slide, a non-16:9 surface (the iPad, desktop windows) leaves a black
+      // band above the slide — the bar lives in that band, clear of slide content,
+      // rather than overlapping the title/set-meta row. Targets are sized for
+      // touch. Flush to the top edge: no top border, only a slight corner round.
+      // Sized in vmax (the longer viewport edge) not vw, so the targets stay the
+      // same physical size in portrait and landscape — vw would shrink them in
+      // portrait, where the width is the short edge. Only left:50vw (true
+      // horizontal centring on the viewport width) stays in vw.
+      '#wcc-bar{position:fixed;top:0;left:50vw;' +
+      'transform:translateX(-50%);z-index:60;display:flex;gap:0.6vmax;padding:0.7vmax 0.6vmax;' +
       'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);border-top:none;' +
-      'border-radius:0 0 0.4vw 0.4vw;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
+      'border-radius:0 0 0.6vmax 0.6vmax;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
       'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);overflow:hidden;}' +
-      '#wcc-bar button{width:2.3vw;height:2.3vw;border:none;border-radius:50%;background:transparent;' +
+      '#wcc-bar button{width:4.7vmax;height:4.7vmax;border:none;border-radius:50%;background:transparent;' +
       'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;' +
       '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
       '#wcc-bar button:active{background:rgba(255,255,255,0.12);}' +
       '#wcc-bar button.primary{background:rgba(212,175,55,0.18);}' +
       '#wcc-bar button.primary:active{background:rgba(212,175,55,0.32);}' +
-      '#wcc-bar svg{width:1.15vw;height:1.15vw;fill:#fff;stroke:#fff;stroke-width:2;' +
+      '#wcc-bar svg{width:2.35vmax;height:2.35vmax;fill:#fff;stroke:#fff;stroke-width:2;' +
       'stroke-linejoin:round;stroke-linecap:round;}' +
       '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}' +
       // Countdown for the current panel/slide. The wall's tab underline no longer
       // fills, so the timer lives here — visible only while the control bar is.
-      '#wcc-bar-progress{position:absolute;left:0;right:0;bottom:0;height:0.22vw;' +
+      '#wcc-bar-progress{position:absolute;left:0;right:0;bottom:0;height:0.35vmax;' +
       'background:rgba(212,175,55,0.16);}' +
       '#wcc-bar-progress i{display:block;height:100%;background:#d4af37;' +
       'transform-origin:left;transform:scaleX(0);}';
