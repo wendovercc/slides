@@ -1,0 +1,486 @@
+{
+  "match_id": 7298976,
+  "match_date": "11/07/2026",
+  "match_time": "12:30",
+  "ground_name": "Kimble CC",
+  "competition_id": "135855",
+  "competition_name": "Division 6C",
+  "is_home": true,
+  "result": "L",
+  "result_description": "Denham CC - 1st XI - Won",
+  "toss_won_by_us": false,
+  "toss_elected_bat": true,
+  "toss_text": "Denham CC - 1st XI won the toss and elected to bat",
+  "opposition_name": "1st XI",
+  "opposition_club_name": "Denham CC",
+  "we_bat_first": false,
+  "our_total": {
+    "runs": "141",
+    "wickets": "10",
+    "overs": "32.1",
+    "extras": {
+      "byes": 4,
+      "leg_byes": 6,
+      "wides": 1,
+      "no_balls": 0,
+      "penalty": 0,
+      "total": 11
+    }
+  },
+  "their_total": {
+    "runs": "280",
+    "wickets": "7",
+    "overs": "45.0",
+    "extras": {
+      "byes": 13,
+      "leg_byes": 1,
+      "wides": 10,
+      "no_balls": 1,
+      "penalty": 0,
+      "total": 25
+    }
+  },
+  "our_batting": [
+    {
+      "id": "4106458",
+      "name": "Anshuman Pandit",
+      "runs": 39,
+      "balls": 57,
+      "fours": 4,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Solomon Methari"
+    },
+    {
+      "id": "4929132",
+      "name": "Charlie McGrail",
+      "runs": 6,
+      "balls": 15,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Chris Lupton",
+      "bowler_name": "Md Murad Chowdhury"
+    },
+    {
+      "id": "4951952",
+      "name": "Zachary Cleary",
+      "runs": 10,
+      "balls": 9,
+      "fours": 2,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Bharath Acharya",
+      "bowler_name": "Faisal Mahmood Jnr"
+    },
+    {
+      "id": "5434069",
+      "name": "George Jackson",
+      "runs": 0,
+      "balls": 2,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Prince Singh",
+      "bowler_name": "Md Murad Chowdhury"
+    },
+    {
+      "id": "4951528",
+      "name": "Harry Godden",
+      "runs": 10,
+      "balls": 16,
+      "fours": 2,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Bharath Acharya",
+      "bowler_name": "Md Murad Chowdhury"
+    },
+    {
+      "id": "5902950",
+      "name": "George Greer",
+      "runs": 6,
+      "balls": 11,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "run out",
+      "fielder_name": "Krithesh Shetty",
+      "bowler_name": ""
+    },
+    {
+      "id": "6172543",
+      "name": "James Roan",
+      "runs": 39,
+      "balls": 26,
+      "fours": 7,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Solomon Methari"
+    },
+    {
+      "id": "5896200",
+      "name": "Eashan Patel",
+      "runs": 6,
+      "balls": 28,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Nishant Jain",
+      "bowler_name": "Faisal Mahmood Snr"
+    },
+    {
+      "id": "5371777",
+      "name": "Kaynu Samaradiwakara",
+      "runs": 0,
+      "balls": 11,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Faisal Mahmood Snr"
+    },
+    {
+      "id": "6435142",
+      "name": "Jefin Mukkolil",
+      "runs": 14,
+      "balls": 13,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Faisal Mahmood Snr",
+      "bowler_name": "Faisal Mahmood Snr"
+    },
+    {
+      "id": "5544591",
+      "name": "Danny Nelson",
+      "runs": 0,
+      "balls": 5,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    }
+  ],
+  "our_bowling": [
+    {
+      "id": "5434069",
+      "name": "George Jackson",
+      "wickets": 0,
+      "runs": 38,
+      "balls": 54,
+      "maidens": 0
+    },
+    {
+      "id": "5371777",
+      "name": "Kaynu Samaradiwakara",
+      "wickets": 2,
+      "runs": 73,
+      "balls": 54,
+      "maidens": 1
+    },
+    {
+      "id": "6172543",
+      "name": "James Roan",
+      "wickets": 2,
+      "runs": 27,
+      "balls": 54,
+      "maidens": 0
+    },
+    {
+      "id": "6435142",
+      "name": "Jefin Mukkolil",
+      "wickets": 0,
+      "runs": 61,
+      "balls": 42,
+      "maidens": 1
+    },
+    {
+      "id": "5896200",
+      "name": "Eashan Patel",
+      "wickets": 1,
+      "runs": 51,
+      "balls": 54,
+      "maidens": 0
+    },
+    {
+      "id": "5902950",
+      "name": "George Greer",
+      "wickets": 1,
+      "runs": 16,
+      "balls": 12,
+      "maidens": 0
+    }
+  ],
+  "their_batting": [
+    {
+      "id": "4488391",
+      "name": "Chris Lupton",
+      "runs": 31,
+      "balls": 87,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "George Greer",
+      "bowler_name": "George Greer"
+    },
+    {
+      "id": "5893720",
+      "name": "Rasikh Butt",
+      "runs": 13,
+      "balls": 13,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Eashan Patel",
+      "bowler_name": "Kaynu Samaradiwakara"
+    },
+    {
+      "id": "6279307",
+      "name": "Faisal Mahmood Jnr",
+      "runs": 9,
+      "balls": 24,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "James Roan"
+    },
+    {
+      "id": "6281822",
+      "name": "Prince Singh",
+      "runs": 0,
+      "balls": 1,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Eashan Patel",
+      "bowler_name": "James Roan"
+    },
+    {
+      "id": "5388723",
+      "name": "Nishant Jain",
+      "runs": 83,
+      "balls": 82,
+      "fours": 13,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Kaynu Samaradiwakara"
+    },
+    {
+      "id": "6074938",
+      "name": "Osama Mehmood",
+      "runs": 23,
+      "balls": 23,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Harry Godden",
+      "bowler_name": "Eashan Patel"
+    },
+    {
+      "id": "5942963",
+      "name": "Solomon Methari",
+      "runs": 85,
+      "balls": 33,
+      "fours": 9,
+      "sixes": 5,
+      "not_out": false,
+      "how_out": "run out",
+      "fielder_name": "Unsure",
+      "bowler_name": ""
+    },
+    {
+      "id": "5975314",
+      "name": "Faisal Mahmood Snr",
+      "runs": 1,
+      "balls": 4,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "6154466",
+      "name": "Md Murad Chowdhury",
+      "runs": 10,
+      "balls": 4,
+      "fours": 1,
+      "sixes": 1,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "6121931",
+      "name": "Krithesh Shetty",
+      "runs": 0,
+      "balls": 0,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "did not bat",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "6949253",
+      "name": "Bharath Acharya",
+      "runs": 0,
+      "balls": 0,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "did not bat",
+      "fielder_name": "",
+      "bowler_name": ""
+    }
+  ],
+  "their_bowling": [
+    {
+      "id": "6279307",
+      "name": "Faisal Mahmood Jnr",
+      "wickets": 1,
+      "runs": 26,
+      "balls": 36,
+      "maidens": 1
+    },
+    {
+      "id": "6154466",
+      "name": "Md Murad Chowdhury",
+      "wickets": 3,
+      "runs": 23,
+      "balls": 42,
+      "maidens": 0
+    },
+    {
+      "id": "5942963",
+      "name": "Solomon Methari",
+      "wickets": 2,
+      "runs": 22,
+      "balls": 42,
+      "maidens": 1
+    },
+    {
+      "id": "6121931",
+      "name": "Krithesh Shetty",
+      "wickets": 0,
+      "runs": 45,
+      "balls": 36,
+      "maidens": 0
+    },
+    {
+      "id": "5975314",
+      "name": "Faisal Mahmood Snr",
+      "wickets": 3,
+      "runs": 2,
+      "balls": 19,
+      "maidens": 1
+    },
+    {
+      "id": "6949253",
+      "name": "Bharath Acharya",
+      "wickets": 0,
+      "runs": 13,
+      "balls": 18,
+      "maidens": 1
+    }
+  ],
+  "our_points": 6,
+  "their_points": 22,
+  "opposition_team_id": "347205",
+  "opposition_site_id": "2266",
+  "opposition_crest": "https://s3-eu-west-1.amazonaws.com/p-c2gallery.ecb.co.uk/uploads/website_configuration/badge_image/2263/Denham.jpg?1784109264",
+  "opposition_form": [
+    "C",
+    "W",
+    "W",
+    "W",
+    "W"
+  ],
+  "opposition_performers": {
+    "batting": [
+      {
+        "name": "Rasikh Butt",
+        "innings": 9,
+        "not_outs": 0,
+        "runs": 504,
+        "average": 56.0,
+        "high_score": 138,
+        "high_score_not_out": false
+      },
+      {
+        "name": "Faisal Mahmood Jnr",
+        "innings": 9,
+        "not_outs": 1,
+        "runs": 423,
+        "average": 52.88,
+        "high_score": 89,
+        "high_score_not_out": true
+      },
+      {
+        "name": "Prince Singh",
+        "innings": 8,
+        "not_outs": 2,
+        "runs": 382,
+        "average": 63.67,
+        "high_score": 119,
+        "high_score_not_out": true
+      }
+    ],
+    "bowling": [
+      {
+        "name": "Solomon Methari",
+        "wickets": 15,
+        "average": 17.53,
+        "economy": 5.16,
+        "best": {
+          "wickets": 3,
+          "runs": 6
+        }
+      },
+      {
+        "name": "Prince Singh",
+        "wickets": 10,
+        "average": 19.3,
+        "economy": 5.15,
+        "best": {
+          "wickets": 6,
+          "runs": 41
+        }
+      },
+      {
+        "name": "Faisal Mahmood Snr",
+        "wickets": 9,
+        "average": 17.11,
+        "economy": 5.74,
+        "best": {
+          "wickets": 3,
+          "runs": 12
+        }
+      }
+    ]
+  }
+}

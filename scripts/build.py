@@ -21,6 +21,7 @@ VIDEOS_CACHE    = CONTENT / "data" / "fetched" / "videos"
 VIDEO_MANIFEST  = CONTENT / "data" / "video_manifest.json"
 FETCHED_MATCHES = CONTENT / "data" / "fetched" / "matches"   # raw ball events (rebuilt each build)
 CURATION_DIR    = CONTENT / "data" / "matches"               # committed {id}.curation.json overlays
+PINNED_MATCHES  = CONTENT / "pinned-matches.json"            # committed manifest of pinned match sets
 TEMPLATES = ROOT / "templates"
 ASSETS = ROOT / "assets"
 SITE = ROOT / "site"
@@ -45,6 +46,36 @@ FIXED_PANEL_COUNTS = {
 def load_config():
     path = CONTENT / "config.json"
     return json.loads(path.read_text()) if path.exists() else {}
+
+
+def load_pinned_matches():
+    """Pinned matches: completed games kept as their own dedicated slide set
+    regardless of whether they're still a team's latest game.
+
+    fetch_fixtures.py only retains the most recent games per team, so an older
+    match's scorecard drops out of fixtures.json over time. A pin therefore reads
+    its scorecard from a committed snapshot at
+    ``content/data/matches/{match_id}.package.json`` (a completed match is
+    immutable, so the snapshot never goes stale). Ball-event reels still resolve
+    live: their curation overlay is committed and fetch_ball_events.py re-pulls any
+    match that has one.
+
+    Manifest (``content/pinned-matches.json``) is a list of:
+        {"slug", "match_id", "team_id", "title"}
+    - ``slug``     set slug referenced from a slideshow (e.g. "match-denham-cc")
+    - ``team_id``  the team whose match this was, for crest/stats/league lookups
+    - ``title``    the small per-slide heading (e.g. "Match Highlights")
+    Returns each manifest entry with the loaded snapshot under ``_package`` (None
+    when the snapshot file is missing).
+    """
+    if not PINNED_MATCHES.exists():
+        return []
+    pins = json.loads(PINNED_MATCHES.read_text())
+    out = []
+    for pin in pins:
+        pkg_path = CURATION_DIR / f"{pin['match_id']}.package.json"
+        out.append({**pin, "_package": json.loads(pkg_path.read_text()) if pkg_path.exists() else None})
+    return out
 
 
 def balls_to_overs(balls):
@@ -2124,7 +2155,23 @@ def build_match_packages(env, slide_meta):
         print(f"  slide/{slug}")
 
     sets = {}
-    for team_id, m in sorted(last_matches.items()):
+
+    # Each job renders one match package. The live "last match" per team plus any
+    # pinned matches (dedicated sets that survive a team moving on to newer games —
+    # see load_pinned_matches). A pin reuses its team's real team_id for crest /
+    # stats / league lookups but takes its own slug prefix and heading, and skips
+    # the standalone latest-result card (that slot belongs to the live last match).
+    # (slug_prefix, team_id, match, set_title, standalone_result)
+    jobs = [(f"last-match-{tid}", tid, m, "Last Match", True)
+            for tid, m in sorted(last_matches.items())]
+    for pin in load_pinned_matches():
+        if not pin.get("_package"):
+            print(f"  pinned match '{pin.get('slug')}': missing package snapshot — skipped")
+            continue
+        jobs.append((pin["slug"], pin["team_id"], pin["_package"],
+                     pin.get("title", "Match Highlights"), False))
+
+    for slug_prefix, team_id, m, set_title, standalone_result in jobs:
         team = teams_by_id.get(team_id, {})
         title = team.get("name", team_id)
 
@@ -2175,13 +2222,13 @@ def build_match_packages(env, slide_meta):
             innings_bat_club[i] = bat_club
             scoreline = {"_bat_club": bat_club, "_score_readable": _short_innings_total(total)}
             if batting:
-                innings_members.append((i, f"last-match-{team_id}-innings-{i + 1}-batting", label, {
+                innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-batting", label, {
                     "_mode": "batting", "_batting": batting,
                     "_extras": innings_extras(total, batting),
                     "_extras_parts": extras_breakdown_str(total), **scoreline,
                 }))
             if bowling:
-                innings_members.append((i, f"last-match-{team_id}-innings-{i + 1}-bowling", label, {
+                innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-bowling", label, {
                     "_mode": "bowling", "_bowling": bowling, "_bowl_club": bowl_club, **scoreline,
                 }))
         has_result = bool(result or our_total_str or their_total_str)
@@ -2213,7 +2260,7 @@ def build_match_packages(env, slide_meta):
             "_set_opp_team": opp_team,
             "_set_ground": ground,
         }
-        set_common = {"_set_title": "Last Match", "_set_subtitle": title, **set_meta_fields}
+        set_common = {"_set_title": set_title, "_set_subtitle": title, **set_meta_fields}
 
         def with_strip(step_label):
             return {**set_common, "_set_steps": steps, "_set_step": steps.index(step_label)}
@@ -2230,7 +2277,7 @@ def build_match_packages(env, slide_meta):
                 merged, "match", innings=innings_ids_chrono[innings_idx])))
             if not clips:
                 return None
-            slug = f"last-match-{team_id}-innings-{innings_idx + 1}-reel"
+            slug = f"{slug_prefix}-innings-{innings_idx + 1}-reel"
             # A solid top-left tag conceals the Frogbox HIGHLIGHTS/QR bug and shows
             # the innings + the batting team's crest (WCC's for our innings, the
             # opposition's otherwise) — the same crest used on the intro/result.
@@ -2318,7 +2365,7 @@ def build_match_packages(env, slide_meta):
         if not innings_members and not has_result:
             toss_line = "Match scorecard and result not available"
 
-        intro_slug = f"last-match-{team_id}-intro"
+        intro_slug = f"{slug_prefix}-intro"
         emit(intro_slug, intro_tmpl, {
             "template": "match-intro", "title": title,
             "_opp_club_name": opp_club,
@@ -2372,7 +2419,7 @@ def build_match_packages(env, slide_meta):
             "_opp_performers": team_performers(their_batting, their_bowling, our_batting),
         }
         if has_result:
-            set_result_slug = f"last-match-{team_id}-result"
+            set_result_slug = f"{slug_prefix}-result"
             emit(set_result_slug, result_tmpl, {
                 "template": "match-result", "title": title,
                 **set_result_fields, **with_strip("Result"),
@@ -2380,19 +2427,21 @@ def build_match_packages(env, slide_meta):
             members.append(set_result_slug)
 
         # Standalone latest-result card for the results rotation — the same Result
-        # tale of the tape minus the sequence strip. Always emitted: when no result
-        # or scorecard is published it degrades to crests + team names with a footer
-        # note, so every team keeps a results-rotation slide.
-        emit(f"last-match-result-{team_id}", result_tmpl, {
-            "template": "match-result", "title": title,
-            "_set_title": "Last Match Result", "_set_subtitle": title,
-            **set_meta_fields, **set_result_fields,
-            "_result_desc": result_desc or "Match scorecard and result not available",
-        })
+        # tale of the tape minus the sequence strip. Emitted for the live last match
+        # only (a pin isn't the team's latest, so it must not claim that slot): when
+        # no result or scorecard is published it degrades to crests + team names with
+        # a footer note, so every team keeps a results-rotation slide.
+        if standalone_result:
+            emit(f"last-match-result-{team_id}", result_tmpl, {
+                "template": "match-result", "title": title,
+                "_set_title": "Last Match Result", "_set_subtitle": title,
+                **set_meta_fields, **set_result_fields,
+                "_result_desc": result_desc or "Match scorecard and result not available",
+            })
 
         if league_panel:
             league_data, league_team_id, league_name = league_panel
-            league_slug = f"last-match-{team_id}-league"
+            league_slug = f"{slug_prefix}-league"
             emit(league_slug, league_tmpl, {
                 "template": "match-league", "title": title,
                 "_league_data": league_data, "_league_team_id": league_team_id,
@@ -2409,15 +2458,15 @@ def build_match_packages(env, slide_meta):
             })
             members.append(league_slug)
 
-        sets[f"last-match-{team_id}"] = {
+        sets[slug_prefix] = {
             "members": members,
-            "group": f"last-match-{team_id}",
+            "group": slug_prefix,
             "active": True,
             "expires": None,
         }
 
     if sets:
-        print(f"  match packages: {len(sets)} team set(s)")
+        print(f"  match packages: {len(sets)} set(s)")
     return sets
 
 
