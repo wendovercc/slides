@@ -142,10 +142,21 @@
     <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
     {% endfor %}
 
+    <script src="/assets/js/video-cache.js"></script>
     <script src="/assets/js/player-core.js"></script>
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
+
+        // Prime the video cache in the background from this slideshow's build-time
+        // precache manifest; slides fall back to their network <source> until a clip
+        // is stored. See docs/player-offline-architecture.md.
+        if (window.WccVideoCache && WccVideoCache.supported) {
+            fetch(`/slideshow/{{ slug }}/precache.json`)
+                .then(r => r.json())
+                .then(pc => WccVideoCache.prime(pc.videos || []))
+                .catch(() => {});
+        }
 
         let _currentSlug = null;
         function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }

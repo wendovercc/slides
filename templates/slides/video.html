@@ -237,6 +237,7 @@
         }
         {% endif %}
     </style>
+    <script src="/assets/js/video-cache.js"></script>
     <script src="/assets/js/slide-bridge.js"></script>
 </head>
 <body>
@@ -444,9 +445,57 @@
         setTimeout(reveal, 150);       // safety net if the frame/seek callback never fires
     }
 
+    // Point an element at locally-stored bytes when its clip is in the video
+    // cache, else leave the network URL on its <source> in place (and re-try on
+    // the next loop, once the player's prime has stored it). We always read the
+    // original network URL from the <source> element — v.src may already be a blob
+    // URL from a previous pass. cb runs synchronously when caching is unsupported.
+    function ensurePlayable(v, cb) {
+        if (v._objUrl) { cb(); return; }   // already on cached bytes, still resident
+        var srcEl = v.querySelector('source');
+        var netUrl = srcEl && srcEl.src;
+        if (!window.WccVideoCache || !WccVideoCache.supported || !netUrl) { cb(); return; }
+        WccVideoCache.getObjectURL(netUrl).then(function (obj) {
+            if (obj) {
+                v._objUrl = obj;
+                v.src = obj;   // overrides the <source> network URL
+                v.load();
+            } else if (v.src && v.src.indexOf('blob:') === 0) {
+                // Was cached, now a miss (e.g. evicted): drop back to the <source>.
+                v.removeAttribute('src');
+                v.load();
+            }
+            cb();
+        });
+    }
+
+    // Cap resident Blobs at the active clip plus the one we're crossfading from;
+    // revoke the rest so a long reel doesn't pin every clip's bytes at once (design
+    // doc: object-URL hygiene). A reaped element re-resolves a fresh URL next show.
+    function reapObjUrls(keepA, keepB) {
+        videoEls.forEach(function (x) {
+            if (x !== keepA && x !== keepB && x._objUrl) {
+                URL.revokeObjectURL(x._objUrl);
+                x._objUrl = null;
+            }
+        });
+    }
+
     function showVideo(i) {
         var prev = videoEls[current];
         current = i;
+        var v = videoEls[i];
+        if (!v) return;
+        // Resolve cached bytes before playing; the rest of the show runs in the
+        // callback. Bail if a newer show superseded us during the async cache read.
+        ensurePlayable(v, function () {
+            if (current !== i) return;
+            reapObjUrls(v, prev);
+            showVideoNow(i, prev);
+        });
+    }
+
+    function showVideoNow(i, prev) {
         var v = videoEls[i];
         if (!v) return;
         if (CROSSFADE) {

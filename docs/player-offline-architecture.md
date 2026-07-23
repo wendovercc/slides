@@ -193,11 +193,32 @@ prime times out, **fall back to today's behaviour** (direct network URL on the
 `<video>`, HTTP cache) and skip the gate rather than hang. On the walls this path is
 essentially never taken.
 
-### Prerequisite: CORS on R2
+### Prerequisite: CORS on R2 — **DONE (2026-07-23)**
 
 `fetch()`ing a clip for its bytes (and a progress-bar byte count) needs a readable,
-non-opaque response. Enable **CORS on `videos.wendovercc.org`**. (A same-origin proxy
-is the fallback if that proves troublesome — deferred.)
+non-opaque response. **CORS is enabled on the `videos.wendovercc.org` R2 bucket** with
+the policy below — it covers the walls (and every viewer served from the site origin)
+plus local dev. (A same-origin proxy is the fallback if that proves troublesome —
+deferred; not needed.)
+
+```jsonc
+[
+  {
+    "AllowedOrigins": [
+      "https://slides.wendovercc.org",   // walls + all site-origin viewers
+      "http://localhost:8000"            // local `python3 -m http.server` testing
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["Content-Length"], // so prime() can read the progress byte count
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+The player fetches with `credentials: 'omit'`, so an exact-origin (or `*`) match is
+sufficient. Verify with
+`curl -sI -H "Origin: https://slides.wendovercc.org" <clip-url> | grep -i access-control`.
 
 ### Object-URL hygiene
 
@@ -238,8 +259,8 @@ Ordered so each phase ships independently and de-risks the next.
 
 | Phase | Scope | Ships |
 |-------|-------|-------|
-| **0** | Move Pi `--user-data-dir` to SD card; confirm R2 headers via `curl` from a Pi; enable **R2 CORS**. No app code. | Kills the daily cold start immediately; validates the cache hypothesis; unblocks the fetch route. |
-| **1** | `build.py` emits `precache.json`; player fetch-to-Cache-API of all clips; video slides play from an object URL (fall back to network URL on miss). | No re-downloads, no un-primed playback — the core fix. |
+| **0** | Move Pi `--user-data-dir` to SD card; confirm R2 headers via `curl` from a Pi; enable **R2 CORS**. No app code. | Kills the daily cold start immediately; validates the cache hypothesis; unblocks the fetch route. **R2 CORS DONE (2026-07-23); Pi `--user-data-dir` move + Pi `curl` confirmation still pending.** |
+| **1** | `build.py` emits `precache.json`; player fetch-to-Cache-API of all clips; video slides play from an object URL (fall back to network URL on miss). **Built 2026-07-23 (`scripts/build.py`, `assets/js/video-cache.js`, both players, `slides/video.html`); runtime-verified pending a browser test with CORS live.** | No re-downloads, no un-primed playback — the core fix. |
 | **2** | The **loading gate** + branded progress screen; iframes loaded hidden; rotation starts only when all clips stored *and* iframes loaded; per-clip failure policy. | The "Preparing slideshow" experience the walls show. |
 | **3** | Version-stamped background download + cache swap at cycle boundary; prune superseded clips. | App-controlled refresh; blind reload retired. |
 

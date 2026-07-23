@@ -188,6 +188,7 @@
     <div class="about-footer">Built {{ built_at }} &nbsp;·&nbsp; <span id="about-reload"></span></div>
 </div>
 <script src="/assets/js/context.js"></script>
+<script src="/assets/js/video-cache.js"></script>
 <script src="/assets/js/player-core.js"></script>
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
@@ -346,6 +347,18 @@ async function init() {
 
     const show = await fetch(`/slideshow/${slideshowSlug}/data.json`).then(r => r.json());
     const slides = slidesForCtx(show, context, today);
+
+    // Prime the video cache in the background from the slideshow's build-time
+    // precache manifest. Slides play from the network <source> until a clip is
+    // stored, then off local bytes — so re-downloads fade out over the first loops
+    // (the hard loading gate that waits for this is Phase 2). See
+    // docs/player-offline-architecture.md.
+    if (window.WccVideoCache && WccVideoCache.supported) {
+        fetch(`/slideshow/${slideshowSlug}/precache.json`)
+            .then(r => r.json())
+            .then(pc => WccVideoCache.prime(pc.videos || []))
+            .catch(() => {});
+    }
 
     if (PREVIEW) {
         const nextCtxs = WccContext.findNextContexts(calendar, LOCATION_ID);

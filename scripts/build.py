@@ -6,7 +6,7 @@ import hashlib
 import io
 import json
 import shutil
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import qrcode
@@ -511,6 +511,16 @@ def _resolve_video(v: dict) -> tuple:
     if entry:
         return entry["src"], float(entry.get("duration", fallback_dur))
     return None, fallback_dur
+
+
+def slide_video_srcs(slide):
+    """Ordered, resolved clip URLs for a slide (empty for non-video slides).
+
+    These are the absolute R2 URLs the offline player precaches — see
+    docs/player-offline-architecture.md. Kept in slide order so the precache
+    denominator is deterministic.
+    """
+    return [v["_video_src"] for v in slide.get("videos", []) if v.get("_video_src")]
 
 
 def build_video_slide(slide):
@@ -1897,6 +1907,7 @@ def build_slides(env):
             "slide_expires": slide.get("expires"),
             "duration": slide["duration"],
             "panel_duration": slide["panel_duration"],
+            "_videos": slide_video_srcs(slide),
         }
 
         template = env.get_template(f"slides/{slide['template']}.html")
@@ -2264,6 +2275,7 @@ def build_match_packages(env, slide_meta):
             slide_meta[slug] = {
                 "slide_active": True, "slide_expires": None,
                 "duration": slide["duration"], "panel_duration": slide["panel_duration"],
+                "_videos": slide_video_srcs(slide),
             }
             print(f"  slide/{slug} — reel ({len(slide['videos'])} clips, {slide['duration']:.0f}s)")
             return slug
@@ -2419,6 +2431,10 @@ def build_slideshows(env, slide_meta, sets=None):
     default_panel_duration = config.get("default_panel_duration", 20)
     preview_cfg = config.get("preview", {})
     built_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Stamped into each precache.json so the offline player can tell when a
+    # slideshow's asset set has changed (see docs/player-offline-architecture.md,
+    # "Intelligent refresh"). UTC, second-granularity ISO-8601.
+    build_version = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     site_url = preview_cfg.get("site_url", "")
     qr_data_url = generate_qr_data_url(site_url) if site_url else ""
 
@@ -2474,7 +2490,24 @@ def build_slideshows(env, slide_meta, sets=None):
 
         # data.json consumed by the smart player at runtime
         (out_dir / "data.json").write_text(json.dumps(show))
-        print(f"  slideshow/{slug}")
+
+        # precache.json — the offline player's build-time asset manifest: every
+        # clip URL this slideshow can show, deduped in first-seen order, plus a
+        # build_version. A deterministic list (vs. runtime crawling) gives the
+        # loading gate an exact denominator and the pruner an exact keep-set.
+        # See docs/player-offline-architecture.md.
+        seen = set()
+        precache_videos = []
+        for s in merged:
+            for src in s.get("_videos") or []:
+                if src not in seen:
+                    seen.add(src)
+                    precache_videos.append(src)
+        (out_dir / "precache.json").write_text(json.dumps({
+            "build_version": build_version,
+            "videos": precache_videos,
+        }))
+        print(f"  slideshow/{slug}  ({len(precache_videos)} clip(s) to precache)")
 
         if "homepage_rank" in show:
             homepage_shows.append({
