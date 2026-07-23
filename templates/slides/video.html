@@ -100,8 +100,8 @@
            open, JS sets min-width to the (content-sized) panel's measured width. */
         .reel-tag-caption {
             background: var(--navy-2); color: var(--text);
-            font-size: var(--t-xs); font-weight: 700; line-height: 1.2;
-            padding: 0.6vh 0.8vw; box-sizing: border-box;
+            font-size: 1.5vw; font-weight: 700; line-height: 1.2;
+            padding: 0.8vh 1vw; box-sizing: border-box;
             width: max-content; min-width: var(--reel-tag-size, 11vw); max-width: 70vw;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
@@ -109,24 +109,15 @@
            card below (that corner then sits over video). When the caption is flush with
            the card, keep it square so there's no notch. JS toggles this by measuring. */
         .reel-tag-caption.caption-wide { border-bottom-right-radius: 0.8vw; }
-        /* One navy panel holding the square (badge/crest/innings) and, below it, the
-           flashcard. It IS the card: .card-open sizes it to the card content (floored
-           at the square) and the card grows in, so the single gold bottom-border simply
-           drops down — no seam, no gap, no second box. */
+        /* One navy panel holding just the square (badge/crest/innings). It stays at the
+           square's fixed size — only big enough to conceal the Frogbox HIGHLIGHTS/QR
+           graphic. Flashcards no longer grow out of it; they open as a large centred
+           card over the video (see .reel-card below), so this panel never resizes. */
         .reel-panel {
             position: relative;
             width: var(--reel-tag-size, 11vw); overflow: hidden;
             background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
             border-bottom-right-radius: 0.8vw;
-        }
-        /* While a card is up the panel sizes to the card's content — as wide and tall
-           as it needs — but never smaller than the square (min-width / min-height), so
-           it keeps covering the Frogbox graphic. A max-width caps a pathologically long
-           line. The caption's width is matched to the panel in JS so it's never
-           narrower than the card below it. (Transitions are removed for now.) */
-        .reel-tag.card-open .reel-panel {
-            width: max-content; min-width: var(--reel-tag-size);
-            max-width: 42vw; min-height: var(--reel-tag-size);
         }
         .reel-tag-square {
             position: relative; overflow: hidden;
@@ -152,42 +143,56 @@
             font-size: var(--t-xs); font-weight: 900; text-transform: uppercase;
             letter-spacing: 0.08em; color: var(--text); text-align: center; line-height: 1.1;
         }
-        /* Flashcard content = the lower region of the panel, revealed while a clip's
-           lead-in (pre) or lead-out (post) card is active. No box of its own — it
-           shares the panel's navy fill and single gold bottom-border. JS toggles the
-           panel's .show class, which both widens the panel and grows this in. */
+        /* Flashcard = a large card that opens in the centre of the video over a clip's
+           lead-in (pre) or lead-out (post) footage. Roughly three-quarters of the frame
+           (navy fill, gold border, following the slide design tokens), it is decoupled
+           from the top-left tag so it reads clearly at 10 feet. JS toggles .show as the
+           playhead enters/leaves the card's window; it scales up from a hair under full
+           size so the entrance is soft. Sizes here are a first pass — easy to tune. */
         .reel-card {
-            padding: 0 1.1vw; max-height: 0; opacity: 0;
+            position: fixed; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.97);
+            width: 75vw; height: 75vh; box-sizing: border-box;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center; gap: 1vh; padding: 6vh 6vw;
+            background: var(--navy-2); border: 0.3vw solid var(--accent);
+            border-radius: 1.2vw; box-shadow: 0 2vh 7vh rgba(0,0,0,0.6);
+            opacity: 0; pointer-events: none; z-index: 20;
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
-        .reel-tag.card-open .reel-card {
-            max-height: 40vh; opacity: 1; padding: 1.8vh 1.1vw 1.6vh;
+        .reel-card.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        /* The card's kind (New batsman / Batsman innings), a gold pill at the top of
+           the card — this is where the badge lives now, not on the top-left tag. */
+        .reel-card-badge {
+            background: var(--accent); color: var(--navy-1);
+            font-size: var(--t-sm); font-weight: 700; letter-spacing: 0.08em;
+            text-transform: uppercase; padding: 0.6vh 1.4vw; border-radius: 4px;
+            margin-bottom: 2.5vh;
         }
-        /* While a card is up its content REPLACES the crest + innings label: the
-           square collapses to just the badge's headroom and the crest/innings hide, so
-           the card sits directly under the badge. (Transitions removed for now.) */
-        .reel-tag.card-open .reel-tag-square { height: 3.4vh; }
-        .reel-tag.card-open .reel-tag-crest,
-        .reel-tag.card-open .reel-tag-label { display: none; }
         .reel-card-name {
-            font-size: var(--t-sm); font-weight: 900; text-transform: uppercase;
-            letter-spacing: 0.03em; color: var(--text); line-height: 1.1;
+            font-size: var(--t-lg); font-weight: 900; text-transform: uppercase;
+            letter-spacing: 0.03em; color: var(--text); line-height: 1.05;
         }
         .reel-card-headline {
-            font-size: var(--t-md); font-weight: 900; color: var(--accent);
-            line-height: 1.05; margin-top: 0.4vh;
+            font-size: 6vw; font-weight: 900; color: var(--accent);
+            line-height: 0.95; margin-top: 1vh; font-variant-numeric: tabular-nums;
         }
         .reel-card-sub {
-            font-size: var(--t-xs); color: var(--muted); margin-top: 0.4vh;
-            text-transform: uppercase; letter-spacing: 0.05em;
+            font-size: var(--t-md); color: var(--muted); margin-top: 1.2vh;
+            text-transform: uppercase; letter-spacing: 0.06em;
         }
         .reel-card-stats {
-            display: flex; flex-wrap: wrap; gap: 0.6vh 1.2vw; margin-top: 1.1vh;
+            display: flex; flex-wrap: wrap; justify-content: center;
+            gap: 3vh 4vw; margin-top: 4vh;
         }
-        .reel-card-stat { display: flex; flex-direction: column; align-items: flex-start; line-height: 1; }
-        .reel-card-stat .v { font-size: var(--t-sm); font-weight: 900; color: var(--text); }
+        .reel-card-stat { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+        .reel-card-stat .v {
+            font-size: var(--t-xl); font-weight: 900; color: var(--text);
+            font-variant-numeric: tabular-nums;
+        }
         .reel-card-stat .l {
-            font-size: var(--t-xxs); color: var(--muted); text-transform: uppercase;
-            letter-spacing: 0.06em; margin-top: 0.4vh;
+            font-size: var(--t-sm); color: var(--muted); text-transform: uppercase;
+            letter-spacing: 0.06em; margin-top: 1.2vh;
         }
 
         {% else %}
@@ -262,13 +267,14 @@
                 {% if slide._bat_crest %}<img class="reel-tag-crest" src="{{ slide._bat_crest }}" alt="">{% endif %}
                 {% if slide._innings_label %}<div class="reel-tag-label">{{ slide._innings_label }}</div>{% endif %}
             </div>
-            <div id="reel-card" class="reel-card">
-                <div class="reel-card-name"></div>
-                <div class="reel-card-headline" style="display:none"></div>
-                <div class="reel-card-sub" style="display:none"></div>
-                <div class="reel-card-stats"></div>
-            </div>
         </div>
+    </div>
+    <div id="reel-card" class="reel-card">
+        <div class="reel-card-badge" style="display:none"></div>
+        <div class="reel-card-name"></div>
+        <div class="reel-card-headline" style="display:none"></div>
+        <div class="reel-card-sub" style="display:none"></div>
+        <div class="reel-card-stats"></div>
     </div>
     {% else %}
     <div id="overlay" class="overlay">
@@ -326,11 +332,11 @@
     // Reel per-clip caption + ball-outcome badge (null on non-reel slides).
     var captionEl = document.getElementById('reel-caption');
     var badgeEl = document.getElementById('reel-badge');
-    // Reel flashcard: a data card shown over the current clip's lead-in / lead-out.
-    // The whole panel grows to become the card, so .show toggles on the panel.
+    // Reel flashcard: a large card that opens in the centre of the video over the
+    // current clip's lead-in / lead-out. .show toggles it; the top-left tag (panel)
+    // stays fixed and is kept only for the caption-overhang measurement.
     var cardEl = document.getElementById('reel-card');
     var panelEl = document.getElementById('reel-panel');
-    var tagEl = document.querySelector('.reel-tag');
     var activeCardKey = null;
 
     // Default caption slot + outcome badge for the current clip (the ball's own
@@ -346,6 +352,8 @@
     }
 
     function renderCard(card) {
+        var bg = cardEl.querySelector('.reel-card-badge');
+        bg.textContent = card.badge || ''; bg.style.display = card.badge ? '' : 'none';
         cardEl.querySelector('.reel-card-name').textContent = card.name || '';
         var hl = cardEl.querySelector('.reel-card-headline');
         hl.textContent = card.headline || ''; hl.style.display = card.headline ? '' : 'none';
@@ -365,7 +373,7 @@
     // currentTime is inside its window. Pre and post windows never overlap, so the
     // action gap between them retracts the card and the next one drops in fresh.
     function updateCard(v) {
-        if (!panelEl) return;
+        if (!cardEl) return;
         var cards = (VIDEOS[current] && VIDEOS[current].cards) || [];
         var t = v.currentTime, hit = null;
         for (var j = 0; j < cards.length; j++) {
@@ -375,24 +383,21 @@
         var key = hit ? (hit.at + ':' + hit.type) : null;
         if (key === activeCardKey) return;
         activeCardKey = key;
-        // .card-open (on the tag root) grows the panel into the card and widens the
-        // caption above it to match, so the two read as one block.
-        if (hit) { renderCard(hit); if (tagEl) tagEl.classList.add('card-open'); }
-        else if (tagEl) { tagEl.classList.remove('card-open'); }
-        // The panel is content-sized while open; match the caption's min-width to it
-        // (reading offsetWidth forces the reflow) so the caption is never narrower than
-        // the card below — reset to the CSS default (square width) when there's no card.
-        if (captionEl) captionEl.style.minWidth = (hit && panelEl) ? panelEl.offsetWidth + 'px' : '';
-        // While a card is up it takes over both the caption slot (a narrative line)
-        // and the badge (the card's kind, e.g. NEW BATSMAN — not the ball outcome).
-        // Off a card, the ball's own caption + outcome badge show (setBallCaption).
+        // Open / close the large centred card. The top-left tag stays put — only its
+        // caption + badge change (below) to keep the pre-card spoiler-free.
+        if (hit) { renderCard(hit); cardEl.classList.add('show'); }
+        else { cardEl.classList.remove('show'); }
+        // The top-left tag defaults to the ball's own caption + outcome badge. The
+        // card's own kind (New batsman / Batsman innings) now lives on the card itself,
+        // never here. What stays on the tag depends on the card's position:
         setBallCaption();
-        if (hit) {
-            if (hit.caption && captionEl) { captionEl.textContent = hit.caption; captionEl.style.display = ''; }
-            if (badgeEl) {
-                if (hit.badge) { badgeEl.textContent = hit.badge; badgeEl.style.display = ''; }
-                else { badgeEl.style.display = 'none'; }
-            }
+        //  · PRE: the ball hasn't happened yet — blank the tag's caption + badge so
+        //    they can't spoil the outcome while the lead-in card is up.
+        //  · POST: the ball is already done, so the action narrative + outcome badge
+        //    (as set above) can carry on alongside the lead-out card.
+        if (hit && hit.at === 'pre') {
+            if (captionEl) { captionEl.textContent = ''; captionEl.style.display = 'none'; }
+            if (badgeEl) badgeEl.style.display = 'none';
         }
         // Round the caption's bottom-right corner only when it overhangs the card
         // (measured after its text + min-width are set); flush stays square (no notch).
@@ -517,7 +522,7 @@
         // as the clip opens (and stays shown if paused on the first frame) — this
         // also swaps in the pre-card's spoiler-free caption over the ball caption set
         // just above.
-        if (panelEl) { activeCardKey = null; if (tagEl) tagEl.classList.remove('card-open'); updateCard(v); }
+        if (cardEl) { activeCardKey = null; cardEl.classList.remove('show'); updateCard(v); }
         {% if slide.layout is defined and slide.layout == 'fullbleed' %}
         if (overlayEl) {
             overlayEl.classList.remove('faded');
