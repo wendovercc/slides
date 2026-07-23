@@ -163,11 +163,21 @@
     }).catch(function () { return null; });
   }
 
+  /* Delete specific clips from the store — the superseded set on a content refresh
+   * (see WccRefresh). Never throws. */
+  function evict(urls) {
+    if (!SUPPORTED || !urls || !urls.length) return Promise.resolve();
+    return openCache().then(function (cache) {
+      return Promise.all(urls.map(function (u) { return cache.delete(u); }));
+    }).then(function () {}).catch(function () {});
+  }
+
   window.WccVideoCache = {
     supported: SUPPORTED,
     cacheName: CACHE_NAME,
     prime: prime,
     primeWithRetry: primeWithRetry,
-    getObjectURL: getObjectURL
+    getObjectURL: getObjectURL,
+    evict: evict
   };
 })();

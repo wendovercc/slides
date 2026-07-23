@@ -133,7 +133,7 @@
       clearTimer();
       timer = setTimeout(function () {
         var next = (current + 1) % n;
-        if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { location.reload(); return; }
+        if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { if (opts.onReload) opts.onReload(); else location.reload(); return; }
         kioskShow(next);
       }, (items[i].duration || 20) * 1000);
     }
@@ -253,7 +253,7 @@
         } else {
           clearTimer();
           var next = (current + 1) % n;
-          if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { location.reload(); return; }
+          if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { if (opts.onReload) opts.onReload(); else location.reload(); return; }
           kioskShow(next);
         }
         return;

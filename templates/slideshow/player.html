@@ -144,6 +144,7 @@
 
     <script src="/assets/js/video-cache.js"></script>
     <script src="/assets/js/preload-gate.js"></script>
+    <script src="/assets/js/refresh.js"></script>
     <script src="/assets/js/player-core.js"></script>
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
@@ -199,8 +200,7 @@
         if (PREVIEW) renderPanel();
 
         const reloadMs = {{ show.refresh_interval_seconds }} * 1000;
-        let reloadPending = false;
-        setTimeout(() => { reloadPending = true; }, reloadMs);
+        let shouldReloadNow, onReload;   // set in boot(); watch mode = version-aware refresh
 
         function startReloadTicker() {
             const reloadEl = document.getElementById('about-reload');
@@ -228,31 +228,51 @@
                     frame: document.getElementById(`frame-${s._i}`),
                 })),
                 onShow: idx => { _currentSlug = finalSlides[idx].slug; if (PREVIEW) markCurrentSlideByI(finalSlides[idx]._i); },
-                shouldReloadNow: () => reloadPending,
+                shouldReloadNow,
+                onReload,
             });
             if (PREVIEW) startReloadTicker();
         }
 
-        // Same loading gate as the walls (docs/player-offline-architecture.md). Preview
-        // (the 50%-scale debug view) and browsers without the cache APIs keep the
-        // ungated path: prime in the background and start immediately.
+        // Same loading gate + version-aware refresh as the walls
+        // (docs/player-offline-architecture.md). Preview (the 50%-scale debug view) and
+        // browsers without the cache APIs keep the ungated path: background prime,
+        // immediate start.
         async function boot() {
             if (slides.length === 0) return;
             const CACHE_OK = !!(window.WccVideoCache && WccVideoCache.supported);
 
+            // precache.json drives both the gate (clip list) and the refresh
+            // (build_version). no-store so we always see the current build.
+            let precache = { videos: [], build_version: null };
+            try { precache = await fetch(`/slideshow/{{ slug }}/precache.json`, { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
+
+            // Refresh control. PREVIEW keeps the blind countdown; watch mode polls
+            // build_version, prewarms new clips and prunes superseded ones.
+            if (PREVIEW) {
+                let reloadPending = false;
+                setTimeout(() => { reloadPending = true; }, reloadMs);
+                shouldReloadNow = () => reloadPending;
+            } else {
+                const refresh = WccRefresh.start({
+                    url: `/slideshow/{{ slug }}/precache.json`,
+                    version: precache.build_version,
+                    videos: precache.videos || [],
+                    pollMs: reloadMs,
+                    // Fixed slideshow (no context switching), but the shown set drops
+                    // expired slides at midnight — reload on a date rollover to match.
+                    alsoReloadIf: () => new Date().toISOString().slice(0, 10) !== today,
+                });
+                shouldReloadNow = refresh.shouldReloadNow;
+                onReload = refresh.onReload;
+            }
+
             if (PREVIEW || !CACHE_OK) {
-                if (CACHE_OK) {
-                    fetch(`/slideshow/{{ slug }}/precache.json`)
-                        .then(r => r.json())
-                        .then(pc => WccVideoCache.prime(pc.videos || []))
-                        .catch(() => {});
-                }
+                if (CACHE_OK) WccVideoCache.prime(precache.videos || []).catch(() => {});
                 startPlayer(slides);
                 return;
             }
 
-            let precache = { videos: [] };
-            try { precache = await fetch(`/slideshow/{{ slug }}/precache.json`).then(r => r.json()); } catch (e) {}
             const frames = slides.map(s => document.getElementById(`frame-${s._i}`));
             const { failed } = await WccPreloadGate.run({ videos: precache.videos || [], frames });
 

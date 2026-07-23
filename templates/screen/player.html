@@ -190,6 +190,7 @@
 <script src="/assets/js/context.js"></script>
 <script src="/assets/js/video-cache.js"></script>
 <script src="/assets/js/preload-gate.js"></script>
+<script src="/assets/js/refresh.js"></script>
 <script src="/assets/js/player-core.js"></script>
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
@@ -384,9 +385,50 @@ async function init() {
     });
     applyDebugScale();
 
+    // precache.json drives both the loading gate (clip list) and the refresh
+    // (build_version). no-store so we always see the current build, not an HTTP-cached
+    // copy — the whole point of the version poll.
+    let precache = { videos: [], build_version: null };
+    try { precache = await fetch(`/slideshow/${slideshowSlug}/precache.json`, { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
+
     const reloadMs = show.refresh_interval_seconds * 1000;
-    let reloadPending = false;
-    setTimeout(() => { reloadPending = true; }, reloadMs);
+
+    // A signature of what's on screen right now: the slideshow plus the exact set of
+    // slides the current context/date selects. Re-resolving the (load-time) calendar
+    // against the wall clock and re-running the selection means any schedule advance —
+    // a new slideshow, a phase change, a slide expiring at midnight — changes the
+    // signature, so the wall reloads to follow the schedule as the blind reload did.
+    // Content changes (new data.json) ride build_version instead.
+    function shownSignature() {
+        let r;
+        try { r = WccContext.resolveContext(calendar, loc); } catch (e) { return null; }
+        if (!r.slideshowSlug) return null;
+        if (r.slideshowSlug !== slideshowSlug) return `slug:${r.slideshowSlug}`;
+        const t = new Date().toISOString().slice(0, 10);
+        return slidesForCtx(show, r.context, t).map(s => s.slug).join(',');
+    }
+
+    // Refresh control. PREVIEW (debug view) keeps the blind countdown + ticker; watch
+    // mode uses version-aware refresh: poll build_version, prewarm new clips, prune old,
+    // and reload on a schedule advance via shownSignature().
+    let shouldReloadNow, onReload;
+    if (PREVIEW) {
+        let reloadPending = false;
+        setTimeout(() => { reloadPending = true; }, reloadMs);
+        shouldReloadNow = () => reloadPending;
+    } else {
+        const loadSig = shownSignature();
+        const refresh = WccRefresh.start({
+            url: `/slideshow/${slideshowSlug}/precache.json`,
+            version: precache.build_version,
+            videos: precache.videos || [],
+            pollMs: reloadMs,
+            // Guard null (a transient resolve failure) so only a real change reloads.
+            alsoReloadIf: () => { const s = shownSignature(); return s !== null && s !== loadSig; },
+        });
+        shouldReloadNow = refresh.shouldReloadNow;
+        onReload = refresh.onReload;
+    }
 
     function startPlayer(finalSlides) {
         WccPlayer.start({
@@ -401,7 +443,8 @@ async function init() {
                 _currentSlug = finalSlides[i].slug;
                 if (PREVIEW) markCurrentSlide(finalSlides, i);
             },
-            shouldReloadNow: () => reloadPending,
+            shouldReloadNow,
+            onReload,
         });
         if (PREVIEW) startReloadTicker(reloadMs);
     }
@@ -409,20 +452,13 @@ async function init() {
     // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
     // today's behaviour: prime in the background, start immediately, no gate.
     if (PREVIEW || !CACHE_OK) {
-        if (CACHE_OK) {
-            fetch(`/slideshow/${slideshowSlug}/precache.json`)
-                .then(r => r.json())
-                .then(pc => WccVideoCache.prime(pc.videos || []))
-                .catch(() => {});
-        }
+        if (CACHE_OK) WccVideoCache.prime(precache.videos || []).catch(() => {});
         startPlayer(slides);
         return;
     }
 
     // Watch mode (the walls): the hard loading gate. Nothing is revealed until every
     // clip is stored (or has exhausted bounded retries) AND every iframe has loaded.
-    let precache = { videos: [] };
-    try { precache = await fetch(`/slideshow/${slideshowSlug}/precache.json`).then(r => r.json()); } catch (e) {}
     const { failed } = await WccPreloadGate.run({ videos: precache.videos || [], frames });
 
     // Drop any video slide whose clip(s) didn't store, so the show never opens on a
