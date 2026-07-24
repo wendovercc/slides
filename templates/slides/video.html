@@ -515,6 +515,7 @@
             v.currentTime = 0;
             if (isPaused()) v.pause(); else v.play();
         }
+        armStall(i);   // resilience: skip this clip if it errors or stalls (below)
         var body = VIDEOS[i] && VIDEOS[i].body;
         setBallCaption();
         if (bodyEl) bodyEl.textContent = body || '';
@@ -542,15 +543,51 @@
         if (window.WccSlide) WccSlide.notifyPanel(i);
     }
 
+    // Advance out of clip i: to the next clip, or end the whole slide if it was the
+    // last. Shared by natural end, playback error, and the stall watchdog, so a bad
+    // clip is treated exactly like a finished one.
+    function advanceFrom(i) {
+        if (i !== current) return;
+        clearStall();
+        if (i < count - 1) { showVideo(i + 1); }
+        else { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
+    }
+
+    // Resilience: a clip that errors (undecodable, or its network <source> fails to
+    // load) or that stalls with no playback progress must never wedge the reel — the
+    // remaining clips (and the rest of the show) have to keep going. The watchdog only
+    // bites while we're actually trying to play (never when paused/off-screen) and only
+    // after a grace window, so a clip that's merely slow to buffer isn't dropped.
+    var STALL_MS = 15000;
+    var stallTimer = null, stallLastT = -1, stallSince = 0;
+    function clearStall() { if (stallTimer) { clearInterval(stallTimer); stallTimer = null; } }
+    function armStall(i) {
+        clearStall();
+        stallLastT = -1; stallSince = Date.now();
+        stallTimer = setInterval(function () {
+            if (i !== current) { clearStall(); return; }   // moved on / taken over
+            if (isPaused()) { stallSince = Date.now(); return; }   // a hold is not a stall
+            var v = videoEls[i];
+            if (!v) { clearStall(); return; }
+            if (v.currentTime > stallLastT + 0.05) { stallLastT = v.currentTime; stallSince = Date.now(); return; }
+            if (Date.now() - stallSince >= STALL_MS) {
+                try { console.warn('[video] clip ' + i + ' stalled — skipping'); } catch (e) {}
+                advanceFrom(i);
+            }
+        }, 1000);
+    }
+
     videoEls.forEach(function (v) {
         v.addEventListener('timeupdate', function () {
             if (+v.dataset.idx === current) updateCard(v);
         });
-        v.addEventListener('ended', function () {
+        v.addEventListener('ended', function () { advanceFrom(+v.dataset.idx); });
+        v.addEventListener('error', function () {
             var i = +v.dataset.idx;
-            if (i !== current) return;
-            if (i < count - 1) { showVideo(i + 1); }
-            else { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
+            if (i === current && !isPaused()) {
+                try { console.warn('[video] clip ' + i + ' errored — skipping'); } catch (e) {}
+                advanceFrom(i);
+            }
         });
     });
 
@@ -559,8 +596,8 @@
             count: count || 1,
             show: function (i) { showVideo(i); },
             startAuto: function () {},
-            pauseAuto: function () { if (videoEls[current]) videoEls[current].pause(); },
-            restartCurrent: function () { if (videoEls[current]) videoEls[current].play(); }
+            pauseAuto: function () { clearStall(); if (videoEls[current]) videoEls[current].pause(); },
+            restartCurrent: function () { if (videoEls[current]) { videoEls[current].play(); armStall(current); } }
         });
     }
     showVideo(0);
