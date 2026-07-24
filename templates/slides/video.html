@@ -540,7 +540,9 @@
         {% else %}
         if (bodyEl) bodyEl.style.display = body ? '' : 'none';
         {% endif %}
-        if (window.WccSlide) WccSlide.notifyPanel(i);
+        // Report the clip's duration so the player's countdown tracks the current
+        // clip rather than sweeping the whole reel.
+        if (window.WccSlide) WccSlide.notifyPanel(i, { dur: (VIDEOS[i] && VIDEOS[i]._video_duration) || 0 });
     }
 
     // Advance out of clip i: to the next clip, or end the whole slide if it was the

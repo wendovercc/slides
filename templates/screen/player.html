@@ -443,6 +443,7 @@ async function init() {
                 duration: s.duration,
                 panel_duration: s.panel_duration,
                 group: s._group || null,   // slide-set membership (drives hats later)
+                video: (s._videos || []).length > 0,  // video slide → auto-plays on forward arrival
                 frame: frames[slides.indexOf(s)],
             })),
             onShow: i => {

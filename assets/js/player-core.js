@@ -7,10 +7,14 @@
  *                       No controls, no touch. Behaviour unchanged from before.
  *   ?interactive      — touch surface (the bar iPad / phones). The player owns a
  *                       single per-panel timer, drives carousel tabs over the
- *                       slide bridge, and renders an auto-hiding control bar.
- *                       Input: horizontal swipe = prev/next, tap = toggle the bar
- *                       (record mode, future, will remap tap → advance); keyboard
- *                       arrows/Space/Home/End/f; fullscreen where supported.
+ *                       slide bridge, and renders an always-on control bar.
+ *                       Input (identical in watch and the future record mode):
+ *                         horizontal swipe / arrows = prev/next
+ *                         tap / Space                = play/pause (+ centre flash)
+ *                         Home/End = first/last, f = fullscreen.
+ *                       The bar is placed relative to the letterboxed slide:
+ *                       below it, to its right, or (near-16:9, no band) inside
+ *                       the slide's top-right safe zone as a collapsible column.
  *
  * Usage:
  *   WccPlayer.start({
@@ -27,7 +31,9 @@
     pause: '<rect x="6" y="5" width="4" height="14" /><rect x="14" y="5" width="4" height="14" />',
     // Stroke-only corner brackets (rendered with fill:none via the .fs button class).
     expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" />',
-    compress: '<path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" />'
+    compress: '<path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" />',
+    // Stroke-only "controls" grip for the collapse toggle (inside-placement only).
+    grip: '<line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />'
   };
 
   function icon(name) {
@@ -42,36 +48,45 @@
       // touch-action:none so a horizontal drag reaches our swipe handler instead
       // of being eaten by the browser's scroll / pull-to-refresh.
       '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:none;}' +
-      // Docked to the top edge of the whole viewport and centred on the full
-      // screen (not the content column). With the players now letterboxing the
-      // 16:9 slide, a non-16:9 surface (the iPad, desktop windows) leaves a black
-      // band above the slide — the bar lives in that band, clear of slide content,
-      // rather than overlapping the title/set-meta row. Targets are sized for
-      // touch. Flush to the top edge: no top border, only a slight corner round.
-      // Sized in vmax (the longer viewport edge) not vw, so the targets stay the
-      // same physical size in portrait and landscape — vw would shrink them in
-      // portrait, where the width is the short edge. Only left:50vw (true
-      // horizontal centring on the viewport width) stays in vw.
-      '#wcc-bar{position:fixed;top:0;left:50vw;' +
-      'transform:translateX(-50%);z-index:60;display:flex;gap:0.6vmax;padding:0.7vmax 0.6vmax;' +
-      'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);border-top:none;' +
-      'border-radius:0 0 0.6vmax 0.6vmax;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
+      // Centre-screen play/pause feedback flashed on tap / Space. Above the tap
+      // surface, below the bar; never intercepts input.
+      '#wcc-fb{position:fixed;inset:0;z-index:55;display:flex;align-items:center;' +
+      'justify-content:center;pointer-events:none;opacity:0;}' +
+      '#wcc-fb svg{width:14vmax;height:14vmax;fill:rgba(255,255,255,0.92);stroke:none;' +
+      'filter:drop-shadow(0 0.4vh 1.2vh rgba(0,0,0,0.55));}' +
+      '#wcc-fb.anim{animation:wcc-fb-pop 0.5s ease-out;}' +
+      '@keyframes wcc-fb-pop{0%{opacity:0;transform:scale(0.6);}' +
+      '25%{opacity:1;}100%{opacity:0;transform:scale(1.25);}}' +
+      // The control bar floats over the letterboxed slide; placeBar() positions it
+      // each layout via a place-* class (see below). Targets are sized in vmax (the
+      // longer viewport edge) so they stay the same physical size in portrait and
+      // landscape. Base styling only here — geometry lives on the place-* classes.
+      '#wcc-bar{position:fixed;z-index:60;display:flex;gap:0.6vmax;padding:0.7vmax 0.6vmax;' +
+      'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);' +
+      'border-radius:0.6vmax;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
       'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);overflow:hidden;' +
-      'transition:opacity 0.3s ease,transform 0.3s ease;}' +
-      // Auto-hidden state: slide the bar up out of the top band. Keeps the same
-      // translateX(-50%) centring so it re-enters from where it lives.
-      '#wcc-bar.hidden{opacity:0;pointer-events:none;' +
-      'transform:translateX(-50%) translateY(calc(-100% - 0.6vh));}' +
-      // Faint grab-handle occupying the bar's slot while it is hidden; a tap on it
-      // (or anywhere on the slide) brings the bar back. Padded for a touch target.
-      '#wcc-handle{position:fixed;top:0;left:50vw;transform:translateX(-50%);z-index:60;' +
-      'padding:0.9vmax 2vmax 1.1vmax;display:flex;justify-content:center;cursor:pointer;' +
-      '-webkit-tap-highlight-color:transparent;touch-action:manipulation;transition:opacity 0.3s ease;}' +
-      '#wcc-handle::before{content:"";width:6vmax;height:0.5vmax;border-radius:0.5vmax;' +
-      'background:rgba(212,175,55,0.55);}' +
-      '#wcc-handle.hidden{opacity:0;pointer-events:none;}' +
+      'transition:opacity 0.25s ease,transform 0.25s ease;}' +
+      // Below the slide: horizontal row, bottom-anchored, centred on the viewport.
+      // It fills the bottom letterbox band and may overhang up into the slide's
+      // non-safe bottom strip (never past the safe zone — placeBar guarantees it).
+      '#wcc-bar.place-below{flex-direction:row;left:50vw;bottom:0.6vmax;' +
+      'transform:translateX(-50%);}' +
+      // Right of the slide: vertical column, right-anchored, centred vertically.
+      '#wcc-bar.place-right{flex-direction:column;right:0.6vmax;top:50vh;' +
+      'transform:translateY(-50%);}' +
+      // Inside the slide (near-16:9, no usable band): vertical column pinned to the
+      // slide's top-right safe corner (top/right set inline from geometry) and
+      // collapsible so it never permanently obstructs slide content.
+      '#wcc-bar.place-inside{flex-direction:column;}' +
+      '#wcc-bar.place-inside.collapsed{gap:0;}' +
+      '#wcc-bar.place-inside.collapsed>*{display:none;}' +
+      '#wcc-bar.place-inside.collapsed>button.collapse{display:flex;}' +
+      // Collapse grip: hidden except in inside placement (the only case that hides).
+      '#wcc-bar button.collapse{display:none;}' +
+      '#wcc-bar.place-inside button.collapse{display:flex;}' +
+      '#wcc-bar.place-inside button.collapse svg{fill:none;}' +
       '#wcc-bar button{width:4.7vmax;height:4.7vmax;border:none;border-radius:50%;background:transparent;' +
-      'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;' +
+      'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;' +
       '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
       '#wcc-bar button:active{background:rgba(255,255,255,0.12);}' +
       '#wcc-bar button.primary{background:rgba(212,175,55,0.18);}' +
@@ -81,12 +96,16 @@
       '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}' +
       // Fullscreen glyph is drawn as outlined corner brackets, not a filled shape.
       '#wcc-bar button.fs svg{fill:none;}' +
-      // Countdown for the current panel/slide. The wall's tab underline no longer
-      // fills, so the timer lives here — visible only while the control bar is.
-      '#wcc-bar-progress{position:absolute;left:0;right:0;bottom:0;height:0.35vmax;' +
-      'background:rgba(212,175,55,0.16);}' +
-      '#wcc-bar-progress i{display:block;height:100%;background:#d4af37;' +
-      'transform-origin:left;transform:scaleX(0);}';
+      // Countdown for the current panel/slide. Runs along the bar's long edge:
+      // bottom strip when the bar is a row, left strip when it is a column.
+      '#wcc-bar-progress{position:absolute;background:rgba(212,175,55,0.16);}' +
+      '#wcc-bar.place-below #wcc-bar-progress{left:0;right:0;bottom:0;height:0.35vmax;}' +
+      '#wcc-bar.place-right #wcc-bar-progress,#wcc-bar.place-inside #wcc-bar-progress{' +
+      'top:0;bottom:0;right:0;width:0.35vmax;}' +
+      '#wcc-bar-progress i{display:block;width:100%;height:100%;background:#d4af37;}' +
+      '#wcc-bar.place-below #wcc-bar-progress i{transform-origin:left;transform:scaleX(0);}' +
+      '#wcc-bar.place-right #wcc-bar-progress i,#wcc-bar.place-inside #wcc-bar-progress i{' +
+      'transform-origin:top;transform:scaleY(0);}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
@@ -106,15 +125,18 @@
     var current = 0;
     var counts = items.map(function () { return null; }); // panel count per item
     var panelIndex = 0;
-    var playing = true;
+    // Interactive starts paused: the commentator drives timing. (Kiosk ignores this
+    // flag entirely — it runs its own whole-slide rotation.) Forward arrival onto a
+    // video slide flips this true so the clip plays; see arrive().
+    var playing = !interactive;
     var timer = null;
     var shownAt = 0;
+    var panelStart = 0;      // when the current panel countdown began (ms epoch)
+    var panelMs = 0;         // the current panel countdown's full duration (ms)
     var progressFill = null; // control-bar countdown fill (interactive only)
+    var progressAxis = 'x';  // fill grows along x (row bar) or y (column bar)
     var bar = null;          // control bar (interactive only)
-    var handle = null;       // faint grab-handle shown when the bar is auto-hidden
-    var hideTimer = null;    // idle auto-hide timer
-    var barVisible = true;
-    var mode = 'watch';      // gesture dispatch mode; 'record' (future) remaps tap → advance
+    var mode = 'watch';      // session mode; 'record' (future) reuses the same gestures
 
     function frameWin(i) { return items[i].frame.contentWindow; }
     function send(i, action, extra) {
@@ -130,26 +152,37 @@
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
 
     /* Control-bar countdown. Mirrors the interactive per-panel timer: fills over
-     * the dwell while playing, freezes where it is on pause, empties on nav. All
+     * the dwell while playing, freezes where it is on pause, empties on nav. The
+     * grow axis follows the bar orientation (x for a row, y for a column). All
      * no-ops until the bar exists, so kiosk (the wall) shows nothing. */
+    function progressScale(v) { return (progressAxis === 'y' ? 'scaleY(' : 'scaleX(') + v + ')'; }
     function progressRun(ms) {
       if (!progressFill) return;
       progressFill.style.transition = 'none';
-      progressFill.style.transform = 'scaleX(0)';
+      progressFill.style.transform = progressScale(0);
       void progressFill.offsetWidth;                    // reflow → restart from empty
       progressFill.style.transition = 'transform ' + ms + 'ms linear';
-      progressFill.style.transform = 'scaleX(1)';
+      progressFill.style.transform = progressScale(1);
     }
     function progressReset() {
       if (!progressFill) return;
       progressFill.style.transition = 'none';
-      progressFill.style.transform = 'scaleX(0)';
+      progressFill.style.transform = progressScale(0);
     }
     function progressFreeze() {
       if (!progressFill) return;
       var t = getComputedStyle(progressFill).transform; // matrix at current width
       progressFill.style.transition = 'none';
-      progressFill.style.transform = (t && t !== 'none') ? t : 'scaleX(0)';
+      progressFill.style.transform = (t && t !== 'none') ? t : progressScale(0);
+    }
+    // Re-drive the fill after a placement change so it uses the new axis. Only the
+    // playing case matters (rearm for the panel's remaining time); a paused fill is
+    // left frozen — a rare rotate-while-paused may nudge it, which self-heals on
+    // the next nav.
+    function progressRelayout() {
+      if (!progressFill || !playing) return;
+      var remaining = panelMs - (Date.now() - panelStart);
+      if (remaining > 0) progressRun(remaining); else progressReset();
     }
 
     /* ---- kiosk: whole-slide rotation, slides auto-rotate their own panels ----
@@ -172,10 +205,20 @@
     function kioskGo(delta) { kioskShow((current + delta + n) % n); }
 
     /* ---- interactive: player owns the per-panel timer ---- */
+    // Drive the countdown fill over `ms` and remember the window (for resize relayout).
+    function startProgress(ms) {
+      panelStart = Date.now();
+      panelMs = ms;
+      progressRun(ms);
+    }
     function panelTimer() {
       clearTimer();
       var ms = (items[current].panel_duration || 20) * 1000;
-      progressRun(ms);
+      // A video reel drives its own clips; its panel_duration is a long backstop
+      // (whole reel + 30s), so filling the bar over that would creep across the
+      // entire reel. Leave the bar to the per-clip driver (the wcc-panel handler)
+      // and keep this timer only as the slide-advance backstop.
+      if (items[current].video) progressReset(); else startProgress(ms);
       timer = setTimeout(function () {
         var count = counts[current] || 1;
         if (panelIndex < count - 1) {
@@ -194,6 +237,12 @@
       // so stepping back into a multi-clip reel jumped to the first clip).
       var last = panel === 'last' && counts[i] != null ? counts[i] - 1 : null;
       if (playing) {
+        // Clear the slide's paused flag first: only `resume` (in slide-bridge)
+        // unsets body.paused, and video.html keeps a clip paused while it's set. A
+        // slide shown paused earlier (e.g. the deck starts paused) would otherwise
+        // stay frozen on arrival here even though we're now playing — reset/goto-panel
+        // change the panel but don't lift the pause.
+        send(i, 'resume');
         if (last != null) { panelIndex = last; send(i, 'goto-panel', { index: last }); }
         else { panelIndex = 0; send(i, 'reset'); }
         panelTimer();
@@ -205,17 +254,22 @@
       }
     }
     function interShow(i, panel) { activate(i); applyState(panel); }
-    function fwdSlide() { interShow((current + 1) % n, 0); }
-    function backSlide() { interShow((current - 1 + n) % n, 'last'); }
-    function goFirst() { interShow(0, 0); }
-    function goLast() { interShow(n - 1, 0); }
+    // Every arrival sets the transport state before applying it, so the incoming
+    // slide is handed the right play/pause commands. Forward onto a video slide
+    // auto-plays (and, since a finished reel posts wcc-done → fwdSlide, the run
+    // carries on through consecutive video slides); forward onto a non-video — and
+    // every backward/jump move — stops (pauses) so the user regains manual control.
+    function arrive(i, panel, play) { playing = play; updatePlayBtn(); interShow(i, panel); }
+    function fwdSlide() { var i = (current + 1) % n; arrive(i, 0, !!items[i].video); }
+    function backSlide() { arrive((current - 1 + n) % n, 'last', false); }
+    function goFirst() { arrive(0, 0, false); }
+    function goLast() { arrive(n - 1, 0, false); }
 
     function setPlaying(p) {
       playing = p;
       updatePlayBtn();
       if (p) { send(current, 'resume'); panelTimer(); }
       else { clearTimer(); send(current, 'pause'); progressFreeze(); }
-      revealBar(); // surface the state change; auto-hide re-arms only while playing
     }
     // Manual nav preserves the play/pause state (so a paused wall stays paused
     // when you step across slides, including between slide-set members). When
@@ -240,20 +294,89 @@
       }
     }
 
-    /* ---- control-bar visibility: auto-hide ~3s after the last interaction while
-     * playing, reveal on any interaction, stay pinned open while paused. All
-     * no-ops in kiosk (no bar exists). ---- */
-    function clearHideTimer() { if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } }
-    function scheduleHide() { clearHideTimer(); if (!bar || !playing) return; hideTimer = setTimeout(hideBar, 3000); }
-    function showBar() { if (!bar) return; bar.classList.remove('hidden'); if (handle) handle.classList.add('hidden'); barVisible = true; }
-    function hideBar() { if (!bar) return; clearHideTimer(); bar.classList.add('hidden'); if (handle) handle.classList.remove('hidden'); barVisible = false; }
-    function revealBar() { showBar(); scheduleHide(); }
-    function toggleBar() { barVisible ? hideBar() : revealBar(); }
+    /* ---- bar placement: below the slide, right of it, or inside its top-right
+     * safe corner. The players letterbox a 16:9 slide (width:min(100vw,177.78vh),
+     * height:min(56.25vw,100vh)) so the black band falls on exactly one axis. The
+     * controls may overhang that band into the slide's outer 5% non-safe strip;
+     * they only fall inside (collapsible) when neither band+strip can hold them. ---- */
+    function setPlaceClass(p) {
+      bar.classList.remove('place-below', 'place-right', 'place-inside');
+      bar.classList.add('place-' + p);
+    }
+    function placeBar() {
+      if (!bar) return;
+      var wasInside = bar.classList.contains('place-inside'); // capture before measuring
+      // Reset inline positioning first: below/right are anchored purely by their
+      // place-* class, and any inline top/right left over from a previous `inside`
+      // placement would otherwise stretch the bar and corrupt the fit measurement
+      // below (so it could never switch back out into a newly-opened letterbox).
+      bar.style.top = bar.style.right = bar.style.left = bar.style.bottom = bar.style.transform = '';
+      var iw = window.innerWidth, ih = window.innerHeight;
+      var slideW = Math.min(iw, ih * 16 / 9), slideH = Math.min(ih, iw * 9 / 16);
+      var bandBelow = (ih - slideH) / 2, bandRight = (iw - slideW) / 2; // per-side bands
+      var safeY = 0.05 * slideH, safeX = 0.05 * slideW;                 // slide's non-safe strip
+      var edge = 0.006 * Math.max(iw, ih);   // the 0.6vmax gap the bar sits off the viewport edge
+      var aspect = iw / ih, EPS = 0.02, place;
+      // Measure the bar in the orientation we're testing (row for below, column for
+      // right), since its footprint differs. The bar sits `edge` off the outer
+      // viewport edge, which pushes its inner edge that much further in — so the
+      // budget is band + non-safe strip − edge, keeping the inner edge from crossing
+      // into the slide's safe zone.
+      if (aspect < 16 / 9 - EPS) {          // taller viewport → top/bottom bands
+        setPlaceClass('below');
+        place = bar.getBoundingClientRect().height <= bandBelow + safeY - edge ? 'below' : 'inside';
+      } else if (aspect > 16 / 9 + EPS) {   // wider viewport → left/right bands
+        setPlaceClass('right');
+        place = bar.getBoundingClientRect().width <= bandRight + safeX - edge ? 'right' : 'inside';
+      } else {                              // ~16:9 → no usable band
+        place = 'inside';
+      }
+      setPlaceClass(place);
+      // Inside is pinned inline to the viewport's top-right corner (below/right are
+      // positioned entirely by their class). The far corner clears most slide content
+      // — titles/hero sit top-left or centre — and, collapsed to its grip by default,
+      // a column here is the least intrusive option when no band can hold the bar.
+      if (place === 'inside') {
+        bar.style.top = edge + 'px';
+        bar.style.right = edge + 'px';
+      }
+      progressAxis = place === 'below' ? 'x' : 'y';
+      // Collapse belongs to inside only — the one placement that overlaps the slide.
+      // It starts collapsed to its grip (clearing content) and only the grip toggles
+      // it; there's no auto-hide. Entering inside afresh collapses; staying inside
+      // across a resize preserves whatever the user last set. Elsewhere: always open.
+      if (place === 'inside') { if (!wasInside) bar.classList.add('collapsed'); }
+      else { bar.classList.remove('collapsed'); }
+      progressRelayout();
+    }
+    var placeRaf = null;
+    function schedulePlace() {
+      if (placeRaf) return;
+      placeRaf = requestAnimationFrame(function () { placeRaf = null; placeBar(); });
+    }
 
-    /* Gesture dispatch (mode-aware). Watch: a tap toggles the bar, a horizontal
-     * swipe steps slides. Record (future) will remap tap → advance. */
-    function onTap() { if (mode === 'record') next(); else toggleBar(); }
-    function onSwipe(dir) { (dir === 'next' ? next : prev)(); revealBar(); }
+    /* ---- collapse: inside placement only. The grip toggles the column open/shut;
+     * there's no auto-hide (it holds whatever the user last set). A no-op in
+     * below/right, where the bar is always fully visible. ---- */
+    function toggleCollapse() { if (bar) bar.classList.toggle('collapsed'); }
+
+    /* Gestures (identical in watch and the future record mode): a tap toggles
+     * play/pause with centre-screen feedback; a horizontal swipe steps slides. */
+    function onTap() {
+      setPlaying(!playing);
+      flashFeedback(playing ? 'play' : 'pause');
+    }
+    function onSwipe(dir) { (dir === 'next' ? next : prev)(); }
+
+    /* Centre-screen play/pause feedback. Shows the resulting transport state. */
+    var fb = null;
+    function flashFeedback(name) {
+      if (!fb) return;
+      fb.innerHTML = icon(name);
+      fb.classList.remove('anim');
+      void fb.offsetWidth;
+      fb.classList.add('anim');
+    }
 
     /* Fullscreen. The API is absent on iPhone Safari (video-only there), so the
      * button is only added when supported; this stays a safe no-op regardless. */
@@ -285,8 +408,8 @@
       injectStyles();
 
       // Full-surface gesture layer. A horizontal swipe steps slides; a clean tap
-      // toggles the control bar. Movement + time thresholds keep a tap and a swipe
-      // from firing each other (a drag never counts as a tap, and vice versa).
+      // toggles play/pause. Movement + time thresholds keep a tap and a swipe from
+      // firing each other (a drag never counts as a tap, and vice versa).
       var tap = document.createElement('div');
       tap.id = 'wcc-tap';
       var TAP_SLOP = 10, TAP_MAX_MS = 500, SWIPE_MIN = 45;
@@ -305,9 +428,15 @@
       tap.addEventListener('pointercancel', function () { gp = null; });
       document.body.appendChild(tap);
 
+      fb = document.createElement('div');
+      fb.id = 'wcc-fb';
+      document.body.appendChild(fb);
+
       bar = document.createElement('div');
       bar.id = 'wcc-bar';
-      bar.addEventListener('pointerdown', revealBar); // any bar touch keeps it up
+      // Collapse grip: first child so it sits at the column's top; visible only in
+      // inside placement, and the sole control left when collapsed.
+      bar.appendChild(button('grip', 'collapse', toggleCollapse));
       bar.appendChild(button('home', '', function () { location.href = '/'; }));
       bar.appendChild(button('prev', '', prev));
       playBtn = button('pause', 'primary', function () { setPlaying(!playing); });
@@ -315,7 +444,7 @@
       bar.appendChild(button('next', '', next));
       var docEl = document.documentElement;
       if (docEl.requestFullscreen || docEl.webkitRequestFullscreen) {
-        fsBtn = button('expand', 'fs', function () { toggleFullscreen(); revealBar(); });
+        fsBtn = button('expand', 'fs', function () { toggleFullscreen(); });
         bar.appendChild(fsBtn);
         document.addEventListener('fullscreenchange', updateFsBtn);
         document.addEventListener('webkitfullscreenchange', updateFsBtn);
@@ -327,14 +456,10 @@
       bar.appendChild(prog);
       document.body.appendChild(bar);
 
-      handle = document.createElement('div');
-      handle.id = 'wcc-handle';
-      handle.className = 'hidden'; // bar starts visible, so the handle starts hidden
-      handle.addEventListener('pointerdown', function (e) { e.stopPropagation(); revealBar(); });
-      document.body.appendChild(handle);
-
       updatePlayBtn();
-      revealBar(); // show now, then arm the idle auto-hide
+      placeBar();
+      window.addEventListener('resize', schedulePlace);
+      window.addEventListener('orientationchange', schedulePlace);
     }
 
     /* ---- bridge messages from slides ---- */
@@ -373,24 +498,39 @@
         if (idx === current && first && Date.now() - shownAt < 2000) applyState(playing ? 0 : panelIndex);
       } else if (d.type === 'wcc-panel' && idx === current) {
         panelIndex = d.panel;
+        // Video reel: restart the countdown for the clip now playing, so the bar
+        // tracks the current clip rather than the whole reel. Only while playing —
+        // a paused reel leaves the bar reset until it resumes.
+        if (items[current].video && playing && d.dur > 0) startProgress(d.dur * 1000);
       }
     });
 
     /* ---- keyboard ---- */
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'ArrowRight') { if (interactive) { next(); revealBar(); } else kioskGo(1); return; }
-      if (e.key === 'ArrowLeft')  { if (interactive) { prev(); revealBar(); } else kioskGo(-1); return; }
+      if (e.key === 'ArrowRight') { if (interactive) { next(); } else kioskGo(1); return; }
+      if (e.key === 'ArrowLeft')  { if (interactive) { prev(); } else kioskGo(-1); return; }
       if (!interactive) return;
-      if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); setPlaying(!playing); }
-      else if (e.key === 'Home') { e.preventDefault(); goFirst(); revealBar(); }
-      else if (e.key === 'End')  { e.preventDefault(); goLast(); revealBar(); }
-      else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); revealBar(); }
+      if (e.key === ' ' || e.key === 'Spacebar') { e.preventDefault(); onTap(); }
+      else if (e.key === 'Home') { e.preventDefault(); goFirst(); }
+      else if (e.key === 'End')  { e.preventDefault(); goLast(); }
+      else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
     });
 
     /* ---- go ---- */
     if (interactive) {
       buildControls();
-      interShow(0, 0);
+      // Learn every slide's panel count up front. On the gated path the iframes
+      // finish loading (and post their wcc-slide handshake) before start() attaches
+      // the listener above, so those first handshakes are missed and `counts` would
+      // stay null — which breaks next()'s `panelIndex < counts-1` test (it collapses
+      // to `< 0`, so next always leaves the slide) while prev() still steps clips.
+      // Ping now that we're listening; the bridge answers with a fresh wcc-slide.
+      items.forEach(function (it, i) { send(i, 'ping'); });
+      // Start paused so the commentator drives timing — but if the deck opens on a
+      // video slide, play it (there's no preceding non-video to advance from, and a
+      // frozen first frame reads as a stuck/blank screen). Playing it also kicks off
+      // the run, which stops at the first non-video slide.
+      arrive(0, 0, !!items[0].video);
     } else {
       kioskShow(0);
     }

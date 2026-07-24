@@ -19,9 +19,9 @@
   var count = 1;       // panel count (1 for plain slides)
   var current = 0;     // active panel index
 
-  function post(type) {
+  function post(type, extra) {
     try {
-      parent.postMessage({ type: type, panel: current, panels: count }, '*');
+      parent.postMessage(Object.assign({ type: type, panel: current, panels: count }, extra || {}), '*');
     } catch (e) { /* not embedded — ignore */ }
   }
 
@@ -33,10 +33,12 @@
       current = 0;
       post('wcc-slide');
     },
-    // Called by the controller after it changes panel.
-    notifyPanel: function (i) {
+    // Called by the controller after it changes panel. `extra` (optional) rides
+    // along on the wcc-panel message — video reels pass the current clip's duration
+    // so the player's countdown can track the clip, not the whole reel.
+    notifyPanel: function (i, extra) {
       current = i;
-      post('wcc-panel');
+      post('wcc-panel', extra);
     }
   };
 
