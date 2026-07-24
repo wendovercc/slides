@@ -254,7 +254,7 @@
        ensurePlayable points the active clip at cached bytes (or the network source on
        miss) and playback loads it on demand. See docs/player-offline-architecture.md. #}
     {% for v in slide.videos %}{% if v._video_src %}
-    <video data-idx="{{ loop.index0 }}" class="clip" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="none">
+    <video data-idx="{{ loop.index0 }}" class="clip" crossorigin="anonymous" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="none">
         <source src="{{ v._video_src }}" type="video/mp4">
     </video>
     {% endif %}{% endfor %}
@@ -296,7 +296,7 @@
             <div id="body-slot" class="slide-body" style="display:none"></div>
             <div class="video-wrap">
                 {% for v in slide.videos %}{% if v._video_src %}
-                <video data-idx="{{ loop.index0 }}" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="none"{% if not loop.first %} style="display:none"{% endif %}>
+                <video data-idx="{{ loop.index0 }}" crossorigin="anonymous" {% if not (slide.audio is defined and slide.audio) %}muted{% endif %} playsinline preload="none"{% if not loop.first %} style="display:none"{% endif %}>
                     <source src="{{ v._video_src }}" type="video/mp4">
                 </video>
                 {% endif %}{% endfor %}
