@@ -1,0 +1,13 @@
+{
+  "template": "cta",
+  "active": true,
+  "title": "Fancy Pulling a Pint?",
+  "subtitle": "Volunteers wanted for the new pavilion bar",
+  "body": "The bar in our new pavilion is opening on Thursday, Friday & Saturday evenings — and we're looking for a rota of around <span class=\"gold\">15 volunteers</span> to help staff it. Every shift keeps the bar ticking over, ready for a well-earned pint after a match or a members' event. To get involved, speak to a committee member or sign up at the bar.",
+  "items": [
+    "No bar experience needed",
+    "Members only — relaxed & friendly",
+    "Just 1–2 evenings a month each",
+    "Support always on hand"
+  ]
+}
