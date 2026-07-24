@@ -18,8 +18,13 @@
  */
 (function () {
   var CACHE_NAME = 'wcc-video-v1';
-  // Abort a single clip fetch that hangs (a stalled connection, not a clean
-  // failure), so the loading gate's retry loop is bounded rather than wedged.
+  // Clips are downloaded in byte-range CHUNKs, not one long fetch: a large clip
+  // streamed whole over a thin link gets its body reset mid-transfer, and Cache.put()
+  // of that live stream then throws NetworkError — whereas small ranges behave like
+  // the small clips that cache cleanly. We assemble the ranges into one Blob and store
+  // that (from memory, decoupled from the live connection). FETCH_TIMEOUT_MS bounds
+  // each CHUNK, so a stalled range aborts instead of wedging the prime.
+  var CHUNK_BYTES = 8 * 1024 * 1024;
   var FETCH_TIMEOUT_MS = 20000;
 
   // Feature-detect the whole path up front. Cross-origin fetch of clip bytes also
@@ -44,17 +49,51 @@
   function storeOne(cache, url) {
     return cache.match(url).then(function (hit) {
       if (hit) return { ok: true, bytes: contentLength(hit) };
+      return downloadChunked(url).then(function (blob) {
+        if (!blob || !blob.size) return { ok: false, bytes: 0 };
+        // Store the assembled bytes as a fresh in-memory Response, not a live network
+        // stream — that decoupling is what makes Cache.put() reliable for big clips.
+        var resp = new Response(blob, { headers: {
+          'Content-Type': blob.type || 'video/mp4',
+          'Content-Length': String(blob.size)
+        } });
+        return cache.put(url, resp)
+          .then(function () { return { ok: true, bytes: blob.size }; })
+          .catch(function () { return { ok: false, bytes: 0 }; });
+      });
+    }).catch(function () { return { ok: false, bytes: 0 }; });
+  }
+
+  /* Download a clip in sequential byte-range chunks and assemble one Blob. Each range
+   * is short-lived (so it can't be reset like a long whole-file transfer) and carries
+   * its own abort timeout. Resolves the Blob, or null on any chunk failure — the caller
+   * then reports { ok:false } and the prime's retry loop tries the clip again. If the
+   * server ignores Range (200 = whole file at once) we take that as the last chunk. */
+  function downloadChunked(url) {
+    var parts = [];
+    var start = 0;
+    function done() { return new Blob(parts, { type: 'video/mp4' }); }
+    function next() {
       var ctl = ('AbortController' in window) ? new AbortController() : null;
       var timer = ctl ? setTimeout(function () { ctl.abort(); }, FETCH_TIMEOUT_MS) : null;
-      return fetch(url, { mode: 'cors', credentials: 'omit', signal: ctl ? ctl.signal : undefined })
-        .then(function (resp) {
-          if (timer) clearTimeout(timer);
-          if (!resp || !resp.ok) return { ok: false, bytes: 0 };
-          var bytes = contentLength(resp);
-          return cache.put(url, resp).then(function () { return { ok: true, bytes: bytes }; });
-        })
-        .catch(function () { if (timer) clearTimeout(timer); return { ok: false, bytes: 0 }; });
-    }).catch(function () { return { ok: false, bytes: 0 }; });
+      return fetch(url, {
+        mode: 'cors', credentials: 'omit',
+        signal: ctl ? ctl.signal : undefined,
+        headers: { 'Range': 'bytes=' + start + '-' + (start + CHUNK_BYTES - 1) }
+      }).then(function (resp) {
+        if (timer) clearTimeout(timer);
+        if (resp.status === 416) return done();               // range past EOF (size a CHUNK multiple)
+        if (resp.status !== 206 && resp.status !== 200) return null;
+        return resp.arrayBuffer().then(function (buf) {
+          if (buf.byteLength) { parts.push(buf); start += buf.byteLength; }
+          // 200 = server ignored Range (sent the whole file); a short chunk is the
+          // last one; otherwise keep pulling the next range.
+          if (resp.status === 200 || buf.byteLength < CHUNK_BYTES) return done();
+          return next();
+        });
+      }).catch(function () { if (timer) clearTimeout(timer); return null; });
+    }
+    return next();
   }
 
   /* One serial pass over urls. Serial, not parallel: on the pavilion's thin link a
