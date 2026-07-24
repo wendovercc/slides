@@ -356,7 +356,15 @@
         return;
       }
 
-      if (!interactive) return;
+      if (!interactive) {
+        // Kiosk handshake re-apply: slides no longer self-start when embedded, so if a
+        // slide's bridge registered only after our restart-auto was sent (the ungated
+        // path starts the player before iframes finish loading), re-drive the current
+        // one now that it's listening. The gated walls don't need this — iframes are
+        // fully loaded before kioskShow runs — but it's a cheap belt-and-braces.
+        if (d.type === 'wcc-slide' && idx === current && Date.now() - shownAt < 2000) send(current, 'restart-auto');
+        return;
+      }
       if (d.type === 'wcc-slide') {
         var first = counts[idx] == null;
         counts[idx] = d.panels;

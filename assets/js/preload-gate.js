@@ -27,7 +27,7 @@
     ".preload-logo{width:16vh;height:auto;object-fit:contain;}" +
     ".preload-title{font-size:3vh;font-weight:900;letter-spacing:.02em;}" +
     ".preload-bar{width:100%;height:1vh;background:rgba(212,175,55,.18);border-radius:1vh;overflow:hidden;}" +
-    ".preload-bar i{display:block;height:100%;width:100%;background:#d4af37;transform-origin:left;transform:scaleX(0);transition:transform .3s ease;}" +
+    ".preload-bar i{display:block;height:100%;width:100%;background:#d4af37;transform-origin:left;transform:scaleX(0);transition:transform .25s linear;}" +
     ".preload-readout{font-size:1.8vh;color:#b4c8e4;letter-spacing:.02em;}" +
     ".preload-status{font-size:1.6vh;color:#d4af37;min-height:1.6vh;opacity:0;transition:opacity .4s ease;}";
 
@@ -58,7 +58,10 @@
     return {
       update: function (p) {
         var total = p.total || 0, done = p.done || 0, bytes = p.bytes || 0;
-        fill.style.transform = 'scaleX(' + (total ? done / total : 1) + ')';
+        // frac (completed clips + in-flight clip's byte fraction) fills the bar smoothly;
+        // fall back to the clip-count ratio for callers/updates that don't supply it.
+        var frac = (typeof p.frac === 'number') ? p.frac : (total ? done / total : 1);
+        fill.style.transform = 'scaleX(' + frac + ')';
         if (total) {
           var mb = bytes / 1048576;
           readout.textContent = done + ' / ' + total + ' clips · ' + mb.toFixed(mb < 10 ? 1 : 0) + ' MB';

@@ -600,7 +600,12 @@
             restartCurrent: function () { if (videoEls[current]) { videoEls[current].play(); armStall(current); } }
         });
     }
-    showVideo(0);
+    // Only auto-start when opened standalone. Embedded in a player, we wait for it to
+    // activate this slide (restart-auto in kiosk / reset in interactive, both → show(0)):
+    // otherwise every hidden iframe would play clip 0 over its network <source> the
+    // moment it parses — behind the loading gate that races the cache prime and roughly
+    // doubles cold-boot mobile data. preload="none" keeps the element idle until then.
+    if (window.parent === window) showVideo(0);
 })();
 </script>
 </body>
