@@ -152,6 +152,31 @@ Key points:
 - The `while true` loop restarts Chromium automatically if it ever crashes
 - The cursor is hidden via `cursor: none` CSS in the screen player itself
 
+> **Note — the profile lives on RAM (`/tmp`), and that's deliberate for a card-booted Pi.**
+> `/tmp` is `tmpfs` (RAM), so the whole Chromium profile — including the app's video
+> store (the `wcc-video-v1` Cache API entry that `assets/js/video-cache.js` fills) — is
+> **wiped on every nightly reboot**. Expected consequence: **one cold download of each
+> clip per morning** (~80 MB for the current reel), then nothing more for the rest of the
+> day. The expensive per-loop refetch is fixed separately in app code (fetch-to-Cache-API
+> + object-URL playback), so it does **not** depend on where the profile lives.
+>
+> Moving `--user-data-dir` to the SD card (e.g. `/home/pi/.chromium-kiosk`) would save
+> that one download/day, but for a **microSD-booted** Pi running for years the RAM profile
+> is the better default:
+> - **No flash wear.** A live profile writes constantly (cache, LevelDB, cookies, logs);
+>   on tmpfs those writes cost nothing, on microSD they slowly grind the card down — the
+>   classic long-term Pi kiosk failure. The clean-boot profile also **self-heals** any
+>   corruption, so "turn it off and on again" stays a real fix; a persisted profile keeps
+>   its corruption across reboots.
+> - **RAM headroom is fine** — a handful of 80 MB clips sits comfortably under the ~2 GB
+>   tmpfs ceiling on a 4 GB Pi 5.
+>
+> **Flip this only if the Pi boots from an SSD/NVMe** rather than microSD — SSD endurance
+> removes the wear objection, so a persistent profile (and zero re-downloads) becomes the
+> better choice there. (This supersedes the "move `--user-data-dir` to SD" step described
+> as a prerequisite in `docs/player-offline-architecture.md` Phase 0, which predates this
+> decision.)
+
 ### Install the kiosk control server
 
 A small Python HTTP server runs on port 8080 and lets you restart the kiosk from any device on the same network — no SSH needed. The slideshow homepage shows a "↺ Restart screen" link on screen cards that have a Pi configured; clicking it opens `http://wendovercc-1.local:8080/` in a new tab where you can trigger the restart.

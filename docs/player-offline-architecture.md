@@ -227,7 +227,14 @@ Create the object URL when a clip becomes active (optionally one ahead) and
 
 ---
 
-## Pi prerequisite (not optional)
+## Pi prerequisite — superseded (decided: keep the profile on RAM)
+
+> **Decision (2026-07-24): on a microSD-booted Pi, keep `--user-data-dir` on `/tmp`
+> (RAM).** The one cold download per morning is acceptable, and the RAM profile avoids
+> microSD write-wear and keeps the clean-boot self-heal. Only move to the SD card if the
+> Pi boots from an SSD/NVMe. Full reasoning lives in `docs/raspberry-pi.md` Step 5 — that
+> is now the source of truth. The paragraph below is the original recommendation, kept for
+> context.
 
 Cache Storage lives inside the Chromium profile, exactly like the HTTP cache. While
 that profile is on `/tmp` it is wiped nightly and we re-prime every morning. **Move
