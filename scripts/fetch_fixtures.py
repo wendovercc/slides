@@ -33,6 +33,10 @@ CREST_CACHE = CONTENT / "data" / "crests.json"
 CREST_DIR = ASSETS / "images" / "crests"
 API_BASE = "http://play-cricket.com/api/v2"
 MAX_OPP_MATCHES = 10
+# Senior teams whose next fixture carries a published-XI card on the fantasy
+# slide's "Teams" panel. Junior sides are excluded (we don't surface junior
+# player names on screen), matching the opposition-data policy elsewhere here.
+SENIOR_TEAM_IDS = {"1st-xi", "2nd-xi", "friendly-xi"}
 
 
 def load_dotenv():
@@ -553,6 +557,54 @@ def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token, befo
     }
 
 
+def fetch_published_xi(match, our_pc_id, api_token):
+    """Return our published XI for an upcoming match, or None if not published.
+
+    Play Cricket's match_detail carries a `players` block with home_team /
+    away_team selection lists. A side's list is populated only once the club
+    publishes that team; an unpublished (or not-yet-selected) side comes back
+    empty. Note the top-level `published` flag is unreliable — it can read "Yes"
+    with an empty squad — so the presence of players is the real signal.
+
+    Returns a list of {name, position, captain, wicket_keeper} in batting order,
+    or None when the team isn't published yet.
+    """
+    match_id = match["id"]
+    try:
+        data = api_get("match_detail.json", api_token, match_id=match_id)
+        details = data.get("match_details", [])
+        if not details:
+            return None
+        detail = details[0]
+    except Exception as e:
+        print(f"    WARNING: failed to fetch published XI {match_id}: {e}", file=sys.stderr)
+        return None
+
+    is_home = our_pc_id == str(detail.get("home_team_id", ""))
+    side_key = "home_team" if is_home else "away_team"
+
+    side = []
+    for block in detail.get("players") or []:
+        if isinstance(block, dict) and side_key in block:
+            side = block.get(side_key) or []
+            break
+
+    players = []
+    for p in side:
+        name = (p.get("player_name") or "").strip()
+        if not name:
+            continue
+        pos = p.get("position")
+        players.append({
+            "name": name,
+            "position": pos if isinstance(pos, int) else None,
+            "captain": bool(p.get("captain")),
+            "wicket_keeper": bool(p.get("wicket_keeper")),
+        })
+    players.sort(key=lambda x: x["position"] if x["position"] is not None else 99)
+    return players or None
+
+
 def main():
     api_token = os.environ.get("PLAY_CRICKET_API_TOKEN")
     site_id = os.environ.get("PLAY_CRICKET_SITE_ID")
@@ -694,7 +746,14 @@ def main():
             "opposition_site_id": opp_site_id or None,
             "opposition_form": None,
             "opposition_players": None,
+            # Our published XI for this fixture (senior teams only). Populated
+            # below; stays None for juniors and for unpublished senior teams.
+            "published_xi": None,
         }
+
+        if team_id in SENIOR_TEAM_IDS:
+            print(f"  Fetching published XI for {team_id} vs {opp_name}...")
+            fixture["published_xi"] = fetch_published_xi(match, our_pc_id, api_token)
 
         if team_id.startswith("u"):
             # Junior teams: skip opposition data (avoids surfacing junior

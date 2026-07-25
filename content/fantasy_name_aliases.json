@@ -1,0 +1,6 @@
+{
+  "_comment": "Maps a Play Cricket published-XI name (key) to the matching Fantasy Cricket standings name (value), for the cases automatic matching can't resolve — e.g. Play Cricket carries an abbreviated or nickname form of the fantasy name. Keys and values are matched case- and punctuation-insensitively, so use whatever spelling reads clearly. Add an entry only when the two systems disagree; genuine absences (a player not in the fantasy league) need no entry and simply render without a points bar.",
+  "aliases": {
+    "Sangir Kethes": "Sangirthan Ketheswaran"
+  }
+}

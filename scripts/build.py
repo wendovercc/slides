@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import re
 import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -39,8 +40,12 @@ FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fet
 FIXED_PANEL_COUNTS = {
     "honours": 4,
     "leaderboard": 4,
-    "fantasy-league": 3,
+    "fantasy-league": 4,
 }
+
+# Senior teams that get a published-XI card on the fantasy slide's "Teams"
+# panel, in display order (left-to-right).
+FANTASY_TEAM_ORDER = ["1st-xi", "2nd-xi", "friendly-xi"]
 
 
 def load_config():
@@ -1395,6 +1400,161 @@ def _split_opp_name(opp_full, opp_club):
     return opp_full or "", ""
 
 
+def _norm_name(s):
+    """Lowercase, strip punctuation, collapse whitespace — for name matching."""
+    s = re.sub(r"[.\-']", " ", (s or "").lower())
+    s = re.sub(r"[^a-z0-9 ]", "", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _name_key(s):
+    """(first token, surname token) from a name, for initial+surname matching."""
+    parts = _norm_name(s).split()
+    if not parts:
+        return ("", "")
+    if len(parts) == 1:
+        return ("", parts[0])
+    return (parts[0], parts[-1])
+
+
+def _fantasy_points_index(player_standings):
+    """Index fantasy player standings for fuzzy name → {points, value} lookup."""
+    headers = (player_standings or {}).get("headers", []) or []
+    rows = (player_standings or {}).get("rows", []) or []
+    total_i = next(
+        (i for i, h in enumerate(headers) if "total" in h.lower()),
+        len(headers) - 1 if headers else 8,
+    )
+    value_i = next((i for i, h in enumerate(headers) if "value" in h.lower()), 1)
+    index = []
+    for r in rows:
+        if not r:
+            continue
+        name = r[0] if len(r) > 0 else ""
+        if not name:
+            continue
+        try:
+            pts = int(str(r[total_i]).replace(",", "").strip()) if len(r) > total_i else None
+        except ValueError:
+            pts = None
+        value = str(r[value_i]).strip() if len(r) > value_i else ""
+        first, surname = _name_key(name)
+        index.append({
+            "norm": _norm_name(name), "first": first, "surname": surname,
+            "points": pts, "value": value,
+        })
+    return index
+
+
+def _fmt_fantasy_value(raw):
+    """Fantasy value string (e.g. "£6.2m", "£8m") → bare one-decimal "6.2"/"8.0",
+    or None if it carries no number. The "£m" lives in the column header."""
+    m = re.search(r"[-+]?\d*\.?\d+", raw or "")
+    return f"{float(m.group()):.1f}" if m else None
+
+
+def _match_fantasy_entry(pc_name, index):
+    """Best-effort fantasy standings entry for a Play Cricket name, or None.
+
+    Exact normalised name first; then a unique surname match (rejected if both
+    sides carry a first name whose initial disagrees); then, for a shared
+    surname, disambiguation by first initial. Anything still ambiguous → None,
+    so a wrong player is never shown."""
+    norm = _norm_name(pc_name)
+    for e in index:
+        if e["norm"] == norm:
+            return e
+    first, surname = _name_key(pc_name)
+    if not surname:
+        return None
+    cands = [e for e in index if e["surname"] == surname]
+    if not cands:
+        return None
+    if len(cands) == 1:
+        e = cands[0]
+        if first and e["first"] and first[0] != e["first"][0]:
+            return None
+        return e
+    if first:
+        by_initial = [e for e in cands if e["first"] and e["first"][0] == first[0]]
+        if len(by_initial) == 1:
+            return by_initial[0]
+    return None
+
+
+def load_fantasy_aliases():
+    """Manual Play Cricket → Fantasy name overrides for the "Teams" panel.
+
+    Returns {normalised PC name: fantasy name}. Covers cases the automatic match
+    can't (abbreviated/nickname forms); see content/fantasy_name_aliases.json."""
+    path = CONTENT / "fantasy_name_aliases.json"
+    if not path.exists():
+        return {}
+    data = json.loads(path.read_text())
+    return {_norm_name(k): v for k, v in (data.get("aliases") or {}).items()}
+
+
+def build_fantasy_teams(slide, teams_by_id, fixtures_data, player_standings):
+    """Build the "Teams" panel cards: each senior team's next fixture with its
+    published XI (or a not-yet-published placeholder).
+
+    One card per team in FANTASY_TEAM_ORDER that has an upcoming fixture. The
+    imminent fixture is always shown — we never skip ahead to a later published
+    game — so an unpublished side renders the opponent/date with an empty roster
+    and `published: False`. Teams with no upcoming fixture are dropped.
+
+    Each player is fuzzy-matched against the fantasy player standings to attach
+    current Total Points (`points`) and a histogram `bar` percentage, scaled to
+    the top scorer across all cards so bars are comparable panel-wide.
+    """
+    fixtures = (fixtures_data or {}).get("fixtures", {})
+    index = _fantasy_points_index(player_standings)
+    aliases = load_fantasy_aliases()
+    cards = []
+    for team_id in FANTASY_TEAM_ORDER:
+        fixture = fixtures.get(team_id)
+        if not fixture:
+            continue
+        team = teams_by_id.get(team_id, {})
+        opp_club, _ = _split_opp_name(
+            fixture.get("opposition_name", ""), fixture.get("opposition_club_name", "")
+        )
+        iso = _iso_from_dmy(fixture.get("match_date", ""))
+        date_short = ""
+        if iso:
+            d = datetime.strptime(iso, "%Y-%m-%d")
+            date_short = d.strftime(f"%a {d.day} %b")
+        players = []
+        for p in fixture.get("published_xi") or []:
+            player = dict(p)
+            lookup = aliases.get(_norm_name(p.get("name", "")), p.get("name", ""))
+            entry = _match_fantasy_entry(lookup, index)
+            # points drive the (form) bar; value is the displayed £m price
+            player["points"] = entry["points"] if entry else None
+            player["value"] = _fmt_fantasy_value(entry["value"]) if entry else None
+            players.append(player)
+        cards.append({
+            "team_name": team.get("name", team_id),
+            "opponent": opp_club or fixture.get("opposition_name", ""),
+            "is_home": bool(fixture.get("is_home")),
+            "date": date_short,
+            "players": players,
+            "published": bool(players),
+        })
+
+    # Scale bars to the top scorer across every card so lengths are comparable.
+    max_pts = max(
+        (p["points"] for c in cards for p in c["players"]
+         if isinstance(p.get("points"), int) and p["points"] > 0),
+        default=0,
+    )
+    for c in cards:
+        for p in c["players"]:
+            pts = p.get("points")
+            p["bar"] = round(pts / max_pts * 100, 1) if (isinstance(pts, int) and pts > 0 and max_pts) else 0
+    slide["_teams"] = cards
+
+
 def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
     """Assemble the multi-panel team slide object.
 
@@ -1851,6 +2011,9 @@ def build_slides(env):
             ]:
                 data_path = FETCHED / f"{file_key}.json"
                 slide[tab_key] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
+            build_fantasy_teams(
+                slide, teams_by_id, load_fixtures(), slide["_player_standings"]
+            )
 
         if slide.get("template") == "cta" and "qr_url" in slide:
             slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])

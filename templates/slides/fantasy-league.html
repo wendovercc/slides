@@ -140,6 +140,112 @@
         color: var(--accent);
     }
     .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
+    /* Teams panel: one portrait card per senior team's next fixture */
+    .teams-grid {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.4vw;
+    }
+    .team-card {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 0.6vh;
+        padding: 1.4vh 1.1vw;
+    }
+    .team-card-head {
+        border-bottom: 1px solid rgba(255,255,255,0.18);
+        padding-bottom: 0.9vh;
+        margin-bottom: 0.9vh;
+    }
+    .team-card-name {
+        font-size: var(--t-md);
+        font-weight: 700;
+        line-height: 1.1;
+        color: var(--accent);
+    }
+    .team-card-fixture {
+        font-size: var(--t-xs);
+        color: var(--muted);
+        margin-top: 0.4vh;
+        letter-spacing: 0.02em;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.6vw;
+    }
+    .team-card-fixture .fixture-meta {
+        min-width: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .team-card-fixture .vs { opacity: 0.55; }
+    .xi-pts-head {
+        flex-shrink: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.7;
+    }
+    .xi-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.85vh;            /* between rows — the bar hugs the name above it */
+    }
+    .xi-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0 0.5vw;
+        align-items: baseline;
+    }
+    .xi-name {
+        grid-column: 1;
+        grid-row: 1;
+        font-size: var(--t-md);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .xi-bar {
+        grid-column: 1;         /* value line sits under the name, not the price */
+        grid-row: 2;
+        height: 0.4vh;
+        width: var(--bar, 0%);
+        margin-top: 0.3vh;      /* tight to its own name; the row gap is larger */
+        background: linear-gradient(to right, rgba(255,255,255,0.75), rgba(255,255,255,0.32));
+        border-radius: 0 0.2vh 0.2vh 0;
+    }
+    .xi-pts {
+        grid-column: 2;
+        grid-row: 1;
+        font-size: var(--t-sm);
+        text-align: right;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+        color: var(--accent);
+    }
+    .xi-badge {
+        font-size: var(--t-xs);
+        font-weight: 700;
+        color: var(--accent);
+        margin-left: 0.3vw;
+    }
+    .team-card-empty {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        font-size: var(--t-sm);
+        font-style: italic;
+        color: var(--muted);
+        opacity: 0.65;
+        padding: 0 0.5vw;
+    }
 {% endblock %}
 {% block content %}
     <div class="header">
@@ -149,6 +255,7 @@
         <span class="panel-tab active">Team of the Week</span>
         <span class="panel-tab">Top Players</span>
         <span class="panel-tab">Top Managers</span>
+        <span class="panel-tab">Teams</span>
     </nav>
     <div class="panels">
 
@@ -274,6 +381,40 @@
             </div>
             {% else %}
             <div class="empty">No team standings yet</div>
+            {% endif %}
+        </div>
+
+        <div class="panel">
+            {% set cards = slide._teams %}
+            {% if cards %}
+            <div class="teams-grid">
+                {% for card in cards %}
+                <div class="team-card">
+                    <div class="team-card-head">
+                        <div class="team-card-name">{{ card.team_name }}</div>
+                        <div class="team-card-fixture">
+                            <span class="fixture-meta"><span class="vs">{{ 'vs' if card.is_home else 'at' }}</span> {{ card.opponent }}{% if card.date %} · {{ card.date }}{% endif %}</span>
+                            {% if card.published %}<span class="xi-pts-head">Value (£m)</span>{% endif %}
+                        </div>
+                    </div>
+                    {% if card.published %}
+                    <div class="xi-list">
+                        {% for p in card.players %}
+                        <div class="xi-row">
+                            <span class="xi-name">{{ p.name }}{% if p.captain %}<span class="xi-badge">(C)</span>{% endif %}{% if p.wicket_keeper %}<span class="xi-badge">†</span>{% endif %}</span>
+                            <span class="xi-pts">{{ p.value if p.value else '' }}</span>
+                            <span class="xi-bar" style="--bar: {{ p.bar }}%"></span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="team-card-empty">Team not yet announced</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty">No upcoming senior fixtures</div>
             {% endif %}
         </div>
 
