@@ -28,6 +28,11 @@
         iframe.flash { z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
         iframe.flash.flash-active { opacity: 1; }
 
+        /* Live ticker: an always-present transparent overlay iframe above the slides
+           (only its bottom bar paints; it self-hides when nothing's live). Below the
+           flash so a clip takeover covers it. Never intercepts input. */
+        iframe.ticker { z-index: 30; opacity: 1; pointer-events: none; background: transparent; }
+
         body.preview iframe {
             width: 1920px; height: 1080px;
             left: auto; right: 0; top: 0;
@@ -152,6 +157,7 @@
     {% for slide in show.slides %}
     <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
     {% endfor %}
+    <iframe id="ticker-frame" class="ticker" src="/live-ticker/"></iframe>
     <iframe id="flash-frame" class="flash" src="/live-flash/"></iframe>
 
     <script src="/assets/js/video-cache.js"></script>

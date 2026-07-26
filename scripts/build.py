@@ -1976,6 +1976,17 @@ def build_live_flash(env):
     print("  live-flash overlay → /live-flash/")
 
 
+def build_live_ticker(env):
+    """Render the live ticker overlay page (/live-ticker/). Like the flash, a
+    player-owned overlay iframe (not a slide). It listens for the engine's wcc-live
+    broadcast and paints a segment-cycling score bar in the bottom safe strip of
+    the main content column (clear of the sidebar). Static; data arrives at runtime."""
+    out_dir = SITE / "live-ticker"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "index.html").write_text(env.get_template("live-ticker.html").render())
+    print("  live-ticker overlay → /live-ticker/")
+
+
 def build_context_calendar():
     config = load_config()
     phase_cfg = config.get("activity_phases", _DEFAULT_PHASES)
@@ -3000,6 +3011,7 @@ if __name__ == "__main__":
     print("Building live config...")
     build_live_config()
     build_live_flash(env)
+    build_live_ticker(env)
 
     print("Building context calendar...")
     build_context_calendar()

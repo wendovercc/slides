@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Live ticker</title>
+    <style>
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+        :root {
+            --navy-1: #0f2346; --navy-2: #0a1c3a; --gold: #d4af37;
+            --light-blue: #b4c8e4; --text: #fff; --muted: var(--light-blue); --accent: var(--gold);
+            --safe-x: 5vw; --safe-y: 5vh; --sidebar-w: 20vw;
+            --t-md: 2vw; --t-sm: 1.2vw; --t-xs: 0.9vw;
+            /* Bar geometry — tunable to line up in the bottom safe strip on the wall.
+               Right edge meets the sidebar's left edge so the sidebar corner stays free. */
+            --tick-bottom: 1vh; --tick-height: 4.4vh;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+        /* Transparent: only the bar paints; the slide shows through everywhere else. */
+        html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
+            font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--text); }
+
+        .ticker-bar {
+            position: fixed; left: var(--safe-x); right: var(--sidebar-w); bottom: var(--tick-bottom);
+            height: var(--tick-height); display: flex; align-items: stretch;
+            background: rgba(10,28,58,0.92); border-top: 2px solid var(--accent);
+            box-shadow: 0 -0.4vh 1.6vh rgba(0,0,0,0.4);
+            opacity: 0; transition: opacity 0.4s ease;
+        }
+        .ticker-bar.show { opacity: 1; }
+
+        /* Fixed LIVE flag (or a break label) on the left. */
+        .tick-live {
+            display: flex; align-items: center; gap: 0.6vw; flex-shrink: 0;
+            padding: 0 1.2vw; background: var(--accent); color: var(--navy-1);
+            font-size: var(--t-sm); font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+        }
+        .tick-live i { width: 0.8vw; height: 0.8vw; border-radius: 50%; background: #b3261e; }
+        .tick-live.is-live i { background: #b3261e; animation: tick-pulse 1.8s infinite; }
+        @keyframes tick-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(179,38,30,0.6); }
+            70% { box-shadow: 0 0 0 0.7vw rgba(179,38,30,0); }
+            100% { box-shadow: 0 0 0 0 rgba(179,38,30,0); }
+        }
+
+        /* Cycling detail area. Segments fade in place. */
+        .tick-body { position: relative; flex: 1; min-width: 0; overflow: hidden; }
+        .tick-seg {
+            position: absolute; inset: 0; display: flex; align-items: center; gap: 0.8vw;
+            padding: 0 1.4vw; font-size: var(--t-md); line-height: 1;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            opacity: 0; transition: opacity 0.35s ease;
+        }
+        .tick-seg.on { opacity: 1; }
+        .tick-seg .team { font-weight: 900; color: var(--accent); }
+        .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; }
+        .tick-seg .ov { color: var(--muted); font-size: var(--t-sm); }
+        .tick-seg .bat { font-weight: 700; }
+        .tick-seg .bat .num { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+        .tick-seg .star { color: var(--accent); }
+        .tick-seg .lbl { color: var(--muted); font-size: var(--t-sm); text-transform: uppercase; letter-spacing: 0.06em; }
+        .tick-seg .sep { color: var(--muted); opacity: 0.5; margin: 0 0.3vw; }
+    </style>
+</head>
+<body>
+    <div id="ticker" class="ticker-bar">
+        <div id="tick-live" class="tick-live is-live"><i></i><span id="tick-live-label">Live</span></div>
+        <div class="tick-body">
+            <div id="seg-a" class="tick-seg on"></div>
+            <div id="seg-b" class="tick-seg"></div>
+        </div>
+    </div>
+
+<script>
+(function () {
+    var bar = document.getElementById('ticker');
+    var liveEl = document.getElementById('tick-live');
+    var liveLabel = document.getElementById('tick-live-label');
+    var segs = [document.getElementById('seg-a'), document.getElementById('seg-b')];
+    var CYCLE_MS = 4500;
+
+    var segments = [];    // current list of segment HTML strings
+    var idx = 0;          // which segment is showing
+    var face = 0;         // which of the two layers is currently 'on'
+    var timer = null;
+    var lastKey = '';     // avoid restarting the cycle when content hasn't changed
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
+
+    // Build the flat cycle of segments for the live/break matches in the feed.
+    function buildSegments(feed) {
+        var live = (feed && feed.matches || []).filter(function (m) { return m.phase === 'live' || m.phase === 'break'; });
+        var out = [];
+        live.forEach(function (m) {
+            var inn = currentInnings(m);
+            var team = esc((inn && inn.side) || m.home || '');
+            // 1) Score.
+            if (inn) {
+                out.push('<span class="team">' + team + '</span>' +
+                    '<span class="score">' + inn.runs + '/' + inn.wickets + '</span>' +
+                    '<span class="ov">(' + esc(inn.overs) + ' ov)</span>');
+            } else if (m.score_text) {
+                out.push('<span class="team">' + esc(m.score_text) + '</span>');
+            }
+            // 2) At crease.
+            var crease = ((inn && inn.at_crease) || []).map(function (b) {
+                return '<span class="bat">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) +
+                    ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
+            });
+            if (crease.length) out.push(crease.join('<span class="sep">·</span>'));
+            // 3) Last wicket.
+            var w = inn && inn.last_wicket;
+            if (w) out.push('<span class="lbl">Last wkt</span>' + esc(w.name) + ' ' + (w.runs != null ? w.runs : '') +
+                (w.how ? ' — ' + esc(w.how) : ''));
+            // 4) Break, if any.
+            if (m.phase === 'break' && m.break_desc) out.push('<span class="lbl">' + esc(m.break_desc) + '</span>');
+        });
+        return { segments: out, anyBreak: live.some(function (m) { return m.phase === 'break'; }) };
+    }
+
+    function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    function showSeg(i) {
+        var next = 1 - face;
+        segs[next].innerHTML = segments[i] || '';
+        segs[next].classList.add('on');
+        segs[face].classList.remove('on');
+        face = next;
+    }
+
+    function render(feed) {
+        var built = buildSegments(feed);
+        if (!built.segments.length) { bar.classList.remove('show'); stop(); lastKey = ''; return; }
+        liveEl.classList.toggle('is-live', !built.anyBreak);
+        liveLabel.textContent = built.anyBreak ? 'Break' : 'Live';
+        bar.classList.add('show');
+        var key = built.segments.join('|');
+        if (key === lastKey) return;   // same content — let the running cycle continue
+        lastKey = key;
+        segments = built.segments;
+        idx = 0;
+        showSeg(0);
+        stop();
+        if (segments.length > 1) {
+            timer = setInterval(function () { idx = (idx + 1) % segments.length; showSeg(idx); }, CYCLE_MS);
+        }
+    }
+
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d && d.type === 'wcc-live') render(d);
+    });
+    // Ask the player's live engine for the last feed immediately (same handshake the
+    // today board uses), so the bar paints without waiting for the next poll.
+    try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
+})();
+</script>
+</body>
+</html>

@@ -29,6 +29,11 @@
         iframe.flash { z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
         iframe.flash.flash-active { opacity: 1; }
 
+        /* Live ticker: an always-present transparent overlay iframe above the slides
+           (only its bottom bar paints; it self-hides when nothing's live). Below the
+           flash so a clip takeover covers it. Never intercepts input. */
+        iframe.ticker { z-index: 30; opacity: 1; pointer-events: none; background: transparent; }
+
         body.preview iframe {
             width: 1920px; height: 1080px;
             left: auto; right: 0; top: 0;
@@ -395,6 +400,12 @@ async function init() {
         document.body.appendChild(f);
         return f;
     });
+    // Live ticker overlay (transparent; self-hides when nothing's live).
+    const tickerFrame = document.createElement('iframe');
+    tickerFrame.id = 'ticker-frame';
+    tickerFrame.className = 'ticker';
+    tickerFrame.src = '/live-ticker/';
+    document.body.appendChild(tickerFrame);
     // Live-highlight news-flash overlay (not a slide; the player raises it on top).
     const flashFrame = document.createElement('iframe');
     flashFrame.id = 'flash-frame';
