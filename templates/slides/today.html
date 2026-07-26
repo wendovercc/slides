@@ -1,0 +1,224 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{#- Today: a time-ordered board of the whole day's club activity — every team's
+    matches + training — BAKED IN at build time (slide._events → todays_events),
+    so it renders statically offline. The live feed only ENRICHES match rows by
+    pc_id (score / at-crease / last wicket). Card head mirrors the last-match
+    set-header (our team gold · vs · opposition; Home/Away pill + square location
+    badge stacked right). Reason-aware when a match has no live score. -#}
+{% block styles %}
+    .today-head { display: flex; align-items: baseline; gap: 1.2vw; margin-bottom: 2.2vh; }
+    .today-title { font-size: var(--t-lg); font-weight: 700; }
+    /* Live indicator — shown only while a match is live/at a break. */
+    .today-pill { display: inline-flex; align-items: center; gap: 0.5vw; font-size: var(--t-sm);
+        font-weight: 900; letter-spacing: 0.14em; text-transform: uppercase; color: #ff5b5b; }
+    .today-pill[hidden] { display: none; }
+    .today-pill i { width: 0.9vw; height: 0.9vw; border-radius: 50%; background: #ff3b3b;
+        box-shadow: 0 0 0 0 rgba(255,59,59,0.6); animation: live-pulse 1.8s infinite; }
+    @keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(255,59,59,0.55); }
+        70% { box-shadow: 0 0 0 0.9vw rgba(255,59,59,0); } 100% { box-shadow: 0 0 0 0 rgba(255,59,59,0); } }
+    .today-updated { margin-left: auto; font-size: var(--t-xs); color: var(--muted); opacity: 0.7; }
+
+    /* Tile stack: packed from the top, surplus falls below the last tile. */
+    .today-list { flex: 1; display: flex; flex-direction: column; gap: 1.1vh; min-height: 0; align-content: start; }
+
+    .event { display: flex; gap: 1.2vw; align-items: flex-start; flex-shrink: 0;
+        background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 5px; padding: 1.1vh 1.1vw; }
+    .event.is-live { background: rgba(255,91,91,0.06); border-color: rgba(255,91,91,0.35); }
+
+    .event-time { width: 5.5vw; flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
+        font-variant-numeric: tabular-nums; line-height: 1.15; }
+    .event-time .tbc { font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
+
+    .event-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.4vh; }
+    /* Head mirrors the last-match set-header. */
+    .event-head { display: flex; align-items: flex-start; gap: 1vw; }
+    .event-teams { flex: 1; min-width: 0; font-size: var(--t-md); line-height: 1.15;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .event-teams .our { color: var(--accent); font-weight: 700; }
+    .event-teams .e-vs { color: var(--text); opacity: 0.55; margin: 0 0.4vw; }
+    .event-teams .opp { color: var(--text); font-weight: 700; }
+    .event-teams .opp-team { font-size: var(--t-xs); font-weight: 400; opacity: 0.55; margin-left: 0.5vw; }
+
+    .event-tags { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5vh; }
+    .ha { font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        border-radius: 0; padding: 0.1vh 0.55vw;
+        background: rgba(60,180,80,0.3); border: 1px solid rgba(60,180,80,0.5); }
+    .ha.away { background: rgba(180,100,40,0.3); border-color: rgba(180,100,40,0.5); }
+    .ha.train { background: rgba(180,200,228,0.16); border-color: rgba(180,200,228,0.3); color: var(--light-blue); }
+    /* Location badge: square corners (deliberately not rounded). */
+    .loc-badge { max-width: 12vw; background: var(--accent); color: var(--navy-1);
+        font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.02em; padding: 0.15vh 0.6vw;
+        border-radius: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .event-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5vw;
+        font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .event-meta .dot { opacity: 0.4; }
+    .event-meta .live { color: #ff6b6b; font-weight: 700; }
+    .event-meta .brk { color: var(--gold); font-weight: 700; }
+    .event-meta .res { color: var(--light-blue); font-weight: 700; }
+    .event-meta .stream { color: #ff8a8a; font-weight: 700; }
+
+    .event-detail { font-size: var(--t-sm); margin-top: 0.2vh; }
+    .event-detail .score { font-size: var(--t-md); font-weight: 900; color: var(--accent);
+        font-variant-numeric: tabular-nums; }
+    .event-detail .sub { color: var(--muted); font-size: var(--t-xs); }
+    .event-status { font-size: var(--t-sm); color: var(--muted); }
+    .event-status .crease { color: #fff; } .event-status .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .event-status .star { color: var(--accent); }
+    .event-follow { font-size: var(--t-xs); color: var(--muted); opacity: 0.85; }
+    .event-follow strong { color: var(--accent); }
+
+    .today-empty { flex: 1; display: flex; align-items: center; justify-content: center;
+        font-size: var(--t-lg); color: var(--muted); opacity: 0.4; text-align: center; }
+    /* CSS `display` beats the `hidden` attribute — re-assert it so the empty
+       state actually hides when there are events. */
+    .today-empty[hidden] { display: none; }
+{% endblock %}
+{% block content %}
+<div class="today-head">
+    <span class="today-title">Today</span>
+    <span class="today-pill" id="today-pill" hidden><i></i>Live</span>
+    <span class="today-updated" id="today-updated"></span>
+</div>
+<div class="today-list" id="today-list"></div>
+<div class="today-empty" id="today-empty" hidden>Nothing scheduled at the club today</div>
+
+<script>
+(function () {
+    var ENDPOINT = 'https://live.wendovercc.org/state.json';
+    var EVENTS = {{ (slide._events or []) | tojson }};
+    var listEl = document.getElementById('today-list');
+    var emptyEl = document.getElementById('today-empty');
+    var updatedEl = document.getElementById('today-updated');
+    var pill = document.getElementById('today-pill');
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
+    function creaseHtml(inn) { return ((inn && inn.at_crease) || []).map(function (b) {
+        return '<span class="crease">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) + ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
+        }).join('&nbsp;&nbsp;'); }
+    function lastWicketHtml(inn) { var w = inn && inn.last_wicket;
+        return w ? esc(w.name) + ' — ' + esc(w.how || '') + (w.fow != null ? ' @ ' + w.fow : '') : ''; }
+    function ago(t) { if (!t) return null; var s = Math.max(0, Math.round(Date.now() / 1000 - t)); return s < 60 ? s + 's' : Math.round(s / 60) + 'm'; }
+    function timeCell(ev) { return ev.time ? esc(ev.time) : '<span class="tbc">TBC</span>'; }
+
+    // Club-centric head: our team (gold) vs opposition club (+ small team name).
+    function teamsHead(ev) {
+        var our = '<span class="our">' + esc(ev.team_name || 'Wendover') + '</span>';
+        if (!ev.opposition) return our;
+        var oppTeam = (ev.opposition_team && ev.opposition_team !== ev.opposition)
+            ? '<span class="opp-team">' + esc(ev.opposition_team) + '</span>' : '';
+        return our + '<span class="e-vs">vs</span><span class="opp">' + esc(ev.opposition) + oppTeam + '</span>';
+    }
+    function tags(ev, extraTop) {
+        var ha = extraTop || '<span class="ha' + (ev.is_home ? '' : ' away') + '">' + (ev.is_home ? 'Home' : 'Away') + '</span>';
+        var loc = ev.ground ? '<span class="loc-badge">' + esc(ev.ground) + '</span>' : '';
+        return '<div class="event-tags">' + ha + loc + '</div>';
+    }
+    function matchMeta(ev, lm) {
+        var bits = [], p = lm && lm.phase;
+        if (p === 'live') bits.push('<span class="live">● Live</span>');
+        else if (p === 'break') bits.push('<span class="brk">' + esc(lm.break_desc || 'Break') + '</span>');
+        else if (p === 'post') bits.push('<span class="res">Result</span>');
+        if (ev.competition) bits.push(esc(ev.competition));
+        if (ev.streamed || (lm && lm.streamed)) bits.push('<span class="stream">▶ Streamed</span>');
+        return bits.length ? '<div class="event-meta">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
+    }
+
+    var FOLLOW = 'follow on the <strong>Play-Cricket&nbsp;Live</strong> app';
+    function matchDetail(ev, lm, status) {
+        if (lm && (lm.phase === 'live' || lm.phase === 'break')) {
+            var inn = currentInnings(lm);
+            var score = inn ? '<span class="score">' + inn.runs + '/' + inn.wickets + '</span>' +
+                '<span class="sub"> (' + esc(inn.overs) + ' ov) · ' + esc(inn.side) + '</span>'
+                : '<span class="sub">' + esc(lm.score_text || 'In play') + '</span>';
+            var crease = creaseHtml(inn), lastW = lastWicketHtml(inn);
+            var extra = crease ? '<div class="event-status">' + crease + '</div>'
+                : (lastW ? '<div class="event-status">Last out: ' + lastW + '</div>' : '');
+            return '<div class="event-detail">' + score + '</div>' + extra;
+        }
+        if (lm && lm.phase === 'post')
+            return '<div class="event-detail"><span class="sub">' + esc(lm.leader_text || lm.score_text || 'Result') + '</span></div>';
+        if (!ev.pc_id) return '';  // can't poll → pure schedule row
+        if (status === 'ok')
+            return '<div class="event-status">' + (ev.time ? 'Starts ' + esc(ev.time) + ' · not yet live' : 'Awaiting first ball') + '</div>';
+        var reason = status === 'forbidden' ? 'This screen isn’t set up for live scores'
+            : (status === 'error' ? 'Live scores paused' : 'Live scores unavailable on this screen');
+        return '<div class="event-follow">' + reason + ' — ' + FOLLOW + '</div>';
+    }
+
+    function matchTile(ev, lm, status) {
+        var isLive = lm && (lm.phase === 'live' || lm.phase === 'break' || lm.phase === 'post');
+        return '<div class="event' + (isLive ? ' is-live' : '') + '">' +
+            '<div class="event-time">' + timeCell(ev) + '</div>' +
+            '<div class="event-main">' +
+                '<div class="event-head"><div class="event-teams">' + teamsHead(ev) + '</div>' + tags(ev) + '</div>' +
+                matchMeta(ev, lm) + matchDetail(ev, lm, status) +
+            '</div></div>';
+    }
+    function trainingTile(ev) {
+        var teams = (ev.team_names || []).join(', ');
+        return '<div class="event training">' +
+            '<div class="event-time">' + timeCell(ev) + '</div>' +
+            '<div class="event-main">' +
+                '<div class="event-head"><div class="event-teams"><span class="opp">' + esc(ev.title || 'Training') + '</span></div>' +
+                    tags(ev, '<span class="ha train">Training</span>') + '</div>' +
+                (teams ? '<div class="event-meta">' + esc(teams) + '</div>' : '') +
+            '</div></div>';
+    }
+
+    function render(feed, status) {
+        var byId = {};
+        (feed && feed.matches || []).forEach(function (m) { if (m.pc_id != null) byId[String(m.pc_id)] = m; });
+
+        var seen = {};
+        var rows = EVENTS.map(function (ev) {
+            if (ev.type === 'match' && ev.pc_id != null) seen[String(ev.pc_id)] = 1;
+            var lm = (ev.type === 'match' && ev.pc_id != null) ? byId[String(ev.pc_id)] : null;
+            return ev.type === 'training' ? trainingTile(ev) : matchTile(ev, lm, status);
+        });
+        (feed && feed.matches || []).forEach(function (m) {
+            if (m.pc_id != null && !seen[String(m.pc_id)])
+                rows.push(matchTile({ type: 'match', team_name: m.home, opposition: m.away, is_home: true, pc_id: m.pc_id }, m, status));
+        });
+
+        emptyEl.hidden = rows.length > 0;
+        listEl.innerHTML = rows.join('');
+
+        pill.hidden = !(feed && feed.matches || []).some(function (m) { return m.phase === 'live' || m.phase === 'break'; });
+        var a = feed && ago(feed.generated_at);
+        updatedEl.textContent = a ? 'updated ' + a + ' ago' : '';
+    }
+
+    render(null, 'ok');  // initial paint from the baked schedule; feed assumed reachable
+
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d && d.type === 'wcc-live') render(d, d.status || 'ok');
+    });
+
+    if (window.top === window.self) {
+        var params = new URLSearchParams(location.search);
+        var pcs = params.getAll('pc');
+        if (!pcs.length) pcs = EVENTS.filter(function (e) { return e.type === 'match' && e.pc_id != null; })
+                                     .map(function (e) { return e.pc_id; });
+        var key = localStorage.getItem('wccLiveKey') || '';
+        var poll = function () {
+            if (!pcs.length) return;
+            var qs = '?' + pcs.map(function (p) { return 'pc=' + encodeURIComponent(p); }).join('&');
+            fetch(ENDPOINT + qs, { headers: key ? { 'Authorization': 'Bearer ' + key } : {} })
+                .then(function (r) {
+                    if (r.ok) return r.json().then(function (feed) { render(feed, 'ok'); });
+                    render(null, r.status === 403 ? 'forbidden' : 'error');
+                })
+                .catch(function () { render(null, 'offline'); });
+        };
+        poll();
+        setInterval(poll, 20000);
+    }
+})();
+</script>
+{% endblock %}

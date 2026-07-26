@@ -1,0 +1,9 @@
+{
+  "title": "Live Test",
+  "description": "Scratch slideshow for building out the live-match presentation",
+  "refresh_interval_seconds": 300,
+  "slides": [
+    { "slug": "fantasy-league" },
+    { "slug": "today" }
+  ]
+}

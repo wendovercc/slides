@@ -660,6 +660,9 @@ def main():
             )
             opp_team_id_raw = away_id if is_home else home_id
             all_upcoming.setdefault(tid, []).append({
+                # Play-Cricket match id — needed to poll the live feed for this
+                # fixture (build_live_config → live-config.json → live-proxy).
+                "match_id": match.get("id"),
                 "match_date": match.get("match_date", ""),
                 "match_time": match.get("match_time") or None,
                 "ground_name": match.get("ground_name") or None,

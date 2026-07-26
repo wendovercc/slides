@@ -1815,6 +1815,140 @@ def infer_section(team_ids):
     return sections.pop() if len(sections) == 1 else "all"
 
 
+def _load_yt_broadcasts():
+    """Our channel's scheduled/live YouTube broadcasts (the same source the
+    homepage uses). Lets us mark a fixture streamed *in advance* when WE host
+    the Frogbox stream; away streams only surface at runtime via the feed."""
+    p = FETCHED / "youtube_live.json"
+    if not p.exists():
+        return []
+    y = json.loads(p.read_text())
+    return (y.get("live") or []) + (y.get("upcoming") or [])
+
+
+def _load_live_seed():
+    """Optional manual overrides: content/live-seed.json = list of match dicts
+    ({pc_id, ...}) to add to or annotate today's list. Covers ids fixtures.json
+    doesn't carry yet, or forcing `streamed` on an away game we know is streamed."""
+    p = CONTENT / "live-seed.json"
+    return json.loads(p.read_text()) if p.exists() else []
+
+
+def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
+                  loc_names, yt_broadcasts, seed):
+    """The whole day's club activity — every team's matches + training — as
+    time-ordered event dicts for the `today` board. Match events carry the
+    pollable `pc_id` + best-effort `streamed` for live enrichment; training
+    events are static. Shared by build_slides (baked into the slide so it renders
+    offline) and build_live_config (its match subset = the Worker's poll list)."""
+    today_iso = date.today().isoformat()
+
+    def to_iso(s):
+        try:
+            return datetime.strptime(s, "%d/%m/%Y").date().isoformat()
+        except (ValueError, TypeError):
+            return None
+
+    def streamed_today():
+        for b in yt_broadcasts:
+            st = str(b.get("scheduled_start") or b.get("actual_start") or "")
+            if st[:10] == today_iso:
+                return {"video_id": b.get("video_id"), "url": b.get("url")}
+        return None
+
+    events, by_id = [], {}
+    for team_id, fixtures in (all_fixtures or {}).items():
+        team = teams_by_id.get(team_id, {})
+        for f in fixtures or []:
+            if to_iso(f.get("match_date", "")) != today_iso:
+                continue
+            ground = f.get("ground_name") or ""
+            loc_id = loc_lookup.get(ground.lower())
+            pc_id = f.get("match_id")
+            m = {
+                "type": "match",
+                "pc_id": pc_id,
+                "team": team_id,
+                "team_name": team.get("name", team_id),
+                "opposition": f.get("opposition_club_name") or f.get("opposition_team_name") or "",
+                "opposition_team": f.get("opposition_team_name") or "",
+                "time": f.get("match_time") or None,
+                "ground": loc_names.get(loc_id, ground),
+                "is_home": bool(f.get("is_home", True)),
+                "competition": f.get("competition_name") or "",
+            }
+            st = streamed_today()
+            if st:
+                m["streamed"] = True
+                m["video_id"] = st.get("video_id")
+            events.append(m)
+            if pc_id:
+                by_id[str(pc_id)] = m
+
+    for s in training_sessions or []:
+        if s.get("date") != today_iso:
+            continue
+        loc_id = s.get("location_id")
+        names = [teams_by_id[t]["name"] for t in s.get("team_ids", []) if t in teams_by_id]
+        events.append({
+            "type": "training",
+            "time": s.get("time_start") or None,
+            "title": s.get("title") or "Training",
+            "team_names": names,
+            "ground": loc_names.get(loc_id, s.get("location", "")),
+        })
+
+    # Manual seed: add/annotate today's MATCH events (id, streamed) — prefer
+    # annotating an existing fixture by id, else by team (a today fixture with no
+    # id yet), so seeding today's game enriches its row rather than duplicating it.
+    for s in seed or []:
+        if s.get("date") and s["date"] != today_iso:
+            continue  # a dated seed only applies on its date (no future-day leak)
+        pid = str(s.get("pc_id")) if s.get("pc_id") is not None else None
+        target = by_id.get(pid) if pid else None
+        if target is None and s.get("team"):
+            target = next((e for e in events if e.get("type") == "match"
+                           and e.get("team") == s["team"] and not e.get("pc_id")), None)
+        if target is not None:
+            target.update({k: v for k, v in s.items() if v is not None})
+            if pid:
+                by_id[pid] = target
+        else:
+            s.setdefault("type", "match")
+            events.append(s)
+            if pid:
+                by_id[pid] = s
+
+    events.sort(key=lambda e: (e.get("time") or "99:99",
+                               e.get("team_name") or e.get("title") or ""))
+    return events
+
+
+def build_live_config():
+    """Write site/live-config.json — today's pollable matches (the day's events
+    that have a pc_id) = the live-proxy Worker's poll list (LIVE_CONFIG_URL). The
+    `today` slide bakes the full schedule itself; this is only what the Worker
+    needs to know which matches to poll."""
+    teams_by_id = load_teams()
+    locs = json.loads((CONTENT / "locations.json").read_text()).get("locations", [])
+    loc_names = {l["id"]: l["name"] for l in locs}
+    loc_lookup = {}
+    for l in locs:
+        for a in l.get("aliases", []):
+            loc_lookup[a.lower()] = l["id"]
+    fx = FETCHED / "fixtures.json"
+    all_fixtures = json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {}
+    tr = FETCHED / "cs365_training.json"
+    training = json.loads(tr.read_text()).get("sessions", []) if tr.exists() else []
+    events = todays_events(teams_by_id, training, all_fixtures, loc_lookup, loc_names,
+                           _load_yt_broadcasts(), _load_live_seed())
+    matches = [e for e in events if e.get("type") == "match" and e.get("pc_id")]
+    out = {"generated_at": int(datetime.now().timestamp()),
+           "date": date.today().isoformat(), "matches": matches}
+    (SITE / "live-config.json").write_text(json.dumps(out, indent=2) + "\n")
+    print(f"  live-config.json — {len(matches)} pollable match(es) today")
+
+
 def build_context_calendar():
     config = load_config()
     phase_cfg = config.get("activity_phases", _DEFAULT_PHASES)
@@ -2059,6 +2193,15 @@ def build_slides(env):
 
         if slide.get("template") == "video":
             build_video_slide(slide)
+
+        # Today board: bake the whole day's club activity (all teams' matches +
+        # training) into the slide so it renders statically (offline / no-feed) —
+        # the live feed only enriches the match rows.
+        if slide.get("template") == "today":
+            training, all_fx, loc_lookup, loc_names = load_schedule_data()
+            slide["_events"] = todays_events(
+                teams_by_id, training, all_fx, loc_lookup, loc_names,
+                _load_yt_broadcasts(), _load_live_seed())
 
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:
@@ -2826,6 +2969,9 @@ if __name__ == "__main__":
 
     print("Building slideshows...")
     homepage_shows = build_slideshows(env, slide_meta, sets)
+
+    print("Building live config...")
+    build_live_config()
 
     print("Building context calendar...")
     build_context_calendar()
