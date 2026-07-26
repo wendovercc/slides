@@ -1,0 +1,312 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% from 'slides/_set_header.html' import set_header %}
+{% block title %}{{ slide.title }}{% endblock %}
+{#- Today's Match: the live counterpart of the last-match set, for ONE team. Same
+    chrome (set_header + sidebar); a self-managed tab strip whose panels are driven
+    by the wcc-live feed. Tabs present but self-skipping — an empty tab is skipped,
+    and if the match has no live data at all the slide skips itself (posts wcc-done
+    immediately). Cycles the live tabs once, then advances the deck. -#}
+{% block styles %}
+{% include 'slides/_set_header_styles.html' %}
+    /* Own tab strip — reuses the set-nav look; populated + driven by JS (the match
+       decides which tabs exist, so this isn't a build-time carousel). */
+    #lm-nav { display: flex; gap: 2vw; margin-top: 1.5vh; align-items: flex-end; min-height: 3.2vh; }
+    #lm-nav .panel-tab { font-size: var(--t-md); letter-spacing: 0.05em; text-transform: uppercase;
+        white-space: nowrap; opacity: 0.35; position: relative; padding-bottom: 0.6vh; transition: opacity 0.3s; }
+    #lm-nav .panel-tab.active { opacity: 1; }
+    #lm-nav .panel-tab .u { position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+        background: var(--accent); transform-origin: left; transform: scaleX(0); }
+
+    .lm-panels { flex: 1; min-height: 0; position: relative; margin-top: 1.6vh; }
+    .lm-view { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+    /* Scoreline (batting club + score) — matches the scorecard slide. */
+    .scoreline { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8vw; margin-bottom: 1.2vh; }
+    .sc-club { font-size: var(--t-md); font-weight: 700; }
+    .sc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .sc-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
+
+    .table { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .bat-grid  { grid-template-columns: 1.8fr 1.6fr 4vw 3vw 3vw 4.5vw 5vw; }
+    .bowl-grid { grid-template-columns: 1fr 6vw 5vw 5vw 5vw 6vw; }
+    .col-headers { display: grid; gap: 0 0.6vw; padding: 0.4vh 0 0.6vh;
+        border-bottom: 1px solid rgba(255,255,255,0.25); font-size: var(--t-xs);
+        letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.55; }
+    .col-num { text-align: right; }
+    .row { display: grid; gap: 0 0.6vw; padding: 0.5vh 0; font-size: var(--t-md);
+        border-bottom: 1px solid rgba(255,255,255,0.08); align-items: baseline; }
+    .row:nth-child(even) { background: rgba(255,255,255,0.04); }
+    /* Gold left bar marks the live row — at-crease batter or the bowler mid-over. */
+    .row.at-crease, .row.now-bowling { background: rgba(212,175,55,0.10); box-shadow: inset 0.3vw 0 0 var(--accent); }
+    .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 0.4vw; }
+    .row.at-crease .name, .row.now-bowling .name { font-weight: 700; padding-left: 0.7vw; }
+    .out { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.5; font-size: var(--t-sm); }
+    .out.notout { color: var(--accent); opacity: 0.85; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .num.dim { opacity: 0.45; } .num.z { opacity: 0.2; }
+    .num.highlight { font-weight: bold; color: var(--accent); }
+    .not-out-star { opacity: 0.7; }
+    .dnb .name, .dnb .out { opacity: 0.4; }
+    .extras-row { border-top: 1px solid rgba(255,255,255,0.18); }
+    .extras-row .name, .total-row .name { text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-sm); }
+    .extras-row .name { opacity: 0.7; } .total-row .name { font-weight: 700; }
+    .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
+
+    /* Intro view — matchup + toss, spoiler-free pre-match card. */
+    .lm-intro { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vh; }
+    .lm-vs { display: flex; align-items: center; gap: 2.5vw; }
+    .lm-side { display: flex; flex-direction: column; align-items: center; gap: 1.2vh; width: 22vw; }
+    .lm-side img { width: 9vw; height: 9vw; object-fit: contain; background: #fff; border-radius: 50%; padding: 0.6vw; }
+    .lm-side .nm { font-size: var(--t-md); font-weight: 700; text-align: center; line-height: 1.15; }
+    .lm-side.ours .nm { color: var(--accent); }
+    .lm-vs .v { font-size: var(--t-lg); font-weight: 900; opacity: 0.5; }
+    .lm-toss { font-size: var(--t-md); color: var(--text); text-align: center; }
+    .lm-toss b { color: var(--accent); }
+    .lm-intro .meta { font-size: var(--t-sm); color: var(--muted); }
+
+    /* Result view — scoreline + result pill. */
+    .lm-result { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh; }
+    .lm-result .rscore { font-size: var(--t-xl); font-weight: 900; font-variant-numeric: tabular-nums; }
+    .lm-result .rlead { font-size: var(--t-md); color: var(--muted); text-align: center; }
+    .lm-result .rpill { font-size: var(--t-md); font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
+        padding: 0.6vh 1.6vw; border-radius: 4px; background: rgba(212,175,55,0.18); color: var(--accent); }
+    .lm-result .rprov { font-size: var(--t-sm); color: var(--muted); opacity: 0.8; text-transform: uppercase; letter-spacing: 0.08em; }
+{% endblock %}
+{% block content %}
+    {{ set_header(slide) }}
+    <nav class="panel-nav" id="lm-nav"></nav>
+    <div class="lm-panels"><div class="lm-view" id="lm-view"></div></div>
+
+<script>
+(function () {
+    var PC_ID = {{ slide._pc_id | tojson }};
+    var OUR_CREST = {{ (slide._our_crest or '/assets/images/wcc-logo.png') | tojson }};
+    var OPP_CREST = {{ slide._opp_crest | tojson }};
+    var OUR_NAME = {{ (slide._set_subtitle or 'Wendover') | tojson }};
+    var OPP_NAME = {{ (slide._set_opp_club or '') | tojson }};
+    var ENDPOINT = 'https://live.wendovercc.org/state.json';
+    var PANEL_MS = {{ slide.panel_duration | tojson }} * 1000;
+
+    var navEl = document.getElementById('lm-nav');
+    var viewEl = document.getElementById('lm-view');
+
+    var feed = null, feedSeen = false;
+    var views = [], tabs = [], idx = 0, timer = null;
+    var kioskAuto = false, tabsKey = '', lastTab = null, announced = -1;
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function num(v) { return v ? String(v) : '<span class="z">·</span>'; }
+    function ourMatch() {
+        return (feed && feed.matches || []).filter(function (m) { return String(m.pc_id) === String(PC_ID); })[0] || null;
+    }
+
+    // Which views exist right now. Intro appears once there's a toss or play; each
+    // innings contributes batting + bowling; Result appears when the match is over.
+    function buildViews() {
+        var m = ourMatch();
+        var v = [];
+        if (!m || m.phase === 'no-feed') return { m: null, views: v };
+        // Intro/toss lives on the Today board now — this slide is innings + result.
+        (m.innings || []).forEach(function (inn, i) {
+            var tab = (i === 0 ? '1st' : i === 1 ? '2nd' : (i + 1) + 'th') + ' Innings';
+            v.push({ tab: tab, kind: 'batting', inn: i });
+            v.push({ tab: tab, kind: 'bowling', inn: i });
+        });
+        if (m.complete) v.push({ tab: 'Result', kind: 'result' });   // decided, even if not finalised
+        return { m: m, views: v };
+    }
+
+    function tabSpan(tab) { return views.filter(function (v) { return v.tab === tab; }).length; }
+    // Rebuild the tab strip DOM only when the SET of tabs changes, so re-rendering
+    // content on a feed tick doesn't reset the underline.
+    function renderTabs() {
+        navEl.innerHTML = tabs.map(function (t) {
+            return '<span class="panel-tab" data-tab="' + esc(t) + '">' + esc(t) + '<span class="u"></span></span>';
+        }).join('');
+        lastTab = null;
+    }
+    // Highlight the current tab. Re-arm the underline only when the tab actually
+    // changes (so batting->bowling within one innings doesn't restart it); it fills
+    // over the tab's whole span while auto-rotating, or sits full when interactive.
+    function setActive(curTab) {
+        var spans = navEl.querySelectorAll('.panel-tab');
+        for (var i = 0; i < spans.length; i++)
+            spans[i].classList.toggle('active', spans[i].getAttribute('data-tab') === curTab);
+        if (curTab === lastTab) return;
+        lastTab = curTab;
+        var u = navEl.querySelector('.panel-tab.active .u');
+        if (!u) return;
+        u.style.transition = 'none'; u.style.transform = 'scaleX(0)'; void u.offsetWidth;
+        if (kioskAuto) {
+            u.style.transition = 'transform ' + (tabSpan(curTab) * PANEL_MS) + 'ms linear';
+            u.style.transform = 'scaleX(1)';
+        } else { u.style.transform = 'scaleX(1)'; }
+    }
+
+    // ---- view renderers ----
+    function scoreline(inn) {
+        return '<div class="scoreline"><span class="sc-club">' + esc(inn.side) + '</span>' +
+            '<span class="sc-score">' + (inn.runs || 0) + '/' + (inn.wickets || 0) +
+            '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span></div>';
+    }
+    function battingView(m, inn) {
+        var rows = (inn.batters || []).map(function (b) {
+            var at = b.dismissal_id === 1;
+            var how = at ? '<span class="out notout">not out</span>' : '<span class="out">' + esc(b.how || '') + '</span>';
+            return '<div class="row bat-grid' + (at ? ' at-crease' : '') + '"><span class="name">' + esc(b.name) + '</span>' + how +
+                '<span class="num dim">' + num(b.balls) + '</span><span class="num dim">' + num(b.fours) + '</span>' +
+                '<span class="num dim">' + num(b.sixes) + '</span>' +
+                '<span class="num dim">' + (b.sr != null ? b.sr : '<span class="z">·</span>') + '</span>' +
+                '<span class="num highlight">' + (b.runs || 0) + (at ? '<span class="not-out-star">*</span>' : '') + '</span></div>';
+        });
+        // Yet-to-bat next, then Extras at the very bottom. No Total row — the
+        // innings total is already the gold score in the scoreline above.
+        (inn.yet_to_bat || []).forEach(function (nm) {
+            rows.push('<div class="row bat-grid dnb"><span class="name">' + esc(nm) + '</span><span class="out">yet to bat</span>' +
+                '<span></span><span></span><span></span><span></span><span class="num"></span></div>');
+        });
+        var ex = inn.extras || {}, parts = [];
+        if (ex.b) parts.push('b ' + ex.b); if (ex.lb) parts.push('lb ' + ex.lb);
+        if (ex.wd) parts.push('w ' + ex.wd); if (ex.nb) parts.push('nb ' + ex.nb);
+        rows.push('<div class="row bat-grid extras-row"><span class="name">Extras</span><span class="out">' + esc(parts.join(', ')) +
+            '</span><span></span><span></span><span></span><span></span><span class="num highlight">' + (ex.total || 0) + '</span></div>');
+        return scoreline(inn) +
+            '<div class="table"><div class="col-headers bat-grid"><span>Batting</span><span></span>' +
+            '<span class="col-num">B</span><span class="col-num">4</span><span class="col-num">6</span>' +
+            '<span class="col-num">SR</span><span class="col-num">R</span></div>' + rows.join('') + '</div>';
+    }
+    function bowlingView(m, inn) {
+        var bowlSide = (inn.side === m.home) ? m.away : m.home;
+        var rows = (inn.bowling || []).length ? (inn.bowling).map(function (b) {
+            // Mid-over (overs ending .1–.5) = currently bowling → gold bar.
+            var now = /\.[1-5]$/.test(String(b.overs));
+            return '<div class="row bowl-grid' + (now ? ' now-bowling' : '') + '"><span class="name">' + esc(b.name) + '</span>' +
+                '<span class="num">' + esc(b.overs) + '</span><span class="num dim">' + num(b.maidens) + '</span>' +
+                '<span class="num">' + (b.runs || 0) + '</span><span class="num highlight">' + (b.wickets || 0) + '</span>' +
+                '<span class="num dim">' + (b.econ != null ? b.econ : '<span class="z">·</span>') + '</span></div>';
+        }).join('') : '<div class="empty">No bowling yet</div>';
+        return scoreline(inn) +
+            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(bowlSide) + '</span>' +
+            '<span class="col-num">O</span><span class="col-num">M</span><span class="col-num">R</span>' +
+            '<span class="col-num">W</span><span class="col-num">Econ</span></div>' + rows + '</div>';
+    }
+    function introView(m) {
+        var oppCrest = OPP_CREST || '';
+        var toss = m.toss ? ('<div class="lm-toss"><b>' + esc(m.toss.is_wendover ? OUR_NAME : (OPP_NAME || m.toss.winner)) +
+            '</b> won the toss, elected to ' + esc(m.toss.decision) + '</div>') : '';
+        return '<div class="lm-intro"><div class="lm-vs">' +
+            '<div class="lm-side ours"><img src="' + esc(OUR_CREST) + '" alt=""><div class="nm">' + esc(OUR_NAME) + '</div></div>' +
+            '<div class="v">v</div>' +
+            '<div class="lm-side">' + (oppCrest ? '<img src="' + esc(oppCrest) + '" alt="">' : '') +
+            '<div class="nm">' + esc(OPP_NAME) + '</div></div></div>' + toss + '</div>';
+    }
+    function resultView(m) {
+        var res = m.result || m.leader_text || '';
+        return '<div class="lm-result">' +
+            '<div class="rscore">' + esc(m.score_text || '') + '</div>' +
+            (res ? '<div class="rpill">' + esc(res) + '</div>' : '') +
+            (!m.final ? '<div class="rprov">Result to be confirmed</div>' : '') + '</div>';
+    }
+
+    function renderContent(i) {
+        var v = views[i], m = ourMatch();
+        if (!v || !m) { viewEl.innerHTML = ''; return; }
+        var html = '';
+        if (v.kind === 'intro') html = introView(m);
+        else if (v.kind === 'result') html = resultView(m);
+        else if (v.kind === 'batting') html = battingView(m, m.innings[v.inn]);
+        else if (v.kind === 'bowling') html = bowlingView(m, m.innings[v.inn]);
+        viewEl.innerHTML = html;
+    }
+    // Render whatever the current view is — content + active tab. Safe in any mode,
+    // whether or not we're auto-rotating.
+    function renderCurrent() {
+        if (!views.length) { viewEl.innerHTML = ''; navEl.innerHTML = ''; tabsKey = ''; lastTab = null; return; }
+        if (idx >= views.length) idx = views.length - 1;
+        renderContent(idx);
+        setActive(views[idx].tab);
+        if (window.WccSlide) WccSlide.notifyPanel(idx);
+    }
+
+    function refreshViews() {
+        var built = buildViews();
+        views = built.views;
+        tabs = views.reduce(function (acc, v) { if (acc.indexOf(v.tab) < 0) acc.push(v.tab); return acc; }, []);
+        var key = tabs.join('|');
+        if (key !== tabsKey) { tabsKey = key; renderTabs(); }
+    }
+
+    // Report the current panel (view) count to the player so interactive nav can
+    // step through the tabs; re-registers only when the count actually changes.
+    function announceCount() {
+        var c = Math.max(1, views.length);
+        if (c === announced) return;
+        announced = c; controller.count = c;
+        if (window.WccSlide) WccSlide.register(controller);
+    }
+
+    // A feed arrived (broadcast or poll): rebuild the view set and repaint the
+    // current view — in EVERY mode, so content shows even when the player never
+    // sends restart-auto (interactive). Auto-rotation is a separate concern below.
+    function onFeed(data) {
+        feed = data; feedSeen = true;
+        refreshViews();
+        announceCount();
+        renderCurrent();
+        if (kioskAuto && !views.length) done();   // was auto-rotating, now nothing live → skip
+    }
+
+    function done() { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
+    function stop() { kioskAuto = false; if (timer) { clearTimeout(timer); timer = null; } }
+    function schedule() {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(function () {
+            if (!kioskAuto) return;
+            if (idx >= views.length - 1) { done(); return; }   // one full pass → advance deck
+            idx++; renderCurrent(); schedule();
+        }, PANEL_MS);
+    }
+    // Kiosk: start auto-rotating this showing. Waits briefly for the first feed so a
+    // load race doesn't wrongly skip a live match; empty → skip the whole slide.
+    function begin() {
+        kioskAuto = true;
+        if (!feedSeen) { setTimeout(function () { if (kioskAuto) begin(); }, 1500); return; }
+        refreshViews(); announceCount();
+        if (!views.length) { done(); return; }
+        idx = 0; renderCurrent(); schedule();
+    }
+
+    // ---- slide-bridge controller (kiosk restart-auto / interactive nav) ----
+    var controller = {
+        count: 1,
+        show: function (i) { idx = Math.max(0, Math.min(Math.max(1, views.length) - 1, i)); renderCurrent(); },
+        startAuto: function () { begin(); },
+        pauseAuto: function () { stop(); },           // stop rotation; leave content on screen
+        restartCurrent: function () { renderCurrent(); }
+    };
+    if (window.WccSlide) WccSlide.register(controller);
+
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d && d.type === 'wcc-live') onFeed(d);
+    });
+
+    if (window.top !== window.self) {
+        // Embedded: the engine broadcasts wcc-live; ask for the last feed now.
+        try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
+    } else {
+        // Standalone dev: self-poll and drive our own rotation once data is in.
+        var key = localStorage.getItem('wccLiveKey') || '';
+        var startedAuto = false;
+        var poll = function () {
+            fetch(ENDPOINT + '?pc=' + encodeURIComponent(PC_ID), { headers: key ? { 'Authorization': 'Bearer ' + key } : {} })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) { if (!data) return; onFeed(data); if (!startedAuto && views.length) { startedAuto = true; begin(); } })
+                .catch(function () {});
+        };
+        poll(); setInterval(poll, 15000);
+    }
+})();
+</script>
+{% endblock %}

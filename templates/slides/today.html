@@ -133,9 +133,9 @@
     }
     function matchMeta(ev, lm) {
         var bits = [], p = lm && lm.phase;
-        if (p === 'live') bits.push('<span class="live">● Live</span>');
+        if (lm && lm.complete) bits.push('<span class="res">Result' + (lm.final ? '' : ' · provisional') + '</span>');
+        else if (p === 'live') bits.push('<span class="live">● Live</span>');
         else if (p === 'break') bits.push('<span class="brk">' + esc(lm.break_desc || 'Break') + '</span>');
-        else if (p === 'post') bits.push('<span class="res">Result</span>');
         if (ev.competition) bits.push(esc(ev.competition));
         if (ev.streamed || (lm && lm.streamed)) bits.push('<span class="stream">▶ Streamed</span>');
         return bits.length ? '<div class="event-meta">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
@@ -168,18 +168,28 @@
 
     var FOLLOW = 'follow on the <strong>Play-Cricket&nbsp;Live</strong> app';
     function matchDetail(ev, lm, status) {
+        // Decided (scorecard complete) — show the result, provisional until the
+        // scorer finalises it. Comes before the in-play branch since phase stays
+        // 'live' until finalisation.
+        if (lm && lm.complete) {
+            var res = lm.result || lm.leader_text || lm.score_text || 'Result';
+            var html = '<div class="event-detail"><span class="sub">' + esc(res) + '</span></div>';
+            if (!lm.final) html += '<div class="event-follow">Result to be confirmed</div>';
+            return html;
+        }
         if (lm && (lm.phase === 'live' || lm.phase === 'break')) {
-            // Chronological order: toss → innings scoreline → current batters.
+            // Chronological: toss → 1st-innings final (once batting second) → current
+            // innings scoreline → current batters.
+            var innsArr = lm.innings || [];
             var inn = currentInnings(lm);
+            var prior = innsArr.length >= 2 ? inningsLine(ev, innsArr[0]) : '';
             var innLine = inn ? inningsLine(ev, inn)
                 : '<div class="event-detail"><span class="sub">' + esc(lm.score_text || 'In play') + '</span></div>';
             var crease = creaseHtml(inn), lastW = lastWicketHtml(inn);
             var extra = crease ? '<div class="event-status">' + crease + '</div>'
                 : (lastW ? '<div class="event-status">Last out: ' + lastW + '</div>' : '');
-            return tossHtml(ev, lm) + innLine + extra;
+            return tossHtml(ev, lm) + prior + innLine + extra;
         }
-        if (lm && lm.phase === 'post')
-            return '<div class="event-detail"><span class="sub">' + esc(lm.leader_text || lm.score_text || 'Result') + '</span></div>';
         if (!ev.pc_id) return '';  // can't poll → pure schedule row
         // Pre-match with a reachable feed: the toss (once made) is the first live
         // datum — show it in place of the generic "not yet live" holding line.
@@ -194,7 +204,7 @@
     }
 
     function matchTile(ev, lm, status) {
-        var isLive = lm && (lm.phase === 'live' || lm.phase === 'break' || lm.phase === 'post');
+        var isLive = lm && (lm.complete || lm.phase === 'live' || lm.phase === 'break' || lm.phase === 'post');
         return '<div class="event' + (isLive ? ' is-live' : '') + '">' +
             '<div class="event-time">' + timeCell(ev) + '</div>' +
             '<div class="event-main">' +
@@ -231,7 +241,7 @@
         emptyEl.hidden = rows.length > 0;
         listEl.innerHTML = rows.join('');
 
-        pill.hidden = !(feed && feed.matches || []).some(function (m) { return m.phase === 'live' || m.phase === 'break'; });
+        pill.hidden = !(feed && feed.matches || []).some(function (m) { return (m.phase === 'live' || m.phase === 'break') && !m.complete; });
         var a = feed && ago(feed.generated_at);
         updatedEl.textContent = a ? 'updated ' + a + ' ago' : '';
     }

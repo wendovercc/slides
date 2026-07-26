@@ -103,7 +103,10 @@
     function intervalFor(feed) {
       var ms = (feed && feed.matches) || [];
       if (!ms.length) return IDLE;
-      return ms.some(function (m) { return m.phase === 'live' || m.phase === 'break'; }) ? FAST : SLOW;
+      // Fast only while genuinely in play. A decided-but-unfinalised match keeps
+      // polling at the SLOW cadence so a scorer correction / finalisation is caught.
+      var inPlay = ms.some(function (m) { return (m.phase === 'live' || m.phase === 'break') && !m.complete; });
+      return inPlay ? FAST : SLOW;
     }
 
     function schedule(ms) {

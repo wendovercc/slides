@@ -1987,6 +1987,62 @@ def build_live_ticker(env):
     print("  live-ticker overlay → /live-ticker/")
 
 
+def build_live_matches(env, slide_meta):
+    """Emit a `live-match-{team}` slide per team with a fixture today — the live
+    counterpart of the last-match-{team} set, bound to that team's pc_id. It renders
+    the team's live match from the wcc-live feed and self-skips (posts wcc-done)
+    when there's no live data; pavilion-auto's team/section/location filtering
+    decides which screens show it. Registered in slide_meta so slideshows resolve
+    the slug (hence emitted before build_slideshows)."""
+    config = load_config()
+    default_pd = config.get("default_panel_duration", 20)
+    teams_by_id = load_teams()
+    locs = json.loads((CONTENT / "locations.json").read_text()).get("locations", [])
+    loc_names = {l["id"]: l["name"] for l in locs}
+    loc_lookup = {}
+    for l in locs:
+        for a in l.get("aliases", []):
+            loc_lookup[a.lower()] = l["id"]
+    fx = FETCHED / "fixtures.json"
+    all_fixtures = json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {}
+    tr = FETCHED / "cs365_training.json"
+    training = json.loads(tr.read_text()).get("sessions", []) if tr.exists() else []
+    events = todays_events(teams_by_id, training, all_fixtures, loc_lookup, loc_names,
+                           _load_yt_broadcasts(), _load_live_seed())
+    tmpl = env.get_template("slides/live-match.html")
+    n = 0
+    for ev in events:
+        if ev.get("type") != "match" or not ev.get("pc_id"):
+            continue
+        opp_club = ev.get("opposition") or ""
+        opp_team = ev.get("opposition_team") or ""
+        slug = f"live-match-{ev['team']}"
+        slide = {
+            "template": "live-match", "title": "Today's Match",
+            "_set_title": "Today's Match",
+            "_set_subtitle": ev.get("team_name") or ev["team"],
+            "_set_opp_club": opp_club,
+            "_set_opp_team": opp_team if opp_team and opp_team != opp_club else "",
+            "_set_date": ev.get("time") or "Today",
+            "_set_is_home": ev.get("is_home", True),
+            "_set_ground": ev.get("ground") or "",
+            "_pc_id": ev["pc_id"],
+            "_our_crest": ev.get("our_crest") or "/assets/images/wcc-logo.png",
+            "_opp_crest": ev.get("opp_crest"),
+            "panel_duration": default_pd,
+            "duration": default_pd * 6,   # generous backstop; the slide self-advances via wcc-done
+        }
+        out_dir = SITE / "slide" / slug
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "index.html").write_text(tmpl.render(slide=slide, slug=slug))
+        slide_meta[slug] = {"slide_active": True, "slide_expires": None,
+                            "duration": slide["duration"], "panel_duration": default_pd}
+        print(f"  slide/{slug}")
+        n += 1
+    if not n:
+        print("  live-match: no matches with a pc_id today")
+
+
 def build_context_calendar():
     config = load_config()
     phase_cfg = config.get("activity_phases", _DEFAULT_PHASES)
@@ -3004,6 +3060,9 @@ if __name__ == "__main__":
 
     print("Building match packages...")
     sets = build_match_packages(env, slide_meta)
+
+    print("Building live-match slides...")
+    build_live_matches(env, slide_meta)
 
     print("Building slideshows...")
     homepage_shows = build_slideshows(env, slide_meta, sets)
