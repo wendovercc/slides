@@ -24,6 +24,11 @@
         }
         iframe.active { opacity: 1; }
 
+        /* Live-highlight news-flash: a dedicated overlay iframe the player raises
+           above the slide stack (not part of the rotation), dissolved in/out. */
+        iframe.flash { z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+        iframe.flash.flash-active { opacity: 1; }
+
         body.preview iframe {
             width: 1920px; height: 1080px;
             left: auto; right: 0; top: 0;
@@ -198,6 +203,7 @@
 <script src="/assets/js/preload-gate.js"></script>
 <script src="/assets/js/refresh.js"></script>
 <script src="/assets/js/player-core.js"></script>
+<script src="/assets/js/live-engine.js"></script>
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');
@@ -389,6 +395,12 @@ async function init() {
         document.body.appendChild(f);
         return f;
     });
+    // Live-highlight news-flash overlay (not a slide; the player raises it on top).
+    const flashFrame = document.createElement('iframe');
+    flashFrame.id = 'flash-frame';
+    flashFrame.className = 'flash';
+    flashFrame.src = '/live-flash/';
+    document.body.appendChild(flashFrame);
     applyDebugScale();
 
     // precache.json drives both the loading gate (clip list) and the refresh
@@ -452,7 +464,11 @@ async function init() {
             },
             shouldReloadNow,
             onReload,
+            flash: { frame: document.getElementById('flash-frame') },
         });
+        // One live-feed poll loop for the whole deck, broadcasting to every slide
+        // iframe (live-aware slides render it; others ignore it).
+        if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')) });
         if (PREVIEW) startReloadTicker(reloadMs);
     }
 

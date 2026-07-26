@@ -1,0 +1,62 @@
+        /* Reel tag: pinned top-left, conceals the Frogbox "HIGHLIGHTS"/QR bug.
+           A solid square carries the batting team's crest with the innings label
+           below it; a per-clip caption sits above and breaks out to the right as
+           wide as the text needs (a spoiler for the current ball only). No fade —
+           these clips are too short for it. The square's size/position are tunable
+           so it lines up with the bug on the wall; card overlays will later extend
+           it downward. Shared by the curated-reel slide (video.html) and the live
+           highlight news-flash (live-flash.html) so both read identically. */
+        .reel-tag {
+            position: fixed;
+            top: var(--reel-tag-top, 0px); left: var(--reel-tag-left, 0px);
+            display: flex; flex-direction: column; align-items: flex-start; z-index: 10;
+        }
+        /* Caption sits directly on top of the panel and must read as its lid: no
+           rounded corner between them, and at least as wide as the panel below so
+           there's no notch/seam. Its resting min-width is the square; while a card is
+           open, JS sets min-width to the (content-sized) panel's measured width. */
+        .reel-tag-caption {
+            background: var(--navy-2); color: var(--text);
+            font-size: 1.5vw; font-weight: 700; line-height: 1.2;
+            padding: 0.8vh 1vw; box-sizing: border-box;
+            width: max-content; min-width: var(--reel-tag-size, 11vw); max-width: 70vw;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        /* Round the caption's outer bottom-right corner only when it OVERHANGS the
+           card below (that corner then sits over video). When the caption is flush with
+           the card, keep it square so there's no notch. JS toggles this by measuring. */
+        .reel-tag-caption.caption-wide { border-bottom-right-radius: 0.8vw; }
+        /* One navy panel holding just the square (badge/crest/innings). It stays at the
+           square's fixed size — only big enough to conceal the Frogbox HIGHLIGHTS/QR
+           graphic. Flashcards no longer grow out of it; they open as a large centred
+           card over the video (see .reel-card below), so this panel never resizes. */
+        .reel-panel {
+            position: relative;
+            width: var(--reel-tag-size, 11vw); overflow: hidden;
+            background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
+            border-bottom-right-radius: 0.8vw;
+        }
+        .reel-tag-square {
+            position: relative; overflow: hidden;
+            width: 100%; height: var(--reel-tag-size, 11vw);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 1.6vh; padding: 3vh 0.4vw 1vh; box-sizing: border-box;
+        }
+        /* Ball-outcome badge (Wicket / Six / Four …), styled like the slides' venue
+           pill: navy on gold. Pinned top-left in the square's existing headroom so
+           the crest stays put; hidden for 'other' balls. */
+        .reel-tag-badge {
+            position: absolute; top: 0.8vh; left: 0.8vw;
+            background: var(--accent); color: var(--navy-1);
+            font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.05em;
+            text-transform: uppercase;
+            padding: 0.2vh 0.7vw; border-radius: 3px;
+        }
+        .reel-tag-crest {
+            width: 5vw; height: 5vw; border-radius: 50%; object-fit: contain;
+            background: #fff; padding: 0.4vw; box-sizing: border-box;
+        }
+        .reel-tag-label {
+            font-size: var(--t-xs); font-weight: 900; text-transform: uppercase;
+            letter-spacing: 0.08em; color: var(--text); text-align: center; line-height: 1.1;
+        }

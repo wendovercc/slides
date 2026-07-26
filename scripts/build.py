@@ -1843,6 +1843,18 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
     offline) and build_live_config (its match subset = the Worker's poll list)."""
     today_iso = date.today().isoformat()
 
+    def opp_crest(club_name):
+        """Public path of an already-committed opposition crest (by club-name
+        slug), or None. Reuses the localised badges fetch_fixtures caches; no
+        scrape here — an away friendly with no cached crest just renders name-only."""
+        slug = re.sub(r"[^a-z0-9]+", "-", (club_name or "").lower()).strip("-")
+        if not slug:
+            return None
+        for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+            if (ASSETS / "images" / "crests" / f"{slug}{ext}").exists():
+                return f"/assets/images/crests/{slug}{ext}"
+        return None
+
     def to_iso(s):
         try:
             return datetime.strptime(s, "%d/%m/%Y").date().isoformat()
@@ -1876,6 +1888,10 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 "ground": loc_names.get(loc_id, ground),
                 "is_home": bool(f.get("is_home", True)),
                 "competition": f.get("competition_name") or "",
+                # Crests for the live innings scoreline — batting side picks ours
+                # or the opposition's by name at render time.
+                "our_crest": "/assets/images/wcc-logo.png",
+                "opp_crest": opp_crest(f.get("opposition_club_name") or f.get("opposition_team_name")),
             }
             st = streamed_today()
             if st:
@@ -1947,6 +1963,17 @@ def build_live_config():
            "date": date.today().isoformat(), "matches": matches}
     (SITE / "live-config.json").write_text(json.dumps(out, indent=2) + "\n")
     print(f"  live-config.json — {len(matches)} pollable match(es) today")
+
+
+def build_live_flash(env):
+    """Render the live-highlight news-flash overlay page (/live-flash/). It's not
+    a slide in any rotation — the player owns one hidden iframe pointing here and
+    drives it by postMessage when a highlight clip lands. Static; no per-build
+    data (all content arrives at runtime from the live engine)."""
+    out_dir = SITE / "live-flash"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "index.html").write_text(env.get_template("live-flash.html").render())
+    print("  live-flash overlay → /live-flash/")
 
 
 def build_context_calendar():
@@ -2972,6 +2999,7 @@ if __name__ == "__main__":
 
     print("Building live config...")
     build_live_config()
+    build_live_flash(env)
 
     print("Building context calendar...")
     build_context_calendar()

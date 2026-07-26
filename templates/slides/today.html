@@ -61,14 +61,27 @@
     .event-meta .stream { color: #ff8a8a; font-weight: 700; }
 
     .event-detail { font-size: var(--t-sm); margin-top: 0.2vh; }
-    .event-detail .score { font-size: var(--t-md); font-weight: 900; color: var(--accent);
-        font-variant-numeric: tabular-nums; }
-    .event-detail .sub { color: var(--muted); font-size: var(--t-xs); }
+    .event-detail .sub { color: var(--muted); font-size: var(--t-sm); }
+    /* Live innings scoreline — batting club (crest + name) left, score + overs
+       floated right in gold, mirroring the last-match Innings panel .scoreline. */
+    .event-inn { display: flex; align-items: center; justify-content: space-between;
+        gap: 0.8vw; margin-top: 0.5vh; }
+    .event-inn-team { display: flex; align-items: center; gap: 0.6vw; min-width: 0; }
+    .event-inn-team img { width: 1.9vw; height: 1.9vw; object-fit: contain; flex-shrink: 0; }
+    .event-inn-name { font-size: var(--t-sm); font-weight: 700;
+        overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .event-inn-score { flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
+        color: var(--accent); font-variant-numeric: tabular-nums; }
+    .event-inn-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
     .event-status { font-size: var(--t-sm); color: var(--muted); }
     .event-status .crease { color: #fff; } .event-status .num { color: var(--muted); font-variant-numeric: tabular-nums; }
     .event-status .star { color: var(--accent); }
     .event-follow { font-size: var(--t-xs); color: var(--muted); opacity: 0.85; }
     .event-follow strong { color: var(--accent); }
+    /* Toss: the first (chronologically) live datum — heads the live detail and
+       is the pre-match status line. Kept off the smallest tokens for legibility. */
+    .event-toss { font-size: var(--t-sm); color: var(--muted); margin-top: 0.2vh; }
+    .event-toss b { color: var(--text); font-weight: 700; }
 
     .today-empty { flex: 1; display: flex; align-items: center; justify-content: center;
         font-size: var(--t-lg); color: var(--muted); opacity: 0.4; text-align: center; }
@@ -128,23 +141,53 @@
         return bits.length ? '<div class="event-meta">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
     }
 
+    // Toss line phrased club-centrically: "<team> won the toss, elected to bat/field".
+    function tossHtml(ev, lm) {
+        var t = lm && lm.toss;
+        if (!t) return '';
+        var who = t.is_wendover ? (ev.team_name || 'Wendover') : (ev.opposition || t.winner);
+        return '<div class="event-toss"><b>' + esc(who) + '</b> won the toss, elected to ' + esc(t.decision) + '</div>';
+    }
+    // Batting-side crest: ours when the innings side is Wendover, else the cached
+    // opposition badge (null → name-only, e.g. an away friendly with no crest).
+    function battingCrest(ev, inn) {
+        var side = String(inn && inn.side || '').toLowerCase();
+        if (side.indexOf('wendover') !== -1) return ev.our_crest || '/assets/images/wcc-logo.png';
+        return ev.opp_crest || null;
+    }
+    function inningsLine(ev, inn) {
+        if (!inn) return '';
+        var crest = battingCrest(ev, inn);
+        var img = crest ? '<img src="' + esc(crest) + '" alt="">' : '';
+        return '<div class="event-inn">' +
+            '<div class="event-inn-team">' + img + '<span class="event-inn-name">' + esc(inn.side) + '</span></div>' +
+            '<span class="event-inn-score">' + inn.runs + '/' + inn.wickets +
+                '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span>' +
+        '</div>';
+    }
+
     var FOLLOW = 'follow on the <strong>Play-Cricket&nbsp;Live</strong> app';
     function matchDetail(ev, lm, status) {
         if (lm && (lm.phase === 'live' || lm.phase === 'break')) {
+            // Chronological order: toss → innings scoreline → current batters.
             var inn = currentInnings(lm);
-            var score = inn ? '<span class="score">' + inn.runs + '/' + inn.wickets + '</span>' +
-                '<span class="sub"> (' + esc(inn.overs) + ' ov) · ' + esc(inn.side) + '</span>'
-                : '<span class="sub">' + esc(lm.score_text || 'In play') + '</span>';
+            var innLine = inn ? inningsLine(ev, inn)
+                : '<div class="event-detail"><span class="sub">' + esc(lm.score_text || 'In play') + '</span></div>';
             var crease = creaseHtml(inn), lastW = lastWicketHtml(inn);
             var extra = crease ? '<div class="event-status">' + crease + '</div>'
                 : (lastW ? '<div class="event-status">Last out: ' + lastW + '</div>' : '');
-            return '<div class="event-detail">' + score + '</div>' + extra;
+            return tossHtml(ev, lm) + innLine + extra;
         }
         if (lm && lm.phase === 'post')
             return '<div class="event-detail"><span class="sub">' + esc(lm.leader_text || lm.score_text || 'Result') + '</span></div>';
         if (!ev.pc_id) return '';  // can't poll → pure schedule row
-        if (status === 'ok')
+        // Pre-match with a reachable feed: the toss (once made) is the first live
+        // datum — show it in place of the generic "not yet live" holding line.
+        if (status === 'ok') {
+            var toss = tossHtml(ev, lm);
+            if (toss) return toss;
             return '<div class="event-status">' + (ev.time ? 'Starts ' + esc(ev.time) + ' · not yet live' : 'Awaiting first ball') + '</div>';
+        }
         var reason = status === 'forbidden' ? 'This screen isn’t set up for live scores'
             : (status === 'error' ? 'Live scores paused' : 'Live scores unavailable on this screen');
         return '<div class="event-follow">' + reason + ' — ' + FOLLOW + '</div>';
@@ -200,7 +243,13 @@
         if (d && d.type === 'wcc-live') render(d, d.status || 'ok');
     });
 
-    if (window.top === window.self) {
+    if (window.top !== window.self) {
+        // Embedded: the player's live-engine owns the poll loop and broadcasts
+        // wcc-live (handled above). Ask it for the last feed now so the first live
+        // paint doesn't wait a whole poll cycle; its periodic broadcast backstops
+        // the case where the engine hasn't polled yet.
+        try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
+    } else {
         var params = new URLSearchParams(location.search);
         var pcs = params.getAll('pc');
         if (!pcs.length) pcs = EVENTS.filter(function (e) { return e.type === 'match' && e.pc_id != null; })

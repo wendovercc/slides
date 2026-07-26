@@ -138,6 +138,23 @@
     var bar = null;          // control bar (interactive only)
     var mode = 'watch';      // session mode; 'record' (future) reuses the same gestures
 
+    /* ---- live highlight news-flash (player-owned interrupt overlay) ----
+     * A highlight clip arriving from the live engine interrupts the deck: pause the
+     * current slide, dissolve in the full-bleed flash iframe, play the ~30s clip,
+     * then dissolve out and carry on. It's NOT a slide in the rotation — the player
+     * raises one dedicated overlay iframe above the stack. Timing (user's rule):
+     * while playing, fire at the next slide boundary (clean cut; clips are already
+     * minutes old so a few more seconds is free); while paused, fire immediately. */
+    var flashItem = opts.flash || null;          // { frame } | null
+    var flashQueue = [];
+    var flashing = false;
+    var flashCont = null;                          // what to do after the current flash
+    var flashTimeout = null;
+    var lastFlashAt = 0;
+    var FLASH_MIN_GAP_MS = opts.flashMinGapMs || 45000;   // don't machine-gun flashes
+    var FLASH_MAX_MS = opts.flashMaxMs || 65000;          // recover if the frame never reports done
+    function flashWin() { return flashItem && flashItem.frame ? flashItem.frame.contentWindow : null; }
+
     function frameWin(i) { return items[i].frame.contentWindow; }
     function send(i, action, extra) {
       try { frameWin(i).postMessage(Object.assign({ type: 'wcc-cmd', action: action }, extra || {}), '*'); }
@@ -150,6 +167,53 @@
       onShow(i);
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
+
+    /* Queue a highlight for a news-flash. Deduped by clip id, capped so a flurry
+     * can't build a backlog. Kiosk drains at the next slide boundary; interactive
+     * drains immediately when paused (else also at the next boundary). */
+    function enqueueFlash(clip) {
+      if (!flashItem || !clip || !clip.url || clip.id == null) return;
+      if (flashQueue.some(function (c) { return c.id === clip.id; })) return;
+      flashQueue.push(clip);
+      while (flashQueue.length > 5) flashQueue.shift();
+      if (interactive && !playing) drainFlash();   // paused → immediate
+    }
+    function canFlashNow() {
+      return !!flashItem && !flashing && flashQueue.length > 0 &&
+        (lastFlashAt === 0 || Date.now() - lastFlashAt >= FLASH_MIN_GAP_MS);
+    }
+    // Play the next queued flash if allowed; `cont` (optional) runs when it ends,
+    // in place of the default resume. Returns true if a flash started.
+    function drainFlash(cont) {
+      if (!canFlashNow()) return false;
+      playFlash(flashQueue.shift(), cont);
+      return true;
+    }
+    function playFlash(clip, cont) {
+      flashing = true;
+      flashCont = cont || null;
+      clearTimer();                       // hold the rotation while the flash is up
+      send(current, 'take-over');         // pause whatever the current slide is doing
+      if (flashItem.frame) flashItem.frame.classList.add('flash-active');
+      var w = flashWin();
+      if (w) { try { w.postMessage(Object.assign({ type: 'wcc-flash' }, clip), '*'); } catch (e) {} }
+      if (flashTimeout) clearTimeout(flashTimeout);
+      flashTimeout = setTimeout(function () { onFlashDone('timeout'); }, FLASH_MAX_MS);
+    }
+    function onFlashDone() {
+      if (!flashing) return;
+      flashing = false;
+      lastFlashAt = Date.now();
+      if (flashTimeout) { clearTimeout(flashTimeout); flashTimeout = null; }
+      if (flashItem && flashItem.frame) flashItem.frame.classList.remove('flash-active');
+      try { var w = flashWin(); if (w) w.postMessage({ type: 'wcc-flash-stop' }, '*'); } catch (e) {}
+      var cont = flashCont; flashCont = null;
+      // Resume: run the boundary continuation (e.g. advance to the next slide) if the
+      // flash fired at a boundary; otherwise re-anchor the slide we interrupted.
+      if (cont) cont();
+      else if (interactive) arrive(current, panelIndex, playing);
+      else kioskShow(current);
+    }
 
     /* Control-bar countdown. Mirrors the interactive per-panel timer: fills over
      * the dwell while playing, freezes where it is on pause, empties on nav. The
@@ -191,15 +255,21 @@
      * are mid-cycle. Tell the outgoing slide to stop and the incoming one to
      * rotate afresh from panel 0, so each slide's rotation is anchored to when it
      * actually becomes visible. */
+    function kioskAdvance() {
+      var next = (current + 1) % n;
+      if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { if (opts.onReload) opts.onReload(); else location.reload(); return; }
+      kioskShow(next);
+    }
     function kioskShow(i) {
       if (i !== current) send(current, 'take-over'); // stop the slide we're leaving
       activate(i);
       send(i, 'restart-auto');                       // rotate from panel 0, aligned to now
       clearTimer();
       timer = setTimeout(function () {
-        var next = (current + 1) % n;
-        if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { if (opts.onReload) opts.onReload(); else location.reload(); return; }
-        kioskShow(next);
+        // A slide boundary is the clean moment to run a queued news-flash; when it
+        // ends, carry on to the next slide (kioskAdvance). No flash → advance now.
+        if (flashQueue.length && drainFlash(kioskAdvance)) return;
+        kioskAdvance();
       }, (items[i].duration || 20) * 1000);
     }
     function kioskGo(delta) { kioskShow((current + delta + n) % n); }
@@ -269,7 +339,7 @@
       playing = p;
       updatePlayBtn();
       if (p) { send(current, 'resume'); panelTimer(); }
-      else { clearTimer(); send(current, 'pause'); progressFreeze(); }
+      else { clearTimer(); send(current, 'pause'); progressFreeze(); drainFlash(); }
     }
     // Manual nav preserves the play/pause state (so a paused wall stays paused
     // when you step across slides, including between slide-set members). When
@@ -465,6 +535,8 @@
     /* ---- bridge messages from slides ---- */
     window.addEventListener('message', function (e) {
       var d = e.data; if (!d) return;
+      // The flash overlay isn't in `items`; handle its done signal before the idx gate.
+      if (d.type === 'wcc-flash-done' && flashWin() && e.source === flashWin()) { onFlashDone(); return; }
       var idx = items.findIndex(function (it) { return it.frame.contentWindow === e.source; });
       if (idx < 0) return;
 
@@ -474,9 +546,8 @@
           if (playing) fwdSlide(); // paused → hold last frame until user acts
         } else {
           clearTimer();
-          var next = (current + 1) % n;
-          if (next === 0 && opts.shouldReloadNow && opts.shouldReloadNow()) { if (opts.onReload) opts.onReload(); else location.reload(); return; }
-          kioskShow(next);
+          if (flashQueue.length && drainFlash(kioskAdvance)) return;
+          kioskAdvance();
         }
         return;
       }
@@ -515,6 +586,9 @@
       else if (e.key === 'End')  { e.preventDefault(); goLast(); }
       else if (e.key === 'f' || e.key === 'F') { toggleFullscreen(); }
     });
+
+    // Expose the flash entry point for the live engine (running in this same frame).
+    window.WccPlayer.flash = enqueueFlash;
 
     /* ---- go ---- */
     if (interactive) {
