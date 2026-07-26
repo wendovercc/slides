@@ -2029,8 +2029,13 @@ def build_live_matches(env, slide_meta):
             "_pc_id": ev["pc_id"],
             "_our_crest": ev.get("our_crest") or "/assets/images/wcc-logo.png",
             "_opp_crest": ev.get("opp_crest"),
+            # Display-time trim applied to each frogbox HLS clip in the post-match
+            # innings reels (skip run-up dead time, stop before the tail, cap length).
+            "_clip_trim": config.get("clip_trim") or {"pre": 0, "post": 0, "max_len": 30},
             "panel_duration": default_pd,
-            "duration": default_pd * 6,   # generous backstop; the slide self-advances via wcc-done
+            # Big backstop: the slide always self-advances via wcc-done, but a full
+            # innings reel can run minutes, so don't let the player force-cut it.
+            "duration": 900,
         }
         out_dir = SITE / "slide" / slug
         out_dir.mkdir(parents=True, exist_ok=True)

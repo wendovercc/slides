@@ -31,5 +31,6 @@
   "card_types": [
     { "key": "new_batsman",       "at": "pre",  "label": "New batsman — season stats",  "dwell": 4, "subject": "batter" },
     { "key": "dismissal_summary", "at": "post", "label": "Dismissal — innings summary", "dwell": 5, "subject": "dismissed" }
-  ]
+  ],
+  "clip_trim": { "pre": 3, "post": 4, "max_len": 15 }
 }

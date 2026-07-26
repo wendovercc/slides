@@ -8,6 +8,15 @@
     immediately). Cycles the live tabs once, then advances the deck. -#}
 {% block styles %}
 {% include 'slides/_set_header_styles.html' %}
+{% include 'slides/_reel_tag_styles.html' %}
+    /* Full-bleed reel beat: a fixed overlay that takes over the whole slide (sidebar
+       included) to play an innings' highlight clips, then hides to reveal the
+       scorecard. Mirrors the curated last-match reel + the live news-flash. */
+    #lm-reel { position: fixed; inset: 0; z-index: 50; background: var(--navy-2);
+        display: flex; align-items: flex-start; }
+    #lm-reel[hidden] { display: none; }
+    #lm-reel-video { position: absolute; top: 0; left: 0; width: 100%; height: auto; display: block; z-index: 0; }
+
     /* Own tab strip — reuses the set-nav look; populated + driven by JS (the match
        decides which tabs exist, so this isn't a build-time carousel). */
     #lm-nav { display: flex; gap: 2vw; margin-top: 1.5vh; align-items: flex-end; min-height: 3.2vh; }
@@ -77,6 +86,21 @@
     <nav class="panel-nav" id="lm-nav"></nav>
     <div class="lm-panels"><div class="lm-view" id="lm-view"></div></div>
 
+    <div id="lm-reel" hidden>
+        <video id="lm-reel-video" muted playsinline preload="none"></video>
+        <div class="reel-tag">
+            <div id="lm-reel-caption" class="reel-tag-caption" style="display:none"></div>
+            <div class="reel-panel">
+                <div class="reel-tag-square">
+                    <span id="lm-reel-badge" class="reel-tag-badge" style="display:none"></span>
+                    <img id="lm-reel-crest" class="reel-tag-crest" src="" alt="" style="display:none">
+                    <div id="lm-reel-label" class="reel-tag-label" style="display:none"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/assets/js/hls.min.js"></script>
+
 <script>
 (function () {
     var PC_ID = {{ slide._pc_id | tojson }};
@@ -86,13 +110,24 @@
     var OPP_NAME = {{ (slide._set_opp_club or '') | tojson }};
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
     var PANEL_MS = {{ slide.panel_duration | tojson }} * 1000;
+    var CLIP_TRIM = {{ (slide._clip_trim or {'pre': 0, 'post': 0, 'max_len': 30}) | tojson }};
+    var CLIP_BACKSTOP_MS = 45000;   // per-clip hard stop if a clip stalls / never ends
 
     var navEl = document.getElementById('lm-nav');
     var viewEl = document.getElementById('lm-view');
+    var reelEl = document.getElementById('lm-reel');
+    var reelVideo = document.getElementById('lm-reel-video');
+    var reelCaption = document.getElementById('lm-reel-caption');
+    var reelBadge = document.getElementById('lm-reel-badge');
+    var reelCrest = document.getElementById('lm-reel-crest');
+    var reelLabel = document.getElementById('lm-reel-label');
 
     var feed = null, feedSeen = false;
     var views = [], tabs = [], idx = 0, timer = null;
-    var kioskAuto = false, tabsKey = '', lastTab = null, announced = -1;
+    var kioskAuto = false, active = false, tabsKey = '', lastTab = null, announced = -1;
+    // Reel-beat state (one full-bleed HLS player shared across clips).
+    var reel = { active: false, ended: false, sig: '', clips: [], j: 0, token: 0,
+                 stopAt: 0, hls: null, backstop: null, cleanup: null, label: '' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -110,11 +145,58 @@
         // Intro/toss lives on the Today board now — this slide is innings + result.
         (m.innings || []).forEach(function (inn, i) {
             var tab = (i === 0 ? '1st' : i === 1 ? '2nd' : (i + 1) + 'th') + ' Innings';
+            // Highlight reel before the scorecard — only once the result is visible
+            // (m.complete) and only if the innings has selectable clips (streamed).
+            if (m.complete) {
+                var rc = selectReel(m, i);
+                if (rc.length) v.push({ tab: tab, kind: 'reel', inn: i, clips: rc });
+            }
             v.push({ tab: tab, kind: 'batting', inn: i });
             v.push({ tab: tab, kind: 'bowling', inn: i });
         });
         if (m.complete) v.push({ tab: 'Result', kind: 'result' });   // decided, even if not finalised
         return { m: m, views: v };
+    }
+
+    // ---- reel clip selection ----
+    function nameKey(n) { return String(n == null ? '' : n).toLowerCase().trim(); }
+    function isOurs(t) { return /wendover/i.test(String(t || '')); }
+    function byOverBall(a, b) {
+        return ((a.over || 0) - (b.over || 0)) || ((a.ball || 0) - (b.ball || 0)) || ((a.id || 0) - (b.id || 0));
+    }
+    // Clips for one innings, filtered + ordered for the reel. Include every wicket,
+    // six and 'other' event; then, for each Wendover batsman who did NOT hit a six,
+    // add their first four (the feed only knows event type, so "best shot" = a four).
+    function selectReel(m, innIdx) {
+        var inn = (m.innings || [])[innIdx];
+        if (!inn) return [];
+        var innId = inn.innings_id, side = nameKey(inn.side);
+        var pool = (m.clips || []).filter(function (c) {
+            if (innId != null && c.innings_id != null) return String(c.innings_id) === String(innId);
+            // Fallback join by batting-team name when ids are absent ("Denham CC"
+            // vs "Denham CC 1st XI" — prefix match).
+            var bt = nameKey(c.batting_team);
+            return bt && side.indexOf(bt) === 0;
+        });
+        var chosen = [], fours = [];
+        pool.forEach(function (c) {
+            if (c.event === 'wicket' || c.event === 'six' || c.event === 'other') chosen.push(c);
+            else if (c.event === 'four') fours.push(c);
+        });
+        // Which of our batsmen already have a six in this innings.
+        var oursSix = {};
+        chosen.forEach(function (c) {
+            if (c.event === 'six' && isOurs(c.batting_team) && c.batter) oursSix[nameKey(c.batter)] = true;
+        });
+        var gotFour = {};
+        fours.sort(byOverBall).forEach(function (f) {
+            if (!isOurs(f.batting_team) || !f.batter) return;
+            var k = nameKey(f.batter);
+            if (oursSix[k] || gotFour[k]) return;   // hit a six, or already has their four
+            gotFour[k] = true;
+            chosen.push(f);
+        });
+        return chosen.sort(byOverBall);
     }
 
     function tabSpan(tab) { return views.filter(function (v) { return v.tab === tab; }).length; }
@@ -209,9 +291,121 @@
             (!m.final ? '<div class="rprov">Result to be confirmed</div>' : '') + '</div>';
     }
 
+    // ---- reel playback (full-bleed HLS beat) ----
+    function cap(s) { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+    function renderReelTag(c) {
+        reelCaption.textContent = c.title || '';
+        reelCaption.style.display = c.title ? '' : 'none';
+        if (c.event && c.event !== 'other') { reelBadge.textContent = cap(c.event); reelBadge.style.display = ''; }
+        else reelBadge.style.display = 'none';
+        var crest = isOurs(c.batting_team) ? OUR_CREST : (OPP_CREST || '');
+        if (crest) { reelCrest.src = crest; reelCrest.style.display = ''; } else reelCrest.style.display = 'none';
+        reelLabel.textContent = reel.label || '';
+        reelLabel.style.display = reel.label ? '' : 'none';
+    }
+    function detachReel() {
+        try { reelVideo.pause(); } catch (e) {}
+        if (reel.hls) { try { reel.hls.destroy(); } catch (e) {} reel.hls = null; }
+        try { reelVideo.removeAttribute('src'); } catch (e) {}
+    }
+    function teardownReel() {
+        if (reel.cleanup) { reel.cleanup(); reel.cleanup = null; }
+        if (reel.backstop) { clearTimeout(reel.backstop); reel.backstop = null; }
+        detachReel();
+        reel.active = false; reel.ended = false; reel.sig = ''; reel.j = 0;
+        reel.clips = []; reel.stopAt = 0; reel.label = '';
+    }
+    function leaveReel() {
+        if (!reel.active && !reel.ended && reelEl.hidden) return;
+        teardownReel();
+        reelEl.hidden = true;
+    }
+    // Chromium (the Pi wall) can't play HLS natively — hls.js does; Safari can.
+    function attachReel(url, tok) {
+        if (reelVideo.canPlayType('application/vnd.apple.mpegurl')) { reelVideo.src = url; return; }
+        if (window.Hls && Hls.isSupported()) {
+            reel.hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+            reel.hls.loadSource(url);
+            reel.hls.attachMedia(reelVideo);
+            reel.hls.on(Hls.Events.ERROR, function (e, d) { if (d && d.fatal && tok === reel.token) advanceOrEnd(); });
+            return;
+        }
+        advanceOrEnd();   // no HLS support — skip
+    }
+    function playReelClip() {
+        var c = reel.clips[reel.j];
+        if (!c || !c.url) { advanceOrEnd(); return; }
+        renderReelTag(c);
+        reel.stopAt = 0;
+        var myTok = reel.token, video = reelVideo;
+        // Trim each clip: seek past the run-up (pre), stop before the tail (post),
+        // and cap the shown length (max_len — extra comes off the end). Degenerate
+        // trims (clip shorter than the pads) fall back to playing the whole clip.
+        function onMeta() {
+            if (myTok !== reel.token) return;
+            var dur = video.duration || 0;
+            var pre = Math.max(0, Math.min(CLIP_TRIM.pre || 0, dur - 1));
+            var stop = dur - (CLIP_TRIM.post || 0);
+            if (CLIP_TRIM.max_len) stop = Math.min(stop, pre + CLIP_TRIM.max_len);
+            reel.stopAt = (stop > pre + 0.3) ? stop : dur;
+            try { video.currentTime = pre; } catch (e) {}
+            video.play().catch(function () {});
+        }
+        function onTime() { if (myTok === reel.token && reel.stopAt && video.currentTime >= reel.stopAt) advanceOrEnd(); }
+        function onEnd() { if (myTok === reel.token) advanceOrEnd(); }
+        function onErr() { if (myTok === reel.token) advanceOrEnd(); }
+        reel.cleanup = function () {
+            video.removeEventListener('loadedmetadata', onMeta);
+            video.removeEventListener('timeupdate', onTime);
+            video.removeEventListener('ended', onEnd);
+            video.removeEventListener('error', onErr);
+        };
+        video.addEventListener('loadedmetadata', onMeta);
+        video.addEventListener('timeupdate', onTime);
+        video.addEventListener('ended', onEnd);
+        video.addEventListener('error', onErr);
+        attachReel(c.url, myTok);
+        reel.backstop = setTimeout(function () { if (myTok === reel.token) advanceOrEnd(); }, CLIP_BACKSTOP_MS);
+    }
+    // Move to the next clip, or end the reel. Cleans up the current clip's listeners
+    // + timer and bumps the token so any late event/timer from it is ignored.
+    function advanceOrEnd() {
+        if (reel.cleanup) { reel.cleanup(); reel.cleanup = null; }
+        if (reel.backstop) { clearTimeout(reel.backstop); reel.backstop = null; }
+        reel.stopAt = 0;
+        reel.token++;
+        detachReel();
+        reel.j++;
+        if (reel.j >= reel.clips.length) { endReel(); return; }
+        playReelClip();
+    }
+    function endReel() {
+        reel.ended = true; reel.active = false;
+        // Kiosk: hide the overlay and advance the deck to the scorecard. Interactive:
+        // leave the last frame up (nav tears it down via leaveReel()).
+        if (kioskAuto) { teardownReel(); reelEl.hidden = true; advance(); }
+    }
+    function startReel(view) {
+        var sig = view.clips.map(function (c) { return c.id; }).join(',');
+        if (sig === reel.sig && (reel.active || reel.ended)) return;   // this reel is already playing/played
+        teardownReel();
+        reel.active = true; reel.sig = sig; reel.clips = view.clips; reel.j = 0;
+        reel.label = view.tab; reel.token++;
+        reelEl.hidden = false;
+        playReelClip();
+    }
+
     function renderContent(i) {
         var v = views[i], m = ourMatch();
-        if (!v || !m) { viewEl.innerHTML = ''; return; }
+        if (!v || !m) { viewEl.innerHTML = ''; leaveReel(); return; }
+        if (v.kind === 'reel') {
+            viewEl.innerHTML = '';
+            // Only autoplay once the slide is actually being shown (kiosk auto or an
+            // interactive nav) — never from an off-screen feed tick.
+            if (active) startReel(v); else leaveReel();
+            return;
+        }
+        leaveReel();
         var html = '';
         if (v.kind === 'intro') html = introView(m);
         else if (v.kind === 'result') html = resultView(m);
@@ -259,18 +453,22 @@
 
     function done() { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
     function stop() { kioskAuto = false; if (timer) { clearTimeout(timer); timer = null; } }
+    // Step to the next view, or advance the deck after one full pass.
+    function advance() {
+        if (idx >= views.length - 1) { done(); return; }   // one full pass → advance deck
+        idx++; renderCurrent(); schedule();
+    }
     function schedule() {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(function () {
-            if (!kioskAuto) return;
-            if (idx >= views.length - 1) { done(); return; }   // one full pass → advance deck
-            idx++; renderCurrent(); schedule();
-        }, PANEL_MS);
+        if (timer) { clearTimeout(timer); timer = null; }
+        // A reel view drives its own advance (on the last clip ending), so don't
+        // arm the fixed panel timer over it — a reel can run for minutes.
+        if (views[idx] && views[idx].kind === 'reel') return;
+        timer = setTimeout(function () { if (kioskAuto) advance(); }, PANEL_MS);
     }
     // Kiosk: start auto-rotating this showing. Waits briefly for the first feed so a
     // load race doesn't wrongly skip a live match; empty → skip the whole slide.
     function begin() {
-        kioskAuto = true;
+        kioskAuto = true; active = true;
         if (!feedSeen) { setTimeout(function () { if (kioskAuto) begin(); }, 1500); return; }
         refreshViews(); announceCount();
         if (!views.length) { done(); return; }
@@ -280,7 +478,7 @@
     // ---- slide-bridge controller (kiosk restart-auto / interactive nav) ----
     var controller = {
         count: 1,
-        show: function (i) { idx = Math.max(0, Math.min(Math.max(1, views.length) - 1, i)); renderCurrent(); },
+        show: function (i) { active = true; idx = Math.max(0, Math.min(Math.max(1, views.length) - 1, i)); renderCurrent(); },
         startAuto: function () { begin(); },
         pauseAuto: function () { stop(); },           // stop rotation; leave content on screen
         restartCurrent: function () { renderCurrent(); }
