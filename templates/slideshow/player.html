@@ -157,14 +157,16 @@
     {% for slide in show.slides %}
     <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
     {% endfor %}
+    {% if live_enabled %}
     <iframe id="ticker-frame" class="ticker" src="/live-ticker/"></iframe>
     <iframe id="flash-frame" class="flash" src="/live-flash/"></iframe>
+    {% endif %}
 
     <script src="/assets/js/video-cache.js"></script>
     <script src="/assets/js/preload-gate.js"></script>
     <script src="/assets/js/refresh.js"></script>
     <script src="/assets/js/player-core.js"></script>
-    <script src="/assets/js/live-engine.js"></script>
+    {% if live_enabled %}<script src="/assets/js/live-engine.js"></script>{% endif %}
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
@@ -254,7 +256,7 @@
             });
             // One live-feed poll loop for the whole deck, broadcasting to every
             // slide iframe (live-aware slides render it; others ignore it).
-            if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')) });
+            {% if live_enabled %}if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')) });{% endif %}
             if (PREVIEW) startReloadTicker();
         }
 

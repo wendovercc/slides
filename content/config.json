@@ -3,6 +3,8 @@
   "seasons": {
     "this_season": 2026
   },
+  "_comment_live_enabled": "Master switch for the live-match feature set (live.wendovercc.org poller, live-match slides, live-aware today slide, ticker + news-flash overlays). Off = none of it is built or polled, so other changes can ship without turning on this unfinished work.",
+  "live_enabled": false,
   "default_panel_duration": 20,
   "leaderboards": {
     "min_innings": 2,

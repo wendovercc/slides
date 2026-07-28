@@ -253,6 +253,10 @@
         if (d && d.type === 'wcc-live') render(d, d.status || 'ok');
     });
 
+    // Live enrichment (poll / engine broadcast) is gated behind config.live_enabled.
+    // Off = the slide stays on its baked schedule paint above and never touches the
+    // live endpoint, so this unfinished feature ships dark.
+    {% if live_enabled %}
     if (window.top !== window.self) {
         // Embedded: the player's live-engine owns the poll loop and broadcasts
         // wcc-live (handled above). Ask it for the last feed now so the first live
@@ -278,6 +282,7 @@
         poll();
         setInterval(poll, 20000);
     }
+    {% endif %}
 })();
 </script>
 {% endblock %}

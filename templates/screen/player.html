@@ -208,7 +208,7 @@
 <script src="/assets/js/preload-gate.js"></script>
 <script src="/assets/js/refresh.js"></script>
 <script src="/assets/js/player-core.js"></script>
-<script src="/assets/js/live-engine.js"></script>
+{% if live_enabled %}<script src="/assets/js/live-engine.js"></script>{% endif %}
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');
@@ -400,6 +400,7 @@ async function init() {
         document.body.appendChild(f);
         return f;
     });
+    {% if live_enabled %}
     // Live ticker overlay (transparent; self-hides when nothing's live).
     const tickerFrame = document.createElement('iframe');
     tickerFrame.id = 'ticker-frame';
@@ -412,6 +413,7 @@ async function init() {
     flashFrame.className = 'flash';
     flashFrame.src = '/live-flash/';
     document.body.appendChild(flashFrame);
+    {% endif %}
     applyDebugScale();
 
     // precache.json drives both the loading gate (clip list) and the refresh
@@ -479,7 +481,7 @@ async function init() {
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
-        if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')) });
+        {% if live_enabled %}if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')) });{% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
     }
 

@@ -722,6 +722,10 @@ def make_env():
     # club name in slide footers/sidebars and on the home page.
     site_url = load_config().get("preview", {}).get("site_url", "")
     env.globals["site_url"] = site_url.split("//")[-1].rstrip("/")
+    # Master switch for the live-match feature set. Templates gate the endpoint-
+    # touching bits (poller wiring, ticker/flash overlays, standalone self-poll)
+    # on this; the build gates the live-* emitters on the Python-side value below.
+    env.globals["live_enabled"] = load_config().get("live_enabled", False)
     return env
 
 
@@ -3066,16 +3070,26 @@ if __name__ == "__main__":
     print("Building match packages...")
     sets = build_match_packages(env, slide_meta)
 
-    print("Building live-match slides...")
-    build_live_matches(env, slide_meta)
+    # Live-match feature set is gated behind config.live_enabled so unfinished
+    # work can sit in main without being built or polled. Off = no live slides,
+    # no poll list, no overlay pages; the players (also flag-gated) never wire up
+    # the poller, so nothing hits live.wendovercc.org.
+    live_enabled = load_config().get("live_enabled", False)
+
+    if live_enabled:
+        print("Building live-match slides...")
+        build_live_matches(env, slide_meta)
+    else:
+        print("Skipping live-match slides (live_enabled=false)")
 
     print("Building slideshows...")
     homepage_shows = build_slideshows(env, slide_meta, sets)
 
-    print("Building live config...")
-    build_live_config()
-    build_live_flash(env)
-    build_live_ticker(env)
+    if live_enabled:
+        print("Building live config...")
+        build_live_config()
+        build_live_flash(env)
+        build_live_ticker(env)
 
     print("Building context calendar...")
     build_context_calendar()
