@@ -9,6 +9,12 @@ content/data/video_manifest.json (committed to the repo).
 Pass --dry-run (or -n) to print the reconcile plan (what would upload / delete)
 without downloading, uploading, deleting, or writing the manifest.
 
+Safety guard: a curated match ({id}.curation.json) whose fetched ball-events file
+is missing has its reel clips absent from the referenced set — so a sync would not
+only skip uploading them but PRUNE any already in R2. The run aborts before any
+upload/delete if such a match is found, naming the fetch command to run first.
+Pass --allow-missing-fetch to override (e.g. a curation for a match with no stream).
+
 Required in .env:
     R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
     R2_BUCKET, R2_BASE_URL
@@ -185,10 +191,40 @@ def probe_duration(path: Path, fallback: float) -> float:
     return fallback
 
 
+def curated_without_fetch():
+    """Curated matches (a committed {id}.curation.json) whose fetched ball-events
+    file is absent. Their reel clips resolve from the merged fetched+overlay data,
+    so with no fetched file they drop out of the referenced set entirely — which
+    both skips their upload and marks any already in R2 for deletion. Always an
+    oversight (run fetch_ball_events first), never intentional. Returns sorted ids."""
+    suffix = ".curation.json"
+    curated = {p.name[:-len(suffix)] for p in ball_events.CURATION_DIR.glob(f"*{suffix}")}
+    fetched = {p.stem for p in ball_events.FETCHED_MATCHES.glob("*.json")}
+    return sorted(cid for cid in curated - fetched if cid.isdigit())
+
+
 def main():
     dry_run = "--dry-run" in sys.argv or "-n" in sys.argv
+    allow_missing = "--allow-missing-fetch" in sys.argv
     load_dotenv()
     CACHE.mkdir(parents=True, exist_ok=True)
+
+    # Guard against the deletion footgun, before touching R2: a curated match with no
+    # fetched events has its reel clips absent from the referenced set, so a sync would
+    # skip uploading them AND prune any already in R2. Warn always; on a real run abort
+    # before any R2 work unless explicitly overridden. Purely local, so it fails fast.
+    missing = curated_without_fetch()
+    if missing:
+        print("  ⚠ Curated match(es) with NO fetched ball-events "
+              "(their reel clips are unreferenced):")
+        for cid in missing:
+            print(f"      {cid} — run: python3 scripts/fetch_ball_events.py --match-id {cid}")
+        print("    A sync would skip uploading those clips AND delete any already in R2.")
+        if not dry_run and not allow_missing:
+            print("\n  Aborting before any R2 upload/delete. Fetch the match(es) above and "
+                  "re-run,\n  or pass --allow-missing-fetch to override.\n")
+            return 1
+        print("")
 
     bucket   = os.environ["R2_BUCKET"]
     base_url = os.environ["R2_BASE_URL"].rstrip("/")
