@@ -29,6 +29,10 @@
     var configUrl = opts.configUrl || '/live-config.json';
     // A function so the frame set is read fresh each poll (a refresh may swap iframes).
     var framesOf = opts.frames || function () { return []; };
+    // Called with the feed (or null past the grace window) each poll, so the player
+    // can drive parent-frame chrome (the live ticker footer's sticky show/hide latch)
+    // off the same state the slides render. A no-op if the caller doesn't need it.
+    var onState = opts.onState || function () {};
     var keyName = opts.keyName || 'wccLiveKey';
     // Adaptive cadence: fast while something is actually in play, relaxed when the
     // day's matches are only pre/post, idle when there's nothing on. The Worker's
@@ -119,7 +123,9 @@
       lastStatus = status;
       // Within grace, hold the last good scores (a dropped poll shouldn't blank a
       // live score); past it, broadcast null so the slide shows its reason line.
-      broadcast(fails <= GRACE ? last : null, status);
+      var held = fails <= GRACE ? last : null;
+      broadcast(held, status);
+      onState(held, status);
       schedule(SLOW);
     }
 
@@ -131,6 +137,7 @@
           return r.json().then(function (feed) {
             fails = 0; last = feed; lastStatus = 'ok';
             broadcast(feed, 'ok');
+            onState(feed, 'ok');
             detectClips(feed);
             schedule(intervalFor(feed));
           });

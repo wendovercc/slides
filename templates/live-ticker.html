@@ -10,22 +10,21 @@
         :root {
             --navy-1: #0f2346; --navy-2: #0a1c3a; --gold: #d4af37;
             --light-blue: #b4c8e4; --text: #fff; --muted: var(--light-blue); --accent: var(--gold);
-            --safe-x: 5vw; --safe-y: 5vh; --sidebar-w: 20vw;
             --t-md: 2vw; --t-sm: 1.2vw; --t-xs: 0.9vw;
-            /* Bar geometry — tunable to line up in the bottom safe strip on the wall.
-               Right edge meets the sidebar's left edge so the sidebar corner stays free. */
-            --tick-bottom: 1vh; --tick-height: 4.4vh;
+            /* Match the player's chrome matte (sidebar darker navy) so the footer bar
+               and the right strip read as one continuous recessed band. */
+            --matte: #08152c;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-        /* Transparent: only the bar paints; the slide shows through everywhere else. */
+        /* The player sizes this iframe to the bottom footer band (below the retracted
+           slide layer) and reveals it there; the bar simply fills it. Transparent
+           elsewhere so the stage matte shows through while the bar is hidden. */
         html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
             font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--text); }
 
         .ticker-bar {
-            position: fixed; left: var(--safe-x); right: var(--sidebar-w); bottom: var(--tick-bottom);
-            height: var(--tick-height); display: flex; align-items: stretch;
-            background: rgba(10,28,58,0.92); border-top: 2px solid var(--accent);
-            box-shadow: 0 -0.4vh 1.6vh rgba(0,0,0,0.4);
+            position: absolute; inset: 0; display: flex; align-items: stretch;
+            background: var(--matte); border-top: 0.15vw solid var(--accent);
             opacity: 0; transition: opacity 0.4s ease;
         }
         .ticker-bar.show { opacity: 1; }
