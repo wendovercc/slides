@@ -208,7 +208,7 @@
 <script src="/assets/js/preload-gate.js"></script>
 <script src="/assets/js/refresh.js"></script>
 <script src="/assets/js/player-core.js"></script>
-{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
+{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');

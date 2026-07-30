@@ -170,24 +170,46 @@
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
 
     /* Queue a highlight for a news-flash. Deduped by clip id, capped so a flurry
-     * can't build a backlog. Kiosk drains at the next slide boundary; interactive
-     * drains immediately when paused (else also at the next boundary). */
+     * can't build a backlog. Deferred download: a clip is prefetched whole into the
+     * cache the moment it arrives and only becomes flashable once fully stored
+     * (clip._ready) — so the flash (which shows a clip just ONCE) opens on local
+     * bytes at the next slide boundary instead of streaming. Where the Cache API is
+     * absent, a clip is ready immediately (the old streaming behaviour). Kiosk drains
+     * at the next boundary; interactive drains as soon as a ready clip exists while
+     * paused. */
+    function flashCacheOn() { return !!(window.WccHlsCache && WccHlsCache.supported && WccHlsCache.prefetch); }
     function enqueueFlash(clip) {
       if (!flashItem || !clip || !clip.url || clip.id == null) return;
       if (flashQueue.some(function (c) { return c.id === clip.id; })) return;
+      clip._ready = !flashCacheOn();          // no cache → stream immediately (as before)
       flashQueue.push(clip);
       while (flashQueue.length > 5) flashQueue.shift();
-      if (interactive && !playing) drainFlash();   // paused → immediate
+      if (flashCacheOn()) {
+        // Start the download now; mark flashable once the whole clip is cached.
+        WccHlsCache.prefetch(clip.url, clip.id).then(function (ok) {
+          if (!ok) return;
+          clip._ready = true;
+          if (interactive && !playing) drainFlash();   // paused → fire as soon as ready
+        });
+      } else if (interactive && !playing) {
+        drainFlash();
+      }
+    }
+    // First queued clip that's finished downloading, or -1 — a not-yet-ready clip
+    // never blocks a later ready one.
+    function firstReadyFlash() {
+      for (var i = 0; i < flashQueue.length; i++) if (flashQueue[i]._ready) return i;
+      return -1;
     }
     function canFlashNow() {
-      return !!flashItem && !flashing && flashQueue.length > 0 &&
+      return !!flashItem && !flashing && firstReadyFlash() >= 0 &&
         (lastFlashAt === 0 || Date.now() - lastFlashAt >= FLASH_MIN_GAP_MS);
     }
-    // Play the next queued flash if allowed; `cont` (optional) runs when it ends,
-    // in place of the default resume. Returns true if a flash started.
+    // Play the first READY queued flash if allowed; `cont` (optional) runs when it
+    // ends, in place of the default resume. Returns true if a flash started.
     function drainFlash(cont) {
       if (!canFlashNow()) return false;
-      playFlash(flashQueue.shift(), cont);
+      playFlash(flashQueue.splice(firstReadyFlash(), 1)[0], cont);
       return true;
     }
     function playFlash(clip, cont) {

@@ -58,6 +58,7 @@
         .flash-fallback[hidden] { display: none; }
     </style>
     <script src="/assets/js/hls.min.js"></script>
+    <script src="/assets/js/hls-cache.js"></script>
 </head>
 <body>
     <video id="flash-video" muted playsinline preload="none"></video>
@@ -131,7 +132,12 @@
             return;
         }
         if (window.Hls && Hls.isSupported()) {
-            hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+            // Play from the prefetched cache (the player downloads the clip before it
+            // ever fires this flash), so this opens on local bytes, not a stream.
+            var opts = { enableWorker: true, lowLatencyMode: false };
+            var cacheLoader = window.WccHlsCache && WccHlsCache.loader();
+            if (cacheLoader) opts.loader = cacheLoader;
+            hls = new Hls(opts);
             hls.loadSource(url);
             hls.attachMedia(video);
             hls.on(Hls.Events.MANIFEST_PARSED, function () { video.play().catch(function () {}); });
