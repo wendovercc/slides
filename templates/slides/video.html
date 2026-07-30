@@ -32,6 +32,15 @@
             --reel-tag-size: 11vw;
             --reel-tag-top:  0px;
             --reel-tag-left: 0px;
+            /* Narrative caption: distance up from the frame bottom. Nudge to rest it
+               just above the Frogbox stats banner baked into the footage.
+               --reel-narr-minw is the floor width so short captions still cover the
+               raised centre block of that banner. */
+            --reel-narr-bottom: 9.83%;
+            --reel-narr-minw: 32.6vw;
+            --reel-narr-h: 5vh;           /* bar height; also drives the chamfer */
+            --reel-narr-slope: 0.56;      /* end-cut angle: 1 = 45°, <1 steeper, >1 shallower */
+            --reel-narr-end-bg: #0e3c62;  /* darker end-cap colour */
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body {
@@ -274,9 +283,8 @@
     var badgeEl = document.getElementById('reel-badge');
     // Reel flashcard: a large card that opens in the centre of the video over the
     // current clip's lead-in / lead-out. .show toggles it; the top-left tag (panel)
-    // stays fixed and is kept only for the caption-overhang measurement.
+    // stays fixed regardless.
     var cardEl = document.getElementById('reel-card');
-    var panelEl = document.getElementById('reel-panel');
     var activeCardKey = null;
 
     // Default caption slot + outcome badge for the current clip (the ball's own
@@ -338,11 +346,6 @@
         if (hit && hit.at === 'pre') {
             if (captionEl) { captionEl.textContent = ''; captionEl.style.display = 'none'; }
             if (badgeEl) badgeEl.style.display = 'none';
-        }
-        // Round the caption's bottom-right corner only when it overhangs the card
-        // (measured after its text + min-width are set); flush stays square (no notch).
-        if (captionEl && panelEl) {
-            captionEl.classList.toggle('caption-wide', captionEl.offsetWidth > panelEl.offsetWidth + 1);
         }
     }
     {% if slide.layout is defined and slide.layout == 'fullbleed' %}

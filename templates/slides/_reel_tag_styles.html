@@ -11,21 +11,56 @@
             top: var(--reel-tag-top, 0px); left: var(--reel-tag-left, 0px);
             display: flex; flex-direction: column; align-items: flex-start; z-index: 10;
         }
-        /* Caption sits directly on top of the panel and must read as its lid: no
-           rounded corner between them, and at least as wide as the panel below so
-           there's no notch/seam. Its resting min-width is the square; while a card is
-           open, JS sets min-width to the (content-sized) panel's measured width. */
+        /* Per-clip narrative caption. Detached from the top-left tag: it floats
+           bottom-centre over the video, resting just above the Frogbox stats banner
+           baked into the footage. --reel-narr-bottom is the nudge knob (distance up
+           from the frame bottom); on the 16:9 wall the video fills the height so this
+           reads as a fraction of the banner's position.
+           Styled to echo the Frogbox scoreboard's central block directly below it: a
+           blue bar whose ends flare into a heraldic-flag finial — the bar is FULL width
+           along the bottom and cut back at the top, so each end edge leans inward as it
+           rises. Each end is capped by a darker-blue triangle sitting apex-up on the
+           flared bottom corner: its outer edge rides the bar's end edge, its inner edge
+           is the converse, and the two meet at the top — so from the bottom the outer
+           edge goes inward and the inner edge goes outward, like the board's two-tone
+           ends. --in is the horizontal cut; it's the bar height (--reel-narr-h, vh)
+           times --reel-narr-slope, so slope 1 = a true 45° (equal run and rise), <1 is
+           steeper, >1 shallower — dial it to match the board. --cap is the cap's bottom
+           half-width. Heavy navy text in the same sentence case as the board's status
+           line ("WEN won the toss…"). --reel-narr-minw is a floor width; --reel-narr-end-bg
+           tints the caps. */
         .reel-tag-caption {
-            background: var(--navy-2); color: var(--text);
-            font-size: 1.5vw; font-weight: 700; line-height: 1.2;
-            padding: 0.8vh 1vw; box-sizing: border-box;
-            width: max-content; min-width: var(--reel-tag-size, 11vw); max-width: 70vw;
+            position: fixed; z-index: 11;
+            --in:  calc(var(--reel-narr-h, 5vh) * var(--reel-narr-slope, 0.56));
+            --cap: calc(var(--in) * 2);
+            bottom: var(--reel-narr-bottom, 9.83%); left: 50%; transform: translateX(-50%);
+            background: #56abea; color: var(--navy-1); /* Frogbox scoreboard blue */
+            height: var(--reel-narr-h, 5vh); line-height: var(--reel-narr-h, 5vh);
+            font-size: 1.5vw; font-weight: 900;
+            padding: 0 calc(var(--cap) + 1vw);
+            box-sizing: border-box;
+            width: max-content; min-width: var(--reel-narr-minw, 32.6vw); max-width: 90vw;
+            text-align: center;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            clip-path: polygon(
+                var(--in) 0, calc(100% - var(--in)) 0,
+                100% 100%, 0 100%);
         }
-        /* Round the caption's outer bottom-right corner only when it OVERHANGS the
-           card below (that corner then sits over video). When the caption is flush with
-           the card, keep it square so there's no notch. JS toggles this by measuring. */
-        .reel-tag-caption.caption-wide { border-bottom-right-radius: 0.8vw; }
+        /* Darker end caps. Each pseudo covers the whole bar, clipped to an apex-up
+           triangle on one flared bottom corner: apex on the top edge at the end cut,
+           base along the bottom. Outer edge rides the bar's end edge; inner edge is the
+           converse. The caption's clip-path trims any overhang; text padding clears them. */
+        .reel-tag-caption::before, .reel-tag-caption::after {
+            content: ''; position: absolute; inset: 0; pointer-events: none;
+            background: var(--reel-narr-end-bg, #0e3c62);
+        }
+        .reel-tag-caption::before { /* left cap */
+            clip-path: polygon(var(--in) 0, 0 100%, var(--cap) 100%);
+        }
+        .reel-tag-caption::after { /* right cap */
+            clip-path: polygon(
+                calc(100% - var(--in)) 0, 100% 100%, calc(100% - var(--cap)) 100%);
+        }
         /* One navy panel holding just the square (badge/crest/innings). It stays at the
            square's fixed size — only big enough to conceal the Frogbox HIGHLIGHTS/QR
            graphic. Flashcards no longer grow out of it; they open as a large centred
