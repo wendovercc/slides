@@ -92,8 +92,11 @@
             <div id="lm-reel-caption" class="reel-tag-caption" style="display:none"></div>
             <div class="reel-panel">
                 <div class="reel-tag-square">
-                    <span id="lm-reel-badge" class="reel-tag-badge" style="display:none"></span>
-                    <img id="lm-reel-crest" class="reel-tag-crest" src="" alt="" style="display:none">
+                    {% if slide._set_title %}<div class="reel-tag-kicker">{{ slide._set_title }}</div>{% endif %}
+                    <div class="reel-tag-fixture">
+                        <span class="rt-team">{{ slide._set_subtitle }}</span>
+                        {% if slide._set_opp_club %}<span class="rt-vs">vs</span><span class="rt-opp">{{ slide._set_opp_club }}</span>{% endif %}
+                    </div>
                     <div id="lm-reel-label" class="reel-tag-label" style="display:none"></div>
                 </div>
             </div>
@@ -120,8 +123,6 @@
     var reelEl = document.getElementById('lm-reel');
     var reelVideo = document.getElementById('lm-reel-video');
     var reelCaption = document.getElementById('lm-reel-caption');
-    var reelBadge = document.getElementById('lm-reel-badge');
-    var reelCrest = document.getElementById('lm-reel-crest');
     var reelLabel = document.getElementById('lm-reel-label');
 
     var feed = null, feedSeen = false;
@@ -304,15 +305,12 @@
             (!m.final ? '<div class="rprov">Result to be confirmed</div>' : '') + '</div>';
     }
 
-    // ---- reel tag (top-left square: caption + event badge + crest + innings) ----
-    function cap(s) { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
+    // ---- reel tag (top-left square) ----
+    // The square's title + fixture are static host context (rendered server-side);
+    // only the per-clip narrative caption and the active innings tab change here.
     function renderReelTag(c, label) {
         reelCaption.textContent = c.title || '';
         reelCaption.style.display = c.title ? '' : 'none';
-        if (c.event && c.event !== 'other') { reelBadge.textContent = cap(c.event); reelBadge.style.display = ''; }
-        else reelBadge.style.display = 'none';
-        var crest = isOurs(c.batting_team) ? OUR_CREST : (OPP_CREST || '');
-        if (crest) { reelCrest.src = crest; reelCrest.style.display = ''; } else reelCrest.style.display = 'none';
         reelLabel.textContent = label || '';
         reelLabel.style.display = label ? '' : 'none';
     }

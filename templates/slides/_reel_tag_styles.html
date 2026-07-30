@@ -1,11 +1,13 @@
         /* Reel tag: pinned top-left, conceals the Frogbox "HIGHLIGHTS"/QR bug.
-           A solid square carries the batting team's crest with the innings label
-           below it; a per-clip caption sits above and breaks out to the right as
-           wide as the text needs (a spoiler for the current ball only). No fade —
+           A solid square carries the host slide's context in miniature — the set
+           title, the fixture, and the innings — so the clip reads as a continuation
+           of the last-match / today's-match slide it came out of (see .reel-tag-square
+           below). A per-clip narrative caption sits above and breaks out to the right
+           as wide as the text needs (a spoiler for the current ball only). No fade —
            these clips are too short for it. The square's size/position are tunable
-           so it lines up with the bug on the wall; card overlays will later extend
-           it downward. Shared by the curated-reel slide (video.html) and the live
-           highlight news-flash (live-flash.html) so both read identically. */
+           so it lines up with the bug on the wall. Shared by the curated-reel slide
+           (video.html), the live-match reel (live-match.html) and the live highlight
+           news-flash (live-flash.html) so all three read identically. */
         .reel-tag {
             position: fixed;
             top: var(--reel-tag-top, 0px); left: var(--reel-tag-left, 0px);
@@ -70,7 +72,7 @@
                 calc(100% - var(--in)) calc(100% - var(--reel-narr-h, 5vh)),
                 100% 100%, calc(100% - var(--cap)) 100%);
         }
-        /* One navy panel holding just the square (badge/crest/innings). It stays at the
+        /* One navy panel holding just the square (the context header). It stays at the
            square's fixed size — only big enough to conceal the Frogbox HIGHLIGHTS/QR
            graphic. Flashcards no longer grow out of it; they open as a large centred
            card over the video (see .reel-card below), so this panel never resizes. */
@@ -80,27 +82,43 @@
             background: var(--navy-2); border-bottom: 0.3vw solid var(--accent);
             border-bottom-right-radius: 0.8vw;
         }
+        /* The square echoes the host slide's set-header (_set_header.html) in
+           miniature — the context the clip came out of, not the ball outcome. Three
+           stacked, centred levels matching the real header: a title kicker, the
+           fixture (our team vs the opposition), and the active innings tab. Content is
+           top-aligned (the old top headroom reserved for a narrative is gone — that
+           moved to the bottom banner), so the title sits high in the square. */
         .reel-tag-square {
             position: relative; overflow: hidden;
             width: 100%; height: var(--reel-tag-size, 11vw);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 1.6vh; padding: 3vh 0.4vw 1vh; box-sizing: border-box;
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+            text-align: center; gap: 0.9vh; padding: 1vh 0.9vw; box-sizing: border-box;
         }
-        /* Ball-outcome badge (Wicket / Six / Four …), styled like the slides' venue
-           pill: navy on gold. Pinned top-left in the square's existing headroom so
-           the crest stays put; hidden for 'other' balls. */
-        .reel-tag-badge {
-            position: absolute; top: 0.8vh; left: 0.8vw;
-            background: var(--accent); color: var(--navy-1);
-            font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.05em;
-            text-transform: uppercase;
-            padding: 0.2vh 0.7vw; border-radius: 3px;
+        /* 1 — Title kicker (e.g. "Last Match" / "Today's Match"): the host title
+           rendered as a small muted eyebrow above the fixture. */
+        .reel-tag-kicker {
+            font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.14em;
+            text-transform: uppercase; color: var(--muted); line-height: 1.1;
         }
-        .reel-tag-crest {
-            width: 5vw; height: 5vw; border-radius: 50%; object-fit: contain;
-            background: #fff; padding: 0.4vw; box-sizing: border-box;
+        /* 2 — Fixture: our team (gold) / vs / the opposition (white), stacked on three
+           centred lines. Echoes the header's .subtitle, broken to fit the square. The
+           auto top+bottom margins centre it vertically in the gap between the pinned
+           kicker and innings, so longer (multi-line) names stay balanced. */
+        .reel-tag-fixture {
+            margin: auto 0;
+            font-size: var(--t-sm); font-weight: 700; line-height: 1.2; color: var(--text);
         }
+        .reel-tag-fixture .rt-team,
+        .reel-tag-fixture .rt-vs,
+        .reel-tag-fixture .rt-opp { display: block; }
+        .reel-tag-fixture .rt-team { color: var(--accent); }
+        .reel-tag-fixture .rt-vs { color: var(--text); opacity: 0.55; font-weight: 400; }
+        .reel-tag-fixture .rt-opp { color: var(--text); }
+        /* 3 — Innings: the active panel tab, docked to the bottom of the square (the
+           fixture's auto bottom-margin absorbs the slack above it) just above the
+           panel's own gold border, which reads as the sequence strip's underline — so
+           no separate rule is needed here. */
         .reel-tag-label {
             font-size: var(--t-xs); font-weight: 900; text-transform: uppercase;
-            letter-spacing: 0.08em; color: var(--text); text-align: center; line-height: 1.1;
+            letter-spacing: 0.08em; color: var(--text); line-height: 1.1;
         }

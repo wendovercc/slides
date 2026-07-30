@@ -2744,6 +2744,11 @@ def build_match_packages(env, slide_meta):
             slide = {
                 "template": "video", "layout": "fullbleed", "reel": True,
                 "title": f"{label} Highlights",  # page <title> only; not shown on the wall
+                # Top-left square echoes this reel's host set-header: title (set label),
+                # fixture (our team vs opposition), and the innings step. _bat_crest is
+                # kept for possible reuse but no longer shown in the square.
+                "_set_title": set_title, "_set_subtitle": title,
+                "_set_opp_club": opp_club, "_set_opp_team": opp_team,
                 "_innings_label": label, "_bat_crest": bat_crest,
                 "videos": videos,
             }

@@ -213,8 +213,11 @@
         <div id="reel-caption" class="reel-tag-caption" style="display:none"></div>
         <div id="reel-panel" class="reel-panel">
             <div class="reel-tag-square">
-                <span id="reel-badge" class="reel-tag-badge" style="display:none"></span>
-                {% if slide._bat_crest %}<img class="reel-tag-crest" src="{{ slide._bat_crest }}" alt="">{% endif %}
+                {% if slide._set_title %}<div class="reel-tag-kicker">{{ slide._set_title }}</div>{% endif %}
+                <div class="reel-tag-fixture">
+                    <span class="rt-team">{{ slide._set_subtitle }}</span>
+                    {% if slide._set_opp_club %}<span class="rt-vs">vs</span><span class="rt-opp">{{ slide._set_opp_club }}</span>{% endif %}
+                </div>
                 {% if slide._innings_label %}<div class="reel-tag-label">{{ slide._innings_label }}</div>{% endif %}
             </div>
         </div>
@@ -279,25 +282,19 @@
     // The bridge sets body.paused on an explicit user pause; a clip we navigate to
     // while paused should hold its first frame rather than start playing.
     function isPaused() { return document.body.classList.contains('paused'); }
-    // Reel per-clip caption + ball-outcome badge (null on non-reel slides).
+    // Reel per-clip narrative caption (null on non-reel slides).
     var captionEl = document.getElementById('reel-caption');
-    var badgeEl = document.getElementById('reel-badge');
     // Reel flashcard: a large card that opens in the centre of the video over the
     // current clip's lead-in / lead-out. .show toggles it; the top-left tag (panel)
     // stays fixed regardless.
     var cardEl = document.getElementById('reel-card');
     var activeCardKey = null;
 
-    // Default caption slot + outcome badge for the current clip (the ball's own
-    // outcome). A pre card overrides these until the action starts (see updateCard).
+    // Default caption for the current clip (the ball's own narrative). A pre card
+    // blanks this until the action starts (see updateCard).
     function setBallCaption() {
         var v = VIDEOS[current] || {};
         if (captionEl) { captionEl.textContent = v.body || ''; captionEl.style.display = v.body ? '' : 'none'; }
-        if (badgeEl) {
-            var ty = v.type;
-            if (ty && ty !== 'other') { badgeEl.textContent = ty.charAt(0).toUpperCase() + ty.slice(1); badgeEl.style.display = ''; }
-            else { badgeEl.style.display = 'none'; }
-        }
     }
 
     function renderCard(card) {
@@ -333,20 +330,19 @@
         if (key === activeCardKey) return;
         activeCardKey = key;
         // Open / close the large centred card. The top-left tag stays put — only its
-        // caption + badge change (below) to keep the pre-card spoiler-free.
+        // narrative caption changes (below) to keep the pre-card spoiler-free.
         if (hit) { renderCard(hit); cardEl.classList.add('show'); }
         else { cardEl.classList.remove('show'); }
-        // The top-left tag defaults to the ball's own caption + outcome badge. The
-        // card's own kind (New batsman / Batsman innings) now lives on the card itself,
-        // never here. What stays on the tag depends on the card's position:
+        // The caption defaults to the ball's own narrative. The card's own kind
+        // (New batsman / Batsman innings) lives on the card itself, never on the tag.
+        // What stays on the caption depends on the card's position:
         setBallCaption();
-        //  · PRE: the ball hasn't happened yet — blank the tag's caption + badge so
-        //    they can't spoil the outcome while the lead-in card is up.
-        //  · POST: the ball is already done, so the action narrative + outcome badge
-        //    (as set above) can carry on alongside the lead-out card.
+        //  · PRE: the ball hasn't happened yet — blank the caption so it can't spoil
+        //    the outcome while the lead-in card is up.
+        //  · POST: the ball is already done, so the narrative can carry on alongside
+        //    the lead-out card.
         if (hit && hit.at === 'pre') {
             if (captionEl) { captionEl.textContent = ''; captionEl.style.display = 'none'; }
-            if (badgeEl) badgeEl.style.display = 'none';
         }
     }
     {% if slide.layout is defined and slide.layout == 'fullbleed' %}

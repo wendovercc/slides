@@ -91,16 +91,37 @@
         });
       });
     }
+    // The clip's innings as a 1st/2nd ordinal (mirrors the today's-match reel tab):
+    // locate the clip's innings within the match's chronological innings[] by id,
+    // falling back to a batting-side name match, then to '' when neither resolves.
+    function inningsLabel(m, c) {
+      var list = (m && m.innings) || [];
+      var idx = -1;
+      if (c.innings_id != null) {
+        for (var i = 0; i < list.length; i++) {
+          if (String(list[i].innings_id) === String(c.innings_id)) { idx = i; break; }
+        }
+      }
+      if (idx < 0 && c.batting_team) {
+        for (var j = 0; j < list.length; j++) {
+          if ((list[j].side || '').toLowerCase() === c.batting_team.toLowerCase()) { idx = j; break; }
+        }
+      }
+      if (idx < 0) return '';
+      return (idx === 0 ? '1st' : idx === 1 ? '2nd' : (idx + 1) + 'th') + ' Innings';
+    }
     function buildFlash(m, c) {
       var cfg = cfgById[String(m.pc_id)] || {};
       var isWend = /wendover/i.test(c.batting_team || '');
-      var opp = cfg.opposition || m.away || '';
+      // Fixture is always our team vs the opposition (not the batting side), matching
+      // the today's-match reel — the square's middle gold/white line.
       return {
         id: c.id, url: c.url, event: c.event, title: c.title,
         over: c.over, ball: c.ball, batter: c.batter, bowler: c.bowler, dismissed: c.dismissed,
         crest: isWend ? (cfg.our_crest || '/assets/images/wcc-logo.png') : (cfg.opp_crest || null),
-        innings_label: c.batting_team || '',
-        fixture: cfg.team_name ? (cfg.team_name + ' v ' + opp) : ((m.home || '') + ' v ' + (m.away || '')),
+        innings_label: inningsLabel(m, c),
+        team: cfg.team_name || m.home || '',
+        opp: cfg.opposition || m.away || '',
       };
     }
 

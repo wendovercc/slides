@@ -32,28 +32,6 @@
         /* Shared reel-tag look (top-left crest/innings/caption + outcome badge). */
 {% include 'slides/_reel_tag_styles.html' %}
 
-        /* News-flash heading: a centred branded banner, clear of the top-left tag.
-           It announces the interruption + the match/over context the tag doesn't
-           spell out, then fades so the clip can breathe. */
-        .flash-head {
-            position: fixed; top: 3vh; left: 50%; transform: translateX(-50%); z-index: 12;
-            display: flex; flex-direction: column; align-items: center; gap: 0.7vh;
-            padding: 1.4vh 2.6vw; text-align: center;
-            background: rgba(10,28,58,0.82); border: 1px solid rgba(212,175,55,0.5);
-            border-radius: 0.6vw; box-shadow: 0 1vh 3vh rgba(0,0,0,0.5);
-            backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
-            transition: opacity 0.6s ease;
-        }
-        .flash-head.faded { opacity: 0; }
-        .flash-kicker {
-            display: flex; align-items: center; gap: 0.6vw;
-            font-size: var(--t-sm); font-weight: 900; letter-spacing: 0.2em;
-            text-transform: uppercase; color: var(--accent);
-        }
-        .flash-kicker .bolt { font-size: var(--t-md); }
-        .flash-sub { font-size: var(--t-md); font-weight: 700; color: var(--text); }
-        .flash-sub .dot { color: var(--muted); opacity: 0.6; margin: 0 0.5vw; }
-
         .flash-fallback {
             position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
             font-size: var(--t-lg); font-weight: 700; color: var(--muted); z-index: 1;
@@ -70,16 +48,15 @@
         <div id="reel-caption" class="reel-tag-caption" style="display:none"></div>
         <div id="reel-panel" class="reel-panel">
             <div class="reel-tag-square">
-                <span id="reel-badge" class="reel-tag-badge" style="display:none"></span>
-                <img id="reel-crest" class="reel-tag-crest" src="" alt="" style="display:none">
+                <div class="reel-tag-kicker">Live Highlight</div>
+                <div id="reel-fixture" class="reel-tag-fixture" style="display:none">
+                    <span id="reel-team" class="rt-team"></span>
+                    <span id="reel-vs" class="rt-vs">vs</span>
+                    <span id="reel-opp" class="rt-opp"></span>
+                </div>
                 <div id="reel-label" class="reel-tag-label" style="display:none"></div>
             </div>
         </div>
-    </div>
-
-    <div id="flash-head" class="flash-head">
-        <div class="flash-kicker"><span class="bolt">⚡</span><span>Live Highlight</span></div>
-        <div id="flash-sub" class="flash-sub"></div>
     </div>
 
     <div id="flash-fallback" class="flash-fallback" hidden>Loading highlight…</div>
@@ -88,31 +65,23 @@
 (function () {
     var video = document.getElementById('flash-video');
     var captionEl = document.getElementById('reel-caption');
-    var badgeEl = document.getElementById('reel-badge');
-    var crestEl = document.getElementById('reel-crest');
+    var fixtureEl = document.getElementById('reel-fixture');
+    var teamEl = document.getElementById('reel-team');
+    var vsEl = document.getElementById('reel-vs');
+    var oppEl = document.getElementById('reel-opp');
     var labelEl = document.getElementById('reel-label');
-    var headEl = document.getElementById('flash-head');
-    var subEl = document.getElementById('flash-sub');
     var fallbackEl = document.getElementById('flash-fallback');
 
     var hls = null;
     var doneToken = 0;      // guards against a late 'ended'/timeout from a prior clip
-    var backstop = null, fadeTimer = null;
+    var backstop = null;
     var MAX_MS = 60000;     // hard backstop: never wedge the deck if 'ended' never fires
-    var FADE_HEAD_MS = 4500;
 
     function esc(s) { return String(s == null ? '' : s); }
     function show(el, on) { el.style.display = on ? '' : 'none'; }
-    function ordinal(n) {
-        n = Number(n); if (!n) return '';
-        var s = ['th', 'st', 'nd', 'rd'], v = n % 100;
-        return n + (s[(v - 20) % 10] || s[v] || s[0]);
-    }
-    function cap(s) { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
 
     function clearTimers() {
         if (backstop) { clearTimeout(backstop); backstop = null; }
-        if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
     }
     function teardown() {
         clearTimers();
@@ -151,24 +120,17 @@
     }
 
     function renderTag(clip) {
-        // Caption = the frogbox narrative; badge = the outcome (hidden for 'other').
+        // Caption = the frogbox narrative; the square carries the match context —
+        // our team (gold) vs the opposition (white) + the innings — so it reads
+        // exactly like the last-match / today's-match reels.
         captionEl.textContent = esc(clip.title);
         show(captionEl, !!clip.title);
-        if (clip.event && clip.event !== 'other') { badgeEl.textContent = cap(clip.event); show(badgeEl, true); }
-        else show(badgeEl, false);
-        if (clip.crest) { crestEl.src = clip.crest; show(crestEl, true); }
-        else show(crestEl, false);
+        teamEl.textContent = esc(clip.team);
+        oppEl.textContent = esc(clip.opp);
+        show(vsEl, !!clip.opp);
+        show(fixtureEl, !!(clip.team || clip.opp));
         labelEl.textContent = esc(clip.innings_label);
         show(labelEl, !!clip.innings_label);
-    }
-
-    function renderHead(clip) {
-        var bits = [];
-        if (clip.fixture) bits.push(esc(clip.fixture));
-        if (clip.over != null) bits.push(ordinal(clip.over) + ' over');
-        subEl.innerHTML = bits.join('<span class="dot">·</span>');
-        headEl.classList.remove('faded');
-        fadeTimer = setTimeout(function () { headEl.classList.add('faded'); }, FADE_HEAD_MS);
     }
 
     function playClip(clip) {
@@ -176,7 +138,6 @@
         teardown();
         if (!clip || !clip.url) { done('no-url'); return; }
         renderTag(clip);
-        renderHead(clip);
         show(fallbackEl, false); fallbackEl.hidden = true;
         video.currentTime = 0;
         attach(clip.url);
@@ -188,7 +149,9 @@
 
     // Player drives this overlay directly (it's not a slide in the rotation):
     //   { type:'wcc-flash', url, event, title, over, ball, crest, innings_label,
-    //     fixture, batter, bowler, dismissed }
+    //     team, opp, batter, bowler, dismissed }
+    //   team/opp = our side vs the opposition (the square's fixture line);
+    //   innings_label = "1st Innings" / "2nd Innings" (the docked bottom tab).
     window.addEventListener('message', function (e) {
         var d = e.data; if (!d) return;
         if (d.type === 'wcc-flash') playClip(d);
