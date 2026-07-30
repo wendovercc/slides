@@ -17,49 +17,58 @@
            from the frame bottom); on the 16:9 wall the video fills the height so this
            reads as a fraction of the banner's position.
            Styled to echo the Frogbox scoreboard's central block directly below it: a
-           blue bar whose ends flare into a heraldic-flag finial — the bar is FULL width
-           along the bottom and cut back at the top, so each end edge leans inward as it
-           rises. Each end is capped by a darker-blue triangle sitting apex-up on the
-           flared bottom corner: its outer edge rides the bar's end edge, its inner edge
-           is the converse, and the two meet at the top — so from the bottom the outer
-           edge goes inward and the inner edge goes outward, like the board's two-tone
-           ends. --in is the horizontal cut; it's the bar height (--reel-narr-h, vh)
-           times --reel-narr-slope, so slope 1 = a true 45° (equal run and rise), <1 is
-           steeper, >1 shallower — dial it to match the board. --cap is the cap's bottom
-           half-width. Heavy navy text in the same sentence case as the board's status
-           line ("WEN won the toss…"). --reel-narr-minw is a floor width; --reel-narr-end-bg
-           tints the caps. */
+           blue bar with a heraldic-flag finial. The WIDTH is fixed (--reel-narr-minw) so
+           its flared foot always lines up with the fixed-width board block below; long
+           captions WRAP and the bar grows UPWARD instead of widening. The flare is a
+           foot of fixed height (--reel-narr-h) pinned to the bottom: full width along the
+           bottom, cut back to the body width over that foot, then vertical sides up to a
+           flat top. Pinning the foot keeps its edge angle constant no matter how tall the
+           bar gets, so it stays continuous with the board. Each bottom corner is capped
+           by a darker-blue triangle sitting apex-up at the top of the flare: its outer
+           edge rides the foot's edge, its inner edge is the converse — from the bottom
+           the outer edge goes inward, the inner edge outward, like the board's two-tone
+           ends. --in is the horizontal cut (= --reel-narr-h × --reel-narr-slope; slope 1
+           = 45°, <1 steeper, >1 shallower — dial it to match the board); --cap is the
+           cap's bottom half-width. Heavy navy text in the same sentence case as the
+           board's status line ("WEN won the toss…"). --reel-narr-end-bg tints the caps. */
         .reel-tag-caption {
             position: fixed; z-index: 11;
             --in:  calc(var(--reel-narr-h, 5vh) * var(--reel-narr-slope, 0.56));
             --cap: calc(var(--in) * 2);
             bottom: var(--reel-narr-bottom, 9.83%); left: 50%; transform: translateX(-50%);
-            background: #56abea; color: var(--navy-1); /* Frogbox scoreboard blue */
-            height: var(--reel-narr-h, 5vh); line-height: var(--reel-narr-h, 5vh);
-            font-size: 1.5vw; font-weight: 900;
-            padding: 0 calc(var(--cap) + 1vw);
+            background: var(--reel-narr-bg, #61b5f2); color: var(--navy-1); /* Frogbox scoreboard blue */
+            min-height: var(--reel-narr-h, 5vh);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.5vw; font-weight: 900; line-height: 1.2;
+            padding: 0.3vh calc(var(--cap) + 1vw);
             box-sizing: border-box;
-            width: max-content; min-width: var(--reel-narr-minw, 32.6vw); max-width: 90vw;
+            min-width: var(--reel-narr-minw, 32.6vw); max-width: var(--reel-narr-minw, 32.6vw);
             text-align: center;
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             clip-path: polygon(
-                var(--in) 0, calc(100% - var(--in)) 0,
-                100% 100%, 0 100%);
+                var(--in) 0,
+                calc(100% - var(--in)) 0,
+                calc(100% - var(--in)) calc(100% - var(--reel-narr-h, 5vh)),
+                100% 100%,
+                0 100%,
+                var(--in) calc(100% - var(--reel-narr-h, 5vh)));
         }
         /* Darker end caps. Each pseudo covers the whole bar, clipped to an apex-up
-           triangle on one flared bottom corner: apex on the top edge at the end cut,
-           base along the bottom. Outer edge rides the bar's end edge; inner edge is the
-           converse. The caption's clip-path trims any overhang; text padding clears them. */
+           triangle on one flared bottom corner: apex at the top of the flare foot, base
+           along the bottom. Outer edge rides the foot's edge; inner edge is the converse.
+           The caption's clip-path trims any overhang; text padding clears them. */
         .reel-tag-caption::before, .reel-tag-caption::after {
             content: ''; position: absolute; inset: 0; pointer-events: none;
             background: var(--reel-narr-end-bg, #0e3c62);
         }
         .reel-tag-caption::before { /* left cap */
-            clip-path: polygon(var(--in) 0, 0 100%, var(--cap) 100%);
+            clip-path: polygon(
+                var(--in) calc(100% - var(--reel-narr-h, 5vh)),
+                0 100%, var(--cap) 100%);
         }
         .reel-tag-caption::after { /* right cap */
             clip-path: polygon(
-                calc(100% - var(--in)) 0, 100% 100%, calc(100% - var(--cap)) 100%);
+                calc(100% - var(--in)) calc(100% - var(--reel-narr-h, 5vh)),
+                100% 100%, calc(100% - var(--cap)) 100%);
         }
         /* One navy panel holding just the square (badge/crest/innings). It stays at the
            square's fixed size — only big enough to conceal the Frogbox HIGHLIGHTS/QR

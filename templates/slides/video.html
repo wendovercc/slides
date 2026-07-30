@@ -34,12 +34,13 @@
             --reel-tag-left: 0px;
             /* Narrative caption: distance up from the frame bottom. Nudge to rest it
                just above the Frogbox stats banner baked into the footage.
-               --reel-narr-minw is the floor width so short captions still cover the
-               raised centre block of that banner. */
+               --reel-narr-minw is the FIXED bar width (matches the board's centre block);
+               long captions wrap and the bar grows upward rather than widening. */
             --reel-narr-bottom: 9.83%;
             --reel-narr-minw: 32.6vw;
-            --reel-narr-h: 5vh;           /* bar height; also drives the chamfer */
+            --reel-narr-h: 5vh;           /* flare-foot height; also drives the chamfer */
             --reel-narr-slope: 0.56;      /* end-cut angle: 1 = 45°, <1 steeper, >1 shallower */
+            --reel-narr-bg: #61b5f2;      /* light Frogbox scoreboard blue */
             --reel-narr-end-bg: #0e3c62;  /* darker end-cap colour */
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
