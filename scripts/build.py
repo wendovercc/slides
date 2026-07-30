@@ -5,6 +5,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import re
 import shutil
 from datetime import date, datetime, timezone
@@ -48,9 +49,25 @@ FIXED_PANEL_COUNTS = {
 FANTASY_TEAM_ORDER = ["1st-xi", "2nd-xi", "friendly-xi"]
 
 
+def _today():
+    """Today's date, or an override for local testing of day-gated features
+    (live-match slides, the `today` board). Set WCC_TODAY=YYYY-MM-DD to make the
+    whole build behave as if it were that day — e.g. replaying a past match day's
+    live feed on a non-match day. Unset in normal/CI builds → real date."""
+    override = os.environ.get("WCC_TODAY")
+    return date.fromisoformat(override) if override else date.today()
+
+
 def load_config():
     path = CONTENT / "config.json"
-    return json.loads(path.read_text()) if path.exists() else {}
+    config = json.loads(path.read_text()) if path.exists() else {}
+    # Local-testing override for the live-match feature switch, so live can be
+    # exercised without editing (and risking committing) content/config.json.
+    # WCC_LIVE_ENABLED=1/true/on forces it on; 0/false/off forces it off.
+    env_live = os.environ.get("WCC_LIVE_ENABLED")
+    if env_live is not None:
+        config["live_enabled"] = env_live.strip().lower() in ("1", "true", "on", "yes")
+    return config
 
 
 def load_pinned_matches():
@@ -792,7 +809,7 @@ def fmt_match_date(date_str):
 
 
 def build_schedule(slide, teams_by_id, training_sessions, all_fixtures, location_lookup, location_names):
-    today_iso = date.today().isoformat()
+    today_iso = _today().isoformat()
 
     def fmt_date(iso_date):
         try:
@@ -1568,7 +1585,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
     team_id = slide.get("team")
     team = teams_by_id.get(team_id, {})
     fixtures_data = fixtures_data or {}
-    today = date.today()
+    today = _today()
     today_iso = today.isoformat()
 
     panels = []
@@ -1845,7 +1862,7 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
     pollable `pc_id` + best-effort `streamed` for live enrichment; training
     events are static. Shared by build_slides (baked into the slide so it renders
     offline) and build_live_config (its match subset = the Worker's poll list)."""
-    today_iso = date.today().isoformat()
+    today_iso = _today().isoformat()
 
     def opp_crest(club_name):
         """Public path of an already-committed opposition crest (by club-name
@@ -1964,7 +1981,7 @@ def build_live_config():
                            _load_yt_broadcasts(), _load_live_seed())
     matches = [e for e in events if e.get("type") == "match" and e.get("pc_id")]
     out = {"generated_at": int(datetime.now().timestamp()),
-           "date": date.today().isoformat(), "matches": matches}
+           "date": _today().isoformat(), "matches": matches}
     (SITE / "live-config.json").write_text(json.dumps(out, indent=2) + "\n")
     print(f"  live-config.json — {len(matches)} pollable match(es) today")
 
@@ -2045,7 +2062,17 @@ def build_live_matches(env, slide_meta):
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(tmpl.render(slide=slide, slug=slug))
         slide_meta[slug] = {"slide_active": True, "slide_expires": None,
-                            "duration": slide["duration"], "panel_duration": default_pd}
+                            "duration": slide["duration"],
+                            # _is_video: the player treats this like the last-match
+                            # video reel — auto-play on forward arrival + a per-clip
+                            # countdown. The reel's clips are runtime HLS (not in
+                            # _videos / precache), so this flag carries the video-ness.
+                            "_is_video": True,
+                            # The slide self-advances its own clips/scorecards (posting
+                            # wcc-panel per panel and wcc-done at the end), so the
+                            # player's per-panel timer is only a long backstop — never
+                            # let it force-cut a panel before the slide moves on.
+                            "panel_duration": slide["duration"]}
         print(f"  slide/{slug}")
         n += 1
     if not n:
@@ -2166,7 +2193,7 @@ def build_context_calendar():
                 key=lambda e: ACTIVITY_PRIORITY.get(e["type"], 99)
             )
 
-    calendar = {"generated_at": date.today().isoformat(), "entries": entries}
+    calendar = {"generated_at": _today().isoformat(), "entries": entries}
     out_path = SITE / "context_calendar.json"
     out_path.write_text(json.dumps(calendar, indent=2))
     print("  context_calendar.json")

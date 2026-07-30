@@ -133,6 +133,7 @@
     var shownAt = 0;
     var panelStart = 0;      // when the current panel countdown began (ms epoch)
     var panelMs = 0;         // the current panel countdown's full duration (ms)
+    var pausedAt = 0;        // when the current pause began (ms epoch), 0 = not paused
     var progressFill = null; // control-bar countdown fill (interactive only)
     var progressAxis = 'x';  // fill grows along x (row bar) or y (column bar)
     var bar = null;          // control bar (interactive only)
@@ -281,14 +282,10 @@
       panelMs = ms;
       progressRun(ms);
     }
-    function panelTimer() {
+    // Arm the slide-advance timer over `ms`: step to the next panel, or advance the
+    // slide after the last. Shared by panelTimer and the video-resume path.
+    function armAdvanceTimer(ms) {
       clearTimer();
-      var ms = (items[current].panel_duration || 20) * 1000;
-      // A video reel drives its own clips; its panel_duration is a long backstop
-      // (whole reel + 30s), so filling the bar over that would creep across the
-      // entire reel. Leave the bar to the per-clip driver (the wcc-panel handler)
-      // and keep this timer only as the slide-advance backstop.
-      if (items[current].video) progressReset(); else startProgress(ms);
       timer = setTimeout(function () {
         var count = counts[current] || 1;
         if (panelIndex < count - 1) {
@@ -298,6 +295,32 @@
           fwdSlide();
         }
       }, ms);
+    }
+    function panelTimer() {
+      var ms = (items[current].panel_duration || 20) * 1000;
+      // A video reel drives its own clips; its panel_duration is a long backstop
+      // (whole reel + 30s), so filling the bar over that would creep across the
+      // entire reel. Leave the bar to the per-clip driver (the wcc-panel handler)
+      // and keep this timer only as the slide-advance backstop.
+      if (items[current].video) progressReset(); else startProgress(ms);
+      armAdvanceTimer(ms);
+    }
+    // Resume a video slide's per-clip countdown after a pause: continue the frozen
+    // bar over the clip's REMAINING time. panelTimer would blank it (progressReset),
+    // and a merely-resumed clip emits no fresh wcc-panel to re-arm it — so the bar
+    // would vanish. Non-video slides keep panelTimer's fresh-full-panel behaviour.
+    function resumeVideoProgress() {
+      armAdvanceTimer((items[current].panel_duration || 20) * 1000);
+      if (!progressFill) return;
+      if (pausedAt) { panelStart += (Date.now() - pausedAt); pausedAt = 0; }
+      var remaining = panelMs - (Date.now() - panelStart);
+      if (remaining > 0) {
+        // Continue from wherever progressFreeze left the fill, to full, over the rest.
+        progressFill.style.transition = 'transform ' + remaining + 'ms linear';
+        progressFill.style.transform = progressScale(1);
+      } else {
+        progressReset();
+      }
     }
     function applyState(panel) {
       var i = current;
@@ -320,6 +343,14 @@
         send(i, 'pause');
         progressReset();
         var idx = panel === 'last' ? (counts[i] != null ? counts[i] - 1 : 9999) : (panel || 0);
+        // Set panelIndex synchronously (the playing branch above already does).
+        // Otherwise it stays at the OUTGOING slide's panel until the incoming
+        // slide's wcc-panel echo lands — and a fast prev()/next() in that window
+        // reads the stale index and misfires (e.g. back after crossing a slide
+        // boundary sends prev-panel to the new slide instead of stepping back).
+        // The echo still arrives and confirms/corrects (e.g. the real last index
+        // when counts were unknown → 9999).
+        panelIndex = idx;
         send(i, 'goto-panel', { index: idx });
       }
     }
@@ -338,8 +369,14 @@
     function setPlaying(p) {
       playing = p;
       updatePlayBtn();
-      if (p) { send(current, 'resume'); panelTimer(); }
-      else { clearTimer(); send(current, 'pause'); progressFreeze(); drainFlash(); }
+      if (p) {
+        send(current, 'resume');
+        // Video slides own a per-clip countdown; resume continues it rather than
+        // resetting (panelTimer would blank the bar). Others get a fresh panel.
+        if (items[current].video) resumeVideoProgress(); else panelTimer();
+      } else {
+        clearTimer(); send(current, 'pause'); progressFreeze(); pausedAt = Date.now(); drainFlash();
+      }
     }
     // Manual nav preserves the play/pause state (so a paused wall stays paused
     // when you step across slides, including between slide-set members). When

@@ -120,6 +120,14 @@ echo "https://slides.wendovercc.org/screen/the-witchell/" > ~/.kiosk_url
 
 Replace `the-witchell` with the slug for this location. The hostname and the slideshow URL are independent — you can point any Pi at any location.
 
+**Live-feed screens:** if this display shows live-match content, append the live-feed access key as a `?k=` query param:
+
+```bash
+echo "https://slides.wendovercc.org/screen/the-witchell/?k=THE_ACCESS_TOKEN" > ~/.kiosk_url
+```
+
+On load the player captures the token into `localStorage` (`wccLiveKey`) and strips it from the address bar. Because the kiosk runs on a **fresh profile each boot** (`--user-data-dir=/tmp/...`, wiped on reboot), `localStorage` does not survive a restart — so the key must live in `~/.kiosk_url`, which re-provisions it on every boot. Keep this file off the public repo; it is the only place the token is stored for this device. (Devices with a persistent profile, e.g. the bar iPad, can instead set the key once via the ⚙ Settings cog on the home page.)
+
 Create `~/.bash_profile` so that logging in to tty1 starts cage with Chromium:
 
 ```bash

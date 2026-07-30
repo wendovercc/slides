@@ -99,7 +99,9 @@
             </div>
         </div>
     </div>
+    <script src="/assets/js/live-key.js"></script>
     <script src="/assets/js/hls.min.js"></script>
+    <script src="/assets/js/hls-cache.js"></script>
 
 <script>
 (function () {
@@ -123,11 +125,16 @@
     var reelLabel = document.getElementById('lm-reel-label');
 
     var feed = null, feedSeen = false;
-    var views = [], tabs = [], idx = 0, timer = null;
-    var kioskAuto = false, active = false, tabsKey = '', lastTab = null, announced = -1;
-    // Reel-beat state (one full-bleed HLS player shared across clips).
-    var reel = { active: false, ended: false, sig: '', clips: [], j: 0, token: 0,
-                 stopAt: 0, hls: null, backstop: null, cleanup: null, label: '' };
+    var views = [], tabs = [], idx = 0;
+    var tabsKey = '', lastTab = null, announced = -1, shown = false;
+    // Current-clip playback state. Each reel clip is its own panel (mirroring the
+    // last-match video reel), so there's one clip in flight at a time; `clipTok`
+    // invalidates late events/timers from a superseded clip.
+    var clipTok = 0, clipStopAt = 0, clipBackstop = null, clipCleanup = null, hls = null;
+    var dwellTimer = null;
+    // Prefetch-gate state (see ensurePrefetch): a reel is revealed only once its
+    // clips are fully cached, so the user never sees a first-play network stream.
+    var GATE = null, readySet = {}, queued = {}, prefetchQ = [], pumping = false;
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -147,9 +154,18 @@
             var tab = (i === 0 ? '1st' : i === 1 ? '2nd' : (i + 1) + 'th') + ' Innings';
             // Highlight reel before the scorecard — only once the result is visible
             // (m.complete) and only if the innings has selectable clips (streamed).
+            // One panel PER clip (not one reel panel) so prev/next step clip-by-clip
+            // like the last-match video reel; the tab groups them by innings. Gated:
+            // an innings' reel appears only once EVERY one of its clips is fully
+            // cached (clipReady), so the user only ever sees instant cache-backed
+            // playback — until then this innings shows just its scorecard.
             if (m.complete) {
                 var rc = selectReel(m, i);
-                if (rc.length) v.push({ tab: tab, kind: 'reel', inn: i, clips: rc });
+                if (rc.length && rc.every(clipReady)) {
+                    rc.forEach(function (clip) {
+                        v.push({ tab: tab, kind: 'clip', inn: i, clip: clip, label: tab });
+                    });
+                }
             }
             v.push({ tab: tab, kind: 'batting', inn: i });
             v.push({ tab: tab, kind: 'bowling', inn: i });
@@ -220,10 +236,7 @@
         var u = navEl.querySelector('.panel-tab.active .u');
         if (!u) return;
         u.style.transition = 'none'; u.style.transform = 'scaleX(0)'; void u.offsetWidth;
-        if (kioskAuto) {
-            u.style.transition = 'transform ' + (tabSpan(curTab) * PANEL_MS) + 'ms linear';
-            u.style.transform = 'scaleX(1)';
-        } else { u.style.transform = 'scaleX(1)'; }
+        u.style.transform = 'scaleX(1)';
     }
 
     // ---- view renderers ----
@@ -291,70 +304,82 @@
             (!m.final ? '<div class="rprov">Result to be confirmed</div>' : '') + '</div>';
     }
 
-    // ---- reel playback (full-bleed HLS beat) ----
+    // ---- reel tag (top-left square: caption + event badge + crest + innings) ----
     function cap(s) { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : ''; }
-    function renderReelTag(c) {
+    function renderReelTag(c, label) {
         reelCaption.textContent = c.title || '';
         reelCaption.style.display = c.title ? '' : 'none';
         if (c.event && c.event !== 'other') { reelBadge.textContent = cap(c.event); reelBadge.style.display = ''; }
         else reelBadge.style.display = 'none';
         var crest = isOurs(c.batting_team) ? OUR_CREST : (OPP_CREST || '');
         if (crest) { reelCrest.src = crest; reelCrest.style.display = ''; } else reelCrest.style.display = 'none';
-        reelLabel.textContent = reel.label || '';
-        reelLabel.style.display = reel.label ? '' : 'none';
+        reelLabel.textContent = label || '';
+        reelLabel.style.display = label ? '' : 'none';
     }
-    function detachReel() {
+
+    // ---- one-clip playback (mirrors the last-match video reel: video.html) ----
+    // Each reel clip is its own panel, so there's one clip in flight at a time. While
+    // body.paused (an explicit user pause via the bridge) a clip we open holds its
+    // first frame instead of playing, and a finished clip does NOT auto-advance.
+    function isPaused() { return document.body.classList.contains('paused'); }
+
+    function detachClip() {
         try { reelVideo.pause(); } catch (e) {}
-        if (reel.hls) { try { reel.hls.destroy(); } catch (e) {} reel.hls = null; }
-        try { reelVideo.removeAttribute('src'); } catch (e) {}
+        if (hls) { try { hls.destroy(); } catch (e) {} hls = null; }
+        try { reelVideo.removeAttribute('src'); reelVideo.load(); } catch (e) {}
     }
-    function teardownReel() {
-        if (reel.cleanup) { reel.cleanup(); reel.cleanup = null; }
-        if (reel.backstop) { clearTimeout(reel.backstop); reel.backstop = null; }
-        detachReel();
-        reel.active = false; reel.ended = false; reel.sig = ''; reel.j = 0;
-        reel.clips = []; reel.stopAt = 0; reel.label = '';
-    }
-    function leaveReel() {
-        if (!reel.active && !reel.ended && reelEl.hidden) return;
-        teardownReel();
-        reelEl.hidden = true;
+    // Drop the in-flight clip: bump the token (so its late events/timers no-op),
+    // clear its listeners + backstop, and detach the media.
+    function teardownClip() {
+        clipTok++;
+        if (clipCleanup) { clipCleanup(); clipCleanup = null; }
+        if (clipBackstop) { clearTimeout(clipBackstop); clipBackstop = null; }
+        clipStopAt = 0;
+        detachClip();
     }
     // Chromium (the Pi wall) can't play HLS natively — hls.js does; Safari can.
-    function attachReel(url, tok) {
+    function attachClip(url, tok) {
         if (reelVideo.canPlayType('application/vnd.apple.mpegurl')) { reelVideo.src = url; return; }
         if (window.Hls && Hls.isSupported()) {
-            reel.hls = new Hls({ enableWorker: true, lowLatencyMode: false });
-            reel.hls.loadSource(url);
-            reel.hls.attachMedia(reelVideo);
-            reel.hls.on(Hls.Events.ERROR, function (e, d) { if (d && d.fatal && tok === reel.token) advanceOrEnd(); });
+            var hlsOpts = { enableWorker: true, lowLatencyMode: false };
+            // Cache playlist + segments on first play so a looped reel replays from
+            // local bytes (no per-loop re-download over the pavilion SIM). Null when
+            // the Cache API is unavailable → hls.js keeps its default network loader.
+            var cacheLoader = window.WccHlsCache && WccHlsCache.loader();
+            if (cacheLoader) hlsOpts.loader = cacheLoader;
+            hls = new Hls(hlsOpts);
+            hls.loadSource(url);
+            hls.attachMedia(reelVideo);
+            hls.on(Hls.Events.ERROR, function (e, d) { if (d && d.fatal && tok === clipTok) clipEnded(tok); });
             return;
         }
-        advanceOrEnd();   // no HLS support — skip
+        clipEnded(tok);   // no HLS support — skip
     }
-    function playReelClip() {
-        var c = reel.clips[reel.j];
-        if (!c || !c.url) { advanceOrEnd(); return; }
-        renderReelTag(c);
-        reel.stopAt = 0;
-        var myTok = reel.token, video = reelVideo;
-        // Trim each clip: seek past the run-up (pre), stop before the tail (post),
-        // and cap the shown length (max_len — extra comes off the end). Degenerate
-        // trims (clip shorter than the pads) fall back to playing the whole clip.
+    // Open panel `view`'s clip from the start in the full-bleed overlay. Trims each
+    // clip: seek past the run-up (pre), stop before the tail (post), cap the length
+    // (max_len). A backstop guards a clip that stalls / never ends.
+    function showClip(view) {
+        teardownClip();
+        reelEl.hidden = false;
+        renderReelTag(view.clip, view.label);
+        var c = view.clip;
+        if (!c || !c.url) { clipEnded(clipTok); return; }
+        var myTok = clipTok, video = reelVideo;
+        clipStopAt = 0;
         function onMeta() {
-            if (myTok !== reel.token) return;
+            if (myTok !== clipTok) return;
             var dur = video.duration || 0;
             var pre = Math.max(0, Math.min(CLIP_TRIM.pre || 0, dur - 1));
             var stop = dur - (CLIP_TRIM.post || 0);
             if (CLIP_TRIM.max_len) stop = Math.min(stop, pre + CLIP_TRIM.max_len);
-            reel.stopAt = (stop > pre + 0.3) ? stop : dur;
+            clipStopAt = (stop > pre + 0.3) ? stop : dur;
             try { video.currentTime = pre; } catch (e) {}
-            video.play().catch(function () {});
+            if (!isPaused()) { var p = video.play(); if (p && p.catch) p.catch(function () {}); }
         }
-        function onTime() { if (myTok === reel.token && reel.stopAt && video.currentTime >= reel.stopAt) advanceOrEnd(); }
-        function onEnd() { if (myTok === reel.token) advanceOrEnd(); }
-        function onErr() { if (myTok === reel.token) advanceOrEnd(); }
-        reel.cleanup = function () {
+        function onTime() { if (myTok === clipTok && clipStopAt && video.currentTime >= clipStopAt) clipEnded(myTok); }
+        function onEnd() { if (myTok === clipTok) clipEnded(myTok); }
+        function onErr() { if (myTok === clipTok) clipEnded(myTok); }
+        clipCleanup = function () {
             video.removeEventListener('loadedmetadata', onMeta);
             video.removeEventListener('timeupdate', onTime);
             video.removeEventListener('ended', onEnd);
@@ -364,63 +389,64 @@
         video.addEventListener('timeupdate', onTime);
         video.addEventListener('ended', onEnd);
         video.addEventListener('error', onErr);
-        attachReel(c.url, myTok);
-        reel.backstop = setTimeout(function () { if (myTok === reel.token) advanceOrEnd(); }, CLIP_BACKSTOP_MS);
+        attachClip(c.url, myTok);
+        clipBackstop = setTimeout(function () { if (myTok === clipTok) clipEnded(myTok); }, CLIP_BACKSTOP_MS);
     }
-    // Move to the next clip, or end the reel. Cleans up the current clip's listeners
-    // + timer and bumps the token so any late event/timer from it is ignored.
-    function advanceOrEnd() {
-        if (reel.cleanup) { reel.cleanup(); reel.cleanup = null; }
-        if (reel.backstop) { clearTimeout(reel.backstop); reel.backstop = null; }
-        reel.stopAt = 0;
-        reel.token++;
-        detachReel();
-        reel.j++;
-        if (reel.j >= reel.clips.length) { endReel(); return; }
-        playReelClip();
-    }
-    function endReel() {
-        reel.ended = true; reel.active = false;
-        // Kiosk: hide the overlay and advance the deck to the scorecard. Interactive:
-        // leave the last frame up (nav tears it down via leaveReel()).
-        if (kioskAuto) { teardownReel(); reelEl.hidden = true; advance(); }
-    }
-    function startReel(view) {
-        var sig = view.clips.map(function (c) { return c.id; }).join(',');
-        if (sig === reel.sig && (reel.active || reel.ended)) return;   // this reel is already playing/played
-        teardownReel();
-        reel.active = true; reel.sig = sig; reel.clips = view.clips; reel.j = 0;
-        reel.label = view.tab; reel.token++;
-        reelEl.hidden = false;
-        playReelClip();
+    // A clip reached its trim-stop / ended / errored: auto-advance to the next panel
+    // unless paused (then hold the last frame until the user resumes or navigates).
+    function clipEnded(tok) {
+        if (tok !== clipTok) return;
+        if (clipBackstop) { clearTimeout(clipBackstop); clipBackstop = null; }
+        clipStopAt = 0;
+        if (!isPaused()) autoAdvance();
     }
 
-    function renderContent(i) {
-        var v = views[i], m = ourMatch();
-        if (!v || !m) { viewEl.innerHTML = ''; leaveReel(); return; }
-        if (v.kind === 'reel') {
+    // ---- panel rotation (clips + scorecards share one flat panel list) ----
+    function clearDwell() { if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; } }
+    function armDwell() {
+        clearDwell();
+        if (isPaused()) return;
+        dwellTimer = setTimeout(function () { if (!isPaused()) autoAdvance(); }, PANEL_MS);
+    }
+    // Next panel, or end the slide (→ the deck advances) after the last one.
+    function autoAdvance() {
+        if (idx >= views.length - 1) { done(); return; }
+        gotoPanel(idx + 1, true);
+    }
+    function done() { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
+
+    // Per-clip dwell reported to the interactive countdown — the trimmed cap if we
+    // have one, else the stall backstop.
+    function clipDwellSecs() { return CLIP_TRIM.max_len || (CLIP_BACKSTOP_MS / 1000); }
+    function notifyPanel(i, durSecs) { if (window.WccSlide) WccSlide.notifyPanel(i, { dur: durSecs || 0 }); }
+    function hideReel() { teardownClip(); reelEl.hidden = true; }
+
+    // Render + (optionally) start panel i. play=true starts the clip / arms the
+    // scorecard dwell; play=false renders and holds (an off-screen or in-place feed
+    // repaint). Stepping to a clip always replays it from the top, like last-match.
+    function gotoPanel(i, play) {
+        if (!views.length) { done(); return; }
+        idx = Math.max(0, Math.min(views.length - 1, i));
+        var v = views[idx], m = ourMatch();
+        clearDwell();
+        if (!v || !m) { viewEl.innerHTML = ''; hideReel(); return; }
+        setActive(v.tab);
+        if (v.kind === 'clip') {
             viewEl.innerHTML = '';
-            // Only autoplay once the slide is actually being shown (kiosk auto or an
-            // interactive nav) — never from an off-screen feed tick.
-            if (active) startReel(v); else leaveReel();
+            notifyPanel(idx, clipDwellSecs());
+            if (play) showClip(v);
+            else { teardownClip(); reelEl.hidden = false; renderReelTag(v.clip, v.label); }
             return;
         }
-        leaveReel();
+        // Scorecard / result: hide the reel overlay, render the live table.
+        hideReel();
         var html = '';
-        if (v.kind === 'intro') html = introView(m);
-        else if (v.kind === 'result') html = resultView(m);
-        else if (v.kind === 'batting') html = battingView(m, m.innings[v.inn]);
+        if (v.kind === 'batting') html = battingView(m, m.innings[v.inn]);
         else if (v.kind === 'bowling') html = bowlingView(m, m.innings[v.inn]);
+        else if (v.kind === 'result') html = resultView(m);
         viewEl.innerHTML = html;
-    }
-    // Render whatever the current view is — content + active tab. Safe in any mode,
-    // whether or not we're auto-rotating.
-    function renderCurrent() {
-        if (!views.length) { viewEl.innerHTML = ''; navEl.innerHTML = ''; tabsKey = ''; lastTab = null; return; }
-        if (idx >= views.length) idx = views.length - 1;
-        renderContent(idx);
-        setActive(views[idx].tab);
-        if (window.WccSlide) WccSlide.notifyPanel(idx);
+        notifyPanel(idx, PANEL_MS / 1000);
+        if (play) armDwell();
     }
 
     function refreshViews() {
@@ -430,9 +456,8 @@
         var key = tabs.join('|');
         if (key !== tabsKey) { tabsKey = key; renderTabs(); }
     }
-
-    // Report the current panel (view) count to the player so interactive nav can
-    // step through the tabs; re-registers only when the count actually changes.
+    // Report the panel count to the player so interactive nav can step panels;
+    // re-registers only when the count changes.
     function announceCount() {
         var c = Math.max(1, views.length);
         if (c === announced) return;
@@ -440,48 +465,106 @@
         if (window.WccSlide) WccSlide.register(controller);
     }
 
-    // A feed arrived (broadcast or poll): rebuild the view set and repaint the
-    // current view — in EVERY mode, so content shows even when the player never
-    // sends restart-auto (interactive). Auto-rotation is a separate concern below.
+    // ---- prefetch gate (reveal a reel only when its clips are fully cached) ----
+    // Gating applies only on the hls.js path (Pi/Chromium/Firefox), where our Cache
+    // API loader actually serves playback. Safari's native-HLS path ignores the
+    // Cache API, so there we keep the old behaviour (clips show immediately) rather
+    // than hide them forever — no regression on the bar iPad.
+    function gateOn() {
+        if (GATE === null) {
+            var nativeHls = reelVideo.canPlayType && reelVideo.canPlayType('application/vnd.apple.mpegurl');
+            GATE = !nativeHls && !!(window.Hls && Hls.isSupported()) &&
+                   !!(window.WccHlsCache && WccHlsCache.supported && WccHlsCache.prefetch);
+        }
+        return GATE;
+    }
+    function clipReady(c) { return !gateOn() || (c && c.id != null && !!readySet[c.id]); }
+
+    // As soon as the feed says the match is complete, start downloading every reel
+    // clip in the background — even off-screen — so a reel is cache-ready by the time
+    // the slide is shown. Serial (one clip at a time) to spare the pavilion SIM.
+    function ensurePrefetch(m) {
+        if (!gateOn() || !m || !m.complete) return;
+        (m.innings || []).forEach(function (inn, i) {
+            selectReel(m, i).forEach(function (c) {
+                if (c.id == null || readySet[c.id] || queued[c.id]) return;
+                queued[c.id] = true;
+                prefetchQ.push(c);
+            });
+        });
+        pump();
+    }
+    function pump() {
+        if (pumping) return;
+        var c = prefetchQ.shift();
+        if (!c) return;
+        pumping = true;
+        WccHlsCache.prefetch(c.url, c.id).then(function (ok) {
+            pumping = false;
+            if (ok) {
+                readySet[c.id] = true;
+                if (feed) onFeed(feed);   // an innings may now be fully ready → reveal
+            } else {
+                delete queued[c.id];       // let a later feed retry with fresh attempts
+            }
+            pump();
+        });
+    }
+
+    // A feed arrived. Rebuild the panel set; repaint a *scorecard* panel in place so
+    // live numbers refresh, but never interrupt a clip that's playing. Renders
+    // nothing until the slide has actually been shown (no off-screen playback).
     function onFeed(data) {
         feed = data; feedSeen = true;
+        ensurePrefetch(ourMatch());
+        var wasClip = views[idx] && views[idx].kind === 'clip';
         refreshViews();
         announceCount();
-        renderCurrent();
-        if (kioskAuto && !views.length) done();   // was auto-rotating, now nothing live → skip
+        if (!views.length) { if (shown) done(); return; }
+        if (idx > views.length - 1) idx = views.length - 1;
+        if (shown && !wasClip) gotoPanel(idx, false);
     }
 
-    function done() { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
-    function stop() { kioskAuto = false; if (timer) { clearTimeout(timer); timer = null; } }
-    // Step to the next view, or advance the deck after one full pass.
-    function advance() {
-        if (idx >= views.length - 1) { done(); return; }   // one full pass → advance deck
-        idx++; renderCurrent(); schedule();
-    }
-    function schedule() {
-        if (timer) { clearTimeout(timer); timer = null; }
-        // A reel view drives its own advance (on the last clip ending), so don't
-        // arm the fixed panel timer over it — a reel can run for minutes.
-        if (views[idx] && views[idx].kind === 'reel') return;
-        timer = setTimeout(function () { if (kioskAuto) advance(); }, PANEL_MS);
-    }
-    // Kiosk: start auto-rotating this showing. Waits briefly for the first feed so a
-    // load race doesn't wrongly skip a live match; empty → skip the whole slide.
-    function begin() {
-        kioskAuto = true; active = true;
-        if (!feedSeen) { setTimeout(function () { if (kioskAuto) begin(); }, 1500); return; }
+    // Kiosk activation waits briefly for the first feed so a load race doesn't skip a
+    // live match; an empty feed → skip the whole slide.
+    var beginRetry = null;
+    function clearBeginRetry() { if (beginRetry) { clearTimeout(beginRetry); beginRetry = null; } }
+    function beginFromStart() {
+        shown = true;
+        clearBeginRetry();
+        if (!feedSeen) { beginRetry = setTimeout(beginFromStart, 1500); return; }
         refreshViews(); announceCount();
         if (!views.length) { done(); return; }
-        idx = 0; renderCurrent(); schedule();
+        gotoPanel(0, true);
     }
 
-    // ---- slide-bridge controller (kiosk restart-auto / interactive nav) ----
+    // ---- slide-bridge controller ----
+    // Mirrors video.html: show(i) jumps to a panel and (re)starts it; startAuto
+    // (kiosk restart-auto) begins from panel 0; pauseAuto (take-over / user pause)
+    // holds the current clip's frame; restartCurrent (resume) continues it.
+    function holdCurrent() {
+        clearDwell();
+        if (clipBackstop) { clearTimeout(clipBackstop); clipBackstop = null; }
+        try { reelVideo.pause(); } catch (e) {}
+    }
+    function resumeCurrent() {
+        var v = views[idx];
+        if (!v) return;
+        if (v.kind !== 'clip') { armDwell(); return; }
+        // Continue a held clip if one is loaded; otherwise open it fresh.
+        if (reelVideo.src || clipStopAt) {
+            var p = reelVideo.play(); if (p && p.catch) p.catch(function () {});
+            var myTok = clipTok;
+            if (clipBackstop) clearTimeout(clipBackstop);
+            clipBackstop = setTimeout(function () { if (myTok === clipTok) clipEnded(myTok); }, CLIP_BACKSTOP_MS);
+        } else { showClip(v); }
+    }
     var controller = {
         count: 1,
-        show: function (i) { active = true; idx = Math.max(0, Math.min(Math.max(1, views.length) - 1, i)); renderCurrent(); },
-        startAuto: function () { begin(); },
-        pauseAuto: function () { stop(); },           // stop rotation; leave content on screen
-        restartCurrent: function () { renderCurrent(); }
+        show: function (i) { shown = true; clearBeginRetry(); gotoPanel(i, true); },
+        startAuto: function () { clearBeginRetry(); beginFromStart(); },
+        pauseAuto: function () { holdCurrent(); },
+        restartCurrent: function () { shown = true; resumeCurrent(); }
     };
     if (window.WccSlide) WccSlide.register(controller);
 
@@ -500,7 +583,7 @@
         var poll = function () {
             fetch(ENDPOINT + '?pc=' + encodeURIComponent(PC_ID), { headers: key ? { 'Authorization': 'Bearer ' + key } : {} })
                 .then(function (r) { return r.ok ? r.json() : null; })
-                .then(function (data) { if (!data) return; onFeed(data); if (!startedAuto && views.length) { startedAuto = true; begin(); } })
+                .then(function (data) { if (!data) return; onFeed(data); if (!startedAuto && views.length) { startedAuto = true; beginFromStart(); } })
                 .catch(function () {});
         };
         poll(); setInterval(poll, 15000);

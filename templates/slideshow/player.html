@@ -166,7 +166,7 @@
     <script src="/assets/js/preload-gate.js"></script>
     <script src="/assets/js/refresh.js"></script>
     <script src="/assets/js/player-core.js"></script>
-    {% if live_enabled %}<script src="/assets/js/live-engine.js"></script>{% endif %}
+    {% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
@@ -246,7 +246,7 @@
                     duration: s.duration,
                     panel_duration: s.panel_duration,
                     group: s._group || null,   // slide-set membership (drives hats later)
-                    video: (s._videos || []).length > 0,  // video slide → auto-plays on forward arrival
+                    video: (s._videos || []).length > 0 || !!s._is_video,  // video slide → auto-plays on forward arrival
                     frame: document.getElementById(`frame-${s._i}`),
                 })),
                 onShow: idx => { _currentSlug = finalSlides[idx].slug; if (PREVIEW) markCurrentSlideByI(finalSlides[idx]._i); },

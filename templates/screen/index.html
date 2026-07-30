@@ -159,6 +159,57 @@
             background: #fff; animation: live-pulse 1.4s ease-in-out infinite;
         }
         .ctx-next { opacity: 0.6; }
+
+        /* Device settings cog (live-feed access key). Sits at the far right of the
+           header; a gold dot marks a device that already has a key set. */
+        .settings-cog {
+            margin-left: auto; align-self: flex-start;
+            background: none; border: none; cursor: pointer; padding: 6px;
+            color: var(--muted); opacity: 0.6; position: relative;
+            transition: opacity 0.15s ease, color 0.15s ease;
+        }
+        .settings-cog:hover { opacity: 1; color: var(--accent); }
+        .settings-cog svg { width: clamp(22px, 2.2vw, 28px); height: clamp(22px, 2.2vw, 28px);
+            fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
+        .settings-cog.has-key::after {
+            content: ''; position: absolute; top: 4px; right: 4px;
+            width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+            border: 1.5px solid var(--navy-1);
+        }
+        .settings-modal {
+            position: fixed; inset: 0; z-index: 100; display: flex;
+            align-items: center; justify-content: center; padding: 24px;
+            background: rgba(6, 16, 34, 0.72);
+        }
+        .settings-modal[hidden] { display: none; }
+        .settings-card {
+            width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px;
+            background: var(--navy-1); border: 1px solid rgba(255,255,255,0.14);
+            border-radius: 14px; padding: clamp(20px, 3vw, 32px);
+            box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+        }
+        .settings-card h2 { font-size: clamp(18px, 2vw, 24px); font-weight: 900; }
+        .settings-hint { color: var(--muted); font-size: clamp(12px, 1.3vw, 15px); line-height: 1.45; }
+        .settings-card label { font-size: 0.82rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+        .settings-card input {
+            width: 100%; padding: 10px 12px; border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
+            color: var(--text); font: inherit; font-size: 0.95rem;
+        }
+        .settings-card input:focus { outline: none; border-color: var(--accent); }
+        .settings-status { font-size: 0.85rem; min-height: 1.2em; }
+        .settings-status.ok  { color: #9bdf9b; }
+        .settings-status.off { color: var(--muted); }
+        .settings-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 4px; }
+        .settings-actions button {
+            padding: 9px 18px; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .btn-ghost { background: none; border-color: rgba(255,255,255,0.2); color: var(--text); }
+        .btn-ghost:hover { border-color: var(--accent); }
+        .btn-danger { color: #e08b7f; }
+        .btn-gold { background: var(--accent); color: var(--navy-1); }
+        .btn-gold:hover { filter: brightness(1.08); }
     </style>
 </head>
 <body>
@@ -168,6 +219,11 @@
             <h1>{{ preview.club_name }}</h1>
             <p>Watch anywhere · <a href="{{ preview.site_url }}" target="_blank">{{ site_url }}</a></p>
         </div>
+        {% if live_enabled %}
+        <button class="settings-cog" id="settingsCog" aria-label="Device settings" title="Device settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        {% endif %}
     </header>
 
     <main>
@@ -187,6 +243,49 @@
         </div>
     </main>
 
+    {% if live_enabled %}
+    <div class="settings-modal" id="settingsModal" hidden>
+        <div class="settings-card">
+            <h2>Device settings</h2>
+            <p class="settings-hint">Live-feed access key for this device. Set it once and it stays on this screen — no need to re-enter it after a reload.</p>
+            <label for="liveKeyInput">Access key</label>
+            <input type="password" id="liveKeyInput" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="paste access key">
+            <div class="settings-status" id="liveKeyStatus"></div>
+            <div class="settings-actions">
+                <button type="button" class="btn-ghost" id="settingsCancel">Cancel</button>
+                <button type="button" class="btn-ghost btn-danger" id="liveKeyClear">Clear key</button>
+                <button type="button" class="btn-gold" id="liveKeySave">Save</button>
+            </div>
+        </div>
+    </div>
+    <script src="/assets/js/live-key.js"></script>
+    <script>
+        (function () {
+            var cog = document.getElementById('settingsCog'),
+                modal = document.getElementById('settingsModal'),
+                input = document.getElementById('liveKeyInput'),
+                status = document.getElementById('liveKeyStatus'),
+                saveBtn = document.getElementById('liveKeySave');
+            if (!cog || !modal || !window.WccLiveKey) return;
+            function refresh() {
+                var has = !!WccLiveKey.get();
+                status.textContent = has ? 'Key is set on this device.' : 'No key set — the live feed is unavailable on this device.';
+                status.className = 'settings-status ' + (has ? 'ok' : 'off');
+                cog.classList.toggle('has-key', has);
+            }
+            function open() { input.value = ''; refresh(); modal.hidden = false; setTimeout(function () { input.focus(); }, 40); }
+            function close() { modal.hidden = true; }
+            cog.addEventListener('click', open);
+            document.getElementById('settingsCancel').addEventListener('click', close);
+            modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+            document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.hidden) close(); });
+            saveBtn.addEventListener('click', function () { if (input.value.trim()) WccLiveKey.set(input.value); refresh(); close(); });
+            document.getElementById('liveKeyClear').addEventListener('click', function () { WccLiveKey.clear(); input.value = ''; refresh(); });
+            input.addEventListener('keydown', function (e) { if (e.key === 'Enter') saveBtn.click(); });
+            refresh();
+        })();
+    </script>
+    {% endif %}
 
     <script src="/assets/js/context.js"></script>
     <script>
