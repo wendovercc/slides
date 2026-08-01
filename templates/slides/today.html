@@ -28,8 +28,18 @@
     .event.is-live { background: rgba(255,91,91,0.06); border-color: rgba(255,91,91,0.35); }
 
     .event-time { width: 5.5vw; flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
-        font-variant-numeric: tabular-nums; line-height: 1.15; }
+        font-variant-numeric: tabular-nums; line-height: 1.15;
+        display: flex; flex-direction: column; gap: 0.5vh; }
     .event-time .tbc { font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
+    /* Feed-status badge under the time (left rail). Only for pollable matches when
+       live is enabled; conveys the states the detail column no longer spells out. */
+    .feed-badge { font-size: var(--t-xs); font-weight: 700; line-height: 1;
+        text-transform: uppercase; letter-spacing: 0.03em; }
+    .feed-badge.live { color: #ff6b6b; }
+    .feed-badge.brk  { color: var(--gold); }
+    .feed-badge.res  { color: var(--light-blue); }
+    .feed-badge.wait { color: var(--muted); font-weight: 400; }
+    .feed-badge.off  { color: var(--muted); font-weight: 400; opacity: 0.6; }
 
     .event-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.4vh; }
     /* Head mirrors the last-match set-header. */
@@ -83,6 +93,27 @@
     .event-toss { font-size: var(--t-sm); color: var(--muted); margin-top: 0.2vh; }
     .event-toss b { color: var(--text); font-weight: 700; }
 
+    /* League context: the day's OTHER matches in this division, baked in. Swing
+       games (close to Wendover on points) get the gold left-rail. Scores fill in
+       live from the slow league poll (data-live spans). */
+    .event-league { margin-top: 0.7vh; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 0.5vh; }
+    .el-row { display: flex; align-items: baseline; gap: 0.8vw; font-size: var(--t-sm);
+        padding: 0.15vh 0 0.15vh 0.6vw; border-left: 2px solid transparent; }
+    .el-row.is-swing { border-left-color: var(--gold); }
+    .el-time { flex-shrink: 0; width: 4vw; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .el-teams { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .el-team { font-weight: 700; }
+    /* Points relative to Wendover (+ ahead / − behind), in place of league position. */
+    .el-diff { font-weight: 400; color: var(--muted); font-size: var(--t-xs);
+        font-variant-numeric: tabular-nums; margin-left: 0.3vw; }
+    /* Opposition points-vs-Wendover in the match header — larger than the list's. */
+    .opp-diff { font-weight: 700; color: var(--muted); font-size: var(--t-md);
+        font-variant-numeric: tabular-nums; margin-left: 0.6vw; }
+    .el-v { color: var(--muted); opacity: 0.55; margin: 0 0.5vw; font-weight: 400; }
+    .el-score { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .el-score.live { color: #ff6b6b; font-weight: 700; }
+    .el-score.done { color: var(--light-blue); font-weight: 700; }
+
     .today-empty { flex: 1; display: flex; align-items: center; justify-content: center;
         font-size: var(--t-lg); color: var(--muted); opacity: 0.4; text-align: center; }
     /* CSS `display` beats the `hidden` attribute — re-assert it so the empty
@@ -101,11 +132,17 @@
 <script>
 (function () {
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
+    var LIVE_ENABLED = {{ 'true' if live_enabled else 'false' }};
     var EVENTS = {{ (slide._events or []) | tojson }};
     var listEl = document.getElementById('today-list');
     var emptyEl = document.getElementById('today-empty');
     var updatedEl = document.getElementById('today-updated');
     var pill = document.getElementById('today-pill');
+    // Other-league scores, keyed by pc match id, from the slow league poll (a
+    // future `wcc-league` broadcast — see applyLeague). render() reads this so a
+    // league update just re-paints from the baked schedule + the latest scores.
+    var LEAGUE_SCORES = {};
+    var lastFeed = null, lastStatus = 'ok';
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -117,6 +154,19 @@
         return w ? esc(w.name) + ' — ' + esc(w.how || '') + (w.fow != null ? ' @ ' + w.fow : '') : ''; }
     function ago(t) { if (!t) return null; var s = Math.max(0, Math.round(Date.now() / 1000 - t)); return s < 60 ? s + 's' : Math.round(s / 60) + 'm'; }
     function timeCell(ev) { return ev.time ? esc(ev.time) : '<span class="tbc">TBC</span>'; }
+    // Compact feed-status badge shown under the time, in place of the old
+    // "Starts HH:MM · not yet live" detail line. Nothing when live is disabled or
+    // the match isn't pollable.
+    function feedBadge(ev, lm, status) {
+        if (!LIVE_ENABLED || !ev.pc_id) return '';
+        var cls, txt;
+        if (lm && lm.complete) { cls = 'res'; txt = 'Result'; }
+        else if (lm && lm.phase === 'live') { cls = 'live'; txt = '● Live'; }
+        else if (lm && lm.phase === 'break') { cls = 'brk'; txt = 'Break'; }
+        else if (status === 'ok') { cls = 'wait'; txt = 'Awaiting'; }
+        else { cls = 'off'; txt = 'No feed'; }
+        return '<span class="feed-badge ' + cls + '">' + txt + '</span>';
+    }
 
     // Club-centric head: our team (gold) vs opposition club (+ small team name).
     function teamsHead(ev) {
@@ -124,7 +174,8 @@
         if (!ev.opposition) return our;
         var oppTeam = (ev.opposition_team && ev.opposition_team !== ev.opposition)
             ? '<span class="opp-team">' + esc(ev.opposition_team) + '</span>' : '';
-        return our + '<span class="e-vs">vs</span><span class="opp">' + esc(ev.opposition) + oppTeam + '</span>';
+        var diff = ev.league ? relPts(ev.league.opp_diff, 'opp-diff') : '';
+        return our + '<span class="e-vs">vs</span><span class="opp">' + esc(ev.opposition) + oppTeam + '</span>' + diff;
     }
     function tags(ev, extraTop) {
         var ha = extraTop || '<span class="ha' + (ev.is_home ? '' : ' away') + '">' + (ev.is_home ? 'Home' : 'Away') + '</span>';
@@ -136,7 +187,9 @@
         if (lm && lm.complete) bits.push('<span class="res">Result' + (lm.final ? '' : ' · provisional') + '</span>');
         else if (p === 'live') bits.push('<span class="live">● Live</span>');
         else if (p === 'break') bits.push('<span class="brk">' + esc(lm.break_desc || 'Break') + '</span>');
-        if (ev.competition) bits.push(esc(ev.competition));
+        if (ev.league && ev.league.name)
+            bits.push(esc(ev.league.name) + ' <span class="dot">·</span> ' + esc(ev.league.division || ev.competition || ''));
+        else if (ev.competition) bits.push(esc(ev.competition));
         if (ev.streamed || (lm && lm.streamed)) bits.push('<span class="stream">▶ Streamed</span>');
         return bits.length ? '<div class="event-meta">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
     }
@@ -166,7 +219,6 @@
         '</div>';
     }
 
-    var FOLLOW = 'follow on the <strong>Play-Cricket&nbsp;Live</strong> app';
     function matchDetail(ev, lm, status) {
         // Decided (scorecard complete) — show the result, provisional until the
         // scorer finalises it. Comes before the in-play branch since phase stays
@@ -191,25 +243,48 @@
             return tossHtml(ev, lm) + prior + innLine + extra;
         }
         if (!ev.pc_id) return '';  // can't poll → pure schedule row
-        // Pre-match with a reachable feed: the toss (once made) is the first live
-        // datum — show it in place of the generic "not yet live" holding line.
-        if (status === 'ok') {
-            var toss = tossHtml(ev, lm);
-            if (toss) return toss;
-            return '<div class="event-status">' + (ev.time ? 'Starts ' + esc(ev.time) + ' · not yet live' : 'Awaiting first ball') + '</div>';
-        }
-        var reason = status === 'forbidden' ? 'This screen isn’t set up for live scores'
-            : (status === 'error' ? 'Live scores paused' : 'Live scores unavailable on this screen');
-        return '<div class="event-follow">' + reason + ' — ' + FOLLOW + '</div>';
+        // Pre-match / no-score states no longer carry a detail line — the feed
+        // status badge under the time conveys them. The toss, once made, is real
+        // content, so still surface it.
+        return status === 'ok' ? tossHtml(ev, lm) : '';
+    }
+
+    function shortClub(name) { return esc(String(name || '').replace(/\s+(CC|Cricket Club)$/i, '')); }
+    // Points relative to Wendover: +N ahead, −N behind, "level" when equal.
+    function relPts(diff, cls) {
+        if (diff == null) return '';
+        return '<span class="' + (cls || 'el-diff') + '">' + (diff > 0 ? '+' + diff : (diff < 0 ? '−' + Math.abs(diff) : 'level')) + '</span>';
+    }
+    function leagueSide(s) {
+        return '<span class="el-team">' + shortClub(s.club) + '</span>' + relPts(s.diff);
+    }
+    // The day's OTHER matches in this division, baked in; swing games rail-marked.
+    // Scores are empty placeholders until the slow league poll fills them.
+    function leagueOthers(ev) {
+        var lg = ev.league;
+        if (!lg || !(lg.others && lg.others.length)) return '';
+        // Drop per-row times when every other game starts at our time (usual case).
+        var showTimes = lg.others.some(function (o) { return o.time && o.time !== ev.time; });
+        var rows = lg.others.map(function (o) {
+            var sc = LEAGUE_SCORES[String(o.match_id)];
+            var score = sc ? '<span class="el-score ' + (sc.done ? 'done' : 'live') + '">' + esc(sc.line) + '</span>'
+                           : '<span class="el-score" data-live></span>';
+            return '<div class="el-row' + (o.swing ? ' is-swing' : '') + '" data-match-id="' + esc(o.match_id) + '">' +
+                (showTimes ? '<span class="el-time">' + esc(o.time || '') + '</span>' : '') +
+                '<span class="el-teams">' + leagueSide(o.home) + '<span class="el-v">v</span>' + leagueSide(o.away) + '</span>' +
+                score +
+            '</div>';
+        }).join('');
+        return '<div class="event-league">' + rows + '</div>';
     }
 
     function matchTile(ev, lm, status) {
         var isLive = lm && (lm.complete || lm.phase === 'live' || lm.phase === 'break' || lm.phase === 'post');
         return '<div class="event' + (isLive ? ' is-live' : '') + '">' +
-            '<div class="event-time">' + timeCell(ev) + '</div>' +
+            '<div class="event-time">' + timeCell(ev) + feedBadge(ev, lm, status) + '</div>' +
             '<div class="event-main">' +
                 '<div class="event-head"><div class="event-teams">' + teamsHead(ev) + '</div>' + tags(ev) + '</div>' +
-                matchMeta(ev, lm) + matchDetail(ev, lm, status) +
+                matchMeta(ev, lm) + matchDetail(ev, lm, status) + leagueOthers(ev) +
             '</div></div>';
     }
     function trainingTile(ev) {
@@ -223,7 +298,23 @@
             '</div></div>';
     }
 
+    // Merge slow-poll league scores from the `wcc-league` feed. Card contract =
+    // live-worker/src/pc.mjs buildLeagueState: { matches: [{ match_id, complete,
+    // result, score_text, phase, ... }] }. In-progress → the scoreline; done → the
+    // result. The engine's league loop + Worker /league.json endpoint are still to
+    // come; this consumer is ready for them.
+    function applyLeague(matches) {
+        (matches || []).forEach(function (m) {
+            if (m.match_id == null) return;
+            LEAGUE_SCORES[String(m.match_id)] = {
+                line: m.complete ? (m.result || '') : (m.score_text || ''),
+                done: !!m.complete
+            };
+        });
+    }
+
     function render(feed, status) {
+        lastFeed = feed; lastStatus = status;
         var byId = {};
         (feed && feed.matches || []).forEach(function (m) { if (m.pc_id != null) byId[String(m.pc_id)] = m; });
 
@@ -250,7 +341,9 @@
 
     window.addEventListener('message', function (e) {
         var d = e.data;
-        if (d && d.type === 'wcc-live') render(d, d.status || 'ok');
+        if (!d) return;
+        if (d.type === 'wcc-live') render(d, d.status || 'ok');
+        else if (d.type === 'wcc-league') { applyLeague(d.matches); render(lastFeed, lastStatus); }
     });
 
     // Live enrichment (poll / engine broadcast) is gated behind config.live_enabled.

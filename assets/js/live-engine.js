@@ -175,6 +175,54 @@
       try { e.source.postMessage(Object.assign({ type: 'wcc-live', status: lastStatus }, last || {}), '*'); } catch (err) {}
     });
 
+    // --- League loop: the day's OTHER matches, polled SLOWLY and broadcast as
+    // `wcc-league`. Independent of the WCC loop above — its own cadence, endpoint,
+    // cache key and config — because PC-API is result-granularity, not ball-by-ball
+    // (see the league-wide-today note). Ticker/strip/today render from it; others
+    // ignore it. ------------------------------------------------------------------
+    var LEAGUE_MS = opts.leagueMs || 300000;   // 5 min — matches the Worker LEAGUE_TTL
+    var leagueEndpoint = opts.leagueEndpoint || endpoint.replace('state.json', 'league.json');
+    var leagueConfigUrl = opts.leagueConfigUrl || '/live-league.json';
+    var leagueIds = null, leagueLast = null, leagueTimer = null;
+
+    // Pass ?m= the resolved ids (works pre-deploy + shares the Worker cache key);
+    // a bare URL only if the config gave us nothing, letting the Worker's own config drive.
+    function leagueUrl() {
+      if (leagueIds && leagueIds.length)
+        return leagueEndpoint + '?' + leagueIds.map(function (m) { return 'm=' + encodeURIComponent(m); }).join('&');
+      return leagueEndpoint;
+    }
+    function leagueBroadcast() {
+      var msg = { type: 'wcc-league', matches: (leagueLast && leagueLast.matches) || [] };
+      framesOf().forEach(function (f) {
+        try { if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*'); } catch (e) {}
+      });
+    }
+    function leaguePoll() {
+      var k = key();
+      fetch(leagueUrl(), { headers: k ? { 'Authorization': 'Bearer ' + k } : {} })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (feed) { if (feed) { leagueLast = feed; leagueBroadcast(); } })
+        .catch(function () { /* keep last good; retry next tick */ })
+        .then(function () { leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
+    }
+    // Answer a slide that joins mid-interval with the last league feed at once.
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d || d.type !== 'wcc-league-request' || !e.source) return;
+      try { e.source.postMessage({ type: 'wcc-league', matches: (leagueLast && leagueLast.matches) || [] }, '*'); } catch (err) {}
+    });
+    // Resolve league ids from same-origin config; only start the loop if today has
+    // any (no idle polling on a day with no other league games).
+    fetch(leagueConfigUrl, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (cfg) {
+        leagueIds = ((cfg && cfg.matches) || []).map(function (m) { return m.match_id; })
+          .filter(function (id) { return id != null; });
+      })
+      .catch(function () { leagueIds = []; })
+      .then(function () { if (leagueIds && leagueIds.length) leaguePoll(); });
+
     // Resolve the poll list from the same-origin config (unless the caller passed
     // ids explicitly), then start polling. A failed/empty config still starts the
     // loop — poll() falls back to the bare Worker URL and idles if there's nothing.

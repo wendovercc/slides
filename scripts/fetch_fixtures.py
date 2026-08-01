@@ -667,6 +667,10 @@ def main():
                 "match_time": match.get("match_time") or None,
                 "ground_name": match.get("ground_name") or None,
                 "competition_name": match.get("competition_name", ""),
+                # Division id (= the league_table_<id>.json key) and the parent
+                # league's name, for the today board's league-context block.
+                "competition_id": str(match.get("competition_id") or ""),
+                "league_name": match.get("league_name") or "",
                 "is_home": is_home,
                 "opposition_club_name": (
                     match.get("away_club_name", "") if is_home else match.get("home_club_name", "")

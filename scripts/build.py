@@ -1905,10 +1905,13 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 "team_name": team.get("name", team_id),
                 "opposition": f.get("opposition_club_name") or f.get("opposition_team_name") or "",
                 "opposition_team": f.get("opposition_team_name") or "",
+                "opposition_team_id": str(f.get("opposition_team_id") or ""),
                 "time": f.get("match_time") or None,
                 "ground": loc_names.get(loc_id, ground),
                 "is_home": bool(f.get("is_home", True)),
                 "competition": f.get("competition_name") or "",
+                "competition_id": str(f.get("competition_id") or ""),
+                "league_name": f.get("league_name") or "",
                 # Crests for the live innings scoreline — batting side picks ours
                 # or the opposition's by name at render time.
                 "our_crest": "/assets/images/wcc-logo.png",
@@ -1984,6 +1987,127 @@ def build_live_config():
            "date": _today().isoformat(), "matches": matches}
     (SITE / "live-config.json").write_text(json.dumps(out, indent=2) + "\n")
     print(f"  live-config.json — {len(matches)} pollable match(es) today")
+
+
+def _load_league_today():
+    """Today's OTHER league matches (scripts/fetch_league_fixtures.py), grouped by
+    competition_id. Stale (wrong date) or missing → empty, so the board degrades to
+    schedule-only rather than surfacing yesterday's fixtures."""
+    p = FETCHED / "league_today.json"
+    if not p.exists():
+        return {}
+    try:
+        data = json.loads(p.read_text())
+    except (ValueError, OSError):
+        return {}
+    if data.get("date") != _today().isoformat():
+        return {}
+    by_comp = {}
+    for m in data.get("matches", []):
+        by_comp.setdefault(str(m.get("competition_id") or ""), []).append(m)
+    return by_comp
+
+
+def _league_standings(comp_id):
+    """(standings_by_team_id, win_points) for a division from its committed
+    league_table_<comp_id>.json. Columns are league-specific, so Pts/Played are
+    resolved via `headings` (never a fixed index). win_points is parsed from the
+    table `key` legend ("w - Won (22)"); None when absent."""
+    p = FETCHED / f"league_table_{comp_id}.json"
+    if not comp_id or not p.exists():
+        return {}, None
+    try:
+        lt = json.loads(p.read_text())["league_table"][0]
+    except (ValueError, OSError, KeyError, IndexError):
+        return {}, None
+    headings = lt.get("headings", {})
+    col = lambda label: next((k for k, v in headings.items() if str(v).lower() == label), None)
+    pts_col, p_col = col("pts"), col("p")
+
+    def num(row, key):
+        v = row.get(key) if key else None
+        try:
+            return int(v) if v not in (None, "") else None
+        except (ValueError, TypeError):
+            return None
+
+    standings = {}
+    for row in lt.get("values", []):
+        tid = str(row.get("team_id") or "")
+        if tid:
+            standings[tid] = {"position": num(row, "position"),
+                              "points": num(row, pts_col), "played": num(row, p_col)}
+    m = re.search(r"w\s*-\s*Won\s*\((\d+)\)", lt.get("key", ""))
+    return standings, (int(m.group(1)) if m else None)
+
+
+def attach_league_context(events, teams_by_id):
+    """Enrich each WCC match event on the today board with its league context: the
+    parent league name, the day's OTHER matches in that division, and — when the
+    committed league table is available — each side's standing, a point-difference
+    to Wendover, and a swing-game flag. Purely additive: a missing table or
+    league-today file just leaves the league name + division with no standings.
+    Called only on the today slide (NOT inside todays_events) so live-config.json —
+    the Worker's poll list — stays lean."""
+    by_comp = _load_league_today()
+    for ev in events:
+        if ev.get("type") != "match":
+            continue
+        comp = ev.get("competition_id")
+        if not comp or not (ev.get("league_name") or by_comp.get(comp)):
+            continue
+        standings, win_points = _league_standings(comp)
+        team = teams_by_id.get(ev.get("team"), {})
+        wcc_row = standings.get(str(team.get("play_cricket_team_id") or ""))
+        wcc_pts = wcc_row["points"] if wcc_row else None
+
+        def side(club, tname, tid):
+            st = standings.get(str(tid or "")) or {}
+            pts = st.get("points")
+            return {"club": club, "team": tname, "position": st.get("position"),
+                    "points": pts,
+                    "diff": (pts - wcc_pts) if (pts is not None and wcc_pts is not None) else None}
+
+        others = []
+        for om in by_comp.get(comp, []):
+            h = side(om.get("home_club_name"), om.get("home_team_name"), om.get("home_team_id"))
+            a = side(om.get("away_club_name"), om.get("away_team_name"), om.get("away_team_id"))
+            # Swing (first-pass, to iterate): a game between sides close enough to
+            # Wendover on points that its result could reshuffle our standing —
+            # within one win either way. Needs win_points + our own points.
+            swing = bool(win_points and wcc_pts is not None and any(
+                s["points"] is not None and abs(s["points"] - wcc_pts) <= win_points
+                for s in (h, a)))
+            others.append({"match_id": om.get("match_id"), "time": om.get("match_time"),
+                           "home": h, "away": a, "swing": swing})
+        others.sort(key=lambda o: (o.get("time") or "99:99"))
+
+        # Our own opponent's points relative to Wendover, for the match header —
+        # same basis as the other games' diffs. None for a friendly / unranked side.
+        opp = side(ev.get("opposition"), ev.get("opposition_team"), ev.get("opposition_team_id"))
+        ev["league"] = {
+            "name": ev.get("league_name") or "",
+            "division": ev.get("competition") or "",
+            "win_points": win_points,
+            "opp_diff": opp["diff"],
+            "wcc": ({"position": wcc_row.get("position"), "points": wcc_pts,
+                     "played": wcc_row.get("played"), "team_name": ev.get("team_name")}
+                    if wcc_row else None),
+            "others": others,
+        }
+
+
+def build_league_config():
+    """Publish site/live-league.json — today's OTHER league matches (their pc ids),
+    the poll list for the live-proxy Worker's future slow /league.json endpoint.
+    Mirrors build_live_config for WCC; sourced from the build-time league_today.json
+    (scripts/fetch_league_fixtures.py). Empty/absent → an empty list, so the Worker
+    just has nothing to poll."""
+    matches = [m for ms in _load_league_today().values() for m in ms]
+    out = {"generated_at": int(datetime.now().timestamp()),
+           "date": _today().isoformat(), "matches": matches}
+    (SITE / "live-league.json").write_text(json.dumps(out, indent=2) + "\n")
+    print(f"  live-league.json — {len(matches)} other-league match(es) today")
 
 
 def build_live_flash(env):
@@ -2332,6 +2456,7 @@ def build_slides(env):
             slide["_events"] = todays_events(
                 teams_by_id, training, all_fx, loc_lookup, loc_names,
                 _load_yt_broadcasts(), _load_live_seed())
+            attach_league_context(slide["_events"], teams_by_id)
 
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:
@@ -3120,6 +3245,7 @@ if __name__ == "__main__":
     if live_enabled:
         print("Building live config...")
         build_live_config()
+        build_league_config()
         build_live_flash(env)
         build_live_ticker(env)
 
