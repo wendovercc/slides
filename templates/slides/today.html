@@ -74,45 +74,67 @@
     .event-detail .sub { color: var(--muted); font-size: var(--t-sm); }
     /* Live innings scoreline — batting club (crest + name) left, score + overs
        floated right in gold, mirroring the last-match Innings panel .scoreline. */
+    /* The innings lines + batters form one tight scorecard unit (small gaps within);
+       larger separation to the division block comes from .event-league below. */
     .event-inn { display: flex; align-items: center; justify-content: space-between;
-        gap: 0.8vw; margin-top: 0.5vh; }
-    .event-inn-team { display: flex; align-items: center; gap: 0.6vw; min-width: 0; }
-    .event-inn-team img { width: 1.9vw; height: 1.9vw; object-fit: contain; flex-shrink: 0; }
-    .event-inn-name { font-size: var(--t-sm); font-weight: 700;
-        overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+        gap: 0.8vw; margin-top: 0.3vh; }
+    .event-inn-team { display: flex; align-items: center; min-width: 0; flex: 1; }
+    /* Team name + inline batters on one line; ellipsises as a unit if too long. */
+    .event-inn-line { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+        font-size: var(--t-sm); }
+    /* Club name is the larger anchor; Wendover's is gold (batters stay small/muted). */
+    .event-inn-line .nm { font-size: var(--t-md); font-weight: 700; color: var(--text); }
+    .event-inn-line .nm.ours { color: var(--accent); }
+    .event-inn-sep { color: var(--muted); opacity: 0.5; margin: 0 0.5vw; }
+    .event-inn-bats { color: var(--muted); font-weight: 400; }
+    .event-inn-bats .crease { color: var(--text); }
+    .event-inn-bats .num { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .event-inn-bats .star { color: var(--accent); }
+    /* Opposition score white; only Wendover's is the gold hero (.ours). */
     .event-inn-score { flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
-        color: var(--accent); font-variant-numeric: tabular-nums; }
+        color: var(--text); font-variant-numeric: tabular-nums; }
+    .event-inn-score.ours { color: var(--accent); }
     .event-inn-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
-    .event-status { font-size: var(--t-sm); color: var(--muted); }
-    .event-status .crease { color: #fff; } .event-status .num { color: var(--muted); font-variant-numeric: tabular-nums; }
-    .event-status .star { color: var(--accent); }
+    /* Fallback "Last out" line (only when nobody's at the crease). */
+    .event-status { font-size: var(--t-sm); color: var(--muted); margin-top: 0.3vh; }
+    /* Result headline on a completed match — gold when Wendover won; sits above the
+       final innings scorelines, mirroring the toss's role while live. */
+    .event-result { font-size: var(--t-sm); font-weight: 700; color: var(--text); margin-bottom: 1vh; }
+    .event-result.win { color: var(--accent); }
+    .event-result .prov { color: var(--muted); font-weight: 400; }
     .event-follow { font-size: var(--t-xs); color: var(--muted); opacity: 0.85; }
     .event-follow strong { color: var(--accent); }
     /* Toss: the first (chronologically) live datum — heads the live detail and
        is the pre-match status line. Kept off the smallest tokens for legibility. */
-    .event-toss { font-size: var(--t-sm); color: var(--muted); margin-top: 0.2vh; }
+    /* Space under the toss separates it from the innings block, so the two innings
+       read as one group. */
+    .event-toss { font-size: var(--t-sm); color: var(--muted); margin-top: 0.2vh; margin-bottom: 1vh; }
     .event-toss b { color: var(--text); font-weight: 700; }
 
     /* League context: the day's OTHER matches in this division, baked in. Swing
        games (close to Wendover on points) get the gold left-rail. Scores fill in
        live from the slow league poll (data-live spans). */
-    .event-league { margin-top: 0.7vh; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 0.5vh; }
+    .event-league { margin-top: 1.1vh; border-top: 1px solid rgba(255,255,255,0.07); padding-top: 0.6vh; }
     .el-row { display: flex; align-items: baseline; gap: 0.8vw; font-size: var(--t-sm);
-        padding: 0.15vh 0 0.15vh 0.6vw; border-left: 2px solid transparent; }
-    .el-row.is-swing { border-left-color: var(--gold); }
+        padding: 0.15vh 0; }
     .el-time { flex-shrink: 0; width: 4vw; color: var(--muted); font-variant-numeric: tabular-nums; }
     .el-teams { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .el-team { font-weight: 700; }
-    /* Points relative to Wendover (+ ahead / − behind), in place of league position. */
-    .el-diff { font-weight: 400; color: var(--muted); font-size: var(--t-xs);
-        font-variant-numeric: tabular-nums; margin-left: 0.3vw; }
-    /* Opposition points-vs-Wendover in the match header — larger than the list's. */
-    .opp-diff { font-weight: 700; color: var(--muted); font-size: var(--t-md);
-        font-variant-numeric: tabular-nums; margin-left: 0.6vw; }
+    /* Other-division sides: muted by default; the batting side steps forward in
+       white-bold (gold stays reserved for Wendover). */
+    .el-team { font-weight: 400; color: var(--muted); }
+    .el-team.batting { font-weight: 700; color: var(--text); }
+    /* Title for the games beneath it — "Thames Valley Cricket League · Division 9E".
+       Reads as a heading (bold, full-strength) rather than a faint caption. */
+    .el-head { font-size: var(--t-sm); font-weight: 900; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.5vh 0; }
     .el-v { color: var(--muted); opacity: 0.55; margin: 0 0.5vw; font-weight: 400; }
     .el-score { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--muted); }
-    .el-score.live { color: #ff6b6b; font-weight: 700; }
+    /* Live league scores stay calm white — the card's LIVE badge conveys liveness,
+       so they don't need alarm-red; our own score is the sole gold hero. */
+    .el-score.live { color: var(--text); font-weight: 700; }
     .el-score.done { color: var(--light-blue); font-weight: 700; }
+    /* "chasing N" — the first-innings target, muted so the live score still leads. */
+    .el-chase { color: var(--muted); font-weight: 400; }
 
     .today-empty { flex: 1; display: flex; align-items: center; justify-content: center;
         font-size: var(--t-lg); color: var(--muted); opacity: 0.4; text-align: center; }
@@ -149,7 +171,7 @@
     function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
     function creaseHtml(inn) { return ((inn && inn.at_crease) || []).map(function (b) {
         return '<span class="crease">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) + ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
-        }).join('&nbsp;&nbsp;'); }
+        }).join('<span class="event-inn-sep">·</span>'); }
     function lastWicketHtml(inn) { var w = inn && inn.last_wicket;
         return w ? esc(w.name) + ' — ' + esc(w.how || '') + (w.fow != null ? ' @ ' + w.fow : '') : ''; }
     function ago(t) { if (!t) return null; var s = Math.max(0, Math.round(Date.now() / 1000 - t)); return s < 60 ? s + 's' : Math.round(s / 60) + 'm'; }
@@ -174,8 +196,10 @@
         if (!ev.opposition) return our;
         var oppTeam = (ev.opposition_team && ev.opposition_team !== ev.opposition)
             ? '<span class="opp-team">' + esc(ev.opposition_team) + '</span>' : '';
-        var diff = ev.league ? relPts(ev.league.opp_diff, 'opp-diff') : '';
-        return our + '<span class="e-vs">vs</span><span class="opp">' + esc(ev.opposition) + oppTeam + '</span>' + diff;
+        // Points-vs-Wendover intentionally NOT shown on the match day board — it read
+        // as a score and cluttered the header. The `league.opp_diff`/`others[].diff`
+        // data stays baked for the (future) live sidebar's standings context.
+        return our + '<span class="e-vs">vs</span><span class="opp">' + esc(ev.opposition) + oppTeam + '</span>';
     }
     function tags(ev, extraTop) {
         var ha = extraTop || '<span class="ha' + (ev.is_home ? '' : ' away') + '">' + (ev.is_home ? 'Home' : 'Away') + '</span>';
@@ -183,13 +207,9 @@
         return '<div class="event-tags">' + ha + loc + '</div>';
     }
     function matchMeta(ev, lm) {
-        var bits = [], p = lm && lm.phase;
-        if (lm && lm.complete) bits.push('<span class="res">Result' + (lm.final ? '' : ' · provisional') + '</span>');
-        else if (p === 'live') bits.push('<span class="live">● Live</span>');
-        else if (p === 'break') bits.push('<span class="brk">' + esc(lm.break_desc || 'Break') + '</span>');
-        if (ev.league && ev.league.name)
-            bits.push(esc(ev.league.name) + ' <span class="dot">·</span> ' + esc(ev.league.division || ev.competition || ''));
-        else if (ev.competition) bits.push(esc(ev.competition));
+        // Match state lives in the feed-badge; the league/division title now heads the
+        // other-games block below (no duplication). This line is just the stream flag.
+        var bits = [];
         if (ev.streamed || (lm && lm.streamed)) bits.push('<span class="stream">▶ Streamed</span>');
         return bits.length ? '<div class="event-meta">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
     }
@@ -201,20 +221,25 @@
         var who = t.is_wendover ? (ev.team_name || 'Wendover') : (ev.opposition || t.winner);
         return '<div class="event-toss"><b>' + esc(who) + '</b> won the toss, elected to ' + esc(t.decision) + '</div>';
     }
-    // Batting-side crest: ours when the innings side is Wendover, else the cached
-    // opposition badge (null → name-only, e.g. an away friendly with no crest).
-    function battingCrest(ev, inn) {
-        var side = String(inn && inn.side || '').toLowerCase();
-        if (side.indexOf('wendover') !== -1) return ev.our_crest || '/assets/images/wcc-logo.png';
-        return ev.opp_crest || null;
+    // Club name only — drop the trailing team designation ("1st XI", "- 3rd XI",
+    // junior "U12 …"/"Under 12 …") since the card header already names the team.
+    function clubOnly(name) {
+        return String(name || '').trim()
+            .replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
+            .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '')
+            .trim();
     }
-    function inningsLine(ev, inn) {
+    function inningsLine(ev, inn, batsHtml) {
         if (!inn) return '';
-        var crest = battingCrest(ev, inn);
-        var img = crest ? '<img src="' + esc(crest) + '" alt="">' : '';
+        // Gold marks OUR score only; the opposition's innings stays white.
+        var ours = String(inn.side || '').toLowerCase().indexOf('wendover') !== -1;
+        // Batters (current innings only) sit on the same row after the team name,
+        // dot-separated. The whole name+batters line ellipsises as one if too long.
+        var bats = batsHtml ? '<span class="event-inn-sep">·</span><span class="event-inn-bats">' + batsHtml + '</span>' : '';
         return '<div class="event-inn">' +
-            '<div class="event-inn-team">' + img + '<span class="event-inn-name">' + esc(inn.side) + '</span></div>' +
-            '<span class="event-inn-score">' + inn.runs + '/' + inn.wickets +
+            '<div class="event-inn-team">' +
+                '<span class="event-inn-line"><span class="nm' + (ours ? ' ours' : '') + '">' + esc(clubOnly(inn.side)) + '</span>' + bats + '</span></div>' +
+            '<span class="event-inn-score' + (ours ? ' ours' : '') + '">' + inn.runs + '/' + inn.wickets +
                 '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span>' +
         '</div>';
     }
@@ -224,22 +249,27 @@
         // scorer finalises it. Comes before the in-play branch since phase stays
         // 'live' until finalisation.
         if (lm && lm.complete) {
+            // Keep the final scorecard (both innings) and lead with a result headline
+            // — gold when Wendover won. Provisional until the scorer finalises it.
             var res = lm.result || lm.leader_text || lm.score_text || 'Result';
-            var html = '<div class="event-detail"><span class="sub">' + esc(res) + '</span></div>';
-            if (!lm.final) html += '<div class="event-follow">Result to be confirmed</div>';
-            return html;
+            var wendWon = /wendover/i.test(res) && /\bwon\b/i.test(res);
+            var banner = '<div class="event-result' + (wendWon ? ' win' : '') + '">' + esc(res) +
+                (lm.final ? '' : '<span class="prov"> · to be confirmed</span>') + '</div>';
+            var lines = (lm.innings || []).map(function (i) { return inningsLine(ev, i, ''); }).join('');
+            return banner + lines;
         }
         if (lm && (lm.phase === 'live' || lm.phase === 'break')) {
             // Chronological: toss → 1st-innings final (once batting second) → current
             // innings scoreline → current batters.
             var innsArr = lm.innings || [];
             var inn = currentInnings(lm);
-            var prior = innsArr.length >= 2 ? inningsLine(ev, innsArr[0]) : '';
-            var innLine = inn ? inningsLine(ev, inn)
-                : '<div class="event-detail"><span class="sub">' + esc(lm.score_text || 'In play') + '</span></div>';
             var crease = creaseHtml(inn), lastW = lastWicketHtml(inn);
-            var extra = crease ? '<div class="event-status">' + crease + '</div>'
-                : (lastW ? '<div class="event-status">Last out: ' + lastW + '</div>' : '');
+            var prior = innsArr.length >= 2 ? inningsLine(ev, innsArr[0], '') : '';
+            var innLine = inn ? inningsLine(ev, inn, crease)
+                : '<div class="event-detail"><span class="sub">' + esc(lm.score_text || 'In play') + '</span></div>';
+            // Batters now sit inline on the innings line; only fall back to a separate
+            // status line for a between-innings "Last out" when there's no one at the crease.
+            var extra = (!crease && lastW) ? '<div class="event-status">Last out: ' + lastW + '</div>' : '';
             return tossHtml(ev, lm) + prior + innLine + extra;
         }
         if (!ev.pc_id) return '';  // can't poll → pure schedule row
@@ -250,13 +280,19 @@
     }
 
     function shortClub(name) { return esc(String(name || '').replace(/\s+(CC|Cricket Club)$/i, '')); }
-    // Points relative to Wendover: +N ahead, −N behind, "level" when equal.
-    function relPts(diff, cls) {
-        if (diff == null) return '';
-        return '<span class="' + (cls || 'el-diff') + '">' + (diff > 0 ? '+' + diff : (diff < 0 ? '−' + Math.abs(diff) : 'level')) + '</span>';
+    // PC result_description "Denham CC - 1st XI - Won" -> "Denham won"; verdict-only
+    // strings ("Match Drawn"/"Match Tied") pass through unchanged. Returns RAW text
+    // (the el-score cell escapes it), so don't esc() here.
+    function shortResult(desc) {
+        var parts = String(desc || '').split(' - ');
+        if (parts.length < 2) return String(desc || '');
+        var club = String(parts[0]).replace(/\s+(CC|Cricket Club)$/i, '');
+        return club + ' ' + parts[parts.length - 1].toLowerCase();
     }
-    function leagueSide(s) {
-        return '<span class="el-team">' + shortClub(s.club) + '</span>' + relPts(s.diff);
+    // Batting side reads white-bold, the other muted — "who's in" without spending
+    // gold (reserved for Wendover). Points-vs-Wendover dropped from the board.
+    function leagueSide(s, isBatting) {
+        return '<span class="el-team' + (isBatting ? ' batting' : '') + '">' + shortClub(s.club) + '</span>';
     }
     // The day's OTHER matches in this division, baked in; swing games rail-marked.
     // Scores are empty placeholders until the slow league poll fills them.
@@ -267,15 +303,30 @@
         var showTimes = lg.others.some(function (o) { return o.time && o.time !== ev.time; });
         var rows = lg.others.map(function (o) {
             var sc = LEAGUE_SCORES[String(o.match_id)];
-            var score = sc ? '<span class="el-score ' + (sc.done ? 'done' : 'live') + '">' + esc(sc.line) + '</span>'
+            var chase = (sc && sc.chase != null) ? '<span class="el-chase"> · chasing ' + esc(sc.chase) + '</span>' : '';
+            var score = sc ? '<span class="el-score ' + (sc.done ? 'done' : 'live') + '">' + esc(sc.score) + chase + '</span>'
                            : '<span class="el-score" data-live></span>';
-            return '<div class="el-row' + (o.swing ? ' is-swing' : '') + '" data-match-id="' + esc(o.match_id) + '">' +
+            // Once we know who's batting, lead with them so the leading name lines up
+            // with the score on the right (reads like a scorecard: "Chesham 41/0 v Kew").
+            // Before that, keep the baked home-v-away order.
+            var awayBatting = sc && sc.battingHome === false;
+            var first = awayBatting ? o.away : o.home;
+            var second = awayBatting ? o.home : o.away;
+            var firstBatting = !!(sc && sc.battingHome != null);
+            return '<div class="el-row" data-match-id="' + esc(o.match_id) + '">' +
                 (showTimes ? '<span class="el-time">' + esc(o.time || '') + '</span>' : '') +
-                '<span class="el-teams">' + leagueSide(o.home) + '<span class="el-v">v</span>' + leagueSide(o.away) + '</span>' +
+                '<span class="el-teams">' + leagueSide(first, firstBatting) +
+                    '<span class="el-v">v</span>' + leagueSide(second, false) + '</span>' +
                 score +
             '</div>';
         }).join('');
-        return '<div class="event-league">' + rows + '</div>';
+        // The competition title now lives here (removed from the top meta line) —
+        // league name · division, heading the rest of the division's games.
+        var div = (lg.division || ev.competition || '').trim();
+        var title = lg.name ? esc(lg.name) + (div ? ' <span class="dot">·</span> ' + esc(div) : '')
+                            : esc(div);
+        var head = title ? '<div class="el-head">' + title + '</div>' : '';
+        return '<div class="event-league">' + head + rows + '</div>';
     }
 
     function matchTile(ev, lm, status) {
@@ -306,9 +357,29 @@
     function applyLeague(matches) {
         (matches || []).forEach(function (m) {
             if (m.match_id == null) return;
+            var inns = m.innings || [];
+            var inn = inns.length ? inns[inns.length - 1] : null;
+            // Bare score for the right cell — the batting club is gold on the LEFT,
+            // so the score sheds its (redundant) team name here.
+            var bare = inn ? ((inn.runs != null ? inn.runs : 0) + '/' + (inn.wickets != null ? inn.wickets : 0) +
+                              ' (' + (inn.overs || '0') + ' ov)') : '';
+            // Which listed side is batting (home vs away) → gold on the left. The
+            // innings `side` carries the XI suffix ("Amersham CC - 3rd XI"), so match
+            // it by club-name prefix against the card's home/away club names.
+            var battingHome = null;
+            if (inn && inn.side) {
+                var s = String(inn.side).toLowerCase();
+                if (m.home && s.indexOf(String(m.home).toLowerCase()) === 0) battingHome = true;
+                else if (m.away && s.indexOf(String(m.away).toLowerCase()) === 0) battingHome = false;
+            }
+            // Second innings underway → surface what they're chasing (the first
+            // innings total), since the row only shows the current innings score.
+            var chase = (!m.complete && inns.length >= 2 && inns[0].runs != null) ? inns[0].runs : null;
             LEAGUE_SCORES[String(m.match_id)] = {
-                line: m.complete ? (m.result || '') : (m.score_text || ''),
-                done: !!m.complete
+                score: m.complete ? shortResult(m.result) : bare,
+                done: !!m.complete,
+                battingHome: battingHome,
+                chase: chase
             };
         });
     }

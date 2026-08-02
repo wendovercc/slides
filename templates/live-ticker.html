@@ -52,11 +52,15 @@
             opacity: 0; transition: opacity 0.35s ease;
         }
         .tick-seg.on { opacity: 1; }
-        .tick-seg .team { font-weight: 900; color: var(--accent); }
-        .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; }
+        /* Convention: gold for Wendover (team + players), white for the opposition. */
+        .tick-seg .team { font-weight: 900; color: var(--text); }
+        .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--text); }
         .tick-seg .ov { color: var(--muted); font-size: var(--t-sm); }
-        .tick-seg .bat { font-weight: 700; }
-        .tick-seg .bat .num { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
+        .tick-seg .bat { font-weight: 700; color: var(--text); }
+        .tick-seg .team.ours, .tick-seg .score.ours, .tick-seg .bat.ours { color: var(--accent); }
+        /* Shared by at-crease batters and the last-wicket line so player names read
+           the same everywhere; the trailing figures/dismissal stay muted. */
+        .tick-seg .num { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
         .tick-seg .star { color: var(--accent); }
         .tick-seg .lbl { color: var(--muted); font-size: var(--t-sm); text-transform: uppercase; letter-spacing: 0.06em; }
         .tick-seg .sep { color: var(--muted); opacity: 0.5; margin: 0 0.3vw; }
@@ -77,76 +81,108 @@
     var liveEl = document.getElementById('tick-live');
     var liveLabel = document.getElementById('tick-live-label');
     var segs = [document.getElementById('seg-a'), document.getElementById('seg-b')];
-    var CYCLE_MS = 4500;
+    var CYCLE_MS = 9000;
 
-    var segments = [];    // current list of segment HTML strings
+    var segments = [];    // current list of {label, html, live} segments
     var idx = 0;          // which segment is showing
     var face = 0;         // which of the two layers is currently 'on'
     var timer = null;
     var lastKey = '';     // avoid restarting the cycle when content hasn't changed
+    var lastFeed = null;  // last feed, so we can re-render once the team map resolves
+
+    // pc_id -> our team label ("1st XI"/"2nd XI"), so the left flag names the match
+    // the current segment belongs to instead of a generic "Live". Same-origin config
+    // the daily build writes next to the player; a miss just falls back to Live/Break.
+    var PC_TEAM = {};
+    fetch('/live-config.json', { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (cfg) {
+            ((cfg && cfg.matches) || []).forEach(function (m) {
+                if (m.pc_id != null) PC_TEAM[String(m.pc_id)] = m.team_name || null;
+            });
+            if (lastFeed) render(lastFeed);   // relabel a feed that painted before the map loaded
+        })
+        .catch(function () {});
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
+    function batHtml(b, ours) {
+        return '<span class="bat' + (ours ? ' ours' : '') + '">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) +
+            ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
+    }
+    // Spell out dismissals now there's room: "c Smith b Jones" -> "caught Smith,
+    // bowled Jones"; "b Jones" -> "bowled Jones"; whole-phrase ones pass through.
+    function expandHow(how) {
+        var s = String(how || '').trim();
+        if (!s || /^(run out|not out|retired|hit wicket|timed out|obstruct|handled)/i.test(s)) return s;
+        return s.replace(/^c\s+/i, 'caught ').replace(/^st\s+/i, 'stumped ')
+                .replace(/^b\s+/i, 'bowled ').replace(/\sb\s+/i, ', bowled ');
+    }
 
-    // Build the flat cycle of segments for the live/break matches in the feed.
+    // Build the cycle of segments (each tagged with the match's flag label + live
+    // state) for the live/break/decided matches in the feed.
     function buildSegments(feed) {
         var shown = (feed && feed.matches || []).filter(function (m) { return m.phase === 'live' || m.phase === 'break' || m.complete; });
-        var out = [], anyLive = false, anyBreak = false;
+        var out = [], anyLive = false;
         shown.forEach(function (m) {
+            var team = m.pc_id != null ? PC_TEAM[String(m.pc_id)] : null;
             // Decided match → a result segment (provisional until finalised), no live lines.
             if (m.complete) {
                 var res = m.result || m.leader_text || m.score_text || '';
-                if (res) out.push('<span class="lbl">Result</span>' + esc(res) + (m.final ? '' : ' <span class="lbl">(provisional)</span>'));
+                if (res) out.push({ label: team || 'Result', live: false,
+                    html: '<span class="lbl">Result</span>' + esc(res) + (m.final ? '' : ' <span class="lbl">(provisional)</span>') });
                 return;
             }
             anyLive = true;
-            if (m.phase === 'break') anyBreak = true;
+            var isBreak = m.phase === 'break';
+            var flag = team || (isBreak ? 'Break' : 'Live');
             var inn = currentInnings(m);
-            var team = esc((inn && inn.side) || m.home || '');
-            // 1) Score.
+            // Gold for Wendover (team + players), white for the opposition.
+            var ours = inn ? /wendover/i.test(inn.side || '') : false;
+            var oc = ours ? ' ours' : '';
+            // 1) Score + at-crease batsmen, together in one segment (dot-separated).
             if (inn) {
-                out.push('<span class="team">' + team + '</span>' +
-                    '<span class="score">' + inn.runs + '/' + inn.wickets + '</span>' +
-                    '<span class="ov">(' + esc(inn.overs) + ' ov)</span>');
+                var parts = ['<span class="team' + oc + '">' + esc(inn.side || m.home || '') + '</span>' +
+                    '<span class="score' + oc + '">' + inn.runs + '/' + inn.wickets + '</span>' +
+                    '<span class="ov">(' + esc(inn.overs) + ' ov)</span>'];
+                (inn.at_crease || []).forEach(function (b) { parts.push(batHtml(b, ours)); });
+                out.push({ label: flag, live: !isBreak, html: parts.join('<span class="sep">·</span>') });
             } else if (m.score_text) {
-                out.push('<span class="team">' + esc(m.score_text) + '</span>');
+                out.push({ label: flag, live: !isBreak, html: '<span class="team">' + esc(m.score_text) + '</span>' });
             }
-            // 2) At crease.
-            var crease = ((inn && inn.at_crease) || []).map(function (b) {
-                return '<span class="bat">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) +
-                    ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
-            });
-            if (crease.length) out.push(crease.join('<span class="sep">·</span>'));
-            // 3) Last wicket.
+            // 2) Last wicket — player name styled like the at-crease batters (.bat),
+            // the runs/dismissal muted, for a consistent read across segments.
             var w = inn && inn.last_wicket;
-            if (w) out.push('<span class="lbl">Last wkt</span>' + esc(w.name) + ' ' + (w.runs != null ? w.runs : '') +
-                (w.how ? ' — ' + esc(w.how) : ''));
-            // 4) Break, if any.
-            if (m.phase === 'break' && m.break_desc) out.push('<span class="lbl">' + esc(m.break_desc) + '</span>');
+            if (w) out.push({ label: flag, live: !isBreak,
+                html: '<span class="lbl">Last wkt</span><span class="bat' + oc + '">' + esc(w.name) + '</span>' +
+                    '<span class="num">' + (w.runs != null ? ' ' + w.runs : '') + (w.how ? ' — ' + esc(expandHow(w.how)) : '') + '</span>' });
+            // 3) Break, if any.
+            if (isBreak && m.break_desc) out.push({ label: flag, live: false, html: '<span class="lbl">' + esc(m.break_desc) + '</span>' });
         });
-        return { segments: out, anyLive: anyLive, anyBreak: anyBreak };
+        return { segments: out, anyLive: anyLive };
     }
 
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
 
     function showSeg(i) {
+        var seg = segments[i] || { label: '', html: '', live: false };
         var next = 1 - face;
-        segs[next].innerHTML = segments[i] || '';
+        segs[next].innerHTML = seg.html;
         segs[next].classList.add('on');
         segs[face].classList.remove('on');
         face = next;
+        // The flag names the match this segment belongs to, and pulses only while live.
+        liveLabel.textContent = seg.label;
+        liveEl.classList.toggle('is-live', !!seg.live);
     }
 
     function render(feed) {
+        lastFeed = feed;
         var built = buildSegments(feed);
         if (!built.segments.length) { bar.classList.remove('show'); stop(); lastKey = ''; return; }
-        // Pulse only while genuinely in play; a decided (result-only) ticker shows a
-        // static "Result" flag.
-        liveEl.classList.toggle('is-live', built.anyLive && !built.anyBreak);
-        liveLabel.textContent = built.anyLive ? (built.anyBreak ? 'Break' : 'Live') : 'Result';
         bar.classList.add('show');
-        var key = built.segments.join('|');
+        var key = built.segments.map(function (s) { return s.label + '|' + s.html; }).join('§');
         if (key === lastKey) return;   // same content — let the running cycle continue
         lastKey = key;
         segments = built.segments;
