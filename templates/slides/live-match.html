@@ -1,14 +1,16 @@
 {% extends 'slides/_base-sidebar.html' %}
 {% from 'slides/_set_header.html' import set_header %}
+{% from 'slides/_tape.html' import tape %}
 {% block title %}{{ slide.title }}{% endblock %}
 {#- Today's Match: the live counterpart of the last-match set, for ONE team. Same
-    chrome (set_header + sidebar); a self-managed tab strip whose panels are driven
-    by the wcc-live feed. Tabs present but self-skipping — an empty tab is skipped,
-    and if the match has no live data at all the slide skips itself (posts wcc-done
-    immediately). Cycles the live tabs once, then advances the deck. -#}
+    chrome (set_header + sidebar); a self-managed tab strip. It always opens on a
+    static, build-time "Pre-match" tale of the tape; the remaining panels (innings +
+    result) are driven by the wcc-live feed, with empty tabs self-skipping. A match
+    with no live data shows just Pre-match, then advances the deck. Cycles once. -#}
 {% block styles %}
 {% include 'slides/_set_header_styles.html' %}
 {% include 'slides/_reel_tag_styles.html' %}
+{% include 'slides/_tape_styles.html' %}
     /* Full-bleed reel beat: a fixed overlay that takes over the whole slide (sidebar
        included) to play an innings' highlight clips, then hides to reveal the
        scorecard. Mirrors the curated last-match reel + the live news-flash. */
@@ -61,17 +63,8 @@
     .extras-row .name { opacity: 0.7; } .total-row .name { font-weight: 700; }
     .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
 
-    /* Intro view — matchup + toss, spoiler-free pre-match card. */
-    .lm-intro { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3vh; }
-    .lm-vs { display: flex; align-items: center; gap: 2.5vw; }
-    .lm-side { display: flex; flex-direction: column; align-items: center; gap: 1.2vh; width: 22vw; }
-    .lm-side img { width: 9vw; height: 9vw; object-fit: contain; background: #fff; border-radius: 50%; padding: 0.6vw; }
-    .lm-side .nm { font-size: var(--t-md); font-weight: 700; text-align: center; line-height: 1.15; }
-    .lm-side.ours .nm { color: var(--accent); }
-    .lm-vs .v { font-size: var(--t-lg); font-weight: 900; opacity: 0.5; }
-    .lm-toss { font-size: var(--t-md); color: var(--text); text-align: center; }
-    .lm-toss b { color: var(--accent); }
-    .lm-intro .meta { font-size: var(--t-sm); color: var(--muted); }
+    /* Pre-match view — the spoiler-safe tale of the tape (shared _tape partial),
+       baked server-side into #lm-intro-tmpl and cloned into the panel by JS. */
 
     /* Result view — a two-column tale-of-the-tape mirroring the last-match Result
        slide (match-result.html): crest + club + score + result pill + performers
@@ -113,6 +106,11 @@
     <nav class="panel-nav" id="lm-nav"></nav>
     <div class="lm-panels"><div class="lm-view" id="lm-view"></div></div>
 
+    {#- Pre-match tale of the tape, rendered statically at build time. Inert inside a
+        <template> (crest images don't load until cloned); the slide's JS reads its
+        markup and presents it as the always-first "Pre-match" panel. -#}
+    <template id="lm-intro-tmpl">{{ tape(slide) }}</template>
+
     <div id="lm-reel" hidden>
         <video id="lm-reel-video" muted playsinline preload="none"></video>
         <div class="reel-tag">
@@ -151,6 +149,9 @@
     var reelVideo = document.getElementById('lm-reel-video');
     var reelCaption = document.getElementById('lm-reel-caption');
     var reelLabel = document.getElementById('lm-reel-label');
+    // Static pre-match tale of the tape, baked server-side (see #lm-intro-tmpl).
+    var introTmpl = document.getElementById('lm-intro-tmpl');
+    var INTRO_HTML = introTmpl ? introTmpl.innerHTML : '';
 
     var feed = null, feedSeen = false;
     var views = [], tabs = [], idx = 0;
@@ -171,13 +172,13 @@
         return (feed && feed.matches || []).filter(function (m) { return String(m.pc_id) === String(PC_ID); })[0] || null;
     }
 
-    // Which views exist right now. Intro appears once there's a toss or play; each
-    // innings contributes batting + bowling; Result appears when the match is over.
+    // Which views exist right now. The Pre-match tale of the tape is static and
+    // always first (baked at build time). Each innings then contributes batting +
+    // bowling; Result appears when the match is over.
     function buildViews() {
         var m = ourMatch();
-        var v = [];
-        if (!m || m.phase === 'no-feed') return { m: null, views: v };
-        // Intro/toss lives on the Today board now — this slide is innings + result.
+        var v = [{ tab: 'Pre-match', kind: 'intro' }];
+        if (!m || m.phase === 'no-feed') return { m: m, views: v };
         (m.innings || []).forEach(function (inn, i) {
             var tab = (i === 0 ? '1st' : i === 1 ? '2nd' : (i + 1) + 'th') + ' Innings';
             // Highlight reel before the scorecard — only once the result is visible
@@ -252,19 +253,19 @@
         }).join('');
         lastTab = null;
     }
-    // Highlight the current tab. Re-arm the underline only when the tab actually
-    // changes (so batting->bowling within one innings doesn't restart it); it fills
-    // over the tab's whole span while auto-rotating, or sits full when interactive.
+    // Highlight the current tab and underline only it. The gold `.u` is set on the
+    // active tab and explicitly cleared on every other one — the nav DOM persists
+    // across cycles (renderTabs only rebuilds on a tab-set change), so without the
+    // reset a tab underlined last cycle would keep its bar when the slide restarts.
     function setActive(curTab) {
         var spans = navEl.querySelectorAll('.panel-tab');
-        for (var i = 0; i < spans.length; i++)
-            spans[i].classList.toggle('active', spans[i].getAttribute('data-tab') === curTab);
-        if (curTab === lastTab) return;
+        for (var i = 0; i < spans.length; i++) {
+            var on = spans[i].getAttribute('data-tab') === curTab;
+            spans[i].classList.toggle('active', on);
+            var u = spans[i].querySelector('.u');
+            if (u) u.style.transform = on ? 'scaleX(1)' : 'scaleX(0)';
+        }
         lastTab = curTab;
-        var u = navEl.querySelector('.panel-tab.active .u');
-        if (!u) return;
-        u.style.transition = 'none'; u.style.transform = 'scaleX(0)'; void u.offsetWidth;
-        u.style.transform = 'scaleX(1)';
     }
 
     // ---- view renderers ----
@@ -316,16 +317,6 @@
             '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(bowlSide) + '</span>' +
             '<span class="col-num">O</span><span class="col-num">M</span><span class="col-num">R</span>' +
             '<span class="col-num">W</span><span class="col-num">Econ</span></div>' + rows + '</div>';
-    }
-    function introView(m) {
-        var oppCrest = OPP_CREST || '';
-        var toss = m.toss ? ('<div class="lm-toss"><b>' + esc(m.toss.is_wendover ? OUR_NAME : (OPP_NAME || m.toss.winner)) +
-            '</b> won the toss, elected to ' + esc(m.toss.decision) + '</div>') : '';
-        return '<div class="lm-intro"><div class="lm-vs">' +
-            '<div class="lm-side ours"><img src="' + esc(OUR_CREST) + '" alt=""><div class="nm">' + esc(OUR_NAME) + '</div></div>' +
-            '<div class="v">v</div>' +
-            '<div class="lm-side">' + (oppCrest ? '<img src="' + esc(oppCrest) + '" alt="">' : '') +
-            '<div class="nm">' + esc(OPP_NAME) + '</div></div></div>' + toss + '</div>';
     }
     // ---- result view (mirrors the last-match tale-of-the-tape: match-result.html) ----
     var RESULT_LABELS = { W: 'Won', L: 'Lost', D: 'Drew', T: 'Tied', A: 'Abandoned', C: 'Cancelled', NR: 'No Result' };
@@ -486,6 +477,25 @@
             '<div class="col-divider"></div>' + teamCol(cols[1]) + '</div>' + foot;
     }
 
+    // Pre-match footer enrichment: the static tape is baked with division (+ h2h)
+    // but no toss (unknown overnight). Once the feed carries the toss, drop its line
+    // in at the head of the tape footer — the same slot the last-match intro uses.
+    // Idempotent, and safe to call on the already-rendered panel (no dwell reset).
+    function injectToss() {
+        var m = ourMatch();
+        var text = m && m.toss && m.toss.text ? m.toss.text : '';
+        if (!text) return;
+        var tape = viewEl.querySelector('.tape');
+        if (!tape) return;
+        var foot = tape.querySelector('.tape-foot');
+        if (!foot) { foot = document.createElement('div'); foot.className = 'tape-foot'; tape.appendChild(foot); }
+        if (foot.querySelector('.toss')) return;
+        var el = document.createElement('div');
+        el.className = 'toss';
+        el.textContent = text;
+        foot.insertBefore(el, foot.firstChild);
+    }
+
     // ---- reel tag (top-left square) ----
     // The square's title + fixture are static host context (rendered server-side);
     // only the per-clip narrative caption and the active innings tab change here.
@@ -608,8 +618,19 @@
         idx = Math.max(0, Math.min(views.length - 1, i));
         var v = views[idx], m = ourMatch();
         clearDwell();
-        if (!v || !m) { viewEl.innerHTML = ''; hideReel(); return; }
+        if (!v) { viewEl.innerHTML = ''; hideReel(); return; }
         setActive(v.tab);
+        // Pre-match: static server-rendered tale of the tape, shown before (and
+        // regardless of) any live feed. Treated like a scorecard panel for dwell.
+        if (v.kind === 'intro') {
+            hideReel();
+            viewEl.innerHTML = INTRO_HTML;
+            injectToss();
+            notifyPanel(idx, PANEL_MS / 1000);
+            if (play) armDwell();
+            return;
+        }
+        if (!m) { viewEl.innerHTML = ''; hideReel(); return; }
         if (v.kind === 'clip') {
             viewEl.innerHTML = '';
             notifyPanel(idx, clipDwellSecs());
@@ -696,22 +717,34 @@
     function onFeed(data) {
         feed = data; feedSeen = true;
         ensurePrefetch(ourMatch());
-        var wasClip = views[idx] && views[idx].kind === 'clip';
+        var cur = views[idx];
+        var wasClip = cur && cur.kind === 'clip';
+        var wasIntro = cur && cur.kind === 'intro';
         refreshViews();
         announceCount();
         if (!views.length) { if (shown) done(); return; }
         if (idx > views.length - 1) idx = views.length - 1;
-        if (shown && !wasClip) gotoPanel(idx, false);
+        if (!shown) return;
+        // Never interrupt a playing clip or the static pre-match panel (both run
+        // their own dwell); once the strip rebuilds, just keep the pre-match tab lit.
+        if (wasClip) return;
+        // Keep the pre-match panel in place (don't reset its dwell), but let a
+        // newly-available toss appear and keep its tab lit after the strip rebuilds.
+        if (wasIntro) { setActive(views[idx].tab); injectToss(); return; }
+        gotoPanel(idx, false);
     }
 
     // Kiosk activation waits briefly for the first feed so a load race doesn't skip a
     // live match; an empty feed → skip the whole slide.
-    var beginRetry = null;
+    var beginRetry = null, beginTries = 0;
     function clearBeginRetry() { if (beginRetry) { clearTimeout(beginRetry); beginRetry = null; } }
     function beginFromStart() {
         shown = true;
         clearBeginRetry();
-        if (!feedSeen) { beginRetry = setTimeout(beginFromStart, 1500); return; }
+        // Wait briefly for the first feed so a load race doesn't miss live innings,
+        // but bounded: the Pre-match panel is static, so start it regardless once the
+        // wait lapses (a match with no feed then shows Pre-match and self-advances).
+        if (!feedSeen && beginTries++ < 3) { beginRetry = setTimeout(beginFromStart, 1500); return; }
         refreshViews(); announceCount();
         if (!views.length) { done(); return; }
         gotoPanel(0, true);
@@ -741,7 +774,7 @@
     var controller = {
         count: 1,
         show: function (i) { shown = true; clearBeginRetry(); gotoPanel(i, true); },
-        startAuto: function () { clearBeginRetry(); beginFromStart(); },
+        startAuto: function () { clearBeginRetry(); beginTries = 0; beginFromStart(); },
         pauseAuto: function () { holdCurrent(); },
         restartCurrent: function () { shown = true; resumeCurrent(); }
     };

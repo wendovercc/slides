@@ -2150,6 +2150,8 @@ def build_live_matches(env, slide_meta):
             loc_lookup[a.lower()] = l["id"]
     fx = FETCHED / "fixtures.json"
     all_fixtures = json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {}
+    stats_path = FETCHED / "player_stats_this_season.json"
+    stats = json.loads(stats_path.read_text()) if stats_path.exists() else None
     tr = FETCHED / "cs365_training.json"
     training = json.loads(tr.read_text()).get("sessions", []) if tr.exists() else []
     events = todays_events(teams_by_id, training, all_fixtures, loc_lookup, loc_names,
@@ -2182,6 +2184,33 @@ def build_live_matches(env, slide_meta):
             # innings reel can run minutes, so don't let the player force-cut it.
             "duration": 900,
         }
+
+        # Pre-match tale of the tape — the same spoiler-safe preview the last-match
+        # set opens with, but baked statically here: it's all pre-match data known at
+        # overnight build time, so the live slide can show a "Pre-match" panel before
+        # any feed arrives (mirrors last-match parity). Rendered via the shared _tape
+        # partial into a hidden <template> the slide's JS clones as its first panel.
+        fixture = next((f for f in (all_fixtures.get(ev["team"]) or [])
+                        if str(f.get("match_id")) == str(ev["pc_id"])), {})
+        league_name = ev.get("league_name") or ""
+        comp_name = ev.get("competition") or ""
+        if league_name and comp_name and comp_name != league_name:
+            competition_display = f"{league_name} · {comp_name}"
+        else:
+            competition_display = league_name or comp_name
+        our_form = ((stats or {}).get("form", {}).get(ev["team"], {}).get("all", []))[-5:]
+        slide.update({
+            "_our_form": our_form,
+            "_our_performers": team_current_performers(stats, ev["team"]),
+            "_opp_club_name": opp_club,
+            "_opp_form": fixture.get("opposition_form") or [],
+            "_opp_performers": opp_preview_performers(fixture.get("opposition_players")),
+            "_division": competition_display,
+            "_toss": "",   # no toss before the match; the live feed carries it later
+            "_h2h": "",
+            # Pre-match lists the home team on the left (as the last-match intro).
+            "_our_left": ev.get("is_home", True),
+        })
         out_dir = SITE / "slide" / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(tmpl.render(slide=slide, slug=slug))
@@ -2802,7 +2831,7 @@ def build_match_packages(env, slide_meta):
         # slide, so it carries the shared header but no strip.
         # League table is the final step for league teams (safe post-result).
         league_panel = build_league_panel(team)
-        steps = (["Intro"] + innings_present
+        steps = (["Pre-match"] + innings_present
                  + (["Result"] if has_result else [])
                  + (["League"] if league_panel else []))
         iso = _iso_from_dmy(m.get("match_date", ""))
@@ -2939,9 +2968,9 @@ def build_match_packages(env, slide_meta):
             "_our_form": our_form, "_our_performers": our_performers,
             "_opp_crest": opp_crest, "_opp_form": opp_form, "_opp_performers": opp_performers,
             "_division": competition_display, "_toss": toss_line, "_h2h": h2h,
-            # Intro lists the home team on the left.
+            # Pre-match lists the home team on the left.
             "_our_left": is_home,
-            **with_strip("Intro"),
+            **with_strip("Pre-match"),
         })
         members.append(intro_slug)
 
