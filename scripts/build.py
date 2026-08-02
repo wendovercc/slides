@@ -2149,7 +2149,12 @@ def build_live_matches(env, slide_meta):
         for a in l.get("aliases", []):
             loc_lookup[a.lower()] = l["id"]
     fx = FETCHED / "fixtures.json"
-    all_fixtures = json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {}
+    fx_data = json.loads(fx.read_text()) if fx.exists() else {}
+    all_fixtures = fx_data.get("all_fixtures", {})
+    # Per-team next-match fixtures carry the published XI (fetched pre-match); on
+    # match morning a team's next match IS today's, so it's the source for the
+    # Pre-match "OUT" tags below.
+    next_fixtures = fx_data.get("fixtures", {})
     stats_path = FETCHED / "player_stats_this_season.json"
     stats = json.loads(stats_path.read_text()) if stats_path.exists() else None
     tr = FETCHED / "cs365_training.json"
@@ -2199,9 +2204,20 @@ def build_live_matches(env, slide_meta):
         else:
             competition_display = league_name or comp_name
         our_form = ((stats or {}).get("form", {}).get(ev["team"], {}).get("all", []))[-5:]
+        # Published-XI names for today's match, to tag season leaders who didn't make
+        # the team as OUT (mirrors the last-match intro). Only when the team's next
+        # fixture is in fact today's game (match its date + opposition); otherwise the
+        # XI is unknown and no one is tagged.
+        today_dmy = _today().strftime("%d/%m/%Y")
+        nf = next_fixtures.get(ev["team"]) or {}
+        nf_is_today = (nf.get("match_date") == today_dmy and
+                       str(nf.get("opposition_team_id") or "") == str(ev.get("opposition_team_id") or ""))
+        published_names = {_norm_name(p["name"]) for p in (nf.get("published_xi") or [])
+                           if nf_is_today and p.get("name")}
         slide.update({
             "_our_form": our_form,
-            "_our_performers": team_current_performers(stats, ev["team"]),
+            "_our_performers": team_current_performers(stats, ev["team"],
+                                                       published_names=published_names or None),
             "_opp_club_name": opp_club,
             "_opp_form": fixture.get("opposition_form") or [],
             "_opp_performers": opp_preview_performers(fixture.get("opposition_players")),
@@ -2597,17 +2613,21 @@ def team_preview_performers(stats, team_id, match, n_bat=2, n_bowl=2):
     return bats[:n_bat] + bowls[:n_bowl]
 
 
-def team_current_performers(stats, team_id, n_bat=2, n_bowl=2):
+def team_current_performers(stats, team_id, n_bat=2, n_bowl=2, published_names=None):
     """Season-to-date leading batters (by runs) and bowlers (by wickets) for the
-    Next Match preview, shaped for the shared tale-of-the-tape performer rows.
-    Like team_preview_performers but with nothing to subtract (the match hasn't
-    happened) and no `out` tag (the XI is unknown), so the figures read as the
-    current season totals."""
+    Next Match preview and the live slide's Pre-match tape, shaped for the shared
+    tale-of-the-tape performer rows. Like team_preview_performers but with nothing
+    to subtract (the match hasn't happened), so the figures read as current season
+    totals. `published_names` (a set of `_norm_name`'d published-XI names) flags a
+    leader absent from today's XI as `out`; without it the XI is unknown → none are."""
     if not stats:
         return []
 
     def avg(runs, dismissals):
         return f"{runs / dismissals:.1f}" if dismissals > 0 else "-"
+
+    def is_out(name):
+        return bool(published_names) and _norm_name(name) not in published_names
 
     bats, bowls = [], []
     for p in stats.get("players", {}).values():
@@ -2615,14 +2635,15 @@ def team_current_performers(stats, team_id, n_bat=2, n_bowl=2):
         if not block:
             continue
         b, bw = block["batting"], block["bowling"]
+        out = is_out(p["name"])
         if b["innings"] > 0:
             sr = f"{b['runs'] / b['balls'] * 100:.0f}" if b["balls"] > 0 else "-"
-            bats.append({"category": "bat", "name": p["name"], "_rank": b["runs"], "out": False,
+            bats.append({"category": "bat", "name": p["name"], "_rank": b["runs"], "out": out,
                          "primary": str(b["runs"]), "unit": "runs",
                          "secondary": f"avg {avg(b['runs'], b['innings'] - b['not_outs'])} · SR {sr}"})
         if bw["wickets"] > 0:
             econ = f"{bw['runs'] / (bw['balls'] / 6):.1f}" if bw["balls"] > 0 else "-"
-            bowls.append({"category": "bowl", "name": p["name"], "_rank": bw["wickets"], "out": False,
+            bowls.append({"category": "bowl", "name": p["name"], "_rank": bw["wickets"], "out": out,
                           "primary": str(bw["wickets"]), "unit": "wkts",
                           "secondary": f"avg {avg(bw['runs'], bw['wickets'])} · econ {econ}"})
 
