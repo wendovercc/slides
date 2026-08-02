@@ -2205,20 +2205,19 @@ def _mock_strip_data():
 
 
 def _mock_strip_friendly():
-    """TEMPORARY UI mock: a two-tile friendly (no league table). Mirrored win/loss
-    fills, bat/bowl roles, a DLS margin figure, and the chase-to-target line on the
-    side batting second. Header collapses to 'Friendly'. Remove once fed live."""
+    """TEMPORARY UI mock: a two-tile friendly (no league table) — the same tile look
+    as the league view. The side that batted first sits on top; the chasing side is
+    the 2nd tile, with a chase-stats panel filling the space beneath it. Mirrored
+    win/loss fills, bat/bowl roles. Header collapses to 'Friendly'. Remove once fed
+    live."""
     teams = [
-        {"tla": "WEN", "ours": True,  "role": "bat",  "lean": "win",
-         "certainty": 0.62, "dls": 8, "chase": "need 71 off 78"},
-        {"tla": "CSI", "ours": False, "role": "bowl", "lean": "loss",
-         "certainty": 0.62, "dls": -8},
+        # Batted first, now defending → top tile.
+        {"tla": "CSI", "ours": False, "role": "bowl", "lean": "loss", "certainty": 0.62},
+        # Chasing → 2nd tile; the panel below shows this side's chase.
+        {"tla": "WEN", "ours": True,  "role": "bat",  "lean": "win",  "certainty": 0.62,
+         "chase": {"runs": 71, "balls": 78, "rr": 5.2, "wkts": 7}},
     ]
-    # swing.band = the contested-zone width (∝ resources still to come); it narrows
-    # to 0 as the result settles, hardening the split into a solid winner.
-    return {"mode": "friendly",
-            "league": {"name": None, "team_label": "Friendly", "teams": teams,
-                       "swing": {"band": 26}}}
+    return {"mode": "friendly", "league": {"name": None, "team_label": "Friendly", "teams": teams}}
 
 
 def build_live_strip(env):

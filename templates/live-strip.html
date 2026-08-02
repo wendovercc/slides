@@ -49,53 +49,20 @@
         /* Certainty fill: full points colour, rising from the bottom to `height`. */
         .fill { position: absolute; left: 0; right: 0; bottom: 0; z-index: 0;
             transition: height 0.6s ease; }
-        /* Centred content column (just the TLA in the league view; TLA + DLS margin +
-           chase line in the roomier friendly view). */
-        .tstack { position: relative; z-index: 1; display: flex; flex-direction: column;
-            align-items: center; gap: 0.3vh; }
-        .tla { font-size: 3.2vh; font-weight: 900; letter-spacing: 0.02em; text-align: center; }
-        .dls { font-weight: 900; font-size: 1.9vh; }
-        .dls em { font-style: normal; font-size: 0.62em; font-weight: 700; opacity: 0.7;
-            letter-spacing: 0.08em; margin-left: 0.25em; }
-        .chase { font-weight: 700; font-size: 1.8vh; opacity: 0.92; }
+        .tla { position: relative; z-index: 1;
+            font-size: 3.2vh; font-weight: 900; letter-spacing: 0.02em; text-align: center; }
 
-        /* Friendly view: only two tiles, so scale the type up to use the room. */
-        .strip.mode-friendly .tla { font-size: 6vh; }
-        .strip.mode-friendly .dls { font-size: 2.7vh; }
-        .strip.mode-friendly .chase { font-size: 2.3vh; }
-        .strip.mode-friendly .role { width: 4.6vh; height: 4.6vh; }
+        /* Friendly view: the same tiles as the league view, but only two of them,
+           each capped at the 10-tile height with empty space below (the spacer takes
+           the remaining flex share). */
+        .spacer { flex: 8; min-height: 0; }
 
-        /* Swingometer (head-to-head): one area split green-over-red at a boundary set
-           by the top team's win probability — each side commands area = its chance.
-           No dark dead space, so the balance reads at a glance. */
-        .swing { position: relative; flex: 1; display: flex; flex-direction: column; gap: 0; }
-        /* Two fixed identity tiles (top/bottom thirds) with a sliding track between
-           them (middle third). Tiles never resize — only the marker moves. */
-        .swing .s-tile { flex: 1; position: relative; display: flex; flex-direction: column;
-            align-items: center; justify-content: center; gap: 0.4vh;
-            background: rgba(255,255,255,0.06); border-radius: 0.6vh; }
-        .swing .s-tile.ours { box-shadow: -0.6vh 0 0 0 var(--gold); }
-        .swing .role { bottom: auto; top: 1.2vh; left: 1.2vh; }
-
-        /* Middle third: the tug-of-war track. A faint centre = even; a bar grows from
-           the centre toward the leader up to the marker (green up = top ahead, red
-           down = bottom ahead); the DLS pill rides the marker. */
-        .swing .s-mid { flex: 1; position: relative; margin: 0.6vh 0; }
-        .swing .s-mid .centre { position: absolute; left: 8%; right: 8%; top: 50%;
-            height: 0.14vh; background: rgba(255,255,255,0.2); }
-        .swing .lead-bar { position: absolute; left: 32%; right: 32%; border-radius: 0.4vh;
-            transition: top 0.4s ease, height 0.4s ease, background 0.4s ease; }
-        .swing .marker { position: absolute; left: 0; right: 0; z-index: 2;
-            display: flex; align-items: center; justify-content: center;
-            transform: translateY(-50%); transition: top 0.4s ease; }
-        .swing .marker::before { content: ''; position: absolute; left: 6%; right: 6%; top: 50%;
-            height: 0.18vh; background: rgba(255,255,255,0.4); }
-        .swing .dls-tag { position: relative; background: var(--matte);
-            border: 0.15vh solid rgba(255,255,255,0.5); border-radius: 1vh;
-            padding: 0.3vh 1.1vh; font-weight: 900; color: #fff; font-size: 2vh; }
-        .swing .dls-tag em { font-style: normal; font-size: 0.6em; font-weight: 700;
-            opacity: 0.75; letter-spacing: 0.08em; margin-left: 0.3em; }
-        .strip.mode-friendly .dls-tag { font-size: 2.6vh; }
+        /* Chase stats: one full-size tile per stat (same as a team tile), stacked
+           under the 2nd (chasing) tile during a run chase; value + label centred. */
+        .stat-tile { flex-direction: column; gap: 0.3vh; }
+        .cval { font-size: 3.4vh; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+        .clabel { font-size: 1.4vh; font-weight: 700; letter-spacing: 0.04em;
+            text-transform: uppercase; color: rgba(255,255,255,0.6); }
 
         /* Our team: a thick gold bar just OUTSIDE the tile's left edge. */
         .tile.ours { box-shadow: -0.6vh 0 0 0 var(--gold); }
@@ -165,51 +132,28 @@
         // provisional (done, not yet published).
         if (t.role && GLYPH[t.role]) inner += '<span class="role">' + GLYPH[t.role] + '</span>';
         else if (t.provisional) inner += '<span class="role">' + GLYPH.prov + '</span>';
-        // Content stack: TLA always; DLS margin + chase line where present (friendly).
-        var stack = '<div class="tstack"><span class="tla">' + esc(t.tla) + '</span>';
-        if (t.dls != null) stack += '<span class="dls">' + (t.dls >= 0 ? '+' : '−') + Math.abs(t.dls) + '<em>DLS</em></span>';
-        if (t.chase) stack += '<span class="chase">' + esc(t.chase) + '</span>';
-        stack += '</div>';
-        inner += stack;
+        // The tile shows the abbreviation; a chase (object) is rendered separately by
+        // the panel below, never on the tile.
+        inner += '<span class="tla">' + esc(t.tla) + '</span>';
         if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + (t.ghost === 'up' ? '▲' : '▼') + '</span>';
         if (t.idle === 'nodata') inner += '<span class="dot"></span>';
 
         return '<div class="' + cls.join(' ') + '">' + inner + '</div>';
     }
 
-    // Head-to-head tug-of-war for a friendly: two fixed identity tiles (top/bottom
-    // thirds) with a marker sliding in the middle third. Marker at the top of the
-    // track = 100% top win, bottom = 100% bottom win, centre = even. A lead bar grows
-    // from the centre toward the leader; the DLS pill rides the marker.
-    function renderFriendly(l) {
-        var teams = (l && l.teams) || [];
-        if (teams.length < 2) return '';
-        var top = teams[0], bot = teams[1];
-        var pWin = function (t) { var c = t.certainty || 0; return t.lean === 'win' ? c : 1 - c; };
-        var pTop = pWin(top);
-        var y = Math.round((1 - pTop) * 100);            // marker position down the track (0 = top wins)
-        var leadTop = Math.min(y, 50), leadH = Math.abs(y - 50);
-        var leadColour = y < 50 ? leanColour('win') : leanColour('loss');   // up = top ahead, down = behind
-
-        function tileEl(t, cls) {
-            var role = (t.role && GLYPH[t.role]) ? '<span class="role">' + GLYPH[t.role] + '</span>' : '';
-            var s = '<div class="s-tile ' + cls + (t.ours ? ' ours' : '') + '">' + role +
-                    '<div class="tstack"><span class="tla">' + esc(t.tla) + '</span>';
-            if (t.chase) s += '<span class="chase">' + esc(t.chase) + '</span>';
-            return s + '</div></div>';
+    // Chase stats as full-size tiles (one per stat, stacked) under the 2nd (chasing)
+    // tile during a 2nd innings. Balls left is optional (needs the overs allotment).
+    // Returns {html, count} so the trailing spacer knows how many tiles were added.
+    function chaseTiles(c) {
+        function stat(val, label) {
+            return '<div class="tile stat-tile"><span class="cval">' + esc(val) + '</span>' +
+                   '<span class="clabel">' + label + '</span></div>';
         }
-        var dlsTag = top.dls != null
-            ? '<span class="dls-tag">' + (top.dls >= 0 ? '+' : '−') + Math.abs(top.dls) + '<em>DLS</em></span>' : '';
-
-        return '<div class="swing">' +
-            tileEl(top, 's-top') +
-            '<div class="s-mid">' +
-                '<div class="centre"></div>' +
-                '<div class="lead-bar" style="top:' + leadTop + '%;height:' + leadH + '%;background:' + leadColour + '"></div>' +
-                '<div class="marker" style="top:' + y + '%">' + dlsTag + '</div>' +
-            '</div>' +
-            tileEl(bot, 's-bot') +
-        '</div>';
+        var html = stat(c.runs, 'Runs left'), n = 1;
+        if (c.balls != null) { html += stat(c.balls, 'Balls left'); n++; }
+        if (c.rr != null) { html += stat(c.rr, 'Run rate'); n++; }
+        if (c.wkts != null) { html += stat(c.wkts, 'Wkts left'); n++; }
+        return { html: html, count: n };
     }
 
     function header(l) {
@@ -224,8 +168,15 @@
         var league = STRIP && STRIP.league;
         var teams = (league && league.teams) || [];
         if (!teams.length) { root.classList.remove('show'); return; }
-        root.classList.toggle('mode-friendly', STRIP.mode === 'friendly');
-        var body = STRIP.mode === 'friendly' ? renderFriendly(league) : teams.map(tile).join('');
+        // Same tiles for both views; the friendly view caps them at the 10-tile
+        // height, then fills the space below with the chase panel (2nd innings) or an
+        // empty spacer, both soaking up the remaining flex share.
+        var body = teams.map(tile).join('');
+        if (STRIP.mode === 'friendly') {
+            var chase = teams[1] && teams[1].chase, extra = 0;
+            if (chase) { var ct = chaseTiles(chase); body += ct.html; extra = ct.count; }
+            body += '<div class="spacer" style="flex:' + Math.max(1, 10 - teams.length - extra) + '"></div>';
+        }
         root.innerHTML = header(league) + body;
         root.classList.add('show');
     }
