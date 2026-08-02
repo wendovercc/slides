@@ -73,13 +73,40 @@
     .lm-toss b { color: var(--accent); }
     .lm-intro .meta { font-size: var(--t-sm); color: var(--muted); }
 
-    /* Result view — scoreline + result pill. */
-    .lm-result { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.5vh; }
-    .lm-result .rscore { font-size: var(--t-xl); font-weight: 900; font-variant-numeric: tabular-nums; }
-    .lm-result .rlead { font-size: var(--t-md); color: var(--muted); text-align: center; }
-    .lm-result .rpill { font-size: var(--t-md); font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase;
-        padding: 0.6vh 1.6vw; border-radius: 4px; background: rgba(212,175,55,0.18); color: var(--accent); }
-    .lm-result .rprov { font-size: var(--t-sm); color: var(--muted); opacity: 0.8; text-transform: uppercase; letter-spacing: 0.08em; }
+    /* Result view — a two-column tale-of-the-tape mirroring the last-match Result
+       slide (match-result.html): crest + club + score + result pill + performers
+       each side, over a footer margin line. Driven live from the completed feed
+       (no PC points, and provisional until the scorer finalises). */
+    .result-columns { flex: 1; display: flex; gap: 2.5vw; min-height: 0; }
+    .team-col { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
+    .col-divider { width: 1px; background: rgba(255,255,255,0.12); flex-shrink: 0; }
+    .crest { height: 6vw; display: flex; align-items: center; justify-content: center; margin-top: 1vh; }
+    .crest img { width: 6vw; height: 6vw; border-radius: 50%; object-fit: contain; background: #fff; padding: 0.4vw; box-sizing: border-box; }
+    .tc-name { font-size: var(--t-md); font-weight: 900; line-height: 1.05; margin-top: 1.2vh; }
+    .tc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; margin-top: 0.8vh; }
+    .tc-result-row { margin-top: 3vh; }
+    .result-pill { font-weight: bold; font-size: var(--t-sm); letter-spacing: 0.12em; text-transform: uppercase;
+        padding: 0.35vh 0.9vw; border-radius: 4px; }
+    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
+    .result-A, .result-C, .result-NR { background: #4a3800; border: 1px solid #8c6800; color: #ffd966; }
+
+    .tc-performers { width: 100%; text-align: left; margin-top: 6vh; display: flex; flex-direction: column; gap: 1.1vh; }
+    .match-hl { display: flex; flex-direction: column; }
+    .hl-line { display: grid; grid-template-columns: 2vw 1fr auto; gap: 0 0.6vw; align-items: center; font-size: var(--t-md); line-height: 1.1; }
+    .perf-icon { width: 1.7vw; height: 1.7vw; color: rgba(255,255,255,0.85); }
+    .perf-icon-cell { display: flex; align-items: center; justify-content: center; }
+    .hl-line .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.9; }
+    .pts { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; color: var(--accent); }
+    .hl-detail { padding-left: 2.6vw; font-family: 'Lato', Arial, sans-serif; font-size: var(--t-sm); opacity: 0.55; letter-spacing: 0.04em; margin-top: -0.1vh; }
+
+    /* Footer mirrors the last-match Result: the match outcome as the headline
+       (white), with a provisional tail until PC finalises the scorecard. */
+    .result-foot { flex-shrink: 0; text-align: center; padding-top: 1.6vh; margin-top: 1vh; border-top: 1px solid rgba(255,255,255,0.15); }
+    .result-summary { font-size: var(--t-md); font-weight: 700; }
+    .result-summary .prov { color: var(--muted); font-weight: 400; }
 {% endblock %}
 {% block content %}
     {{ set_header(slide) }}
@@ -249,8 +276,10 @@
     function battingView(m, inn) {
         var rows = (inn.batters || []).map(function (b) {
             var at = b.dismissal_id === 1;
+            // The "not out"/"*" facts stay on a closed innings (scorecard convention);
+            // only the gold live-row highlight is dropped once the innings has ended.
             var how = at ? '<span class="out notout">not out</span>' : '<span class="out">' + esc(b.how || '') + '</span>';
-            return '<div class="row bat-grid' + (at ? ' at-crease' : '') + '"><span class="name">' + esc(b.name) + '</span>' + how +
+            return '<div class="row bat-grid' + (at && !inn.closed ? ' at-crease' : '') + '"><span class="name">' + esc(b.name) + '</span>' + how +
                 '<span class="num dim">' + num(b.balls) + '</span><span class="num dim">' + num(b.fours) + '</span>' +
                 '<span class="num dim">' + num(b.sixes) + '</span>' +
                 '<span class="num dim">' + (b.sr != null ? b.sr : '<span class="z">·</span>') + '</span>' +
@@ -275,8 +304,9 @@
     function bowlingView(m, inn) {
         var bowlSide = (inn.side === m.home) ? m.away : m.home;
         var rows = (inn.bowling || []).length ? (inn.bowling).map(function (b) {
-            // Mid-over (overs ending .1–.5) = currently bowling → gold bar.
-            var now = /\.[1-5]$/.test(String(b.overs));
+            // Mid-over (overs ending .1–.5) = currently bowling → gold bar. Not on a
+            // closed innings — nobody is mid-over once it has ended.
+            var now = !inn.closed && /\.[1-5]$/.test(String(b.overs));
             return '<div class="row bowl-grid' + (now ? ' now-bowling' : '') + '"><span class="name">' + esc(b.name) + '</span>' +
                 '<span class="num">' + esc(b.overs) + '</span><span class="num dim">' + num(b.maidens) + '</span>' +
                 '<span class="num">' + (b.runs || 0) + '</span><span class="num highlight">' + (b.wickets || 0) + '</span>' +
@@ -297,12 +327,163 @@
             '<div class="lm-side">' + (oppCrest ? '<img src="' + esc(oppCrest) + '" alt="">' : '') +
             '<div class="nm">' + esc(OPP_NAME) + '</div></div></div>' + toss + '</div>';
     }
+    // ---- result view (mirrors the last-match tale-of-the-tape: match-result.html) ----
+    var RESULT_LABELS = { W: 'Won', L: 'Lost', D: 'Drew', T: 'Tied', A: 'Abandoned', C: 'Cancelled', NR: 'No Result' };
+    var PERF_ICONS = {
+        bat: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><g transform="rotate(45 12 12)" fill="currentColor"><rect x="8.8" y="6.6" width="6.4" height="12" rx="3"/><rect x="10.6" y="2.2" width="2.8" height="5.2" rx="1.4"/></g></svg>',
+        bowl: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="currentColor"/><g fill="none" stroke="#0a1c3a" stroke-width="1.1" stroke-linecap="round" opacity="0.55"><path d="M12 4.2 Q 14 12 12 19.8"/><path d="M10.7 6.7 l2.6 0.5"/><path d="M10.2 9.3 l2.9 0.4"/><path d="M10.1 12 l3 0"/><path d="M10.2 14.7 l2.9 -0.4"/><path d="M10.7 17.3 l2.6 -0.5"/></g></svg>',
+        field: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><rect x="6" y="7" width="1.9" height="13" rx="0.95"/><rect x="11.05" y="7" width="1.9" height="13" rx="0.95"/><rect x="16.1" y="7" width="1.9" height="13" rx="0.95"/><rect x="5.4" y="5.3" width="6.3" height="1.6" rx="0.8"/><rect x="12.3" y="5.3" width="6.3" height="1.6" rx="0.8"/></g></svg>'
+    };
+    // Club name only — drop the "- 1st XI"/junior designation (the header already
+    // names the team). Mirrors today.html's clubOnly + build's tc-name convention.
+    function clubOnly(name) {
+        return String(name == null ? '' : name).trim()
+            .replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
+            .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '').trim();
+    }
+    // The 1st-innings side's card vs the other's — order-sorted by the feed, so
+    // innings[0] is chronologically first.
+    function sideInnings(m) {
+        var ours = null, opp = null;
+        (m.innings || []).forEach(function (inn) {
+            if (isOurs(inn.side)) { if (!ours) ours = inn; }
+            else if (!opp) opp = inn;
+        });
+        return { ours: ours, opp: opp };
+    }
+    // Short innings total for the column headline — mirrors build's _short_innings_total
+    // ("139/6 (45.0)", "150 ao (48.2)").
+    function shortTotal(inn) {
+        if (!inn) return '';
+        var runs = inn.runs || 0, wkts = inn.wickets, overs = inn.overs || '', score;
+        if (wkts == null) score = String(runs);
+        else if (Number(wkts) >= 10) score = runs + ' ao';
+        else score = runs + '/' + Number(wkts);
+        return overs ? (score + ' (' + esc(overs) + ')') : score;
+    }
+    // Decision letters (W/L for each side, or a shared D/T/A/NR) from the result
+    // text, falling back to comparing the two innings totals when it's not yet a
+    // verdict-shaped string.
+    function verdict(m) {
+        var t = String(m.result || m.leader_text || '');
+        if (/tie|tied/i.test(t)) return { our: 'T', opp: 'T' };
+        if (/draw|drawn/i.test(t)) return { our: 'D', opp: 'D' };
+        if (/abandon/i.test(t)) return { our: 'A', opp: 'A' };
+        if (/no result/i.test(t)) return { our: 'NR', opp: 'NR' };
+        if (/won|win/i.test(t)) return isOurs(t) ? { our: 'W', opp: 'L' } : { our: 'L', opp: 'W' };
+        var si = sideInnings(m);
+        if (si.ours && si.opp) {
+            var o = si.ours.runs || 0, p = si.opp.runs || 0;
+            if (o > p) return { our: 'W', opp: 'L' };
+            if (p > o) return { our: 'L', opp: 'W' };
+            return { our: 'T', opp: 'T' };
+        }
+        return null;
+    }
+
+    // Performer highlight dicts — ports of build's _bat_highlight/_bowl_highlight.
+    function batHl(b) {
+        var parts = [];
+        if (b.balls) parts.push(b.balls + ' balls');
+        if (b.fours) parts.push(b.fours + ' fours');
+        if (b.sixes) parts.push(b.sixes + ' sixes');
+        return { category: 'bat', name: b.name || '',
+            primary: (b.runs || 0) + (b.dismissal_id === 1 ? '*' : ''), secondary: parts.join(' · ') };
+    }
+    function bowlHl(b) {
+        var parts = [(b.overs || '0') + ' overs'], md = b.maidens || 0;
+        if (md) parts.push(md + ' maiden' + (md !== 1 ? 's' : ''));
+        return { category: 'bowl', name: b.name || '',
+            primary: (b.wickets || 0) + '–' + (b.runs || 0), secondary: parts.join(' · ') };
+    }
+    // Fielders with 2+ dismissals from the innings this team fielded in (oppBatting),
+    // formatted like build's team_performers — "3c 1ro 1st" (catches/run-outs/
+    // stumpings, zeros dropped). Uses the worker's resolved fielder + out_kind.
+    function fielderHls(oppBatting) {
+        var tally = {};
+        (oppBatting || []).forEach(function (b) {
+            var k = b.out_kind === 'caught' ? 'c' : b.out_kind === 'stumped' ? 'st' : b.out_kind === 'run_out' ? 'ro' : null;
+            if (!k || !b.fielder) return;
+            var f = tally[b.fielder] || (tally[b.fielder] = { c: 0, ro: 0, st: 0, n: 0 });
+            f[k]++; f.n++;
+        });
+        return Object.keys(tally).sort(function (a, b) { return tally[b].n - tally[a].n; })
+            .filter(function (name) { return tally[name].n >= 2; })
+            .map(function (name) {
+                var f = tally[name];
+                var figure = ['c', 'ro', 'st'].filter(function (k) { return f[k]; }).map(function (k) { return f[k] + k; }).join(' ');
+                return { category: 'field', name: name, primary: figure, secondary: '' };
+            });
+    }
+    // A team's headline performers from its own card — best bat + best bowl always,
+    // then up to two more notable (50+, 3+ wkt hauls, 2+ dismissal fielders). Port of
+    // build's team_performers; oppBatting is the card this team fielded against.
+    function teamPerformers(batting, bowling, oppBatting) {
+        var bats = (batting || []).filter(function (b) { return (b.runs || 0) > 0 || (b.balls || 0) > 0; });
+        var bowls = (bowling || []).filter(function (b) { return (b.wickets || 0) > 0 || (b.overs && parseFloat(b.overs) > 0); });
+        var out = [], seen = {};
+        function add(hl) { var n = (hl.name || '').trim(); if (n && !seen[n]) { out.push(hl); seen[n] = 1; } }
+        if (bats.length) add(batHl(bats.slice().sort(function (a, b) {
+            return (b.runs || 0) - (a.runs || 0) || (a.balls || 0) - (b.balls || 0); })[0]));
+        if (bowls.length) add(bowlHl(bowls.slice().sort(function (a, b) {
+            return (b.wickets || 0) - (a.wickets || 0) || (a.runs || 0) - (b.runs || 0); })[0]));
+        var notable = [];
+        bats.slice().sort(function (a, b) { return (b.runs || 0) - (a.runs || 0); })
+            .forEach(function (b) { if ((b.runs || 0) >= 50) notable.push(batHl(b)); });
+        bowls.slice().sort(function (a, b) { return (b.wickets || 0) - (a.wickets || 0) || (b.runs || 0) - (a.runs || 0); })
+            .forEach(function (b) { if ((b.wickets || 0) >= 3) notable.push(bowlHl(b)); });
+        fielderHls(oppBatting).forEach(function (h) { notable.push(h); });
+        for (var i = 0; i < notable.length && out.length < 4; i++) add(notable[i]);
+        var ORD = { bat: 0, bowl: 1, field: 2 };
+        function rank(c) { return c in ORD ? ORD[c] : 3; }
+        out.sort(function (a, b) { return rank(a.category) - rank(b.category); });
+        return out;
+    }
+    function perfLine(h) {
+        return '<div class="match-hl"><div class="hl-line">' +
+            '<span class="perf-icon-cell">' + (PERF_ICONS[h.category] || '') + '</span>' +
+            '<span class="name">' + esc(h.name) + '</span>' +
+            (h.primary ? '<span class="pts">' + esc(h.primary) + '</span>' : '') + '</div>' +
+            (h.secondary ? '<div class="hl-detail">' + esc(h.secondary) + '</div>' : '') + '</div>';
+    }
+    function teamCol(col) {
+        return '<div class="team-col">' +
+            '<div class="crest">' + (col.crest ? '<img src="' + esc(col.crest) + '" alt="' + esc(col.name) + '">' : '') + '</div>' +
+            '<div class="tc-name">' + esc(col.name) + '</div>' +
+            '<div class="tc-score">' + (col.score || '&nbsp;') + '</div>' +
+            '<div class="tc-result-row">' +
+                (col.result ? '<span class="result-pill result-' + col.result + '">' + esc(col.label) +
+                    (col.points != null ? ' · ' + col.points + ' pts' : '') + '</span>'
+                            : '<span class="result-pill" style="visibility:hidden">&nbsp;</span>') + '</div>' +
+            '<div class="tc-performers">' + col.performers.map(perfLine).join('') + '</div></div>';
+    }
     function resultView(m) {
+        var si = sideInnings(m), v = verdict(m);
+        var ourCol = {
+            crest: OUR_CREST, name: si.ours ? clubOnly(si.ours.side) : (OUR_NAME || 'Wendover'),
+            score: shortTotal(si.ours), result: v && v.our, label: v && RESULT_LABELS[v.our],
+            // League points come from the feed (worker-computed, TVCL only); absent for
+            // non-TVCL matches → the pill shows the result without a points suffix.
+            points: si.ours ? si.ours.points : null,
+            // Our batting + our bowling (= the bowlers in the opposition's innings) +
+            // our fielders (credited from the opposition's dismissals).
+            performers: teamPerformers(si.ours && si.ours.batters, si.opp && si.opp.bowling, si.opp && si.opp.batters)
+        };
+        var oppCol = {
+            crest: OPP_CREST, name: si.opp ? clubOnly(si.opp.side) : (OPP_NAME || 'Opposition'),
+            score: shortTotal(si.opp), result: v && v.opp, label: v && RESULT_LABELS[v.opp],
+            points: si.opp ? si.opp.points : null,
+            performers: teamPerformers(si.opp && si.opp.batters, si.ours && si.ours.bowling, si.ours && si.ours.batters)
+        };
+        // Left = the side that batted first (mirrors match-result's _our_left = we_bat_first).
+        var first = (m.innings || [])[0];
+        var ourFirst = first ? isOurs(first.side) : true;
+        var cols = ourFirst ? [ourCol, oppCol] : [oppCol, ourCol];
         var res = m.result || m.leader_text || '';
-        return '<div class="lm-result">' +
-            '<div class="rscore">' + esc(m.score_text || '') + '</div>' +
-            (res ? '<div class="rpill">' + esc(res) + '</div>' : '') +
-            (!m.final ? '<div class="rprov">Result to be confirmed</div>' : '') + '</div>';
+        var foot = res ? '<div class="result-foot"><div class="result-summary">' + esc(res) +
+            (!m.final ? '<span class="prov"> · to be confirmed</span>' : '') + '</div></div>' : '';
+        return '<div class="result-columns">' + teamCol(cols[0]) +
+            '<div class="col-divider"></div>' + teamCol(cols[1]) + '</div>' + foot;
     }
 
     // ---- reel tag (top-left square) ----
