@@ -496,6 +496,75 @@
         foot.insertBefore(el, foot.firstChild);
     }
 
+    // Punctuation-robust name key, mirroring build's _norm_name so feed names match
+    // the baked performer names ("A.B. Smith" == "AB Smith").
+    function normName(s) {
+        return String(s == null ? '' : s).toLowerCase()
+            .replace(/[.\-']/g, ' ').replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+    }
+    // First-initial + surname key (mirrors build's _name_key), a looser fallback so
+    // the RV feed's name form still matches the PC stats name baked into the tape
+    // ("Robert Cooke" ↔ "Rob Cooke", "A. Reid" ↔ "Andrew Reid").
+    function nameInitialKey(s) {
+        var p = normName(s).split(' ');
+        if (!p[0]) return '';
+        return p.length === 1 ? p[0] : (p[0].charAt(0) + ' ' + p[p.length - 1]);
+    }
+    // Our playing XI as the live feed knows it: the full batting card for our
+    // innings (batted + yet-to-bat, which includes DNBs) covers every XI member
+    // regardless of role, so it tags both batting and bowling leaders. Returns
+    // { full, keys } lookup sets, or null when the feed doesn't yet hold a
+    // full-looking order (we've not batted, or only part of the card is entered) —
+    // in which case the build-time published-XI tags are left untouched.
+    function ourXiFromFeed(m) {
+        if (!m) return null;
+        var names = [];
+        (m.innings || []).forEach(function (inn) {
+            if (!isOurs(inn.side)) return;
+            (inn.batters || []).forEach(function (b) { if (b && b.name) names.push(b.name); });
+            (inn.yet_to_bat || []).forEach(function (n) { if (n) names.push(n); });
+        });
+        if (names.length < 9) return null;   // not a full order yet — don't override
+        var full = {}, keys = {};
+        names.forEach(function (n) { full[normName(n)] = 1; var k = nameInitialKey(n); if (k) keys[k] = 1; });
+        return { full: full, keys: keys };
+    }
+    // Is this performer in our feed XI? Exact normalised name, else the looser
+    // initial+surname key (a false match only where two leaders share both, which
+    // never happens across a 2-4 performer list).
+    function inXi(xi, name) {
+        return !!xi.full[normName(name)] || !!xi.keys[nameInitialKey(name)];
+    }
+    // Once live gives us our actual XI, re-tag our tape performers' OUT badges from
+    // it (add for a leader who's not playing, clear one the published XI got wrong).
+    // Only our column is touched; the opposition side is never tagged. No-op without
+    // feed access or a full order (the build-time tags then stand).
+    function applyLiveXi() {
+        var xi = ourXiFromFeed(ourMatch());
+        if (!xi) return;
+        var cols = viewEl.querySelectorAll('.tape-col');
+        for (var i = 0; i < cols.length; i++) {
+            var nm = cols[i].querySelector('.tc-name');
+            if (!nm || !isOurs(nm.textContent)) continue;
+            var rows = cols[i].querySelectorAll('.perf-row');
+            for (var j = 0; j < rows.length; j++) {
+                var who = rows[j].querySelector('.perf-who');
+                var nameEl = rows[j].querySelector('.perf-name');
+                if (!who || !nameEl) continue;
+                var out = !inXi(xi, nameEl.textContent);
+                var tag = who.querySelector('.out-tag');
+                if (out && !tag) {
+                    tag = document.createElement('span');
+                    tag.className = 'out-tag';
+                    tag.textContent = 'OUT';
+                    who.appendChild(tag);
+                } else if (!out && tag) {
+                    tag.parentNode.removeChild(tag);
+                }
+            }
+        }
+    }
+
     // ---- reel tag (top-left square) ----
     // The square's title + fixture are static host context (rendered server-side);
     // only the per-clip narrative caption and the active innings tab change here.
@@ -626,6 +695,7 @@
             hideReel();
             viewEl.innerHTML = INTRO_HTML;
             injectToss();
+            applyLiveXi();
             notifyPanel(idx, PANEL_MS / 1000);
             if (play) armDwell();
             return;
@@ -730,7 +800,7 @@
         if (wasClip) return;
         // Keep the pre-match panel in place (don't reset its dwell), but let a
         // newly-available toss appear and keep its tab lit after the strip rebuilds.
-        if (wasIntro) { setActive(views[idx].tab); injectToss(); return; }
+        if (wasIntro) { setActive(views[idx].tab); injectToss(); applyLiveXi(); return; }
         gotoPanel(idx, false);
     }
 
