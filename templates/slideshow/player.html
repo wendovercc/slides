@@ -76,6 +76,17 @@
             z-index: 1; pointer-events: none; background: transparent;
         }
 
+        /* Live strip: the right band the retracting slide layer uncovers (the
+           vertical partner of the ticker footer). Full height minus the footer band
+           so the two meet at the bottom-right corner without overlapping. Same z /
+           reveal / no-input rules as the ticker. */
+        iframe.strip {
+            position: absolute; top: 0; right: 0;
+            width: calc(var(--live-band) * 100%);
+            height: calc((1 - var(--live-band)) * 100%); border: none;
+            z-index: 1; pointer-events: none; background: transparent;
+        }
+
         /* Preview (50%-scale debug view): scale the whole stage from the top-right, so
            slides, ticker and flash scale together and the live shrink still composes. */
         body.preview #stage {
@@ -207,6 +218,7 @@
         </div>
         {% if live_enabled %}
         <iframe id="ticker-frame" class="ticker" src="/live-ticker/"></iframe>
+        <iframe id="strip-frame" class="strip" src="/live-strip/"></iframe>
         <iframe id="flash-frame" class="flash" src="/live-flash/"></iframe>
         {% endif %}
     </div>

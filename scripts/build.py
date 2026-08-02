@@ -2132,6 +2132,117 @@ def build_live_ticker(env):
     print("  live-ticker overlay → /live-ticker/")
 
 
+def _team_tla(club_name):
+    """Short 2–4 char tag for a club (Frogbox-style), the ladder's crest fallback.
+    Initials of the significant words; a single-word club takes its first 3 letters.
+    A manual override map can refine collisions later."""
+    words = [w for w in re.split(r"[^A-Za-z0-9]+", club_name or "")
+             if w and w.lower() not in ("cc", "cricket", "club", "the", "and")]
+    if not words:
+        return (club_name or "?")[:3].upper()
+    if len(words) == 1:
+        return words[0][:3].upper()
+    return "".join(w[0] for w in words).upper()[:4]
+
+
+def _club_of(team_name):
+    """Club portion of a league-table team name ('Maidenhead & Bray CC - 3rd XI'
+    -> 'Maidenhead & Bray CC')."""
+    return re.sub(r"\s*-\s*.*$", "", team_name or "").strip()
+
+
+def _strip_league(comp_id, comp_label):
+    """The division as an ordered list of teams (by current league position) for
+    the strip: short tag + whether it's our row. One equal tile per team; the order
+    will later shift live as results are predicted."""
+    p = FETCHED / f"league_table_{comp_id}.json"
+    if not comp_id or not p.exists():
+        return None
+    try:
+        lt = json.loads(p.read_text())["league_table"][0]
+    except (ValueError, OSError, KeyError, IndexError):
+        return None
+    teams = []
+    for r in lt.get("values", []):
+        club = _club_of(r.get("column_1"))
+        teams.append({
+            "tla": _team_tla(club),
+            "ours": club.lower().startswith("wendover cc"),
+        })
+    return {"name": comp_label, "teams": teams}
+
+
+def _mock_strip_data():
+    """TEMPORARY UI mock: the real Div 6C order with an illustrative spread of live
+    tile states laid over it, purely to view the tile visuals (tint = result lean,
+    opacity = certainty, bat/bowl glyph, ghost move-arrow). Remove once fed live.
+
+    Each overlay: role (bat/bowl glyph), lean (win/loss tint), certainty (tint
+    opacity 0–1), ghost (pending up/down move), provisional (done-not-published,
+    dashed), idle ('none' = no match, 'nodata' = match on but silent feed)."""
+    league = _strip_league("135855", "Div 6C")
+    if not league:
+        return {"league": None}
+    spread = [
+        {"lean": "win",  "certainty": 1.00},                                 # HW  published win (G)
+        {"lean": "win",  "certainty": 0.90, "provisional": True},            # DEN done, unpublished (F)
+        {"role": "bat",  "lean": "loss", "certainty": 0.62, "ghost": "down"},# MB  chasing us, behind on DLS (D)
+        {"role": "bowl", "certainty": 0.12, "ghost": "down"},                # HUR 1st inns bowling (B)
+        {"role": "bowl", "lean": "win",  "certainty": 0.62, "ghost": "up"},  # WEN defending 249, ahead (E) — ours
+        {"idle": "none"},                                                    # MR  no match today (A)
+        {"idle": "nodata"},                                                  # TP  match on, no live data (A2)
+        {"role": "bat",  "certainty": 0.12},                                 # LEE 1st inns batting (C)
+        {"lean": "loss", "certainty": 1.00},                                 # AME published loss (G)
+        {"role": "bat",  "lean": "win",  "certainty": 0.70, "ghost": "up"},  # WN  chasing, ahead (D)
+    ]
+    for i, t in enumerate(league["teams"]):
+        if i < len(spread):
+            t.update(spread[i])
+    # The featured XI whose division this is — matches the ticker's left flag, so
+    # the header can keep the two chrome surfaces visibly in sync.
+    league["team_label"] = "1st XI"
+    return {"mode": "league", "league": league}
+
+
+def _mock_strip_friendly():
+    """TEMPORARY UI mock: a two-tile friendly (no league table). Mirrored win/loss
+    fills, bat/bowl roles, a DLS margin figure, and the chase-to-target line on the
+    side batting second. Header collapses to 'Friendly'. Remove once fed live."""
+    teams = [
+        {"tla": "WEN", "ours": True,  "role": "bat",  "lean": "win",
+         "certainty": 0.62, "dls": 8, "chase": "need 71 off 78"},
+        {"tla": "CSI", "ours": False, "role": "bowl", "lean": "loss",
+         "certainty": 0.62, "dls": -8},
+    ]
+    # swing.band = the contested-zone width (∝ resources still to come); it narrows
+    # to 0 as the result settles, hardening the split into a solid winner.
+    return {"mode": "friendly",
+            "league": {"name": None, "team_label": "Friendly", "teams": teams,
+                       "swing": {"band": 26}}}
+
+
+def build_live_strip(env):
+    """Render the live vertical-strip page (/live-strip/). Player-owned chrome
+    iframe on the right band (like the ticker): one equal-height tile per team in
+    the division, ordered by league position.
+
+    Data is baked at build time. WCC_LIVE_MOCK=1 bakes a real division for design
+    work; otherwise the strip renders empty (hidden) until it's wired to the feed."""
+    out_dir = SITE / "live-strip"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    mock = os.environ.get("WCC_LIVE_MOCK", "").strip().lower()
+    if mock in ("friendly", "f"):
+        data = _mock_strip_friendly()
+    elif mock in ("1", "true", "on", "yes", "league", "l"):
+        data = _mock_strip_data()
+    else:
+        data = {"mode": None, "league": None}
+    html = env.get_template("live-strip.html").render(strip_json=json.dumps(data))
+    (out_dir / "index.html").write_text(html)
+    n = len((data.get("league") or {}).get("teams") or [])
+    print(f"  live-strip → /live-strip/ ({n} tiles; mock={mock or 'off'})")
+
+
 def build_live_matches(env, slide_meta):
     """Emit a `live-match-{team}` slide per team with a fixture today — the live
     counterpart of the last-match-{team} set, bound to that team's pc_id. It renders
@@ -3298,6 +3409,7 @@ if __name__ == "__main__":
         build_league_config()
         build_live_flash(env)
         build_live_ticker(env)
+        build_live_strip(env)
 
     print("Building context calendar...")
     build_context_calendar()

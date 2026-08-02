@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Live strip</title>
+    <style>
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+        :root {
+            --gold: #d4af37; --text: #fff; --matte: #08152c;
+            /* Match the points badges elsewhere (--accent-win / --accent-loss). */
+            --win: 45, 122, 45; --loss: 139, 26, 26;   /* rgb triples */
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+        html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
+            font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--text); }
+
+        /* The column reveals with the rest of the live chrome. */
+        .strip {
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            background: var(--matte);
+            padding: 1vh 0.5vh; gap: 0.6vh;
+            opacity: 0; transition: opacity 0.4s ease;
+        }
+        .strip.show { opacity: 1; }
+
+        /* Subordinate header: names the division (and the featured XI, echoing the
+           ticker's gold flag) so the strip is self-explanatory and reads as in sync
+           with the ticker. Deliberately not tile-styled — a caption, not a row. */
+        .head { flex-shrink: 0; text-align: center; padding: 0.2vh 0 0.7vh;
+            border-bottom: 0.12vh solid rgba(255,255,255,0.14); }
+        .head-xi { display: inline-block; font-size: 1.5vh; font-weight: 900;
+            letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
+        .head-div { font-size: 1.7vh; font-weight: 900; letter-spacing: 0.07em;
+            text-transform: uppercase; color: rgba(255,255,255,0.55); margin-top: 0.2vh; }
+
+        /* One equal-height tile per team, ordered by league position. Channels:
+           - FILL colour   = result lean (green win / red loss), always the full points colour
+           - FILL height   = certainty (a band rising from the bottom; full tile = settled)
+           - bat/bowl ICON = live role (top-left)
+           - GHOST arrow   = a pending, not-yet-committed move up/down the table
+           Role/dot top-left, ghost arrow bottom-right, TLA centred; text stays white on
+           either the dark base or the full colour, so contrast never drops. */
+        .tile {
+            position: relative; flex: 1; min-height: 0; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            background: rgba(255,255,255,0.06); border-radius: 0.6vh;
+        }
+        /* Certainty fill: full points colour, rising from the bottom to `height`. */
+        .fill { position: absolute; left: 0; right: 0; bottom: 0; z-index: 0;
+            transition: height 0.6s ease; }
+        /* Centred content column (just the TLA in the league view; TLA + DLS margin +
+           chase line in the roomier friendly view). */
+        .tstack { position: relative; z-index: 1; display: flex; flex-direction: column;
+            align-items: center; gap: 0.3vh; }
+        .tla { font-size: 3.2vh; font-weight: 900; letter-spacing: 0.02em; text-align: center; }
+        .dls { font-weight: 900; font-size: 1.9vh; }
+        .dls em { font-style: normal; font-size: 0.62em; font-weight: 700; opacity: 0.7;
+            letter-spacing: 0.08em; margin-left: 0.25em; }
+        .chase { font-weight: 700; font-size: 1.8vh; opacity: 0.92; }
+
+        /* Friendly view: only two tiles, so scale the type up to use the room. */
+        .strip.mode-friendly .tla { font-size: 6vh; }
+        .strip.mode-friendly .dls { font-size: 2.7vh; }
+        .strip.mode-friendly .chase { font-size: 2.3vh; }
+        .strip.mode-friendly .role { width: 4.6vh; height: 4.6vh; }
+
+        /* Swingometer (head-to-head): one area split green-over-red at a boundary set
+           by the top team's win probability — each side commands area = its chance.
+           No dark dead space, so the balance reads at a glance. */
+        .swing { position: relative; flex: 1; display: flex; flex-direction: column; gap: 0; }
+        /* Two fixed identity tiles (top/bottom thirds) with a sliding track between
+           them (middle third). Tiles never resize — only the marker moves. */
+        .swing .s-tile { flex: 1; position: relative; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 0.4vh;
+            background: rgba(255,255,255,0.06); border-radius: 0.6vh; }
+        .swing .s-tile.ours { box-shadow: -0.6vh 0 0 0 var(--gold); }
+        .swing .role { bottom: auto; top: 1.2vh; left: 1.2vh; }
+
+        /* Middle third: the tug-of-war track. A faint centre = even; a bar grows from
+           the centre toward the leader up to the marker (green up = top ahead, red
+           down = bottom ahead); the DLS pill rides the marker. */
+        .swing .s-mid { flex: 1; position: relative; margin: 0.6vh 0; }
+        .swing .s-mid .centre { position: absolute; left: 8%; right: 8%; top: 50%;
+            height: 0.14vh; background: rgba(255,255,255,0.2); }
+        .swing .lead-bar { position: absolute; left: 32%; right: 32%; border-radius: 0.4vh;
+            transition: top 0.4s ease, height 0.4s ease, background 0.4s ease; }
+        .swing .marker { position: absolute; left: 0; right: 0; z-index: 2;
+            display: flex; align-items: center; justify-content: center;
+            transform: translateY(-50%); transition: top 0.4s ease; }
+        .swing .marker::before { content: ''; position: absolute; left: 6%; right: 6%; top: 50%;
+            height: 0.18vh; background: rgba(255,255,255,0.4); }
+        .swing .dls-tag { position: relative; background: var(--matte);
+            border: 0.15vh solid rgba(255,255,255,0.5); border-radius: 1vh;
+            padding: 0.3vh 1.1vh; font-weight: 900; color: #fff; font-size: 2vh; }
+        .swing .dls-tag em { font-style: normal; font-size: 0.6em; font-weight: 700;
+            opacity: 0.75; letter-spacing: 0.08em; margin-left: 0.3em; }
+        .strip.mode-friendly .dls-tag { font-size: 2.6vh; }
+
+        /* Our team: a thick gold bar just OUTSIDE the tile's left edge. */
+        .tile.ours { box-shadow: -0.6vh 0 0 0 var(--gold); }
+
+        /* Idle 'none' (no match): flatter base and a dimmed TLA so it recedes. */
+        .tile.idle-none { background: rgba(255,255,255,0.03); }
+        .tile.idle-none .tla { opacity: 0.4; }
+        /* Silent-feed dot: left-of-centre, the same slot as the role icon — the two
+           never co-occur (no innings role known when the feed is silent). */
+        /* Silent-feed marker: a quiet, static muted dot — deliberately less present
+           than the bat/bowl icons, since 'match on but no data' says less than a
+           known innings role. Bottom-left, the role slot (the two never co-occur). */
+        .dot { position: absolute; bottom: 1.5vh; left: 1.5vh; z-index: 1;
+            width: 1.1vh; height: 1.1vh;
+            border-radius: 50%; background: rgba(255,255,255,0.55); }
+
+        /* Bat/bowl icon, tucked into the bottom-left corner clear of the centred TLA.
+           PLACEHOLDER — swap for the club's own set. */
+        .role { position: absolute; bottom: 0.6vh; left: 0.6vh; z-index: 1;
+            width: 3vh; height: 3vh; color: #fff; }
+        .role svg { width: 100%; height: 100%; display: block; }
+
+        /* Ghost arrow, bottom-right: white, the pending move (shape carries direction). */
+        .ghost { position: absolute; bottom: 0.7vh; right: 0.9vh; z-index: 1;
+            font-size: 2.8vh; line-height: 1; color: #fff; opacity: 0.9; }
+    </style>
+</head>
+<body>
+    <div id="strip" class="strip"></div>
+<script>
+(function () {
+    var root = document.getElementById('strip');
+
+    // Baked at build time: division ordered by league position, each tile carrying
+    // its live-state channels (mock spread for now). Live feed replaces this later.
+    var STRIP = {{ strip_json | safe }};
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    // PLACEHOLDER bat/bowl marks (swap for the club's icons): a bat blade + handle,
+    // and a seamed ball.
+    var GLYPH = {
+        bat: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="12.5" y="2.5" width="5" height="13" rx="2.5" transform="rotate(38 15 9)"/><rect x="6.8" y="14.5" width="3" height="7" rx="1.5" transform="rotate(38 8.3 18)"/></svg>',
+        bowl: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="currentColor"/><path d="M7.5 4.2 Q13 12 7.5 19.8" fill="none" stroke="#0a1c3a" stroke-width="1.6" stroke-linecap="round"/></svg>',
+        // Provisional result (done, awaiting publication): a clock = "not yet official".
+        prov: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5 V12 L15.5 14"/></svg>'
+    };
+
+    // Result lean → the full points colour (never washed out); certainty drives how
+    // high the fill rises, not its colour.
+    function leanColour(lean) { return lean === 'win' ? 'rgb(45,122,45)' : 'rgb(139,26,26)'; }
+
+    function tile(t) {
+        var cls = ['tile'];
+        if (t.ours) cls.push('ours');
+        if (t.idle === 'none') cls.push('idle-none');
+        if (t.idle === 'nodata') cls.push('idle-nodata');
+
+        var inner = '';
+        // Certainty fill first (sits behind the content).
+        if (t.lean) {
+            var h = Math.round(Math.max(0, Math.min(1, t.certainty || 0)) * 100);
+            inner += '<span class="fill" style="height:' + h + '%;background:' + leanColour(t.lean) + '"></span>';
+        }
+        // Bottom-left slot: bat/bowl while in play, else a clock while the result is
+        // provisional (done, not yet published).
+        if (t.role && GLYPH[t.role]) inner += '<span class="role">' + GLYPH[t.role] + '</span>';
+        else if (t.provisional) inner += '<span class="role">' + GLYPH.prov + '</span>';
+        // Content stack: TLA always; DLS margin + chase line where present (friendly).
+        var stack = '<div class="tstack"><span class="tla">' + esc(t.tla) + '</span>';
+        if (t.dls != null) stack += '<span class="dls">' + (t.dls >= 0 ? '+' : '−') + Math.abs(t.dls) + '<em>DLS</em></span>';
+        if (t.chase) stack += '<span class="chase">' + esc(t.chase) + '</span>';
+        stack += '</div>';
+        inner += stack;
+        if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + (t.ghost === 'up' ? '▲' : '▼') + '</span>';
+        if (t.idle === 'nodata') inner += '<span class="dot"></span>';
+
+        return '<div class="' + cls.join(' ') + '">' + inner + '</div>';
+    }
+
+    // Head-to-head tug-of-war for a friendly: two fixed identity tiles (top/bottom
+    // thirds) with a marker sliding in the middle third. Marker at the top of the
+    // track = 100% top win, bottom = 100% bottom win, centre = even. A lead bar grows
+    // from the centre toward the leader; the DLS pill rides the marker.
+    function renderFriendly(l) {
+        var teams = (l && l.teams) || [];
+        if (teams.length < 2) return '';
+        var top = teams[0], bot = teams[1];
+        var pWin = function (t) { var c = t.certainty || 0; return t.lean === 'win' ? c : 1 - c; };
+        var pTop = pWin(top);
+        var y = Math.round((1 - pTop) * 100);            // marker position down the track (0 = top wins)
+        var leadTop = Math.min(y, 50), leadH = Math.abs(y - 50);
+        var leadColour = y < 50 ? leanColour('win') : leanColour('loss');   // up = top ahead, down = behind
+
+        function tileEl(t, cls) {
+            var role = (t.role && GLYPH[t.role]) ? '<span class="role">' + GLYPH[t.role] + '</span>' : '';
+            var s = '<div class="s-tile ' + cls + (t.ours ? ' ours' : '') + '">' + role +
+                    '<div class="tstack"><span class="tla">' + esc(t.tla) + '</span>';
+            if (t.chase) s += '<span class="chase">' + esc(t.chase) + '</span>';
+            return s + '</div></div>';
+        }
+        var dlsTag = top.dls != null
+            ? '<span class="dls-tag">' + (top.dls >= 0 ? '+' : '−') + Math.abs(top.dls) + '<em>DLS</em></span>' : '';
+
+        return '<div class="swing">' +
+            tileEl(top, 's-top') +
+            '<div class="s-mid">' +
+                '<div class="centre"></div>' +
+                '<div class="lead-bar" style="top:' + leadTop + '%;height:' + leadH + '%;background:' + leadColour + '"></div>' +
+                '<div class="marker" style="top:' + y + '%">' + dlsTag + '</div>' +
+            '</div>' +
+            tileEl(bot, 's-bot') +
+        '</div>';
+    }
+
+    function header(l) {
+        if (!l) return '';
+        var xi = l.team_label ? '<span class="head-xi">' + esc(l.team_label) + '</span>' : '';
+        var div = l.name ? '<div class="head-div">' + esc(l.name) + '</div>' : '';
+        if (!xi && !div) return '';
+        return '<div class="head">' + xi + div + '</div>';
+    }
+
+    function render() {
+        var league = STRIP && STRIP.league;
+        var teams = (league && league.teams) || [];
+        if (!teams.length) { root.classList.remove('show'); return; }
+        root.classList.toggle('mode-friendly', STRIP.mode === 'friendly');
+        var body = STRIP.mode === 'friendly' ? renderFriendly(league) : teams.map(tile).join('');
+        root.innerHTML = header(league) + body;
+        root.classList.add('show');
+    }
+
+    render();
+})();
+</script>
+</body>
+</html>
