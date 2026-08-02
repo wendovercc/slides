@@ -236,6 +236,20 @@
                 .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '')
                 .trim();
     }
+    // A side-led result ("<side> won/lost/conceded by …") with the winning side
+    // shown as its clean fixture club name — ours from the baked our_club, the
+    // opposition from ev.opposition — instead of the club+team designation the feed
+    // bakes into the phrase ("Wendover Friendly XI won …" -> "Wendover CC won …").
+    // Verdict-only phrases ("Match tied/drawn/abandoned") aren't side-led and pass
+    // through unchanged.
+    function resultClub(res, ev) {
+        var s = String(res == null ? '' : res);
+        var vm = s.match(/^(.*?\S)\s+(\b(?:won|win|lost|conceded)\b.*)$/i);
+        if (!vm) return s;
+        var club = /wendover/i.test(vm[1]) ? (ev.our_club || clubOnly(vm[1]))
+                                           : (ev.opposition || clubOnly(vm[1]));
+        return club ? club + ' ' + vm[2] : s;
+    }
     function inningsLine(ev, inn, batsHtml) {
         if (!inn) return '';
         // Gold marks OUR score only; the opposition's innings stays white.
@@ -264,7 +278,7 @@
         if (lm && lm.complete) {
             // Keep the final scorecard (both innings) and lead with a result headline
             // — gold when Wendover won. Provisional until the scorer finalises it.
-            var res = lm.result || lm.leader_text || lm.score_text || 'Result';
+            var res = resultClub(lm.result || lm.leader_text || lm.score_text || 'Result', ev);
             var wendWon = /wendover/i.test(res) && /\bwon\b/i.test(res);
             var banner = '<div class="event-result' + (wendWon ? ' win' : '') + '">' + esc(res) +
                 (lm.final ? '' : '<span class="prov"> · to be confirmed</span>') + '</div>';

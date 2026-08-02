@@ -62,6 +62,8 @@
         .tick-seg .num { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
         .tick-seg .star { color: var(--accent); }
         .tick-seg .lbl { color: var(--muted); font-size: var(--t-sm); text-transform: uppercase; letter-spacing: 0.06em; }
+        /* Provisional-result note — matches today.html's .prov (muted, not uppercase). */
+        .tick-seg .prov { color: var(--muted); font-weight: 400; }
         .tick-seg .sep { color: var(--muted); opacity: 0.5; margin: 0 0.3vw; }
     </style>
 </head>
@@ -91,11 +93,13 @@
 
     // pc_id -> our team label ("1st XI"/"2nd XI"), so the left flag names the match
     // the current segment belongs to instead of a generic "Live". PC_OPP maps the
-    // same id -> the opposition's clean club name (fixture opposition_club_name), so
-    // the scoreline can use it rather than parsing the feed's batting-side string.
-    // Same-origin config the daily build writes next to the player; a miss just
-    // falls back to Live/Break (label) and clubOnly() (scoreline).
-    var PC_TEAM = {}, PC_OPP = {};
+    // same id -> the opposition's clean club name (fixture opposition_club_name) and
+    // PC_OUR -> our own clean club name ("Wendover CC"), both from the fixture, so
+    // the scoreline/result use the authoritative names rather than parsing the
+    // feed's batting-side designation (which lacks "CC" on some sides, e.g.
+    // friendlies). Same-origin config the daily build writes next to the player; a
+    // miss just falls back to Live/Break (label) and clubOnly() (scoreline).
+    var PC_TEAM = {}, PC_OPP = {}, PC_OUR = {};
     fetch('/live-config.json', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (cfg) {
@@ -103,6 +107,7 @@
                 if (m.pc_id == null) return;
                 PC_TEAM[String(m.pc_id)] = m.team_name || null;
                 PC_OPP[String(m.pc_id)] = m.opposition || null;
+                PC_OUR[String(m.pc_id)] = m.our_club || null;
             });
             if (lastFeed) render(lastFeed);   // relabel a feed that painted before the map loaded
         })
@@ -120,6 +125,32 @@
         if (cc) return cc[1].trim();
         return s.replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
                 .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '').trim();
+    }
+    // Club-only inside a result phrase: "Wendover CC 2nd XI won by 5 wickets" ->
+    // "Wendover CC won by 5 wickets". Only the leading side-name carries a team
+    // designation, so clip it at the club suffix and re-attach the verdict clause.
+    // Verdict-only strings ("Match tied") and already-short names pass through.
+    // Last-ditch fallback for a match not in our fixture config; resultClub() below
+    // prefers the authoritative fixture names.
+    function resultClubOnly(res) {
+        var m = String(res == null ? '' : res).match(
+            /^(.*?\b(?:CC|Cricket Club))\b\s*.*?(\b(?:won|lost|win|tied?|drawn?|abandoned|conceded|no result)\b.*)$/i);
+        if (m) return (m[1] + ' ' + m[2]).replace(/\s+/g, ' ').trim();
+        return String(res == null ? '' : res);
+    }
+    // A side-led result ("<side> won/lost/conceded by …") with the winning side
+    // shown as its clean fixture club name — ours from PC_OUR, otherwise the
+    // opposition from PC_OPP — instead of the club+team designation the feed bakes
+    // into the phrase. Verdict-only phrases ("Match tied/drawn/abandoned") aren't
+    // side-led, so they pass through resultClubOnly() unchanged.
+    function resultClub(res, m) {
+        var s = String(res == null ? '' : res);
+        var vm = s.match(/^(.*?\S)\s+(\b(?:won|win|lost|conceded)\b.*)$/i);
+        if (!vm) return resultClubOnly(s);
+        var club = /wendover/i.test(vm[1])
+            ? (m.pc_id != null ? PC_OUR[String(m.pc_id)] : null)
+            : (m.pc_id != null ? PC_OPP[String(m.pc_id)] : null);
+        return club ? club + ' ' + vm[2] : resultClubOnly(s);
     }
     function batHtml(b, ours) {
         return '<span class="bat' + (ours ? ' ours' : '') + '">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) +
@@ -143,9 +174,9 @@
             var team = m.pc_id != null ? PC_TEAM[String(m.pc_id)] : null;
             // Decided match → a result segment (provisional until finalised), no live lines.
             if (m.complete) {
-                var res = m.result || m.leader_text || m.score_text || '';
+                var res = resultClub(m.result || m.leader_text || m.score_text || '', m);
                 if (res) out.push({ label: team || 'Result', live: false,
-                    html: '<span class="lbl">Result</span>' + esc(res) + (m.final ? '' : ' <span class="lbl">(provisional)</span>') });
+                    html: '<span class="team">' + esc(res) + '</span>' + (m.final ? '' : '<span class="prov"> · to be confirmed</span>') });
                 return;
             }
             anyLive = true;
@@ -156,12 +187,14 @@
             // still drives which club name (ours vs the fixture opposition) to show.
             var ours = inn ? /wendover/i.test(inn.side || '') : false;
             var oc = '';
-            // Opposition scoreline uses the fixture's clean club name; our own side
-            // (and any unknown opposition) falls back to clubOnly() on the feed name.
+            // Both club names come from the fixture config: ours from PC_OUR, the
+            // opposition from PC_OPP. Only an unknown match id (not in our config)
+            // falls back to clubOnly() on the feed name.
             var oppClub = m.pc_id != null ? PC_OPP[String(m.pc_id)] : null;
+            var ourClub = m.pc_id != null ? PC_OUR[String(m.pc_id)] : null;
             // 1) Score + at-crease batsmen, together in one segment (dot-separated).
             if (inn) {
-                var sideName = ours ? clubOnly(inn.side || m.home || '')
+                var sideName = ours ? (ourClub || clubOnly(inn.side || m.home || ''))
                                     : (oppClub || clubOnly(inn.side || m.home || ''));
                 var parts = ['<span class="team' + oc + '">' + esc(sideName) + '</span>' +
                     '<span class="score' + oc + '">' + inn.runs + '/' + inn.wickets + '</span>' +

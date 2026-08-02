@@ -137,6 +137,7 @@
     var OUR_CREST = {{ (slide._our_crest or '/assets/images/wcc-logo.png') | tojson }};
     var OPP_CREST = {{ slide._opp_crest | tojson }};
     var OUR_NAME = {{ (slide._set_subtitle or 'Wendover') | tojson }};
+    var OUR_CLUB = {{ (slide._set_our_club or '') | tojson }};
     var OPP_NAME = {{ (slide._set_opp_club or '') | tojson }};
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
     var PANEL_MS = {{ slide.panel_duration | tojson }} * 1000;
@@ -337,11 +338,20 @@
         return s.replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
             .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '').trim();
     }
-    // A feed side name -> its club name: ours parses cleanly to "Wendover CC", but
-    // the opposition's string can't be split reliably ("Captain Scott Invitation XI
-    // Sunday 1st XI"), so use the baked clean club name (OPP_NAME) for it.
+    // A feed side name -> its club name, from the baked clean fixture names: ours
+    // from OUR_CLUB ("Wendover CC"), the opposition from OPP_NAME. The feed string
+    // can't be split reliably ("Captain Scott Invitation XI Sunday 1st XI", or a
+    // friendly side with no "CC" suffix), so clubOnly() is only a last-ditch fallback.
     function sideClub(name) {
-        return isOurs(name) ? clubOnly(name) : (OPP_NAME || clubOnly(name));
+        return isOurs(name) ? (OUR_CLUB || clubOnly(name)) : (OPP_NAME || clubOnly(name));
+    }
+    // A side-led result ("<side> won/lost/conceded by …") with the winning side
+    // shown as its clean club name (via sideClub) instead of the club+team
+    // designation the feed bakes in. Verdict-only phrases ("Match tied") pass through.
+    function resultClub(res) {
+        var s = String(res == null ? '' : res);
+        var vm = s.match(/^(.*?\S)\s+(\b(?:won|win|lost|conceded)\b.*)$/i);
+        return vm ? sideClub(vm[1]) + ' ' + vm[2] : s;
     }
     // The 1st-innings side's card vs the other's — order-sorted by the feed, so
     // innings[0] is chronologically first.
@@ -481,7 +491,7 @@
         var first = (m.innings || [])[0];
         var ourFirst = first ? isOurs(first.side) : true;
         var cols = ourFirst ? [ourCol, oppCol] : [oppCol, ourCol];
-        var res = m.result || m.leader_text || '';
+        var res = resultClub(m.result || m.leader_text || '');
         var foot = res ? '<div class="result-foot"><div class="result-summary">' + esc(res) +
             (!m.final ? '<span class="prov"> · to be confirmed</span>' : '') + '</div></div>' : '';
         return '<div class="result-columns">' + teamCol(cols[0]) +

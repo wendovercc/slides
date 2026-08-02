@@ -1889,6 +1889,14 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 return {"video_id": b.get("video_id"), "url": b.get("url")}
         return None
 
+    # Our club's short name for live scorelines/results. Prefer the team's PC
+    # league-table name ("Wendover CC"); friendly/junior teams that carry none
+    # fall back to the configured club name shortened to the same "CC" form. Kept
+    # authoritative here so live surfaces never have to string-munge the feed's
+    # batting-side designation (which lacks "CC" on some sides, e.g. friendlies).
+    club_fallback = re.sub(r"\bCricket Club\b", "CC",
+                           (load_config().get("preview", {}) or {}).get("club_name", "")).strip()
+
     events, by_id = [], {}
     for team_id, fixtures in (all_fixtures or {}).items():
         team = teams_by_id.get(team_id, {})
@@ -1903,6 +1911,7 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 "pc_id": pc_id,
                 "team": team_id,
                 "team_name": team.get("name", team_id),
+                "our_club": team.get("league_table_name") or club_fallback,
                 "opposition": f.get("opposition_club_name") or f.get("opposition_team_name") or "",
                 "opposition_team": f.get("opposition_team_name") or "",
                 "opposition_team_id": str(f.get("opposition_team_id") or ""),
@@ -2283,6 +2292,7 @@ def build_live_matches(env, slide_meta):
             "template": "live-match", "title": "Today's Match",
             "_set_title": "Today's Match",
             "_set_subtitle": ev.get("team_name") or ev["team"],
+            "_set_our_club": ev.get("our_club") or "",
             "_set_opp_club": opp_club,
             "_set_opp_team": opp_team if opp_team and opp_team != opp_club else "",
             "_set_date": ev.get("time") or "Today",
