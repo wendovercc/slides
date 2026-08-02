@@ -270,7 +270,7 @@
 
     // ---- view renderers ----
     function scoreline(inn) {
-        return '<div class="scoreline"><span class="sc-club">' + esc(inn.side) + '</span>' +
+        return '<div class="scoreline"><span class="sc-club">' + esc(sideClub(inn.side)) + '</span>' +
             '<span class="sc-score">' + (inn.runs || 0) + '/' + (inn.wickets || 0) +
             '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span></div>';
     }
@@ -314,7 +314,7 @@
                 '<span class="num dim">' + (b.econ != null ? b.econ : '<span class="z">·</span>') + '</span></div>';
         }).join('') : '<div class="empty">No bowling yet</div>';
         return scoreline(inn) +
-            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(bowlSide) + '</span>' +
+            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(sideClub(bowlSide)) + '</span>' +
             '<span class="col-num">O</span><span class="col-num">M</span><span class="col-num">R</span>' +
             '<span class="col-num">W</span><span class="col-num">Econ</span></div>' + rows + '</div>';
     }
@@ -325,12 +325,23 @@
         bowl: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="currentColor"/><g fill="none" stroke="#0a1c3a" stroke-width="1.1" stroke-linecap="round" opacity="0.55"><path d="M12 4.2 Q 14 12 12 19.8"/><path d="M10.7 6.7 l2.6 0.5"/><path d="M10.2 9.3 l2.9 0.4"/><path d="M10.1 12 l3 0"/><path d="M10.2 14.7 l2.9 -0.4"/><path d="M10.7 17.3 l2.6 -0.5"/></g></svg>',
         field: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><rect x="6" y="7" width="1.9" height="13" rx="0.95"/><rect x="11.05" y="7" width="1.9" height="13" rx="0.95"/><rect x="16.1" y="7" width="1.9" height="13" rx="0.95"/><rect x="5.4" y="5.3" width="6.3" height="1.6" rx="0.8"/><rect x="12.3" y="5.3" width="6.3" height="1.6" rx="0.8"/></g></svg>'
     };
-    // Club name only — drop the "- 1st XI"/junior designation (the header already
+    // Club name only — drop the team designation after it (the header already
     // names the team). Mirrors today.html's clubOnly + build's tc-name convention.
     function clubOnly(name) {
-        return String(name == null ? '' : name).trim()
-            .replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
+        var s = String(name == null ? '' : name).trim();
+        // The club portion ends at its "CC"/"Cricket Club" suffix — drop any team
+        // designation after it ("Wendover CC Friendly XI" -> "Wendover CC").
+        var cc = s.match(/^(.*?\b(?:CC|Cricket Club))\b/i);
+        if (cc) return cc[1].trim();
+        // No club suffix — strip numbered/junior designations as a fallback.
+        return s.replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
             .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '').trim();
+    }
+    // A feed side name -> its club name: ours parses cleanly to "Wendover CC", but
+    // the opposition's string can't be split reliably ("Captain Scott Invitation XI
+    // Sunday 1st XI"), so use the baked clean club name (OPP_NAME) for it.
+    function sideClub(name) {
+        return isOurs(name) ? clubOnly(name) : (OPP_NAME || clubOnly(name));
     }
     // The 1st-innings side's card vs the other's — order-sorted by the feed, so
     // innings[0] is chronologically first.
@@ -451,7 +462,7 @@
     function resultView(m) {
         var si = sideInnings(m), v = verdict(m);
         var ourCol = {
-            crest: OUR_CREST, name: si.ours ? clubOnly(si.ours.side) : (OUR_NAME || 'Wendover'),
+            crest: OUR_CREST, name: si.ours ? sideClub(si.ours.side) : (OUR_NAME || 'Wendover'),
             score: shortTotal(si.ours), result: v && v.our, label: v && RESULT_LABELS[v.our],
             // League points come from the feed (worker-computed, TVCL only); absent for
             // non-TVCL matches → the pill shows the result without a points suffix.
@@ -461,7 +472,7 @@
             performers: teamPerformers(si.ours && si.ours.batters, si.opp && si.opp.bowling, si.opp && si.opp.batters)
         };
         var oppCol = {
-            crest: OPP_CREST, name: si.opp ? clubOnly(si.opp.side) : (OPP_NAME || 'Opposition'),
+            crest: OPP_CREST, name: si.opp ? sideClub(si.opp.side) : (OPP_NAME || 'Opposition'),
             score: shortTotal(si.opp), result: v && v.opp, label: v && RESULT_LABELS[v.opp],
             points: si.opp ? si.opp.points : null,
             performers: teamPerformers(si.opp && si.opp.batters, si.ours && si.ours.bowling, si.ours && si.ours.batters)
@@ -483,7 +494,16 @@
     // Idempotent, and safe to call on the already-rendered panel (no dwell reset).
     function injectToss() {
         var m = ourMatch();
-        var text = m && m.toss && m.toss.text ? m.toss.text : '';
+        var toss = m && m.toss;
+        if (!toss) return;
+        // Club name only, not "Wendover CC Friendly XI": our side from the feed
+        // winner name, the opposition from the baked clean club name (OPP_NAME).
+        // Fall back to the feed's pre-composed text if either part is missing.
+        var who = toss.is_wendover ? clubOnly(toss.winner)
+                                   : (OPP_NAME || clubOnly(toss.winner));
+        var text = (who && toss.decision)
+            ? who + ' won the toss and elected to ' + toss.decision
+            : (toss.text || '');
         if (!text) return;
         var tape = viewEl.querySelector('.tape');
         if (!tape) return;

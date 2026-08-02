@@ -82,18 +82,16 @@
     /* Team name + inline batters on one line; ellipsises as a unit if too long. */
     .event-inn-line { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
         font-size: var(--t-sm); }
-    /* Club name is the larger anchor; Wendover's is gold (batters stay small/muted). */
+    /* Club name is the larger anchor; both sides read white (batters stay small/muted). */
     .event-inn-line .nm { font-size: var(--t-md); font-weight: 700; color: var(--text); }
-    .event-inn-line .nm.ours { color: var(--accent); }
     .event-inn-sep { color: var(--muted); opacity: 0.5; margin: 0 0.5vw; }
     .event-inn-bats { color: var(--muted); font-weight: 400; }
     .event-inn-bats .crease { color: var(--text); }
     .event-inn-bats .num { color: var(--muted); font-variant-numeric: tabular-nums; }
     .event-inn-bats .star { color: var(--accent); }
-    /* Opposition score white; only Wendover's is the gold hero (.ours). */
+    /* Both sides' scores read white — no gold hero on the live scoreline. */
     .event-inn-score { flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
         color: var(--text); font-variant-numeric: tabular-nums; }
-    .event-inn-score.ours { color: var(--accent); }
     .event-inn-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
     /* Fallback "Last out" line (only when nobody's at the crease). */
     .event-status { font-size: var(--t-sm); color: var(--muted); margin-top: 0.3vh; }
@@ -218,28 +216,43 @@
     function tossHtml(ev, lm) {
         var t = lm && lm.toss;
         if (!t) return '';
-        var who = t.is_wendover ? (ev.team_name || 'Wendover') : (ev.opposition || t.winner);
+        // Club name, not the team designation: our side from the feed winner name
+        // ("Wendover CC Friendly XI" -> "Wendover CC"), the opposition from the
+        // fixture's clean club name.
+        var who = t.is_wendover ? (clubOnly(t.winner) || 'Wendover')
+                                : (ev.opposition || clubOnly(t.winner));
         return '<div class="event-toss"><b>' + esc(who) + '</b> won the toss, elected to ' + esc(t.decision) + '</div>';
     }
     // Club name only — drop the trailing team designation ("1st XI", "- 3rd XI",
     // junior "U12 …"/"Under 12 …") since the card header already names the team.
     function clubOnly(name) {
-        return String(name || '').trim()
-            .replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
-            .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '')
-            .trim();
+        var s = String(name || '').trim();
+        // The club portion ends at its "CC"/"Cricket Club" suffix — drop any team
+        // designation after it ("Wendover CC Friendly XI" -> "Wendover CC").
+        var cc = s.match(/^(.*?\b(?:CC|Cricket Club))\b/i);
+        if (cc) return cc[1].trim();
+        // No club suffix — strip numbered/junior designations as a fallback.
+        return s.replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
+                .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '')
+                .trim();
     }
     function inningsLine(ev, inn, batsHtml) {
         if (!inn) return '';
         // Gold marks OUR score only; the opposition's innings stays white.
         var ours = String(inn.side || '').toLowerCase().indexOf('wendover') !== -1;
+        // Prefer the authoritative club name from the fixture (ev.opposition = the
+        // PC opposition_club_name) over parsing the feed's batting-side string —
+        // that string bundles the team designation and can't be split reliably
+        // ("Captain Scott Invitation XI Sunday 1st XI"). Our own side, and any
+        // unknown opposition, fall back to clubOnly() on the feed name.
+        var sideName = ours ? clubOnly(inn.side) : (ev.opposition || clubOnly(inn.side));
         // Batters (current innings only) sit on the same row after the team name,
         // dot-separated. The whole name+batters line ellipsises as one if too long.
         var bats = batsHtml ? '<span class="event-inn-sep">·</span><span class="event-inn-bats">' + batsHtml + '</span>' : '';
         return '<div class="event-inn">' +
             '<div class="event-inn-team">' +
-                '<span class="event-inn-line"><span class="nm' + (ours ? ' ours' : '') + '">' + esc(clubOnly(inn.side)) + '</span>' + bats + '</span></div>' +
-            '<span class="event-inn-score' + (ours ? ' ours' : '') + '">' + inn.runs + '/' + inn.wickets +
+                '<span class="event-inn-line"><span class="nm">' + esc(sideName) + '</span>' + bats + '</span></div>' +
+            '<span class="event-inn-score">' + inn.runs + '/' + inn.wickets +
                 '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span>' +
         '</div>';
     }

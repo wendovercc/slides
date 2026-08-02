@@ -52,12 +52,11 @@
             opacity: 0; transition: opacity 0.35s ease;
         }
         .tick-seg.on { opacity: 1; }
-        /* Convention: gold for Wendover (team + players), white for the opposition. */
+        /* Both sides read white on the live scoreline — no gold hero. */
         .tick-seg .team { font-weight: 900; color: var(--text); }
         .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--text); }
         .tick-seg .ov { color: var(--muted); font-size: var(--t-sm); }
         .tick-seg .bat { font-weight: 700; color: var(--text); }
-        .tick-seg .team.ours, .tick-seg .score.ours, .tick-seg .bat.ours { color: var(--accent); }
         /* Shared by at-crease batters and the last-wicket line so player names read
            the same everywhere; the trailing figures/dismissal stay muted. */
         .tick-seg .num { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 400; }
@@ -91,14 +90,19 @@
     var lastFeed = null;  // last feed, so we can re-render once the team map resolves
 
     // pc_id -> our team label ("1st XI"/"2nd XI"), so the left flag names the match
-    // the current segment belongs to instead of a generic "Live". Same-origin config
-    // the daily build writes next to the player; a miss just falls back to Live/Break.
-    var PC_TEAM = {};
+    // the current segment belongs to instead of a generic "Live". PC_OPP maps the
+    // same id -> the opposition's clean club name (fixture opposition_club_name), so
+    // the scoreline can use it rather than parsing the feed's batting-side string.
+    // Same-origin config the daily build writes next to the player; a miss just
+    // falls back to Live/Break (label) and clubOnly() (scoreline).
+    var PC_TEAM = {}, PC_OPP = {};
     fetch('/live-config.json', { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (cfg) {
             ((cfg && cfg.matches) || []).forEach(function (m) {
-                if (m.pc_id != null) PC_TEAM[String(m.pc_id)] = m.team_name || null;
+                if (m.pc_id == null) return;
+                PC_TEAM[String(m.pc_id)] = m.team_name || null;
+                PC_OPP[String(m.pc_id)] = m.opposition || null;
             });
             if (lastFeed) render(lastFeed);   // relabel a feed that painted before the map loaded
         })
@@ -107,6 +111,16 @@
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
+    // Club name only for the scoreline — drop the team designation after the
+    // "CC"/"Cricket Club" suffix ("Wendover CC Friendly XI" -> "Wendover CC").
+    // Mirrors today.html's clubOnly.
+    function clubOnly(name) {
+        var s = String(name == null ? '' : name).trim();
+        var cc = s.match(/^(.*?\b(?:CC|Cricket Club))\b/i);
+        if (cc) return cc[1].trim();
+        return s.replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
+                .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '').trim();
+    }
     function batHtml(b, ours) {
         return '<span class="bat' + (ours ? ' ours' : '') + '">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) +
             ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
@@ -138,15 +152,21 @@
             var isBreak = m.phase === 'break';
             var flag = team || (isBreak ? 'Break' : 'Live');
             var inn = currentInnings(m);
-            // Gold for Wendover (team + players), white for the opposition.
+            // Both sides read white — no gold hero on the live scoreline. `ours`
+            // still drives which club name (ours vs the fixture opposition) to show.
             var ours = inn ? /wendover/i.test(inn.side || '') : false;
-            var oc = ours ? ' ours' : '';
+            var oc = '';
+            // Opposition scoreline uses the fixture's clean club name; our own side
+            // (and any unknown opposition) falls back to clubOnly() on the feed name.
+            var oppClub = m.pc_id != null ? PC_OPP[String(m.pc_id)] : null;
             // 1) Score + at-crease batsmen, together in one segment (dot-separated).
             if (inn) {
-                var parts = ['<span class="team' + oc + '">' + esc(inn.side || m.home || '') + '</span>' +
+                var sideName = ours ? clubOnly(inn.side || m.home || '')
+                                    : (oppClub || clubOnly(inn.side || m.home || ''));
+                var parts = ['<span class="team' + oc + '">' + esc(sideName) + '</span>' +
                     '<span class="score' + oc + '">' + inn.runs + '/' + inn.wickets + '</span>' +
                     '<span class="ov">(' + esc(inn.overs) + ' ov)</span>'];
-                (inn.at_crease || []).forEach(function (b) { parts.push(batHtml(b, ours)); });
+                (inn.at_crease || []).forEach(function (b) { parts.push(batHtml(b, false)); });
                 out.push({ label: flag, live: !isBreak, html: parts.join('<span class="sep">·</span>') });
             } else if (m.score_text) {
                 out.push({ label: flag, live: !isBreak, html: '<span class="team">' + esc(m.score_text) + '</span>' });
