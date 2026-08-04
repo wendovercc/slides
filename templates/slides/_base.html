@@ -33,6 +33,16 @@
             --t-sm:         1.2vw;
             --t-xs:         0.9vw;
             --t-xxs:        0.7vw;
+            /* Hairlines, radii and shadows — viewport-relative so the slide is
+               zoom-invariant. A px here would grow under browser zoom while the
+               vw/vh boxes around it held still: in-flow borders then shove their
+               siblings, and radii/shadows visibly thicken. Calibrated at 1080p
+               (1vh = 10.8px), so they scale with the panel on a 4K wall too. */
+            --hair:         0.1vh;   /* ~1px — table rules, dividers, pill borders */
+            --rule:         0.2vh;   /* ~2px — tab underlines, value-bar left edge */
+            --radius-sm:    0.25vh;  /* ~3px — small inline tags */
+            --radius:       0.4vh;   /* ~4px — badges, pills, tiles, sponsor logo */
+            --title-shadow: 0 0.28vh 0.55vh rgba(0,0,0,0.4);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body {
@@ -117,8 +127,8 @@
             width: auto;
             object-fit: cover;
             background: #fff;
-            border-radius: 4px;
-            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: var(--radius);
+            border: var(--hair) solid rgba(255,255,255,0.12);
         }
         /* Interactive pause: freeze the active tab's gold underline at full width */
         body.paused .panel-tab.active::after { animation: none; transform: scaleX(1); }

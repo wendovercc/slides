@@ -32,7 +32,88 @@ spacing.
 --t-sm: 1.2vw;
 --t-xs: 0.9vw;  /* column headers */
 --t-xxs: 0.7vw;
+
+--hair: 0.1vh;        /* ~1px — table rules, dividers, pill borders */
+--rule: 0.2vh;        /* ~2px — tab underlines, value-bar left edge */
+--radius-sm: 0.25vh;  /* ~3px — small inline tags */
+--radius: 0.4vh;      /* ~4px — badges, pills, tiles, sponsor logo */
+--title-shadow: 0 0.28vh 0.55vh rgba(0,0,0,0.4);
 ```
+
+## Zoom invariance
+
+**Rule: no `px` anywhere in a slide.** Changing browser zoom on a slide must
+produce zero visible change. This is not a nicety — it's how we know a slide
+holds its layout on a panel whose resolution we don't control.
+
+Under zoom the CSS viewport shrinks, so `vw`/`vh` boxes keep their apparent size
+while `px` boxes grow against them. Two things then go wrong:
+
+- **In-flow `px` shoves its siblings.** A `border`, a `height` on a rule, or `px`
+  padding occupies box-model space, so it pushes everything after it. In a table
+  this *accumulates* — every row adds its own error and the last rows walk off
+  the panel. This was the cause of every drift found in the 2026-08 audit: tab
+  underlines, table row borders, and the last-match location badge (pushed down
+  by the 1px border on the home/away pill above it).
+- **Cosmetic `px` visibly thickens.** `border-radius`, `text-shadow` and
+  `box-shadow` don't move anything, but they still coarsen — the sponsor logo's
+  corners are the giveaway.
+
+Use the tokens above rather than a raw `px`, and prefer extending a token to
+inventing a local one:
+
+| Instead of | Use |
+|---|---|
+| `border: 1px solid …` | `border: var(--hair) solid …` |
+| `border: 2px solid …`, `height: 2px` | `var(--rule)` |
+| `width: 1px` (vertical divider), `height: 1px` | `var(--hair)` |
+| `border-radius: 4px` / `5px` | `var(--radius)` |
+| `border-radius: 2px` / `3px` | `var(--radius-sm)` |
+| `text-shadow: 0 3px 6px rgba(0,0,0,0.4)` | `var(--title-shadow)` |
+
+Hairline tokens are `vh` in **both** axes — a divider should read the same
+thickness whether it runs across or down, and the wall is fixed 16:9 so `vh` and
+`vw` stay in proportion. Values are calibrated at 1080p (`1vh` = 10.8px) and
+scale up on a 4K wall, which is the point.
+
+**Not violations** — don't "fix" these:
+
+- `em`, which resolves against the element's own `--t-*` font-size and so scales
+  with the viewport. Correct for `letter-spacing` and inline spacers
+  (`.hs-star`, `.col-score-gap`).
+- `0px` — zero is zero.
+- Percentages, `vmin`/`vmax`, `aspect-ratio`, unitless `line-height`.
+
+Templates that don't extend a base (`video.html`, `image.html`) carry their own
+copy of the token block — keep it in step with `_base.html` when tokens change.
+
+### Viewport units are necessary, not sufficient
+
+A surface can be 100% `vw`/`vh` and still drift. Text wrapping is decided by
+glyph advance widths, which round to different subpixel values at each zoom
+level — so a narrow column's caption can flip between two and three lines as
+zoom changes. If that caption sits in a **content-height** box, everything below
+it shunts. This is what moved the live strip's tiles (`live-strip.html`, `.head`)
+even though nothing in the chain used `px`.
+
+**Give a fixed height to any box whose job is to position what follows it** —
+headers, captions, meta rows above a table or tile stack. Centre the content
+inside it, `overflow: hidden`, and clamp multi-line text:
+
+```css
+.head { height: 6vh; overflow: hidden;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center; }
+.head-div { display: -webkit-box; -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical; overflow: hidden; }
+```
+
+This is the same reasoning as the fixed-height tile stack (see "Tile stacks"):
+let surplus space fall at the end rather than letting content decide geometry.
+
+To check: `grep -rE '[0-9.]+px' templates/slides` should return only comments.
+Stricter still, against the build output, `grep -rE '[0-9.]+px' site/slides`
+should return nothing at all.
 
 ## Brand colour & type
 

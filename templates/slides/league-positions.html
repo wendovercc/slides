@@ -14,7 +14,7 @@
     table { width: 100%; border-collapse: collapse; }
     thead tr {
         background: rgba(255,255,255,0.15);
-        border-bottom: 2px solid rgba(255,255,255,0.3);
+        border-bottom: var(--rule) solid rgba(255,255,255,0.3);
     }
     th {
         padding: 0.35vh 0.7vw;
@@ -24,7 +24,7 @@
         font-weight: bold;
         opacity: 0.75;
     }
-    tbody tr { border-bottom: 1px solid rgba(255,255,255,0.08); }
+    tbody tr { border-bottom: var(--hair) solid rgba(255,255,255,0.08); }
     tbody tr:nth-child(even) { background: rgba(255,255,255,0.04); }
     td { padding: 0.28vh 0.7vw; font-size: var(--t-sm); }
     .col-team     { text-align: left; }
@@ -38,12 +38,12 @@
         flex: 1;
         height: 0.7vh;
         background: rgba(255,255,255,0.12);
-        border-radius: 2px;
+        border-radius: var(--radius-sm);
         overflow: hidden;
     }
     .bar-fill {
         height: 100%;
-        border-radius: 2px;
+        border-radius: var(--radius-sm);
         background: rgba(60,180,80,0.75);
     }
     .gap-label {
@@ -58,11 +58,11 @@
         display: inline-block;
         width: 1.3vw; height: 1.3vw; line-height: 1.3vw;
         text-align: center;
-        border-radius: 3px;
+        border-radius: var(--radius-sm);
         font-size: var(--t-xxs);
         font-family: 'Lato', Arial, sans-serif;
         font-weight: bold;
-        margin-right: 2px;
+        margin-right: 0.1vw;
     }
     .badge-W { background: var(--accent-win);   color: #fff; }
     .badge-L { background: var(--accent-loss);  color: #fff; }

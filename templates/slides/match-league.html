@@ -15,14 +15,14 @@
     }
     .col-headers {
         padding: 0.4vh 0 0.6vh;
-        border-bottom: 1px solid rgba(255,255,255,0.25);
+        border-bottom: var(--hair) solid rgba(255,255,255,0.25);
         font-size: var(--t-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         opacity: 0.55;
     }
     .col-num { text-align: right; }
-    .row { padding: 0.42vh 0; font-size: var(--t-md); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .row { padding: 0.42vh 0; font-size: var(--t-md); border-bottom: var(--hair) solid rgba(255,255,255,0.08); }
     .row:nth-child(even) { background: rgba(255,255,255,0.04); }
     .league-grid.row.highlight { background: rgba(212,175,55,0.2); color: #ffd966; font-weight: bold; }
     .league-grid .name { display: flex; align-items: baseline; gap: 0.5vw; overflow: hidden; padding-right: 0.5vw; }
@@ -40,14 +40,14 @@
         text-transform: uppercase;
         font-variant-numeric: tabular-nums;
         padding: 0.2vh 0.7vw;
-        border-radius: 4px;
-        background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);
+        border-radius: var(--radius);
+        background: rgba(255,255,255,0.08); border: var(--hair) solid rgba(255,255,255,0.2);
     }
-    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
-    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
-    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
-    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
-    .result-A, .result-C, .result-NR { background: #4a3800; border: 1px solid #8c6800; color: #ffd966; }
+    .result-W { background: #1e5c1e; border: var(--hair) solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: var(--hair) solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: var(--hair) solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: var(--hair) solid #2d7aa5; color: #a8d8f0; }
+    .result-A, .result-C, .result-NR { background: #4a3800; border: var(--hair) solid #8c6800; color: #ffd966; }
     .val { text-align: right; opacity: 0.7; font-variant-numeric: tabular-nums; }
     .pts { text-align: right; font-weight: bold; font-variant-numeric: tabular-nums; color: var(--accent); }
 {% endblock %}

@@ -19,7 +19,7 @@
         display: grid;
         gap: 0 0.6vw;
         padding: 0.4vh 0 0.6vh;
-        border-bottom: 1px solid rgba(255,255,255,0.25);
+        border-bottom: var(--hair) solid rgba(255,255,255,0.25);
         font-size: var(--t-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -31,7 +31,7 @@
         gap: 0 0.6vw;
         padding: 0.45vh 0;
         font-size: var(--t-md);
-        border-bottom: 1px solid rgba(255,255,255,0.08);
+        border-bottom: var(--hair) solid rgba(255,255,255,0.08);
         align-items: baseline;
     }
     .row:nth-child(even) { background: rgba(255,255,255,0.04); }
@@ -50,7 +50,7 @@
     .not-out-star { opacity: 0.7; }
     /* Extras — total from the innings object; the b/lb/w/nb breakdown sits in
        the second column in the dim how-out style. */
-    .extras-row { border-top: 1px solid rgba(255,255,255,0.18); }
+    .extras-row { border-top: var(--hair) solid rgba(255,255,255,0.18); }
     .extras-row .name { opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-sm); font-family: 'Lato', Arial, sans-serif; }
     .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
 {% endblock %}

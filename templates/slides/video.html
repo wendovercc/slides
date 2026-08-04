@@ -26,6 +26,13 @@
             --t-sm:         1.2vw;
             --t-xs:         0.9vw;
             --t-xxs:        0.7vw;
+            /* Hairlines/radii/shadows — see _base.html; kept in step here because
+               this template is standalone (it doesn't extend a base). */
+            --hair:         0.1vh;
+            --rule:         0.2vh;
+            --radius-sm:    0.25vh;
+            --radius:       0.4vh;
+            --title-shadow: 0 0.28vh 0.55vh rgba(0,0,0,0.4);
             /* Reel highlights-bug cover (top-left square). Nudge these to line the
                square up exactly with the Frogbox HIGHLIGHTS/QR graphic on the wall:
                --reel-tag-size grows/shrinks the square, top/left shift it. */
@@ -75,7 +82,7 @@
             padding: var(--safe-y) var(--safe-x) 4vh;
             background: {% if slide.overlay_solid is defined and slide.overlay_solid %}var(--navy-2){% else %}linear-gradient(rgba(10,28,58,0.95) 0%, transparent 100%){% endif %};
         }
-        .overlay-title { font-size: var(--t-lg); font-weight: 700; text-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+        .overlay-title { font-size: var(--t-lg); font-weight: 700; text-shadow: 0 0.18vh 0.75vh rgba(0,0,0,0.6); }
         .overlay-body {
             font-size: 1.6vw; color: var(--muted); margin-top: 0.5vh;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -90,7 +97,7 @@
         .fallback {
             width: 100%; height: 100%; background: var(--bg);
             display: flex; align-items: center; justify-content: center;
-            font-size: var(--t-xl); font-weight: 700; text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            font-size: var(--t-xl); font-weight: 700; text-shadow: var(--title-shadow);
         }
 {% include 'slides/_reel_tag_styles.html' %}
         /* Flashcard = a large card that opens in the centre of the video over a clip's
@@ -116,7 +123,7 @@
         .reel-card-badge {
             background: var(--accent); color: var(--navy-1);
             font-size: var(--t-sm); font-weight: 700; letter-spacing: 0.08em;
-            text-transform: uppercase; padding: 0.6vh 1.4vw; border-radius: 4px;
+            text-transform: uppercase; padding: 0.6vh 1.4vw; border-radius: var(--radius);
             margin-bottom: 2.5vh;
         }
         .reel-card-name {
@@ -159,7 +166,7 @@
             display: flex; flex-direction: column; align-items: center;
             padding: var(--safe-y) var(--safe-x) var(--safe-y) 2vw;
             background: rgba(0,0,0,0.25);
-            border-left: 1px solid rgba(255,255,255,0.08);
+            border-left: var(--hair) solid rgba(255,255,255,0.08);
             gap: 2.5vh; overflow: hidden;
         }
         .club-logo { width: 65%; max-width: 10vw; height: auto; object-fit: contain; }
@@ -167,13 +174,13 @@
         .club-name { font-size: var(--t-xxs); letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.8; text-align: center; }
         .club-watch { font-size: var(--t-xxs); color: var(--muted); text-align: center; }
         .club-watch strong { color: var(--accent); font-weight: 700; }
-        .sidebar-divider { width: 60%; height: 1px; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+        .sidebar-divider { width: 60%; height: var(--hair); background: rgba(255,255,255,0.15); flex-shrink: 0; }
         .sponsor-heading { font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); text-align: center; }
         .sponsor-logos-vert { display: flex; flex-direction: column; align-items: center; gap: 2vh; width: 100%; }
-        .sponsor-logo-vert { width: 100%; aspect-ratio: 16 / 3; object-fit: cover; background: #fff; border-radius: 4px; border: 1px solid rgba(255,255,255,0.12); }
+        .sponsor-logo-vert { width: 100%; aspect-ratio: 16 / 3; object-fit: cover; background: #fff; border-radius: var(--radius); border: var(--hair) solid rgba(255,255,255,0.12); }
         .slide-heading {
             font-size: var(--t-lg); font-weight: bold; line-height: 1.2;
-            margin-bottom: 1.5vh; text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            margin-bottom: 1.5vh; text-shadow: var(--title-shadow);
             flex-shrink: 0; padding: 0 2vw 0 var(--safe-x);
         }
         .slide-body {
@@ -186,8 +193,8 @@
         .video-wrap video { position: absolute; inset: 0; width: 100%; height: 100%; }
         .video-fallback {
             width: 100%; height: 100%; min-height: 20vh;
-            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 4px; display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.3); border: var(--hair) solid rgba(255,255,255,0.1);
+            border-radius: var(--radius); display: flex; align-items: center; justify-content: center;
             font-size: var(--t-md); color: var(--muted);
         }
         {% endif %}

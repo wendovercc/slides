@@ -4,6 +4,16 @@
     <meta charset="utf-8">
     <title>{{ slide.title }}</title>
     <style>
+        /* Fullbleed image slide — deliberately standalone (no base): it has no
+           footer or sidebar chrome. The tokens below mirror _base.html so the
+           placeholder state stays on-brand and zoom-invariant. */
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+        :root {
+            --navy-1: #0f2346;
+            --navy-2: #0a1c3a;
+            --bg:     linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+            --t-lg:   2.8vw;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
         img {
@@ -13,12 +23,12 @@
         }
         .placeholder {
             width: 100%; height: 100%;
-            background: linear-gradient(165deg, #0f2346 0%, #0a1c3a 100%);
+            background: var(--bg);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-family: Arial, sans-serif;
-            font-size: 3rem;
+            font-family: 'Lato', -apple-system, Arial, sans-serif;
+            font-size: var(--t-lg);
             color: rgba(255,255,255,0.5);
         }
     </style>

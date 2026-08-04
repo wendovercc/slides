@@ -15,7 +15,7 @@
        that the strip otherwise provides on the in-set Result step. */
     .result-columns.no-strip { margin-top: 4vh; }
     .team-col { flex: 1; display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 0; }
-    .col-divider { width: 1px; background: rgba(255,255,255,0.12); flex-shrink: 0; }
+    .col-divider { width: var(--hair); background: rgba(255,255,255,0.12); flex-shrink: 0; }
     /* Crest block — shared look with match-intro: white circular badge, contained
        so the full crest shows; the box stays fixed height when a crest is absent. */
     .crest { height: 6vw; display: flex; align-items: center; justify-content: center; margin-top: 1vh; }
@@ -32,13 +32,13 @@
         letter-spacing: 0.12em;
         text-transform: uppercase;
         padding: 0.35vh 0.9vw;
-        border-radius: 4px;
+        border-radius: var(--radius);
     }
-    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
-    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
-    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
-    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
-    .result-A, .result-C, .result-NR { background: #4a3800; border: 1px solid #8c6800; color: #ffd966; }
+    .result-W { background: #1e5c1e; border: var(--hair) solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: var(--hair) solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: var(--hair) solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: var(--hair) solid #2d7aa5; color: #a8d8f0; }
+    .result-A, .result-C, .result-NR { background: #4a3800; border: var(--hair) solid #8c6800; color: #ffd966; }
 
     /* Performers stay a left-aligned list (full column width) even though the
        column above them is centred. */
@@ -59,7 +59,7 @@
     .hl-detail { padding-left: 2.6vw; font-family: 'Lato', Arial, sans-serif; font-size: var(--t-sm); opacity: 0.55; letter-spacing: 0.04em; margin-top: -0.1vh; }
 
     /* Footer mirrors the Intro slide: the match outcome as the headline (white). */
-    .result-foot { flex-shrink: 0; text-align: center; padding-top: 1.6vh; margin-top: 1vh; border-top: 1px solid rgba(255,255,255,0.15); }
+    .result-foot { flex-shrink: 0; text-align: center; padding-top: 1.6vh; margin-top: 1vh; border-top: var(--hair) solid rgba(255,255,255,0.15); }
     .result-summary { font-size: var(--t-md); font-weight: 700; }
 {% endblock %}
 {% block content %}

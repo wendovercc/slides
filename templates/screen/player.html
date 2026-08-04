@@ -6,38 +6,95 @@
     <title>{{ location.name }}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --navy-2: #0a1c3a; --gold: #d4af37;
+            /* Chrome matte = the darker navy of the sidebar layout: the slide sidebar
+               paints rgba(0,0,0,0.25) over the navy gradient (_base-sidebar.html), which
+               composites to ~#08152c. Using it for the strip + footer makes the live
+               chrome read as the same recessed band the sidebar slides already use. */
+            --matte: #08152c;
+            /* Live chrome: on a match day the slide layer shrinks toward the top-right
+               corner so a ticker footer (bottom) + a matte strip (left) appear. Because
+               the stage is a fixed 16:9, a UNIFORM scale of (1 − band) leaves exactly
+               `band` of width on the left and `band` of height at the bottom — an L that
+               tiles the frame with no black bars. Keep the scale derived from the band. */
+            --live-band: 0.08;
+        }
         html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
         body:not(.preview) { cursor: none; }
-        iframe {
+
+        /* The 16:9 stage: the whole composition (slides + live chrome) that gets centred
+           and letterboxed on any non-16:9 viewport, so the chrome travels WITH the slide
+           rather than anchoring to the browser window. Its own background is the navy
+           matte, revealed as the left strip + bottom band when the slide layer retracts.
+           On a 16:9 wall it fills the screen exactly (no bars), so kiosk playback is
+           unchanged. Mirrors slideshow/player.html — keep the two in step. */
+        #stage {
             position: absolute;
-            /* Letterbox: always render the 16:9 TV layout, centred, with black
-               bars on any non-16:9 viewport (iPad/desktop) rather than stretching
-               the slide's vw/vh grid vertically. On a 16:9 wall this fills the
-               screen exactly (no bars), so kiosk playback is unchanged. */
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             width: min(100vw, 177.78vh);
             height: min(56.25vw, 100vh);
+            background: var(--matte);
+            overflow: hidden;
+        }
+
+        /* All slide iframes live here. Scaling this ONE layer is a transform, so slides
+           never re-lay-out their vw/vh grid — they just composite smaller — which keeps
+           the grow/shrink smooth. Off match days it stays scale(1) and fills the stage,
+           so playback is byte-for-byte the old full-bleed. */
+        #slide-layer {
+            position: absolute; inset: 0; z-index: 2;
+            transform-origin: top left;
+            transform: scale(1);
+            transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        body.live-chrome #slide-layer { transform: scale(calc(1 - var(--live-band))); }
+
+        #slide-layer iframe {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
             border: none;
             opacity: 0;
             transition: opacity 0.8s ease;
         }
-        iframe.active { opacity: 1; }
+        #slide-layer iframe.active { opacity: 1; }
 
-        /* Live-highlight news-flash: a dedicated overlay iframe the player raises
-           above the slide stack (not part of the rotation), dissolved in/out. */
-        iframe.flash { z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.5s ease; }
+        /* Live-highlight news-flash: a dedicated overlay iframe the player raises above
+           everything (slides AND chrome) — a clip takeover is full-bleed 16:9. */
+        iframe.flash {
+            position: absolute; inset: 0; width: 100%; height: 100%; border: none;
+            z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
+        }
         iframe.flash.flash-active { opacity: 1; }
 
-        /* Live ticker: an always-present transparent overlay iframe above the slides
-           (only its bottom bar paints; it self-hides when nothing's live). Below the
-           flash so a clip takeover covers it. Never intercepts input. */
-        iframe.ticker { z-index: 30; opacity: 1; pointer-events: none; background: transparent; }
+        /* Live ticker: sits in the bottom band the retracting slide layer uncovers (z
+           below the slides, so scale(1) hides it; below the flash so a clip covers it).
+           Its own bar paints the navy/gold footer; the strip + corner are the stage
+           matte behind it. Never intercepts input. */
+        iframe.ticker {
+            position: absolute; left: 0; right: 0; bottom: 0;
+            width: 100%; height: calc(var(--live-band) * 100%); border: none;
+            z-index: 1; pointer-events: none; background: transparent;
+        }
 
-        body.preview iframe {
+        /* Live strip: the right band the retracting slide layer uncovers (the
+           vertical partner of the ticker footer). Full height minus the footer band
+           so the two meet at the bottom-right corner without overlapping. Same z /
+           reveal / no-input rules as the ticker. */
+        iframe.strip {
+            position: absolute; top: 0; right: 0;
+            width: calc(var(--live-band) * 100%);
+            height: calc((1 - var(--live-band)) * 100%); border: none;
+            z-index: 1; pointer-events: none; background: transparent;
+        }
+
+        /* Preview (50%-scale debug view): scale the whole stage from the top-right, so
+           slides, ticker and flash scale together and the live shrink still composes. */
+        body.preview #stage {
+            top: 0; left: auto; right: 0;
             width: 1920px; height: 1080px;
-            left: auto; right: 0; top: 0;
-            transform-origin: top right;
+            transform: none; transform-origin: top right;
         }
         #dbg {
             display: none;
@@ -203,6 +260,13 @@
     </div>
     <div class="about-footer">Built {{ built_at }} &nbsp;·&nbsp; <span id="about-reload"></span></div>
 </div>
+<!-- The 16:9 stage. Slide iframes are appended to #slide-layer and the live chrome
+     (ticker / strip / flash) to #stage itself, both from JS below — this player builds
+     its deck at runtime from the resolved context, where the slideshow player renders
+     its frames server-side. Same resulting structure either way. -->
+<div id="stage">
+    <div id="slide-layer"></div>
+</div>
 <script src="/assets/js/context.js"></script>
 <script src="/assets/js/video-cache.js"></script>
 <script src="/assets/js/preload-gate.js"></script>
@@ -219,9 +283,34 @@ if (PREVIEW) document.body.classList.add('preview');
 function applyDebugScale() {
     if (!PREVIEW) return;
     const scale = (window.innerWidth * 0.5) / 1920;
-    document.querySelectorAll('iframe').forEach(f => f.style.transform = `scale(${scale})`);
+    const stage = document.getElementById('stage');
+    if (stage) stage.style.transform = `scale(${scale})`;
 }
 window.addEventListener('resize', applyDebugScale);
+
+// ---- live chrome latch ------------------------------------------------------
+// The ticker footer + matte strip appear when a match day has something to show and
+// then STAY (sticky): grown once, they only retract after a long quiet spell, so a
+// blip or an innings break never reflows the wall. The daily rebuild/reload is the
+// real teardown. Grow/shrink is a single composited transform (the CSS on
+// #slide-layer keyed off body.live-chrome). Mirrors slideshow/player.html.
+const LIVE_HIDE_DEBOUNCE_MS = 12 * 60 * 1000;
+let _chromeShown = false, _chromeHideTimer = null;
+function liveHasContent(feed) {
+    return !!(feed && feed.matches && feed.matches.some(m =>
+        m.phase === 'live' || m.phase === 'break' || m.complete));
+}
+function onLiveState(feed) {
+    if (liveHasContent(feed)) {
+        if (_chromeHideTimer) { clearTimeout(_chromeHideTimer); _chromeHideTimer = null; }
+        if (!_chromeShown) { _chromeShown = true; document.body.classList.add('live-chrome'); }
+    } else if (_chromeShown && !_chromeHideTimer) {
+        _chromeHideTimer = setTimeout(() => {
+            _chromeHideTimer = null; _chromeShown = false;
+            document.body.classList.remove('live-chrome');
+        }, LIVE_HIDE_DEBOUNCE_MS);
+    }
+}
 
 function matchesContext(s, ctx) {
     const conds = s.show_when;
@@ -394,25 +483,34 @@ async function init() {
 
     // Create every slide iframe up front (hidden by default: iframe{opacity:0}).
     // frames[] stays index-aligned with slides[]. The gate awaits their load events.
+    const slideLayer = document.getElementById('slide-layer');
+    const stage = document.getElementById('stage');
     const frames = slides.map(s => {
         const f = document.createElement('iframe');
         f.src = `/slide/${s.slug}/`;
-        document.body.appendChild(f);
+        slideLayer.appendChild(f);
         return f;
     });
     {% if live_enabled %}
-    // Live ticker overlay (transparent; self-hides when nothing's live).
+    // Live chrome, in the L the retracting slide layer uncovers: ticker along the
+    // bottom band, standings strip up the right. Both sit on the stage (not the slide
+    // layer) so they don't scale with it.
     const tickerFrame = document.createElement('iframe');
     tickerFrame.id = 'ticker-frame';
     tickerFrame.className = 'ticker';
     tickerFrame.src = '/live-ticker/';
-    document.body.appendChild(tickerFrame);
+    stage.appendChild(tickerFrame);
+    const stripFrame = document.createElement('iframe');
+    stripFrame.id = 'strip-frame';
+    stripFrame.className = 'strip';
+    stripFrame.src = '/live-strip/';
+    stage.appendChild(stripFrame);
     // Live-highlight news-flash overlay (not a slide; the player raises it on top).
     const flashFrame = document.createElement('iframe');
     flashFrame.id = 'flash-frame';
     flashFrame.className = 'flash';
     flashFrame.src = '/live-flash/';
-    document.body.appendChild(flashFrame);
+    stage.appendChild(flashFrame);
     {% endif %}
     applyDebugScale();
 
@@ -481,7 +579,7 @@ async function init() {
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
-        {% if live_enabled %}if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')) });{% endif %}
+        {% if live_enabled %}if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
     }
 

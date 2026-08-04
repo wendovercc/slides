@@ -33,6 +33,16 @@
             --t-sm:         1.2vw;
             --t-xs:         0.9vw;
             --t-xxs:        0.7vw;
+            /* Hairlines, radii and shadows — viewport-relative so the slide is
+               zoom-invariant. A px here would grow under browser zoom while the
+               vw/vh boxes around it held still: in-flow borders then shove their
+               siblings, and radii/shadows visibly thicken. Calibrated at 1080p
+               (1vh = 10.8px), so they scale with the panel on a 4K wall too. */
+            --hair:         0.1vh;   /* ~1px — table rules, dividers, pill borders */
+            --rule:         0.2vh;   /* ~2px — tab underlines, value-bar left edge */
+            --radius-sm:    0.25vh;  /* ~3px — small inline tags */
+            --radius:       0.4vh;   /* ~4px — badges, pills, tiles, sponsor logo */
+            --title-shadow: 0 0.28vh 0.55vh rgba(0,0,0,0.4);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body {
@@ -62,7 +72,7 @@
             align-items: center;
             padding: var(--safe-y) var(--safe-x) var(--safe-y) 2vw;
             background: rgba(0,0,0,0.25);
-            border-left: 1px solid rgba(255,255,255,0.08);
+            border-left: var(--hair) solid rgba(255,255,255,0.08);
             gap: 2.5vh;
             overflow: hidden;
         }
@@ -95,7 +105,7 @@
         .club-watch strong { color: var(--accent); font-weight: 700; }
         .sidebar-divider {
             width: 60%;
-            height: 1px;
+            height: var(--hair);
             background: rgba(255,255,255,0.15);
             flex-shrink: 0;
         }
@@ -121,13 +131,13 @@
                logos that carry their own opaque background (Kings Farm black,
                DGD blue) cover it completely. A hairline border defines the dark
                tiles against the dark sidebar. cover (not contain) fills the tile
-               edge-to-edge so the 1px border can't expose letterbox slivers. */
+               edge-to-edge so the hairline border can't expose letterbox slivers. */
             width: 100%;
             aspect-ratio: 16 / 3;
             object-fit: cover;
             background: #fff;
-            border-radius: 4px;
-            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: var(--radius);
+            border: var(--hair) solid rgba(255,255,255,0.12);
         }
         /* Carousel-style slides: breathing room between tab nav and table headers */
         .panel-nav { margin-bottom: 2.8vh; }

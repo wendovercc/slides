@@ -6,7 +6,7 @@
         font-size: var(--t-lg);
         font-weight: bold;
         line-height: 1.2;
-        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        text-shadow: var(--title-shadow);
     }
     .subtitle {
         font-size: var(--t-md);
@@ -49,7 +49,7 @@
         content: '';
         position: absolute;
         bottom: 0; left: 0; right: 0;
-        height: 2px;
+        height: var(--rule);
         background: var(--accent);
         transform-origin: left;
         animation: panel-progress var(--panel-duration, 10s) linear forwards;
@@ -129,7 +129,7 @@
     .col-headers {
         gap: 0 0.4vw;
         padding: 0.3vh 0 0.5vh;
-        border-bottom: 1px solid rgba(255,255,255,0.25);
+        border-bottom: var(--hair) solid rgba(255,255,255,0.25);
         font-size: var(--t-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -140,7 +140,7 @@
         gap: 0 0.4vw;
         padding: 0.3vh 0;
         font-size: var(--t-md);
-        border-bottom: 1px solid rgba(255,255,255,0.08);
+        border-bottom: var(--hair) solid rgba(255,255,255,0.08);
         align-items: baseline;
     }
     .row:nth-child(even) { background: rgba(255,255,255,0.04); }
@@ -210,7 +210,7 @@
         gap: 1.2vw;
         padding: 0.7vh 1vw;
         background: rgba(255,255,255,0.04);
-        border-radius: 4px;
+        border-radius: var(--radius);
         overflow: hidden;
         flex-shrink: 0;
     }
@@ -230,7 +230,7 @@
         gap: 0.15vh;
         justify-content: flex-start;
         padding-left: 1vw;
-        border-left: 1px solid rgba(255,255,255,0.08);
+        border-left: var(--hair) solid rgba(255,255,255,0.08);
         min-width: 0;
     }
     /* Tile-stack meta row: col-headers typography for text, pills at full opacity.
@@ -256,13 +256,13 @@
     .strip-meta .spacer { flex: 1; }
     .home-pill, .away-pill {
         background: rgba(60,180,80,0.3);
-        border: 1px solid rgba(60,180,80,0.5);
-        border-radius: 4px;
+        border: var(--hair) solid rgba(60,180,80,0.5);
+        border-radius: var(--radius);
         padding: 0.1vh 0.55vw;
     }
     .away-pill {
         background: rgba(180,100,40,0.3);
-        border: 1px solid rgba(180,100,40,0.5);
+        border: var(--hair) solid rgba(180,100,40,0.5);
     }
     .result-pill {
         font-weight: bold;
@@ -270,19 +270,19 @@
         letter-spacing: 0.14em;
         text-transform: uppercase;
         padding: 0.15vh 0.7vw;
-        border-radius: 4px;
+        border-radius: var(--radius);
     }
     .result-row {
         display: flex;
         justify-content: flex-end;
         margin-bottom: 0.5vh;
     }
-    .result-W { background: #1e5c1e; border: 1px solid #3da53d; color: #a8f0a8; }
-    .result-L { background: #5c1a1a; border: 1px solid #a53d3d; color: #f0a8a8; }
-    .result-D { background: #404040; border: 1px solid #707070; color: #cccccc; }
-    .result-T { background: #1a3f5c; border: 1px solid #2d7aa5; color: #a8d8f0; }
+    .result-W { background: #1e5c1e; border: var(--hair) solid #3da53d; color: #a8f0a8; }
+    .result-L { background: #5c1a1a; border: var(--hair) solid #a53d3d; color: #f0a8a8; }
+    .result-D { background: #404040; border: var(--hair) solid #707070; color: #cccccc; }
+    .result-T { background: #1a3f5c; border: var(--hair) solid #2d7aa5; color: #a8d8f0; }
     .result-A, .result-C, .result-NR {
-        background: #4a3800; border: 1px solid #8c6800; color: #ffd966;
+        background: #4a3800; border: var(--hair) solid #8c6800; color: #ffd966;
     }
     /* Opposition + score line: data-row weight (var(--t-md)) */
     .strip-opp {
@@ -368,7 +368,7 @@
         gap: 1.2vw;
         padding: 0.7vh 1vw;
         background: rgba(255,255,255,0.04);
-        border-radius: 4px;
+        border-radius: var(--radius);
         overflow: hidden;
         flex-shrink: 0;
     }
@@ -404,7 +404,7 @@
         font-weight: 700;
         letter-spacing: 0.02em;
         padding: 0.2vh 0.7vw;
-        border-radius: 3px;
+        border-radius: var(--radius-sm);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -415,7 +415,7 @@
         display: inline-block;
         width: 1.6vw; height: 1.6vw; line-height: 1.6vw;
         text-align: center;
-        border-radius: 3px;
+        border-radius: var(--radius-sm);
         font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
         font-weight: bold;

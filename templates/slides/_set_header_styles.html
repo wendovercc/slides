@@ -7,7 +7,7 @@
         font-size: var(--t-lg);
         font-weight: bold;
         line-height: 1.2;
-        text-shadow: 0 3px 6px rgba(0,0,0,0.4);
+        text-shadow: var(--title-shadow);
     }
     /* Subtitle: our team (gold) vs opposition (white), on one line. */
     .subtitle {
@@ -54,11 +54,11 @@
     .set-meta .meta-date { color: var(--accent); font-weight: 700; }
     .set-meta .home-pill, .set-meta .away-pill {
         background: rgba(60,180,80,0.3);
-        border: 1px solid rgba(60,180,80,0.5);
-        border-radius: 4px;
+        border: var(--hair) solid rgba(60,180,80,0.5);
+        border-radius: var(--radius);
         padding: 0.1vh 0.55vw;
     }
-    .set-meta .away-pill { background: rgba(180,100,40,0.3); border: 1px solid rgba(180,100,40,0.5); }
+    .set-meta .away-pill { background: rgba(180,100,40,0.3); border: var(--hair) solid rgba(180,100,40,0.5); }
     .set-meta .loc-badge {
         display: inline-block;
         max-width: 100%;
@@ -93,7 +93,7 @@
         content: '';
         position: absolute;
         bottom: 0; left: 0; right: 0;
-        height: 2px;
+        height: var(--rule);
         background: var(--accent);
         transform-origin: left;
         animation: panel-progress var(--panel-duration, 20s) linear forwards;

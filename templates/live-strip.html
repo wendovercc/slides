@@ -26,13 +26,25 @@
 
         /* Subordinate header: names the division (and the featured XI, echoing the
            ticker's gold flag) so the strip is self-explanatory and reads as in sync
-           with the ticker. Deliberately not tile-styled — a caption, not a row. */
-        .head { flex-shrink: 0; text-align: center; padding: 0.2vh 0 0.7vh;
+           with the ticker. Deliberately not tile-styled — a caption, not a row.
+
+           Fixed height, not content height: the strip is narrow enough that a long
+           division name wraps, and the wrap point is decided by glyph advance widths
+           that round differently at each zoom level — so a content-height header
+           flips between 2 and 3 lines and shunts every tile below it. Pinning the
+           height makes the tiles' origin independent of how the caption wraps.
+           The caption is clamped to 2 lines and centred in the box. */
+        .head { flex-shrink: 0; height: 6vh; overflow: hidden;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            text-align: center;
             border-bottom: 0.12vh solid rgba(255,255,255,0.14); }
         .head-xi { display: inline-block; font-size: 1.5vh; font-weight: 900;
             letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
         .head-div { font-size: 1.7vh; font-weight: 900; letter-spacing: 0.07em;
-            text-transform: uppercase; color: rgba(255,255,255,0.55); margin-top: 0.2vh; }
+            text-transform: uppercase; color: rgba(255,255,255,0.55); margin-top: 0.2vh;
+            line-height: 1.15;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; }
 
         /* One equal-height tile per team, ordered by league position. Channels:
            - FILL colour   = result lean (green win / red loss), always the full points colour
