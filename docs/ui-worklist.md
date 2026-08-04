@@ -106,22 +106,30 @@ absolute units at all. Rule is now written up in `design-conventions.md`.
 
 - **[ ] B2 — Team slide, Schedule panel: as B1.**
 
-- **[ ] B3 — Team slide, Batting panel: reclaim the header row.**
-  The Name column heading is low-value. Put the table title there instead,
-  saving a row of vertical space — the panel is currently tight.
+- **[x] B3 — Team slide, Batting panel: reclaim the header row.** Done
+  2026-08-04. The separate `.section-head` row is gone from the four stacked
+  tables (Top batting / Top bowling); the section title now sits in the table's
+  own `.col-headers` row, spanning the rank + name columns
+  (`grid-column: 1 / 3`), and the low-value "Name" heading is dropped. The
+  qualifier note ("min N innings") rides inline after the title.
+  Two details worth knowing:
+  - `.col-headers` switched from `opacity: 0.55` to
+    `color: rgba(255,255,255,0.55)` — opacity compounds, so a child title could
+    never be brighter than its row. Colour lets it.
+  - `.section-head` is retained for the **empty** branch only, so a table with
+    no data still names itself above `.empty-mini`.
 
-- **[ ] B4 — Team slide, Bowling panel: as B3**, plus the three right-hand
-  columns are unnecessarily bunched.
-  Cause: `.bowl-wkts-cols` / `.bowl-avg-cols` are `2.5vw 1fr 5vw 5vw 5vw`
-  (`team.html:176-177`) — three equal narrow columns jammed together at the
-  right edge.
+- **[x] B4 / B5 — Wickets & bowling-average grids unbunched.** Done
+  2026-08-04, one fix in both files. Widths now vary by content the way
+  `.runs-grid` does, instead of three equal narrow columns jammed at the right
+  edge:
+  - wickets (Overs · Best · Wkts) → `2.5vw 1fr 5.5vw 6vw 5.5vw` — `Best` is
+    widest, it holds a `5-27` figure.
+  - bowling average (Overs · Wkts · Avg) → `2.5vw 1fr 5.5vw 5vw 5.5vw`.
 
-- **[ ] B5 — Leaderboards, Most Wickets panel: same bunching.**
-  `.wkts-grid` / `.bowlavg-grid` = `2.5vw 1fr 5vw 5vw 5vw`
-  (`leaderboard.html:73-74`) — identical to B4. Contrast `.runs-grid`
-  (`4.5vw 3.5vw 4.5vw 5.5vw`), which varies width by content and reads better.
-  → B4 and B5 are one fix; the wickets/average grids should be widened and
-  differentiated the way the runs grid is.
+  Applied to `.bowl-wkts-cols` / `.bowl-avg-cols` (`team.html`) and
+  `.wkts-grid` / `.bowlavg-grid` (`leaderboard.html`), which stay
+  character-identical — see the D-section note about sharing them.
 
 - **[ ] B6 — Last-match innings panels: pair the club name and score.**
   Move the batting club name and their score next to each other, left-aligned.
@@ -208,5 +216,9 @@ Only worth doing where consolidation clearly beats abstraction.
 - **[ ] D3 — Table row/header borders re-declared per slide.** Thickness is now
   a token, but `.row` / `.col-headers` are still redefined in each table slide.
   Candidate to hoist into the bases alongside D1.
-- `.bowl-wkts-cols`/`.bowl-avg-cols` (team) and `.wkts-grid`/`.bowlavg-grid`
-  (leaderboard) are character-identical (B4/B5) — shared grid template.
+- **[ ] D4** — `.bowl-wkts-cols`/`.bowl-avg-cols` (team) and
+  `.wkts-grid`/`.bowlavg-grid` (leaderboard) are character-identical and were
+  re-widened in lockstep for B4/B5, each carrying a comment telling the next
+  person to keep the other in step. That's a smell — candidate for one shared
+  grid template, though `design-conventions.md` currently says grid templates
+  are per-slide.

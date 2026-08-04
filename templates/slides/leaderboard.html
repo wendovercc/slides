@@ -70,8 +70,12 @@
     /* Per-panel grid templates — batting and bowling columns differ. */
     .runs-grid    { grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw; }
     .batavg-grid  { grid-template-columns: 2.5vw 1fr 4.5vw 4.5vw 5.5vw; }
-    .wkts-grid    { grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
-    .bowlavg-grid { grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
+    /* Widths vary by content (as .runs-grid does) rather than three equal
+       narrow columns jammed at the right edge: 'Best' holds a 5-27 figure and
+       so is the widest. Keep in step with team.html's .bowl-wkts-cols /
+       .bowl-avg-cols — same columns, same widths. */
+    .wkts-grid    { grid-template-columns: 2.5vw 1fr 5.5vw 6vw 5.5vw; }
+    .bowlavg-grid { grid-template-columns: 2.5vw 1fr 5.5vw 5vw 5.5vw; }
     .col-headers {
         display: grid;
         gap: 0 0.4vw;

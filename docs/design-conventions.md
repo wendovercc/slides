@@ -112,8 +112,8 @@ This is the same reasoning as the fixed-height tile stack (see "Tile stacks"):
 let surplus space fall at the end rather than letting content decide geometry.
 
 To check: `grep -rE '[0-9.]+px' templates/slides` should return only comments.
-Stricter still, against the build output, `grep -rE '[0-9.]+px' site/slides`
-should return nothing at all.
+Stricter still, against the build output, `grep -rE '[0-9.]+px' site/slide`
+should return only the token block's `~2px`-style comments and `0px`.
 
 ## Brand colour & type
 
@@ -233,6 +233,34 @@ them — don't invent panel-specific synonyms.
 
 Grid templates are per-slide (e.g. `.totw-grid`, `.top-grid`, `.league-grid`).
 Column widths vary; typography and alignment do not.
+
+### Table titles live in the header row
+
+Where a panel stacks more than one table (`team.html` — Top batting, Top
+bowling), don't spend a separate row on the section title. Put it in the
+table's own `.col-headers`, spanning the rank and name columns, and drop the
+"Name" heading — it's low-value next to a title that already says what the
+table ranks:
+
+```html
+<div class="bat-runs-cols col-headers">
+    <span class="section-title">Most runs</span>   <!-- grid-column: 1 / 3 -->
+    <span class="col-num">Inns</span>
+    …
+```
+
+Give the header row its dimming with `color: rgba(255,255,255,0.55)`, **not**
+`opacity` — opacity compounds, so an opacity-dimmed row can never hold a
+brighter title. Any qualifier ("min 5 innings") rides inline after the title.
+Keep a plain title row for the *empty* branch, so a table with no data still
+names itself.
+
+### Right-hand numeric columns: vary the width
+
+Three equal narrow columns at the right edge read as one bunched block. Size
+each numeric column to its content instead — a `Best` column holding `5-27`
+earns more width than a `Wkts` column holding `12` — the way `.runs-grid` and
+`.wkts-grid` (`leaderboard.html`) do.
 
 ### Flexible vs fixed name columns
 

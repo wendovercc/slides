@@ -133,7 +133,25 @@
         font-size: var(--t-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        opacity: 0.55;
+        /* colour, not opacity, so the title cell below can sit brighter than
+           the rest of the header row (opacity would compound). */
+        color: rgba(255,255,255,0.55);
+        align-items: baseline;
+    }
+    /* The table title lives in the header row, spanning the rank + name
+       columns — the 'Name' heading is low-value and this reclaims a whole
+       row of vertical space in a tight panel. */
+    .col-headers .section-title {
+        grid-column: 1 / 3;
+        opacity: 1;
+        color: rgba(255,255,255,0.8);
+    }
+    .col-headers .qualifier-note {
+        margin-left: 0.6vw;
+        text-transform: none;
+        letter-spacing: 0;
+        color: rgba(255,255,255,0.45);
+        opacity: 1;
     }
     .col-num { text-align: right; }
     .row {
@@ -173,8 +191,12 @@
 
     .bat-runs-cols,
     .bat-avg-cols { display: grid; grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw; }
-    .bowl-wkts-cols { display: grid; grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
-    .bowl-avg-cols  { display: grid; grid-template-columns: 2.5vw 1fr 5vw 5vw 5vw; }
+    /* Widths vary by content (as the batting grids do) rather than three equal
+       narrow columns jammed at the right edge: 'Best' holds a 5-27 figure and
+       so is the widest. Keep in step with leaderboard.html's .wkts-grid /
+       .bowlavg-grid — same columns, same widths. */
+    .bowl-wkts-cols { display: grid; grid-template-columns: 2.5vw 1fr 5.5vw 6vw 5.5vw; }
+    .bowl-avg-cols  { display: grid; grid-template-columns: 2.5vw 1fr 5.5vw 5vw 5.5vw; }
 
     .empty-mini {
         opacity: 0.4;
@@ -638,14 +660,10 @@
             {% elif tab == 'top_batting' %}
                 <div class="stacked">
                     <div class="stacked-half">
-                        <div class="section-head">
-                            <span class="section-title">Most runs</span>
-                        </div>
                         {% if slide._top_runs %}
                         <div class="top-table">
                             <div class="bat-runs-cols col-headers">
-                                <span></span>
-                                <span>Name</span>
+                                <span class="section-title">Most runs</span>
                                 <span class="col-num">Inns</span>
                                 <span class="col-num">NO</span>
                                 <span class="col-num">HS</span>
@@ -663,20 +681,16 @@
                             {% endfor %}
                         </div>
                         {% else %}
+                        <div class="section-head"><span class="section-title">Most runs</span></div>
                         <div class="empty-mini">No batting data yet</div>
                         {% endif %}
                     </div>
 
                     <div class="stacked-half">
-                        <div class="section-head">
-                            <span class="section-title">Best average</span>
-                            <span class="qualifier-note">min {{ slide._min_innings }} innings</span>
-                        </div>
                         {% if slide._top_avg_bat %}
                         <div class="top-table">
                             <div class="bat-avg-cols col-headers">
-                                <span></span>
-                                <span>Name</span>
+                                <span class="section-title">Best average<span class="qualifier-note">min {{ slide._min_innings }} innings</span></span>
                                 <span class="col-num">Inns</span>
                                 <span class="col-num">NO</span>
                                 <span class="col-num">HS</span>
@@ -694,6 +708,10 @@
                             {% endfor %}
                         </div>
                         {% else %}
+                        <div class="section-head">
+                            <span class="section-title">Best average</span>
+                            <span class="qualifier-note">min {{ slide._min_innings }} innings</span>
+                        </div>
                         <div class="empty-mini">No qualifying batters yet</div>
                         {% endif %}
                     </div>
@@ -702,14 +720,10 @@
             {% elif tab == 'top_bowling' %}
                 <div class="stacked">
                     <div class="stacked-half">
-                        <div class="section-head">
-                            <span class="section-title">Most wickets</span>
-                        </div>
                         {% if slide._top_wkts %}
                         <div class="top-table">
                             <div class="bowl-wkts-cols col-headers">
-                                <span></span>
-                                <span>Name</span>
+                                <span class="section-title">Most wickets</span>
                                 <span class="col-num">Overs</span>
                                 <span class="col-num">Best</span>
                                 <span class="col-num">Wkts</span>
@@ -725,20 +739,16 @@
                             {% endfor %}
                         </div>
                         {% else %}
+                        <div class="section-head"><span class="section-title">Most wickets</span></div>
                         <div class="empty-mini">No bowling data yet</div>
                         {% endif %}
                     </div>
 
                     <div class="stacked-half">
-                        <div class="section-head">
-                            <span class="section-title">Best average</span>
-                            <span class="qualifier-note">min {{ slide._min_overs }} overs</span>
-                        </div>
                         {% if slide._top_avg_bowl %}
                         <div class="top-table">
                             <div class="bowl-avg-cols col-headers">
-                                <span></span>
-                                <span>Name</span>
+                                <span class="section-title">Best average<span class="qualifier-note">min {{ slide._min_overs }} overs</span></span>
                                 <span class="col-num">Overs</span>
                                 <span class="col-num">Wkts</span>
                                 <span class="col-num">Avg</span>
@@ -754,6 +764,10 @@
                             {% endfor %}
                         </div>
                         {% else %}
+                        <div class="section-head">
+                            <span class="section-title">Best average</span>
+                            <span class="qualifier-note">min {{ slide._min_overs }} overs</span>
+                        </div>
                         <div class="empty-mini">No qualifying bowlers yet</div>
                         {% endif %}
                     </div>
