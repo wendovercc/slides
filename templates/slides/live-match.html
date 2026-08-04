@@ -21,10 +21,14 @@
 
     /* Own tab strip — reuses the set-nav look; populated + driven by JS (the match
        decides which tabs exist, so this isn't a build-time carousel). */
-    #lm-nav { display: flex; gap: 2vw; margin-top: 1.5vh; align-items: flex-end; min-height: 3.2vh; }
-    #lm-nav .panel-tab { font-size: var(--t-md); letter-spacing: 0.05em; text-transform: uppercase;
-        white-space: nowrap; opacity: 0.35; position: relative; padding-bottom: 0.6vh; transition: opacity 0.3s; }
-    #lm-nav .panel-tab.active { opacity: 1; }
+    /* Tab typography comes from the base's `.panel-tab`; min-height reserves the
+       row so tiles below don't jump while JS is still populating it. */
+    #lm-nav { gap: 2vw; margin-top: 1.5vh; min-height: 3.2vh; }
+    #lm-nav .panel-tab { letter-spacing: 0.05em; white-space: nowrap; }
+    /* Underline is an explicit child element here, not the base's ::after — JS
+       moves it between tabs as the match's tab set changes — so the base's
+       pseudo-element is switched off to leave one mechanism in charge. */
+    #lm-nav .panel-tab.active::after { content: none; }
     #lm-nav .panel-tab .u { position: absolute; bottom: 0; left: 0; right: 0; height: var(--rule);
         background: var(--accent); transform-origin: left; transform: scaleX(0); }
 
@@ -32,7 +36,7 @@
     .lm-view { position: absolute; inset: 0; display: flex; flex-direction: column; }
 
     /* Scoreline (batting club + score) — matches the scorecard slide. */
-    .scoreline { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8vw; margin-bottom: 1.2vh; }
+    .scoreline { display: flex; align-items: baseline; gap: 1vw; margin-bottom: 0.5vh; }
     .sc-club { font-size: var(--t-md); font-weight: 700; }
     .sc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
     .sc-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
@@ -299,7 +303,9 @@
         rows.push('<div class="row bat-grid extras-row"><span class="name">Extras</span><span class="out">' + esc(parts.join(', ')) +
             '</span><span></span><span></span><span></span><span></span><span class="num highlight">' + (ex.total || 0) + '</span></div>');
         return scoreline(inn) +
-            '<div class="table"><div class="col-headers bat-grid"><span>Batting</span><span></span>' +
+            // No "Batting" heading — the scoreline above names the batting club
+            // (matches the scorecard slide). Two empty grid placeholders instead.
+            '<div class="table"><div class="col-headers bat-grid"><span></span><span></span>' +
             '<span class="col-num">B</span><span class="col-num">4</span><span class="col-num">6</span>' +
             '<span class="col-num">SR</span><span class="col-num">R</span></div>' + rows.join('') + '</div>';
     }

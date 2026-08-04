@@ -30,36 +30,10 @@
     .half.panel-active { opacity: 1; }
     /* Four tabs across the sidebar column: tighter gap/tracking than the
        two-tab honours slides so all four labels fit on one line. */
-    .panel-nav {
-        display: flex;
-        gap: 2vw;
-        margin-top: 1.5vh;
-        align-items: flex-end;
-    }
-    .panel-tab {
-        font-size: var(--t-md);
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        white-space: nowrap;
-        opacity: 0.35;
-        position: relative;
-        padding-bottom: 0.6vh;
-        transition: opacity 0.4s;
-    }
-    .panel-tab.active { opacity: 1; }
-    .panel-tab.active::after {
-        content: '';
-        position: absolute;
-        bottom: 0; left: 0; right: 0;
-        height: var(--rule);
-        background: var(--accent);
-        transform-origin: left;
-        animation: panel-progress var(--panel-duration, 10s) linear forwards;
-    }
-    @keyframes panel-progress {
-        from { transform: scaleX(0); }
-        to   { transform: scaleX(1); }
-    }
+    /* Tab typography/underline come from the base. Four long tab labels, so
+       they're tightened and kept on one line. */
+    .panel-nav { gap: 2vw; margin-top: 1.5vh; }
+    .panel-tab { letter-spacing: 0.05em; white-space: nowrap; }
     .table { flex: 1; display: flex; flex-direction: column; }
     /* pos · name · score|figures · match · year */
     .col-headers {

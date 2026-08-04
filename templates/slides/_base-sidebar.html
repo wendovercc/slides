@@ -30,6 +30,7 @@
             --t-xl:         4vw;
             --t-lg:         2.8vw;
             --t-md:         2vw;
+            --t-ms:         1.5vw;  /* between --t-md and --t-sm: supporting lines that still need to read at 10ft */
             --t-sm:         1.2vw;
             --t-xs:         0.9vw;
             --t-xxs:        0.7vw;
@@ -141,8 +142,43 @@
             border-radius: var(--radius);
             border: var(--hair) solid rgba(255,255,255,0.12);
         }
-        /* Carousel-style slides: breathing room between tab nav and table headers */
-        .panel-nav { margin-bottom: 2.8vh; }
+        /* ── Carousel tab nav ──────────────────────────────────────────────
+           Shared by every carousel slide (fantasy-league, honours, leaderboard,
+           team) and by the match-set sequence strip (`.panel-nav.set-nav`, see
+           _set_header_styles.html). Slides override only what genuinely differs
+           — `gap` / `margin-top` on the nav, `letter-spacing` / `white-space` on
+           the tab. Don't re-declare the underline or the keyframes locally; that
+           block was copy-pasted six ways before it was hoisted here. */
+        .panel-nav {
+            display: flex;
+            align-items: flex-end;
+            /* Breathing room between the tabs and the table headers below.
+               Slides may set margin-top and gap; leave this alone. */
+            margin-bottom: 2.8vh;
+        }
+        .panel-tab {
+            font-size: var(--t-md);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            opacity: 0.35;
+            position: relative;
+            padding-bottom: 0.6vh;
+            transition: opacity 0.4s;
+        }
+        .panel-tab.active { opacity: 1; }
+        .panel-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: var(--rule);
+            background: var(--accent);
+            transform-origin: left;
+            animation: panel-progress var(--panel-duration, 10s) linear forwards;
+        }
+        @keyframes panel-progress {
+            from { transform: scaleX(0); }
+            to   { transform: scaleX(1); }
+        }
         /* Interactive pause: freeze the active tab's gold underline at full width */
         body.paused .panel-tab.active::after { animation: none; transform: scaleX(1); }
         /* Tab progress fill is turned off for now: the active tab reads as fully

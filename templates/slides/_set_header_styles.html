@@ -73,32 +73,10 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    /* Sequence strip. One step is active per member; its underline fills over the
-       member's dwell (driven by set-nav.js) and freezes on pause via the base's
-       `body.paused .panel-tab.active::after` rule. `.panel-nav` bottom margin comes
-       from _base-sidebar.html — only the top margin/gap are set here. */
-    .set-nav { display: flex; gap: 2vw; margin-top: 1.5vh; align-items: flex-end; }
-    .set-nav .panel-tab {
-        font-size: var(--t-md);
-        letter-spacing: 0.05em;
-        text-transform: uppercase;
-        white-space: nowrap;
-        opacity: 0.35;
-        position: relative;
-        padding-bottom: 0.6vh;
-        transition: opacity 0.4s;
-    }
-    .set-nav .panel-tab.active { opacity: 1; }
-    .set-nav .panel-tab.active::after {
-        content: '';
-        position: absolute;
-        bottom: 0; left: 0; right: 0;
-        height: var(--rule);
-        background: var(--accent);
-        transform-origin: left;
-        animation: panel-progress var(--panel-duration, 20s) linear forwards;
-    }
-    @keyframes panel-progress {
-        from { transform: scaleX(0); }
-        to   { transform: scaleX(1); }
-    }
+    /* Sequence strip. Rendered as `.panel-nav.set-nav`, so tab typography, the
+       gold underline and the pause freeze all come from the base — only the
+       spacing and the one-line step labels are set here. One step is active per
+       member; its underline fills over the member's dwell (driven by
+       set-nav.js). Leave `.panel-nav`'s bottom margin to the base. */
+    .set-nav { gap: 2vw; margin-top: 1.5vh; }
+    .set-nav .panel-tab { letter-spacing: 0.05em; white-space: nowrap; }

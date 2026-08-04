@@ -29,6 +29,7 @@ spacing.
 --t-xl: 4vw;    /* hero numerals */
 --t-lg: 2.8vw;  /* slide titles */
 --t-md: 2vw;    /* row text in tables */
+--t-ms: 1.5vw;  /* supporting lines that still have to read at 10ft */
 --t-sm: 1.2vw;
 --t-xs: 0.9vw;  /* column headers */
 --t-xxs: 0.7vw;
@@ -157,10 +158,19 @@ timer.
 - Above the panels, a `<nav class="panel-nav">` lists tabs as
   `<span class="panel-tab">`. The active tab carries `active` and renders an
   animated underline that fills over `--panel-duration` seconds.
-- Bottom margin between tabs and the panel content comes from
-  `_base-sidebar.html` (`.panel-nav { margin-bottom: 2.8vh }`). Don't redeclare
-  this locally — slides may set `margin-top` and `gap`, but leave
-  `margin-bottom` alone for consistency.
+- **Tab styling lives in the bases**, not the slide. `.panel-nav`,
+  `.panel-tab`, the active tab's gold `::after` underline and the
+  `panel-progress` keyframes are all defined once in `_base.html` /
+  `_base-sidebar.html`. A slide declares only what genuinely differs:
+  `gap` / `margin-top` / `flex-wrap` on the nav, and `letter-spacing` /
+  `white-space` on the tab (slides with four long labels tighten to `0.05em`
+  and `nowrap`). Never re-declare the underline block or the keyframes — that
+  is the duplication the hoist removed. `margin-bottom` in particular is the
+  base's: it sets the gap between the tabs and the table headers below, and
+  should be uniform across slides.
+- The match-set sequence strip (`_set_header.html`) renders as
+  `.panel-nav.set-nav` precisely so it picks all of this up — a set reads like
+  a carousel because it *is* the same component.
 - Each panel is shown for `panel_duration` seconds — the same dwell a
   single-panel slide gets — so reading pace is constant regardless of how many
   panels a slide has. The slide's total on-screen time is *derived*:
@@ -311,24 +321,56 @@ space falling below the last tile. Reference implementation:
 
 - Container: `display: flex; flex-direction: column; gap: 1vh` inside the
   panel (no `flex: 1` on the children).
-- Each tile: `height: 16vh; flex-shrink: 0; overflow: hidden; padding: 0.7vh 1vw;
-  background: rgba(255,255,255,0.04); border-radius: 4px`.
+- Each tile: `height: 19vh; flex-shrink: 0; overflow: hidden; padding: 0.7vh 1vw;
+  background: rgba(255,255,255,0.04); border-radius: var(--radius)`.
   - The background tint matches the zebra-stripe shade used in tables, so a
     tile reads as "one row of a non-tabular table".
   - `flex-shrink: 0` and a fixed `vh` height — relying on `flex: 1` to share
     the panel evenly does **not** reliably produce equal tiles when content
     is heterogeneous; fixed height avoids the surprises and lets surplus
     space fall below the stack.
+- **Size the tile from the panel, then the type from the tile.** 19vh is not
+  arbitrary: three tiles plus their gaps have to fit the panel *including* any
+  header row the busiest tab spends (on `team.html` that's the Form tab's
+  form-summary badges — Schedule has no such row, but both tabs use the same
+  tile height because they cycle and must agree). Size to the constrained tab
+  and let the other carry the surplus. Leave a few `vh` of slack: line-height
+  on `normal` isn't something you can compute exactly, and a tile stack that
+  overflows clips its third tile, which is the one thing this pattern exists
+  to prevent.
 - The first row inside the tile is a **meta row** with col-headers
-  typography (`var(--t-xs)`, uppercase, `letter-spacing: 0.08em`). Plain
+  typography (`var(--t-sm)`, uppercase, `letter-spacing: 0.08em`). Plain
   `<span>` children render at opacity 0.55; badges (`.home-pill`,
   `.away-pill`, `.result-pill`, `.badge-*`) render at full opacity so they
   remain the row's focal points.
+- **Park the tile's badge at the right end of the meta row**, after a
+  `<span class="spacer">` (`flex: 1`) — the match result + points on Form, the
+  opposition's form badges on Schedule. It's one short thing that needs no
+  vertical space of its own, and keeping it here leaves whole rows free for
+  content that does. Two consequences to respect:
+  - **The meta row must stay one line.** It positions everything below it in a
+    fixed-height tile, so a wrap pushes content out of the bottom. Give the
+    badges and pills `flex-shrink: 0` (and `flex-wrap: nowrap` on a badge
+    group) and let the date be what gives, with `min-width: 0` + ellipsis.
+  - A badge group nested in the meta row inherits its `opacity: 0.55` and
+    uppercase tracking. Re-assert `opacity: 1` on the group and `letter-spacing:
+    0` on the chip, or a centred single character sits off-centre.
 - Below the meta row, the headline content line (opposition / event name)
-  uses `var(--t-md)` bold with `line-height: 1.1`. Supporting lines use
-  `var(--t-xs)` / `var(--t-xxs)` at opacity 0.55–0.7.
-- Tiles must not grow with content. If a tile would otherwise exceed
-  16vh, reduce typography or supporting content rather than expanding —
+  uses `var(--t-md)` bold with `line-height: 1.1`. Lines carrying real content
+  a rung below the headline — innings scores — use `var(--t-ms)`; genuine
+  captions beneath them (a breakdown, an average) use `var(--t-sm)` at
+  opacity 0.55–0.7. Don't drop tile content to `--t-xs`: that's column-header
+  size, unreadable at 10ft for anything the viewer is meant to actually read.
+- A tile may split into `.tile-left` / `.tile-right` (a hairline border
+  between). **Each column gets its own headline size, set by what that column
+  holds** — not by rank against the other. `team.html`'s right column holds at
+  most two performers and nothing else, so those run at `var(--t-md)`, level
+  with the opposition name opposite; the figure stays the highlight through
+  weight and gold, not size. A column holding one or two items should
+  `justify-content: center` rather than top-pack, so a tile with a single item
+  doesn't read as lopsided.
+- Tiles must not grow with content. If a tile would otherwise exceed its
+  height, reduce typography or supporting content rather than expanding —
   the carousel relies on consistent tile heights so the third tile is
   always fully visible.
 

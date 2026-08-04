@@ -28,7 +28,10 @@
     .league-grid .name { display: flex; align-items: baseline; gap: 0.5vw; overflow: hidden; padding-right: 0.5vw; }
     .name-text { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
     /* Team designation ('- 1st XI') as a lighter sub, consistent with the meta. */
-    .team-desig { font-family: 'Lato', Arial, sans-serif; font-size: var(--t-xs); font-weight: normal; opacity: 0.6; margin-left: 0.5vw; }
+    /* Small team name after the club name. Same idea as the tile stacks'
+       .opp-sub, so it carries the same size — --t-xs left it noticeably
+       smaller than the equivalent on the Form panel. */
+    .team-desig { font-family: 'Lato', Arial, sans-serif; font-size: var(--t-sm); font-weight: normal; opacity: 0.6; margin-left: 0.5vw; }
     /* Points won in this match, badged onto the two involved teams' rows —
        coloured by result like the Result tab's pills (green win / red loss). */
     .match-pts-badge {

@@ -6,9 +6,12 @@
     + gold readable score). -#}
 {% block styles %}
 {% include 'slides/_set_header_styles.html' %}
-    /* Innings headline — club name and score at the same size, score in gold. */
-    /* Club name stays flush left; the score (the innings result) is pushed to the right edge. */
-    .scoreline { display: flex; align-items: baseline; justify-content: space-between; gap: 0.8vw; margin-bottom: 1.4vh; }
+    /* Innings headline — club name and score at the same size, score in gold.
+       The two are one phrase ("Wendover CC 184-7"), so they sit together at the
+       left edge rather than being split to opposite ends of the slide. The
+       headline names the innings, so the table below drops its own "Batting"
+       heading and tucks up close underneath. */
+    .scoreline { display: flex; align-items: baseline; gap: 1vw; margin-bottom: 0.5vh; }
     .sc-club { font-size: var(--t-md); font-weight: 700; }
     .sc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
 
@@ -64,8 +67,10 @@
 
     {% if slide._mode == 'batting' %}
     <div class="table">
+        {#- No "Batting" heading: the scoreline above already names the batting
+            club. The two leading cells stay as empty grid placeholders. -#}
         <div class="col-headers bat-grid">
-            <span>Batting</span>
+            <span></span>
             <span></span>
             <span class="col-num">B</span>
             <span class="col-num">4</span>

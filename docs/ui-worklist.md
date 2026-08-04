@@ -99,12 +99,49 @@ absolute units at all. Rule is now written up in `design-conventions.md`.
 
 ## B. Layout & density
 
-- **[ ] B1 — Team slide, Form panel: wasted vertical space.**
-  Doesn't fill the panel height; fonts are too small in places. Room to scale up.
-  (Tile stack is fixed `16vh` per `design-conventions.md` — revisiting this may
-  mean revisiting that number, or letting tile height derive from panel height.)
+- **[x] B1 / B2 — Team slide, Form & Schedule panels: wasted vertical space.**
+  Done 2026-08-04, one fix for both. Three 16vh tiles + gaps used 50vh of a
+  ~65vh panel, so ~15vh sat dead at the bottom and the tile content was sized
+  for a box far tighter than it needed to be.
+  - Tile height `16vh` → **`19vh`** (`.strip` and `.fix-strip` kept in step —
+    the two tabs cycle, so their tiles must agree). Sized against the *Form*
+    tab, which is the constrained one: it spends a row on the form-summary
+    badges that Schedule doesn't. ~59vh of ~65vh used, with the remainder left
+    as deliberate slack — `line-height: normal` isn't computable exactly and an
+    overflowing stack clips its third tile.
+  - Typography moved up a rung throughout, which is the half of B1 that
+    "fonts are too small" was really about. Meta rows, result/location pills,
+    form labels, the opposition designation and the performer breakdown all
+    went `--t-xs` → `--t-sm`; the innings score lines and the performer
+    name+figure lines went `--t-sm` → **`--t-ms`**. Discipline icons and form
+    badges grew `1.4vw`/`1.6vw` → `1.7vw`/`1.9vw` to stay level with them.
+  - `--t-ms: 1.5vw` is a **new token**, filling a real gap in the scale: the
+    step from `--t-md` (2vw) to `--t-sm` (1.2vw) was much bigger than any other,
+    so content that shouldn't be a headline but also shouldn't be a caption had
+    nowhere to sit. Added to both bases and `video.html`'s copy; purely
+    additive, no existing usage changed.
 
-- **[ ] B2 — Team slide, Schedule panel: as B1.**
+  **Second pass, same day** — the tile height cleared the bottom but the
+  right-hand column was still under-sized. Confirmed both stacks cap at **two**
+  performers (Form via `_select_match_highlights(sc, max_hl=2)`, build.py:1307;
+  Schedule via the fixed `top_bat` + `top_bowl` pair), so the column's height
+  budget is knowable rather than open-ended:
+  - The **result/points pill** (Form) and the **opposition form block**
+    (Schedule) moved out of the right column into the right-hand end of the
+    left tile's meta row, after a `flex: 1` spacer. Both are short and need no
+    row of their own; `.result-row` and `.fix-form-row` are gone.
+  - That leaves the right column holding only the two performers, so they took
+    the space: `.hl-line` `--t-ms` → **`--t-md`** (level with the opposition
+    name opposite), icons `1.7vw` → `2.2vw`, `.hl-detail` `--t-sm` →
+    `--t-ms`. Column is now `justify-content: center` with a `1vh` gap, so a
+    one-performer tile doesn't sit lopsided.
+  - Guards added, because the meta row now positions a fixed-height tile's
+    entire contents: pills/badges `flex-shrink: 0`, badge group
+    `flex-wrap: nowrap`, and the date takes the ellipsis. The badge group also
+    needed `opacity: 1` and `letter-spacing: 0` re-asserted against the
+    meta row's inherited dimming and tracking.
+  - Form tiles with no performers now render `No performer data` rather than a
+    bare bordered column (the `.strip-empty` class existed but was unreachable).
 
 - **[x] B3 — Team slide, Batting panel: reclaim the header row.** Done
   2026-08-04. The separate `.section-head` row is gone from the four stacked
@@ -131,12 +168,19 @@ absolute units at all. Rule is now written up in `design-conventions.md`.
   `.wkts-grid` / `.bowlavg-grid` (`leaderboard.html`), which stay
   character-identical — see the D-section note about sharing them.
 
-- **[ ] B6 — Last-match innings panels: pair the club name and score.**
-  Move the batting club name and their score next to each other, left-aligned.
-
-- **[ ] B7 — Last-match batting innings panels: vertically tight.**
-  Depends on B6. Drop the 'Batting' column header and shift the table up closer
-  to the now left-aligned club name + score.
+- **[x] B6 / B7 — Last-match innings panels: club name + score paired, table
+  pulled up.** Done 2026-08-04.
+  - `.scoreline` dropped `justify-content: space-between` — the club and its
+    score are one phrase ("Wendover CC 184-7"), not two facts to park at
+    opposite ends of a 73vw column. Now a left-aligned pair with a `1vw` gap.
+  - With the headline naming the batting side, the batting table's `Batting`
+    column heading was pure repetition: dropped (two empty grid placeholders
+    keep the 7-column template intact), and `.scoreline`'s bottom margin cut
+    `1.4vh` → `0.5vh` so the table tucks up under the score.
+  - Applied to **both** `scorecard.html` and `live-match.html`, which carry a
+    deliberately identical scoreline (its comment says as much) — the live
+    slide builds its header in JS, so the heading came out of the template
+    string there.
 
 - **[ ] B8 — Video clips, top-left card: font size too small.**
   Should increase, but there isn't much room — may need the card's own layout
@@ -156,6 +200,12 @@ Recorded so they aren't lost; **not** in scope for the consistency pass.
 - **[~] C2 — League table slides need a consistency revisit.**
   Should pick up recent changes made elsewhere — e.g. the small team name after
   the club name, as done in the last-match league panel.
+  *Partly addressed 2026-08-04:* `.team-desig` went `--t-xs` → `--t-sm` in the
+  two slides that already have it (`team.html`'s League panel and
+  `match-league.html`), matching the tile stacks' `.opp-sub` — same idea, so
+  same size. Row heights are unchanged: the `--t-md` row text still sets the
+  line box. What's still open here is the standalone `league-table.html` /
+  `league-positions.html`, which don't split the club and team name at all.
 
 - **[~] C3 — Interactive control position clashes with the live strip.**
   When the control sits on the right of the slide and the live strip is showing,
@@ -208,10 +258,25 @@ Recorded so they aren't lost; **not** in scope for the consistency pass.
 
 Only worth doing where consolidation clearly beats abstraction.
 
-- **[ ] D1 — Panel-tab underline rule duplicated six times.** Now uniformly
-  `var(--rule)`, but the whole `::after` block is still copy-pasted across
-  `_set_header_styles`, `honours`, `fantasy-league`, `leaderboard`, `team` and
-  `live-match`. Strong candidate to hoist into the bases.
+- **[x] D1 — Panel-tab underline rule duplicated six times.** Hoisted
+  2026-08-04. `.panel-nav`, `.panel-tab`, `.panel-tab.active::after` and the
+  `panel-progress` keyframes now live once in each base, next to the existing
+  `body.paused` freeze and the progress-fill override that were already there.
+  The six copies shrank to their genuine differences:
+  - `fantasy-league`, `team` — nav `gap`/`margin-top` (+ `flex-wrap`, since its
+    tab count is data-driven and can reach five).
+  - `honours`, `leaderboard`, `set-nav` — the same, plus
+    `letter-spacing: 0.05em` and `white-space: nowrap`, which is what four long
+    labels need. The base holds `0.08em`, matching the col-headers convention.
+  - `live-match` was the odd one out and stays that way: it drives its
+    underline through an explicit `.u` child element (JS re-points it as the
+    match's tab set changes) rather than the pseudo-element, so it now switches
+    the inherited `::after` off with `content: none` to leave one mechanism in
+    charge. Its tab *typography* does come from the base.
+
+  The match-set sequence strip picks all this up for free because it already
+  renders as `.panel-nav.set-nav` — worth keeping in mind if a new
+  tabbed surface appears.
 - **[x] D2 — Title `text-shadow` duplicated on 10 slides** → `--title-shadow`.
 - **[ ] D3 — Table row/header borders re-declared per slide.** Thickness is now
   a token, but `.row` / `.col-headers` are still redefined in each table slide.

@@ -28,36 +28,9 @@
         transition: opacity 0.4s ease-in-out;
     }
     .panel.panel-active { opacity: 1; }
-    .panel-nav {
-        display: flex;
-        gap: 3vw;
-        margin-top: 1.2vh;
-        align-items: flex-end;
-        flex-wrap: wrap;
-    }
-    .panel-tab {
-        font-size: var(--t-md);
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        opacity: 0.35;
-        position: relative;
-        padding-bottom: 0.6vh;
-        transition: opacity 0.4s;
-    }
-    .panel-tab.active { opacity: 1; }
-    .panel-tab.active::after {
-        content: '';
-        position: absolute;
-        bottom: 0; left: 0; right: 0;
-        height: var(--rule);
-        background: var(--accent);
-        transform-origin: left;
-        animation: panel-progress var(--panel-duration, 10s) linear forwards;
-    }
-    @keyframes panel-progress {
-        from { transform: scaleX(0); }
-        to   { transform: scaleX(1); }
-    }
+    /* Tab typography/underline come from the base. Tab count is data-driven
+       (up to five), so this nav is the one that may need to wrap. */
+    .panel-nav { gap: 3vw; margin-top: 1.2vh; flex-wrap: wrap; }
     .empty {
         flex: 1;
         display: flex;
@@ -94,7 +67,10 @@
         padding-right: 0.5vw;
     }
     /* Team designation ('- 1st XI') as a lighter sub, consistent with the meta. */
-    .team-desig { font-family: 'Lato', Arial, sans-serif; font-size: var(--t-xs); font-weight: normal; opacity: 0.6; margin-left: 0.5vw; }
+    /* Small team name after the club name. Same idea as the tile stacks'
+       .opp-sub, so it carries the same size — --t-xs left it noticeably
+       smaller than the equivalent on the Form panel. */
+    .team-desig { font-family: 'Lato', Arial, sans-serif; font-size: var(--t-sm); font-weight: normal; opacity: 0.6; margin-left: 0.5vw; }
 
     /* ── Tabs 4 & 5: Top batting / Top bowling — two stacked tables ─────── */
     .stacked {
@@ -214,7 +190,7 @@
     }
     .form-summary-label {
         font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         text-transform: uppercase;
         letter-spacing: 0.08em;
         opacity: 0.55;
@@ -226,8 +202,11 @@
         flex-direction: column;
         gap: 1vh;
     }
+    /* 19vh (was 16vh): three tiles + gaps then fill the panel instead of
+       leaving ~15vh dead at the bottom. The Form tab is the binding constraint
+       — it spends a row on the form-summary badges that Schedule doesn't. */
     .strip {
-        height: 16vh;
+        height: 19vh;
         display: flex;
         gap: 1.2vw;
         padding: 0.7vh 1vw;
@@ -245,12 +224,15 @@
         justify-content: flex-start;
         min-width: 0;
     }
+    /* Performers only, at most two — centred against the left column's stack
+       rather than top-packed, so a tile with one performer doesn't leave the
+       column visibly lopsided. */
     .tile-right {
         flex: 1;
         display: flex;
         flex-direction: column;
-        gap: 0.15vh;
-        justify-content: flex-start;
+        gap: 1vh;
+        justify-content: center;
         padding-left: 1vw;
         border-left: var(--hair) solid rgba(255,255,255,0.08);
         min-width: 0;
@@ -261,21 +243,39 @@
         display: flex;
         align-items: center;
         gap: 0.8vw;
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         text-transform: uppercase;
         letter-spacing: 0.08em;
         margin-bottom: 0.6vh;
     }
     .strip-meta > span, .fix-meta > span { opacity: 0.55; }
     .strip-meta > .home-pill, .strip-meta > .away-pill, .strip-meta > .result-pill,
-    .fix-meta > .home-pill, .fix-meta > .away-pill { opacity: 1; }
+    .fix-meta > .home-pill, .fix-meta > .away-pill, .fix-meta > .form-badges { opacity: 1; }
     /* Gold date label — the tile echo of the announcement slide's gold date line. */
     .strip-meta > .meta-date, .fix-meta > .meta-date {
         opacity: 1;
         color: var(--accent);
         font-weight: 700;
     }
-    .strip-meta .spacer { flex: 1; }
+    /* Both tile stacks end their meta row with a right-pushed badge — the
+       result/points pill on Form, the opposition form badges on Schedule. They
+       ride up here rather than sitting in the right-hand column so that column
+       is left to the (at most two) performers alone. */
+    .strip-meta .spacer, .fix-meta .spacer { flex: 1; }
+    /* The meta row must stay one line. It sits above the rest of a fixed-height
+       tile, so a wrap here would shunt the content below it out of the bottom
+       (see design-conventions: content-height boxes that position what follows).
+       The badges and pills hold their size; the date is what gives. */
+    .strip-meta > .form-badges, .fix-meta > .form-badges { flex-wrap: nowrap; flex-shrink: 0; }
+    .strip-meta > .result-pill, .strip-meta > .home-pill, .strip-meta > .away-pill,
+    .fix-meta > .home-pill, .fix-meta > .away-pill,
+    .strip-meta > .form-summary-label, .fix-meta > .form-summary-label { flex-shrink: 0; white-space: nowrap; }
+    .strip-meta > .meta-date, .fix-meta > .meta-date {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     .home-pill, .away-pill {
         background: rgba(60,180,80,0.3);
         border: var(--hair) solid rgba(60,180,80,0.5);
@@ -288,16 +288,11 @@
     }
     .result-pill {
         font-weight: bold;
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         letter-spacing: 0.14em;
         text-transform: uppercase;
         padding: 0.15vh 0.7vw;
         border-radius: var(--radius);
-    }
-    .result-row {
-        display: flex;
-        justify-content: flex-end;
-        margin-bottom: 0.5vh;
     }
     .result-W { background: #1e5c1e; border: var(--hair) solid #3da53d; color: #a8f0a8; }
     .result-L { background: #5c1a1a; border: var(--hair) solid #a53d3d; color: #f0a8a8; }
@@ -314,18 +309,19 @@
     }
     .strip-opp .opp-sub {
         font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         font-weight: normal;
         opacity: 0.55;
         margin-left: 0.6vw;
     }
-    /* Innings lines are supporting detail beneath the opposition headline — kept
-       at --t-sm so two innings + the meta row and opposition fit the 16vh tile. */
+    /* Innings lines sit a rung below the opposition headline (--t-md) at
+       --t-ms. They're the substance of a result tile, so they get the taller
+       tile's reclaimed space rather than staying at caption size. */
     .strip-score {
         display: flex;
         gap: 0.6vw;
         align-items: baseline;
-        font-size: var(--t-sm);
+        font-size: var(--t-ms);
         font-variant-numeric: tabular-nums;
         opacity: 0.85;
     }
@@ -341,20 +337,23 @@
         display: flex;
         flex-direction: column;
     }
-    /* Name and the gold headline figure run at the same size (--t-sm); the figure
-       stays the highlight through weight and colour, not size. Icon and text are
-       centre-aligned so the discipline icon reads level with the name. */
+    /* Name and the gold headline figure run at the same size; the figure stays
+       the highlight through weight and colour, not size. Icon and text are
+       centre-aligned so the discipline icon reads level with the name.
+       At --t-md these match the opposition headline on the left — deliberate:
+       with the badge moved up to the meta row this column holds nothing but
+       the performers, so they are its headline. */
     .hl-line {
         display: grid;
-        grid-template-columns: 1.6vw 1fr auto;
+        grid-template-columns: 2.4vw 1fr auto;
         gap: 0 0.6vw;
         align-items: center;
-        font-size: var(--t-sm);
+        font-size: var(--t-md);
         line-height: 1.05;
     }
     .perf-icon {
-        width: 1.4vw;
-        height: 1.4vw;
+        width: 2.2vw;
+        height: 2.2vw;
         color: rgba(255,255,255,0.85);
     }
     .hl-line .perf-icon-cell {
@@ -369,10 +368,10 @@
         opacity: 0.85;
     }
     .hl-detail {
-        padding-left: 2.2vw;
+        padding-left: 3vw;
         margin-top: -0.2vh;
         font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
+        font-size: var(--t-ms);
         line-height: 1.0;
         opacity: 0.55;
         letter-spacing: 0.04em;
@@ -384,8 +383,10 @@
     }
 
     /* ── Tab 3: Schedule ───────────────────────────────────────────────── */
+    /* Height kept in step with .strip — the two tabs cycle, so their tiles
+       must agree. */
     .fix-strip {
-        height: 16vh;
+        height: 19vh;
         display: flex;
         gap: 1.2vw;
         padding: 0.7vh 1vw;
@@ -403,7 +404,7 @@
     }
     .fix-opp .opp-sub {
         font-family: 'Lato', Arial, sans-serif;
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         font-weight: normal;
         opacity: 0.55;
         margin-left: 0.6vw;
@@ -422,7 +423,7 @@
         max-width: 100%;
         background: var(--accent);
         color: var(--navy-1);
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         font-weight: 700;
         letter-spacing: 0.02em;
         padding: 0.2vh 0.7vw;
@@ -432,11 +433,13 @@
         text-overflow: ellipsis;
     }
     .form-badges { display: flex; gap: 0.25vw; flex-wrap: wrap; }
-    .fix-form-row { margin-bottom: 0.3vh; }
     .badge {
         display: inline-block;
-        width: 1.6vw; height: 1.6vw; line-height: 1.6vw;
+        width: 1.9vw; height: 1.9vw; line-height: 1.9vw;
         text-align: center;
+        /* Zero the tracking inherited from .fix-meta — it would shove a
+           centred single character off-centre in a fixed-width chip. */
+        letter-spacing: 0;
         border-radius: var(--radius-sm);
         font-family: 'Lato', Arial, sans-serif;
         font-size: var(--t-xs);
@@ -558,6 +561,10 @@
                                 <span class="meta-date">{{ r.date_label }}</span>
                                 {% if r.is_home %}<span class="home-pill">Home</span>
                                 {% else %}<span class="away-pill">Away</span>{% endif %}
+                                {% if r.result %}
+                                <span class="spacer"></span>
+                                <span class="result-pill result-{{ r.result }}">{{ result_label(r.result) | trim }}{% if r.our_points is not none %} · {{ r.our_points }} pts{% endif %}</span>
+                                {% endif %}
                             </div>
                             <div class="strip-opp">
                                 {{ r.opp_club_name }}{% if r.opp_team_name %}<span class="opp-sub">{{ r.opp_team_name }}</span>{% endif %}
@@ -572,11 +579,6 @@
                             {% endfor %}
                         </div>
                         <div class="tile-right">
-                            {% if r.result %}
-                            <div class="result-row">
-                                <span class="result-pill result-{{ r.result }}">{{ result_label(r.result) | trim }}{% if r.our_points is not none %} · {{ r.our_points }} pts{% endif %}</span>
-                            </div>
-                            {% endif %}
                             {% if r.highlights %}
                             {% for h in r.highlights %}
                             <div class="match-hl">
@@ -590,6 +592,8 @@
                                 {% endif %}
                             </div>
                             {% endfor %}
+                            {% else %}
+                            <div class="strip-empty">No performer data</div>
                             {% endif %}
                         </div>
                     </div>
@@ -605,6 +609,13 @@
                                 <span class="meta-date">{{ f.date_label }}{% if f.match_time %} · {{ f.match_time }}{% endif %}</span>
                                 {% if f.is_home %}<span class="home-pill">Home</span>
                                 {% else %}<span class="away-pill">Away</span>{% endif %}
+                                {% if f.opp_form %}
+                                <span class="spacer"></span>
+                                <span class="form-summary-label">Form</span>
+                                <span class="form-badges">
+                                    {% for r in f.opp_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
+                                </span>
+                                {% endif %}
                             </div>
                             <div class="fix-opp">
                                 {{ f.opp_club_name }}{% if f.opp_team_name %}<span class="opp-sub">{{ f.opp_team_name }}</span>{% endif %}
@@ -616,15 +627,7 @@
                             {% endif %}
                         </div>
                         <div class="tile-right">
-                            {% if f.opp_form or f.top_bat or f.top_bowl %}
-                                {% if f.opp_form %}
-                                <div class="form-summary fix-form-row">
-                                    <span class="form-summary-label">Form</span>
-                                    <span class="form-badges">
-                                        {% for r in f.opp_form %}<span class="badge badge-{{ r }}">{{ r }}</span>{% endfor %}
-                                    </span>
-                                </div>
-                                {% endif %}
+                            {% if f.top_bat or f.top_bowl %}
                                 {% if f.top_bat %}
                                 <div class="match-hl">
                                     <div class="hl-line">
