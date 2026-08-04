@@ -39,8 +39,10 @@
         justify-content: center;
     }
     .sponsor-logo {
+        /* Banners are 800x300 (8:3); 13vw wide puts them at ~8.7vh tall, so the
+           height cap only needs to sit just above that to stay width-limited. */
         max-width: 13vw;
-        max-height: 8vh;
+        max-height: 9.5vh;
         width: auto; height: auto;
         object-fit: contain;
         display: block;

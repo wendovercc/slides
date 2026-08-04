@@ -118,12 +118,14 @@
             min-width: 0;
         }
         .sponsor-logo {
-            /* Uniform 800x150 (16:3) banner tile, matching the sidebar. The white
+            /* Uniform 800x300 (8:3) banner tile, matching the sidebar. The white
                backing shows only behind transparent logos; cover (not contain)
                fills the tile edge-to-edge so no white letterbox slivers appear
-               around the artwork and the hairline border stays clean. */
+               around the artwork and the hairline border stays clean. This footer
+               strip is no longer used by any live slide — the ratio is kept in
+               step with the assets so it isn't silently broken if revived. */
             height: calc(var(--footer-h) * 0.52);
-            aspect-ratio: 16 / 3;
+            aspect-ratio: 8 / 3;
             width: auto;
             object-fit: cover;
             background: #fff;

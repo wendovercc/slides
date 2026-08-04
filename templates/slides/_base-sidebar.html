@@ -126,14 +126,16 @@
             width: 100%;
         }
         .sponsor-logo-vert {
-            /* Each logo is a uniform 800x150 (16:3) banner tile. The white backing
-               shows only behind transparent logos (Dayla, Squirrel, Print Minds);
-               logos that carry their own opaque background (Kings Farm black,
-               DGD blue) cover it completely. A hairline border defines the dark
-               tiles against the dark sidebar. cover (not contain) fills the tile
-               edge-to-edge so the hairline border can't expose letterbox slivers. */
+            /* Each logo is a uniform 800x300 (8:3) banner tile — twice the height
+               of the old 16:3 tiles, with the artwork re-fitted to suit. The white
+               backing shows only behind transparent logos (Dayla, Squirrel, Print
+               Minds); logos that carry their own opaque background (Kings Farm
+               black, DGD blue) cover it completely. A hairline border defines the
+               dark tiles against the dark sidebar. cover (not contain) fills the
+               tile edge-to-edge so the hairline border can't expose letterbox
+               slivers. */
             width: 100%;
-            aspect-ratio: 16 / 3;
+            aspect-ratio: 8 / 3;
             object-fit: cover;
             background: #fff;
             border-radius: var(--radius);
