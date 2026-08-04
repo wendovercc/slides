@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import random
 import re
 import shutil
 from datetime import date, datetime, timezone
@@ -735,6 +736,12 @@ def make_env():
         for p in sorted(sponsor_dir.glob("*.*"))
         if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".svg"}
     ]
+    # Sidebar sponsor rail: one random order per build, so no sponsor is
+    # permanently stuck at the bottom of the strip. Shuffled once (not per
+    # slide) so the rail stays put as the show advances.
+    sidebar_sponsors = list(env.globals["sponsors"])
+    random.shuffle(sidebar_sponsors)
+    env.globals["sidebar_sponsors"] = sidebar_sponsors
     # Display form of the site URL (no scheme/trailing slash), shown under the
     # club name in slide footers/sidebars and on the home page.
     site_url = load_config().get("preview", {}).get("site_url", "")
