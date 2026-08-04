@@ -45,9 +45,15 @@
       // Interactive mode is touch/pointer-driven: keep the cursor visible
       // (overrides the kiosk `cursor:none` on both player and slide bases).
       'html,body{cursor:auto!important;}' +
-      // touch-action:none so a horizontal drag reaches our swipe handler instead
-      // of being eaten by the browser's scroll / pull-to-refresh.
-      '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:none;}' +
+      // touch-action:manipulation, not none: `none` also kills PINCH-ZOOM, and the
+      // slide layout is deliberately zoom-invariant (all vw/vh), so a pinch magnifies
+      // without reflowing anything — it's the one gesture we want the browser to keep.
+      // `manipulation` still suppresses double-tap-zoom, which would otherwise collide
+      // with our tap→play/pause. Panning is nominally allowed but there is nothing
+      // scrollable at 1x, so a single-finger drag still reaches the swipe handler; once
+      // the user is zoomed in, that drag correctly becomes a visual-viewport pan and
+      // onZoom() below suppresses our nav so the two never fight.
+      '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:manipulation;}' +
       // Centre-screen play/pause feedback flashed on tap / Space. Above the tap
       // surface, below the bar; never intercepts input.
       '#wcc-fb{position:fixed;inset:0;z-index:55;display:flex;align-items:center;' +
@@ -543,13 +549,25 @@
       tap.id = 'wcc-tap';
       var TAP_SLOP = 10, TAP_MAX_MS = 500, SWIPE_MIN = 45;
       var gp = null;
+      // While the user is pinched in, the browser owns the surface: a drag pans the
+      // magnified view and a second finger keeps pinching. Our tap/swipe nav stands
+      // down for the duration so the two gesture sets never fight, and resumes the
+      // moment they pinch back out to a fitted view.
+      var zoomed = false;
+      var vv = window.visualViewport;
+      if (vv) {
+        var onZoom = function () { zoomed = vv.scale > 1.05; if (zoomed) gp = null; };
+        vv.addEventListener('resize', onZoom);
+        onZoom();
+      }
       tap.addEventListener('pointerdown', function (e) {
-        gp = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
+        gp = zoomed ? null : { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
       });
       tap.addEventListener('pointerup', function (e) {
         if (!gp || e.pointerId !== gp.id) return;
         var dx = e.clientX - gp.x, dy = e.clientY - gp.y, dt = Date.now() - gp.t;
         gp = null;
+        if (zoomed) return;
         var adx = Math.abs(dx), ady = Math.abs(dy);
         if (adx > SWIPE_MIN && adx > ady * 1.5) { onSwipe(dx < 0 ? 'next' : 'prev'); }
         else if (adx < TAP_SLOP && ady < TAP_SLOP && dt < TAP_MAX_MS) { onTap(); }
