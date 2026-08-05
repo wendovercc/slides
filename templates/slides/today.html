@@ -334,6 +334,17 @@
                 matchMeta(ev, lm) + matchDetail(ev, lm, status) + leagueOthers(ev) +
             '</div></div>';
     }
+    // Standing opening (Members Bar) — deliberately the slimmest tile on the board:
+    // when it starts, what it is, where. No teams, no state, nothing to poll.
+    function barTile(ev) {
+        var loc = ev.ground ? '<span class="loc-badge">' + esc(ev.ground) + '</span>' : '';
+        return '<div class="event bar">' +
+            '<div class="event-time">' + timeCell(ev) + '</div>' +
+            '<div class="event-main">' +
+                '<div class="event-head"><div class="event-teams"><span class="opp">' + esc(ev.title || 'Members Bar') + '</span></div>' +
+                    '<div class="event-tags">' + loc + '</div></div>' +
+            '</div></div>';
+    }
     function trainingTile(ev) {
         var teams = (ev.team_names || []).join(', ');
         return '<div class="event training">' +
@@ -386,7 +397,9 @@
         var rows = EVENTS.map(function (ev) {
             if (ev.type === 'match' && ev.pc_id != null) seen[String(ev.pc_id)] = 1;
             var lm = (ev.type === 'match' && ev.pc_id != null) ? byId[String(ev.pc_id)] : null;
-            return ev.type === 'training' ? trainingTile(ev) : matchTile(ev, lm, status);
+            if (ev.type === 'training') return trainingTile(ev);
+            if (ev.type === 'bar') return barTile(ev);
+            return matchTile(ev, lm, status);
         });
         (feed && feed.matches || []).forEach(function (m) {
             if (m.pc_id != null && !seen[String(m.pc_id)])

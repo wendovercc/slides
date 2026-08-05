@@ -6,6 +6,8 @@
   "_comment_live_enabled": "Master switch for the live-match feature set (live.wendovercc.org poller, live-match slides, live-aware today slide, ticker + news-flash overlays). Off = none of it is built or polled, so other changes can ship without turning on this unfinished work.",
   "live_enabled": false,
   "default_panel_duration": 20,
+  "_comment_last_match_max_age_days": "How long a team's last-match PACKAGE (intro → scorecards → reels → result) stays in the decks, counted from the match date. Long enough to cover the following weekend, so Saturday's game is still the full story for a Sunday friendly, and it lapses before the next fixture replaces it anyway. In practice it only bites teams that have STOPPED playing (juniors at season's end). When the package lapses the team's standalone last-match-result card takes over automatically — see build_slideshows.",
+  "last_match_max_age_days": 10,
   "leaderboards": {
     "min_innings": 2,
     "min_overs": 2,
@@ -20,6 +22,19 @@
     "support_email": "wendovercctreasurer@gmail.com",
     "sponsorship_url": "https://www.wendovercc.org/sponsorship-opportunities"
   },
+  "_comment_recurring_events": "Standing entries in the context calendar that no feed knows about — hardcoded until ClubSports365 exposes bar opening times, at which point this becomes a fetch. Each generates a calendar entry on every matching weekday from `from` (inclusive) for the next few months. Lowest priority of any activity, so a match or a training session at the same ground still wins its window.",
+  "recurring_events": [
+    {
+      "title": "Members Bar",
+      "type": "bar",
+      "locations": ["tring-road"],
+      "weekdays": ["thu", "fri", "sat"],
+      "from": "2026-08-06",
+      "start": "18:30",
+      "end": "24:00",
+      "section": "senior"
+    }
+  ],
   "activity_phases": {
     "match":    { "warm_up_mins": 120, "main_duration_mins": 210, "wind_down_mins": 180 },
     "training": { "warm_up_mins": 15,  "wind_down_mins": 30 },

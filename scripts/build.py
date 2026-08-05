@@ -9,7 +9,7 @@ import os
 import random
 import re
 import shutil
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import qrcode
@@ -1207,6 +1207,13 @@ def _iso_from_dmy(s):
         return None
 
 
+def _plus_days(iso_date, days):
+    """ISO date `days` later — the last day an expiring slide still shows."""
+    if not iso_date:
+        return None
+    return (date.fromisoformat(iso_date) + timedelta(days=days)).isoformat()
+
+
 def _fmt_date_past(iso_date):
     try:
         d = datetime.strptime(iso_date, "%Y-%m-%d")
@@ -1819,7 +1826,16 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
     slide["_panels"] = panels
 
 
-ACTIVITY_PRIORITY = {"club_event": 0, "section_event": 1, "match": 2, "training": 3, "hire": 4}
+ACTIVITY_PRIORITY = {"club_event": 0, "section_event": 1, "match": 2, "training": 3,
+                     "hire": 4, "bar": 5}
+
+# Weekday names as written in config.recurring_events → Python's Monday-zero index.
+WEEKDAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+
+# How far ahead recurring events are written into the context calendar. The build
+# is nightly, so this only has to outrun a few missed builds — and the debug
+# "next contexts" panel looks a week ahead.
+RECURRING_HORIZON_DAYS = 90
 
 _DEFAULT_PHASES = {
     "match":    {"warm_up_mins": 120, "main_duration_mins": 210, "wind_down_mins": 180},
@@ -1834,6 +1850,20 @@ def add_minutes(time_str, minutes):
     if total >= 1440:
         return "24:00"
     return f"{total // 60:02d}:{total % 60:02d}"
+
+
+def recurring_events_on(d):
+    """config.recurring_events falling on date `d` — the club's standing weekly
+    fixtures of the non-cricket kind (the Members Bar). Hardcoded until CS365 can
+    be asked for opening times. Feeds both the context calendar (which decides the
+    audience) and the today board (which tells people it's on)."""
+    out = []
+    for ev in load_config().get("recurring_events", []):
+        if ev.get("from") and d < date.fromisoformat(ev["from"]):
+            continue
+        if d.weekday() in {WEEKDAYS[x] for x in ev.get("weekdays", []) if x in WEEKDAYS}:
+            out.append(ev)
+    return out
 
 
 def infer_section(team_ids):
@@ -1974,6 +2004,18 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
             events.append(s)
             if pid:
                 by_id[pid] = s
+
+    # Standing weekly openings (the Members Bar). Board-only: no pc_id, no team, so
+    # every live surface downstream filters them straight out — they're here to say
+    # the clubhouse is open, which on a quiet evening is the whole of what's on.
+    for ev in recurring_events_on(_today()):
+        for loc_id in ev.get("locations", []):
+            events.append({
+                "type": ev.get("type", "club_event"),
+                "time": ev.get("start"),
+                "title": ev.get("title"),
+                "ground": loc_names.get(loc_id, loc_id),
+            })
 
     events.sort(key=lambda e: (e.get("time") or "99:99",
                                e.get("team_name") or e.get("title") or ""))
@@ -2341,8 +2383,10 @@ def build_live_matches(env, slide_meta):
     """Emit a `live-match-{team}` slide per team with a fixture today — the live
     counterpart of the last-match-{team} set, bound to that team's pc_id. It renders
     the team's live match from the wcc-live feed and self-skips (posts wcc-done)
-    when there's no live data; pavilion-auto's team/section/location filtering
-    decides which screens show it. Registered in slide_meta so slideshows resolve
+    until the first ball is scored — feed phase 'no-feed'/'pre' means no panels, so
+    the slide only joins the deck once the match is actually under way and then
+    stays through the result. Before then the wall's build-up is the team slide;
+    pavilion-auto's section filtering decides which screens show it. Registered in slide_meta so slideshows resolve
     the slug (hence emitted before build_slideshows)."""
     config = load_config()
     default_pd = config.get("default_panel_duration", 20)
@@ -2561,6 +2605,52 @@ def build_context_calendar():
         }
         entries[loc_id]["dates"].setdefault(iso_date, []).append(entry)
 
+    # Stretch each match's wind-down to the end of the day. The fixed
+    # wind_down_mins expires mid-evening and drops the screen back to `idle`,
+    # which on a match day is wrong twice over: the bar is at its fullest, and
+    # `idle` is the context in which the last-match archive and the team boards
+    # are visible — so last week's game would walk back into the loop alongside
+    # today's result. Instead a match owns its ground until midnight, or until
+    # the next activity there, whichever comes first. Clamping to the next
+    # ACTIVITY (not just the next match) matters because match outranks training
+    # in ACTIVITY_PRIORITY, so an unclamped wind-down would swallow an evening
+    # junior session at the same ground.
+    for loc_id in entries:
+        for iso_date, date_entries in entries[loc_id]["dates"].items():
+            for entry in date_entries:
+                if entry["type"] != "match":
+                    continue
+                wind = entry["phases"]["wind_down"]
+                starts = [o["phases"]["warm_up"]["start"] for o in date_entries
+                          if o is not entry and o["phases"]["warm_up"]["start"] > wind["start"]]
+                wind["end"] = min(starts) if starts else "24:00"
+
+    # Standing weekly entries (recurring_events_on) — currently the Members Bar.
+    # Added AFTER the stretch above so they're not candidates to clamp a match's
+    # wind-down: a home match keeps its ground for the whole evening, and the bar
+    # only ever fills a window nothing else covers. `main` is the only phase — a
+    # bar has no warm-up.
+    today = _today()
+    horizon = today + timedelta(days=RECURRING_HORIZON_DAYS)
+    counts = {}
+    d = today
+    while d <= horizon:
+        for ev in recurring_events_on(d):
+            for loc_id in ev.get("locations", []):
+                if loc_id not in screen_loc_ids:
+                    continue
+                entries[loc_id]["dates"].setdefault(d.isoformat(), []).append({
+                    "type": ev.get("type", "club_event"),
+                    "audience": {"section": ev.get("section", "all"), "teams": [],
+                                 "label": ev.get("title")},
+                    "phases": {"main": {"start": ev["start"], "end": ev.get("end", "24:00")}},
+                    "detail": {"title": ev.get("title")},
+                })
+                counts[ev.get("title")] = counts.get(ev.get("title"), 0) + 1
+        d += timedelta(days=1)
+    for title, n in counts.items():
+        print(f"  recurring: {title} — {n} occurrence(s) to {horizon.isoformat()}")
+
     # Sort entries within each date by activity priority
     for loc_id in entries:
         for iso_date in entries[loc_id]["dates"]:
@@ -2708,6 +2798,12 @@ def build_slides(env):
                 teams_by_id, training, all_fx, loc_lookup, loc_names,
                 _load_yt_broadcasts(), _load_live_seed())
             attach_league_context(slide["_events"], teams_by_id)
+            # Nothing on today → nothing to say. The slide is still built and stays
+            # available to any deck that wants it; it's the slideshow entry that opts
+            # out, via skip_when_empty (see build_slideshows). The today board needs
+            # no team/section gating — it's the whole club's day — so an empty day is
+            # the only reason a screen wouldn't show it.
+            slide["_empty"] = not slide["_events"]
 
         if slide.get("template") == "league-table" and "_data" in slide:
             for table in slide["_data"]["league_table"]:
@@ -2751,6 +2847,9 @@ def build_slides(env):
             "duration": slide["duration"],
             "panel_duration": slide["panel_duration"],
             "_videos": slide_video_srcs(slide),
+            # Built, but with no data behind it this build. Decks opt out per entry
+            # with skip_when_empty rather than the slide vanishing everywhere.
+            "_empty": bool(slide.get("_empty")),
         }
 
         template = env.get_template(f"slides/{slide['template']}.html")
@@ -2943,6 +3042,7 @@ def build_match_packages(env, slide_meta):
     teams_by_id = load_teams()
     config = load_config()
     default_panel_duration = config.get("default_panel_duration", 20)
+    max_age = config.get("last_match_max_age_days", 10)
 
     fixtures_path = FETCHED / "fixtures.json"
     fixtures_data = json.loads(fixtures_path.read_text()) if fixtures_path.exists() else {}
@@ -2956,7 +3056,7 @@ def build_match_packages(env, slide_meta):
     league_tmpl = env.get_template("slides/match-league.html")
     video_tmpl = env.get_template("slides/video.html")
 
-    def emit(slug, template, slide):
+    def emit(slug, template, slide, expires=None, recency=None, empty=False):
         slide["duration"] = default_panel_duration
         slide["panel_duration"] = default_panel_duration
         html = template.render(slide=slide, slug=slug)
@@ -2965,9 +3065,18 @@ def build_match_packages(env, slide_meta):
         (out_dir / "index.html").write_text(html)
         slide_meta[slug] = {
             "slide_active": True,
-            "slide_expires": None,
+            "slide_expires": expires,
             "duration": default_panel_duration,
             "panel_duration": default_panel_duration,
+            # The match this slide reports on, ISO. A run of consecutive
+            # recency-bearing slides in a deck plays newest first — see
+            # build_slideshows.
+            "_recency": recency,
+            # Nothing was published for this match — no scorecard, no result. The
+            # slide still renders (saying so) for the results rotation, which keeps
+            # one card per team; decks that would rather show nothing opt out with
+            # skip_when_empty.
+            "_empty": empty,
         }
         print(f"  slide/{slug}")
 
@@ -3006,7 +3115,6 @@ def build_match_packages(env, slide_meta):
         is_home = m.get("is_home", True)
         we_bat_first = m.get("we_bat_first", True)
         our_total_str = _short_innings_total(m.get("our_total"))
-        their_total_str = _short_innings_total(m.get("their_total"))
         result = m.get("result")
 
         # Curated highlight clips for this match (None for teams with no ball-event
@@ -3048,7 +3156,13 @@ def build_match_packages(env, slide_meta):
                 innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-bowling", label, {
                     "_mode": "bowling", "_bowling": bowling, "_bowl_club": bowl_club, **scoreline,
                 }))
-        has_result = bool(result or our_total_str or their_total_str)
+        # Did this match reach an OUTCOME worth reporting? A result covers the cases
+        # where nobody batted much (abandoned, conceded — Play-Cricket still records
+        # a result), otherwise we need our own total. Deliberately NOT the
+        # opposition's total on its own: a record abandoned part-way through
+        # live-scoring keeps a one-sided stub (their 0-1 off 18 overs, our side
+        # blank, no result) which reads as a match report but says nothing.
+        has_result = bool(result or our_total_str)
 
         # The three heading levels: Title (set label) + Subtitle (team · date) are
         # constant across the set — kept data-driven so a later renderer (e.g. the
@@ -3186,6 +3300,12 @@ def build_match_packages(env, slide_meta):
         # friendly), the intro footer says so in place of the toss headline.
         if not innings_members and not has_result:
             toss_line = "Match scorecard and result not available"
+        # Whether this match earns a slot at all. Broader than the footer wording
+        # above: no outcome means nothing to report even when a half-scored record
+        # leaves some rows behind, so a match still marked "in progress" days later
+        # doesn't stand as a team's latest news. Decks opt out with skip_when_empty;
+        # the results rotation keeps its one-card-per-team and says so on the card.
+        nothing_to_report = not has_result
 
         intro_slug = f"{slug_prefix}-intro"
         emit(intro_slug, intro_tmpl, {
@@ -3254,12 +3374,17 @@ def build_match_packages(env, slide_meta):
         # no result or scorecard is published it degrades to crests + team names with
         # a footer note, so every team keeps a results-rotation slide.
         if standalone_result:
+            match_iso = _iso_from_dmy(m.get("match_date", ""))
             emit(f"last-match-result-{team_id}", result_tmpl, {
                 "template": "match-result", "title": title,
                 "_set_title": "Last Match Result", "_set_subtitle": title,
                 **set_meta_fields, **set_result_fields,
                 "_result_desc": result_desc or "Match scorecard and result not available",
-            })
+            },
+                # Same window as the package it stands in for: a result stops being
+                # news at the same age whether it's told in four panels or one.
+                expires=_plus_days(match_iso, max_age), recency=match_iso,
+                empty=nothing_to_report)
 
         if league_panel:
             league_data, league_team_id, league_name = league_panel
@@ -3284,12 +3409,52 @@ def build_match_packages(env, slide_meta):
             "members": members,
             "group": slug_prefix,
             "active": True,
-            "expires": None,
+            # A match fades: the full package is worth the airtime while it's the
+            # club's recent news, then gives way to the one-card result (see
+            # `standalone` below). Dated from the match, so a team still playing
+            # never reaches it — its last match is replaced weekly. Pins carry no
+            # expiry: being pinned is the whole point of them.
+            "expires": (_plus_days(_iso_from_dmy(m.get("match_date", "")), max_age)
+                        if standalone_result else None),
+            # The standalone card duplicates this set's own `-result` member, so a
+            # deck carrying both would show the same card twice. Recorded here for
+            # build_slideshows to suppress the standalone wherever the set runs.
+            "standalone": f"last-match-result-{team_id}" if standalone_result else None,
+            # No outcome to report — see nothing_to_report. Decks opt out with
+            # skip_when_empty on the set entry.
+            "empty": nothing_to_report,
         }
 
     if sets:
         print(f"  match packages: {len(sets)} set(s)")
     return sets
+
+
+def _recency_ordered(merged):
+    """Play each run of consecutive match-reporting slides newest match first.
+
+    Deck order is authored, but match dates are only known at build time, so a
+    results block can't be hand-ordered — it would be wrong by the next weekend.
+    Any maximal run of adjacent slides carrying `_recency` (the ISO date of the
+    match they report) is sorted here, most recent first; everything else keeps
+    its authored position, and a lone recency slide between other slides is a
+    run of one. Slides within a set already order themselves and carry no
+    `_recency`, so a package is never scrambled.
+    """
+    out, run = [], []
+
+    def flush():
+        out.extend(sorted(run, key=lambda s: s["_recency"], reverse=True))
+        run.clear()
+
+    for s in merged:
+        if s.get("_recency"):
+            run.append(s)
+            continue
+        flush()
+        out.append(s)
+    flush()
+    return out
 
 
 def build_slideshows(env, slide_meta, sets=None):
@@ -3302,6 +3467,7 @@ def build_slideshows(env, slide_meta, sets=None):
     default_panel_duration = config.get("default_panel_duration", 20)
     preview_cfg = config.get("preview", {})
     built_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    today_iso = _today().isoformat()
     # Stamped into each precache.json so the offline player can tell when a
     # slideshow's asset set has changed (see docs/player-offline-architecture.md,
     # "Intelligent refresh"). UTC, second-granularity ISO-8601.
@@ -3320,13 +3486,37 @@ def build_slideshows(env, slide_meta, sets=None):
         # keys (e.g. show_when) are inherited by every member. Unknown slugs and
         # data-skipped slides are dropped. Both players read the derived
         # `duration` from here — neither knows about panels.
+        # A set that has aged out is dropped here rather than left to the players'
+        # runtime `expires` filter, because the two rules have to agree: while a
+        # package runs it suppresses its standalone twin (below), so the twin can
+        # only resurface if the same pass that retires the package sees it go. The
+        # build is nightly and these expiries are date-granular, so evaluating here
+        # is exactly as timely as evaluating in the player.
+        def live_set(s):
+            return s.get("active", True) and not (s.get("expires") and s["expires"] < today_iso)
+
+        # Slides this deck must NOT carry because a set it expands already contains
+        # the same card (last-match-result-{team} duplicates the package's own
+        # `-result` member). Collected up front so the order of the two entries in
+        # the deck doesn't matter.
+        superseded = {s["standalone"] for e in show.get("slides", [])
+                      for s in [sets.get(e.get("slug"))]
+                      if s and s.get("standalone") and live_set(s)}
+
         merged = []
         for entry in show.get("slides", []):
             entry_slug = entry.get("slug")
 
+            if entry_slug in superseded:
+                print(f"  slideshow/{slug}: '{entry_slug}' covered by its match package — skipped")
+                continue
+
             if entry_slug in sets:
                 s = sets[entry_slug]
-                if not s.get("active", True):
+                if not live_set(s):
+                    continue
+                if entry.get("skip_when_empty") and s.get("empty"):
+                    print(f"  slideshow/{slug}: '{entry_slug}' has no content — skipped")
                     continue
                 inherited = {k: v for k, v in entry.items() if k != "slug"}
                 for member_slug in s["members"]:
@@ -3347,10 +3537,20 @@ def build_slideshows(env, slide_meta, sets=None):
                 continue
             if meta.get("_skip"):
                 continue
+            # Opt-in per deck: drop a slide that built with no data behind it (e.g.
+            # the today board on a day with nothing on). Other decks still carry it.
+            if entry.get("skip_when_empty") and meta.get("_empty"):
+                print(f"  slideshow/{slug}: '{entry_slug}' has no content — skipped")
+                continue
+            # Retired here as well as at runtime, for the same reason as live_set():
+            # a lapsed result card must be gone from the pass that decides whether
+            # its package still covers it.
+            if meta.get("slide_expires") and meta["slide_expires"] < today_iso:
+                continue
             merged_entry = {**entry, **meta}
             merged_entry.setdefault("duration", default_panel_duration)
             merged.append(merged_entry)
-        show["slides"] = merged
+        show["slides"] = _recency_ordered(merged)
 
         template = env.get_template("slideshow/player.html")
         html = template.render(show=show, slug=slug, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
@@ -3380,7 +3580,14 @@ def build_slideshows(env, slide_meta, sets=None):
         }))
         print(f"  slideshow/{slug}  ({len(precache_videos)} clip(s) to precache)")
 
-        if "homepage_rank" in show:
+        # A deck can legitimately build with nothing in it — the archive decks empty
+        # out between seasons, and in any fixture gap longer than
+        # last_match_max_age_days. The page is still generated (the URL keeps
+        # working, and it refills on the next build), but an empty deck is not
+        # offered on the homepage: following the link would show a blank player.
+        if "homepage_rank" in show and not merged:
+            print(f"  slideshow/{slug}: no slides — not listed on the homepage")
+        elif "homepage_rank" in show:
             homepage_shows.append({
                 "slug": slug,
                 "title": show["title"],

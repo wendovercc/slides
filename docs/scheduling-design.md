@@ -39,6 +39,7 @@ same slide can appear under different conditions in different slideshows.
 | `club_event` | `events.json` | Whole-club event — all sections |
 | `section_event` | `events.json` | Targets a specific section (e.g. Junior Awards Night) |
 | `hire` | `events.json` | Third-party occupancy of the facility |
+| `bar` | `config.recurring_events` | Standing weekly opening — the Tring Road Members Bar, Thu/Fri/Sat from 18:30. Lowest priority, so a match or session at the same ground still wins its window. Hardcoded until CS365 exposes opening times |
 | `idle` | Computed | No covering activity — enables countdown/teaser slides |
 
 `idle` is not stored in the calendar. The player reaches it when no calendar entry
@@ -208,6 +209,26 @@ Slideshow entries carry no timing: each slide's duration is derived by the build
 from its `panel_duration` (see `design-conventions.md`) and written into
 `data.json`. The last entry illustrates OR: "show when idle, or when it is the
 warm-up phase of a 1st XI match." `NOT` predicates are explicitly deferred.
+
+### Build-time entry rules
+
+Two things a `show_when` predicate cannot express, because they depend on the
+build's data rather than on the runtime context. Both are resolved when
+`build_slideshows` merges the deck, so the players see a settled list.
+
+- **`skip_when_empty: true`** — drop this entry when the slide, or the set, built
+  with no data behind it (`_empty` in its meta / `empty` on the set). The slide is
+  still built and other decks still carry it; only this deck opts out. Used by
+  `today` on a day with nothing on, and by the last-match entries for a match with
+  no scorecard and no result published — the results rotation keeps one card per
+  team saying so, the wall would rather show nothing.
+- **Set supersedes its standalone twin** — a set may name a `standalone` slug that
+  duplicates one of its members. Any deck that expands the set drops that slug.
+  `last-match-{team}` uses it: the package ends on its own result card, so the
+  standalone `last-match-result-{team}` would be the same card twice. When the
+  package passes its `expires` (match date + `last_match_max_age_days`) the build
+  retires it and the standalone surfaces in the same pass — a match fading from
+  full story to one-line result with no second mechanism.
 
 Curated event slideshows remain supported. A screen can be pointed at a specific
 slideshow for the duration of an event, bypassing `pavilion-auto` entirely.

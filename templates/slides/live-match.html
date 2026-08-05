@@ -177,13 +177,20 @@
         return (feed && feed.matches || []).filter(function (m) { return String(m.pc_id) === String(PC_ID); })[0] || null;
     }
 
-    // Which views exist right now. The Pre-match tale of the tape is static and
-    // always first (baked at build time). Each innings then contributes batting +
-    // bowling; Result appears when the match is over.
+    // Which views exist right now. NOTHING until the first ball: the slide joins the
+    // deck when the match actually starts and stays to the end of the day. Both
+    // 'no-feed' (not in the feed at all) and 'pre' (in RV, toss/squads possibly
+    // entered but no ball scored — e.g. a junior game that never gets live-scored)
+    // mean not started, so we report zero panels and the deck skips the slide.
+    // Before then the wall's build-up is Team Focus; see docs/live-presentation.md.
+    // Once play starts, the Pre-match tale of the tape (static, baked at build time)
+    // leads. Each innings then contributes batting + bowling; Result appears when the
+    // match is over.
     function buildViews() {
         var m = ourMatch();
-        var v = [{ tab: 'Pre-match', kind: 'intro' }];
-        if (!m || m.phase === 'no-feed') return { m: m, views: v };
+        var v = [];
+        if (!m || m.phase === 'no-feed' || m.phase === 'pre') return { m: m, views: v };
+        v.push({ tab: 'Pre-match', kind: 'intro' });
         (m.innings || []).forEach(function (inn, i) {
             var tab = (i === 0 ? '1st' : i === 1 ? '2nd' : (i + 1) + 'th') + ' Innings';
             // Highlight reel before the scorecard — only once the result is visible
@@ -725,8 +732,8 @@
         clearDwell();
         if (!v) { viewEl.innerHTML = ''; hideReel(); return; }
         setActive(v.tab);
-        // Pre-match: static server-rendered tale of the tape, shown before (and
-        // regardless of) any live feed. Treated like a scorecard panel for dwell.
+        // Pre-match: static server-rendered tale of the tape, the lead panel once
+        // play is under way. Treated like a scorecard panel for dwell.
         if (v.kind === 'intro') {
             hideReel();
             viewEl.innerHTML = INTRO_HTML;
@@ -848,8 +855,8 @@
         shown = true;
         clearBeginRetry();
         // Wait briefly for the first feed so a load race doesn't miss live innings,
-        // but bounded: the Pre-match panel is static, so start it regardless once the
-        // wait lapses (a match with no feed then shows Pre-match and self-advances).
+        // but bounded: once the wait lapses we build from whatever we have (a match
+        // with no feed, or not yet under way, has no panels and skips itself).
         if (!feedSeen && beginTries++ < 3) { beginRetry = setTimeout(beginFromStart, 1500); return; }
         refreshViews(); announceCount();
         if (!views.length) { done(); return; }

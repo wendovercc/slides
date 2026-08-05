@@ -3,40 +3,14 @@
   "refresh_interval_seconds": 300,
   "slides": [
     {
+      "slug": "today",
+      "skip_when_empty": true
+    },
+    {
       "slug": "bar-volunteers"
     },
     {
-      "slug": "team-1st-xi",
-      "show_when": [
-        {
-          "teams": [
-            "1st-xi"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "team-2nd-xi",
-      "show_when": [
-        {
-          "teams": [
-            "2nd-xi"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "team-friendly-xi",
-      "show_when": [
-        {
-          "teams": [
-            "friendly-xi"
-          ]
-        }
-      ]
-    },
-    {
-      "slug": "leaderboard-senior",
+      "slug": "live-match-1st-xi",
       "show_when": [
         {
           "section": [
@@ -47,7 +21,101 @@
       ]
     },
     {
-      "slug": "leaderboard-junior",
+      "slug": "team-1st-xi",
+      "show_when": [
+        {
+          "teams": [
+            "1st-xi"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "1st-xi"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-2nd-xi",
+      "show_when": [
+        {
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "team-2nd-xi",
+      "show_when": [
+        {
+          "teams": [
+            "2nd-xi"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "2nd-xi"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-friendly-xi",
+      "show_when": [
+        {
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "team-friendly-xi",
+      "show_when": [
+        {
+          "teams": [
+            "friendly-xi"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "friendly-xi"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u9",
       "show_when": [
         {
           "section": [
@@ -63,6 +131,31 @@
         {
           "teams": [
             "u9"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u9"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u10-lightning",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -73,6 +166,31 @@
         {
           "teams": [
             "u10-lightning"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u10-lightning"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u10-thunder",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -83,6 +201,31 @@
         {
           "teams": [
             "u10-thunder"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u10-thunder"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u11-incredibles",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -93,6 +236,31 @@
         {
           "teams": [
             "u11-incredibles"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u11-incredibles"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u11-invincibles",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -103,6 +271,31 @@
         {
           "teams": [
             "u11-invincibles"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u11-invincibles"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u11-girls",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -113,6 +306,31 @@
         {
           "teams": [
             "u11-girls"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u11-girls"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u12-hurricanes",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -123,6 +341,31 @@
         {
           "teams": [
             "u12-hurricanes"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u12-hurricanes"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u12-spitfires",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -133,6 +376,31 @@
         {
           "teams": [
             "u12-spitfires"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u12-spitfires"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u13-hurricanes",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -143,6 +411,31 @@
         {
           "teams": [
             "u13-hurricanes"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u13-hurricanes"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u13-spitfires",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -153,6 +446,31 @@
         {
           "teams": [
             "u13-spitfires"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u13-spitfires"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u13-girls",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -163,6 +481,31 @@
         {
           "teams": [
             "u13-girls"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u13-girls"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u14-hurricanes",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -173,6 +516,31 @@
         {
           "teams": [
             "u14-hurricanes"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u14-hurricanes"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u15-hurricanes",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -183,6 +551,31 @@
         {
           "teams": [
             "u15-hurricanes"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u15-hurricanes"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u15-spitfires",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -193,6 +586,31 @@
         {
           "teams": [
             "u15-spitfires"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u15-spitfires"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-u17-spitfires",
+      "show_when": [
+        {
+          "section": [
+            "junior",
+            "all"
           ]
         }
       ]
@@ -203,6 +621,20 @@
         {
           "teams": [
             "u17-spitfires"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "u17-spitfires"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
           ]
         }
       ]
@@ -217,6 +649,385 @@
           ]
         }
       ]
+    },
+    {
+      "slug": "leaderboard-senior",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "bar"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "leaderboard-junior",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "bar"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "last-match-1st-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-2nd-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-friendly-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-1st-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-2nd-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-friendly-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u9",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u10-lightning",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u10-thunder",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u11-incredibles",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u11-invincibles",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u11-girls",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u12-hurricanes",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u12-spitfires",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u13-hurricanes",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u13-spitfires",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u13-girls",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u14-hurricanes",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u15-hurricanes",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u15-spitfires",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-u17-spitfires",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "junior",
+            "all"
+          ]
+        }
+      ],
+      "skip_when_empty": true
     },
     {
       "slug": "fantasy-league",
