@@ -44,16 +44,23 @@
     var css =
       // Interactive mode is touch/pointer-driven: keep the cursor visible
       // (overrides the kiosk `cursor:none` on both player and slide bases).
-      'html,body{cursor:auto!important;}' +
-      // touch-action:manipulation, not none: `none` also kills PINCH-ZOOM, and the
-      // slide layout is deliberately zoom-invariant (all vw/vh), so a pinch magnifies
-      // without reflowing anything — it's the one gesture we want the browser to keep.
-      // `manipulation` still suppresses double-tap-zoom, which would otherwise collide
-      // with our tap→play/pause. Panning is nominally allowed but there is nothing
-      // scrollable at 1x, so a single-finger drag still reaches the swipe handler; once
-      // the user is zoomed in, that drag correctly becomes a visual-viewport pan and
-      // onZoom() below suppresses our nav so the two never fight.
-      '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:manipulation;}' +
+      // overscroll-behavior:none replaces what touch-action used to buy us — with the
+      // tap surface now touch-action:auto, this is what keeps a drag from turning into
+      // pull-to-refresh or a rubber-band overscroll instead of reaching the swiper.
+      'html,body{cursor:auto!important;overscroll-behavior:none;}' +
+      // touch-action:auto — deliberately, and it took two goes to get here. The slide
+      // layout is zoom-invariant (all vw/vh), so a pinch magnifies without reflowing
+      // anything: pinch is the one gesture worth keeping. `none` killed it outright.
+      // `manipulation` (nominally pan + pinch-zoom) still killed it in a SAFARI TAB
+      // while working in the installed PWA — WebKit routes standalone gestures through
+      // a different recognizer that ignores element touch-action, and in the tab path
+      // it has never honoured the pinch-zoom token, so any non-auto value takes pinch
+      // down with it. `auto` is the only value that pinches in both.
+      // The cost is that Safari's double-tap-zoom comes back; the JS tap handler below
+      // swallows the second tap so it can't also double-toggle play/pause. Nothing is
+      // scrollable at 1x (html,body are overflow:hidden + overscroll-behavior:none), so
+      // a single-finger drag still reaches the swipe handler.
+      '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:auto;}' +
       // Centre-screen play/pause feedback flashed on tap / Space. Above the tap
       // surface, below the bar; never intercepts input.
       '#wcc-fb{position:fixed;inset:0;z-index:55;display:flex;align-items:center;' +
@@ -547,8 +554,8 @@
       // firing each other (a drag never counts as a tap, and vice versa).
       var tap = document.createElement('div');
       tap.id = 'wcc-tap';
-      var TAP_SLOP = 10, TAP_MAX_MS = 500, SWIPE_MIN = 45;
-      var gp = null;
+      var TAP_SLOP = 10, TAP_MAX_MS = 500, SWIPE_MIN = 45, DBLTAP_MS = 300;
+      var gp = null, lastTapAt = 0;
       // While the user is pinched in, the browser owns the surface: a drag pans the
       // magnified view and a second finger keeps pinching. Our tap/swipe nav stands
       // down for the duration so the two gesture sets never fight, and resumes the
@@ -569,8 +576,21 @@
         gp = null;
         if (zoomed) return;
         var adx = Math.abs(dx), ady = Math.abs(dy);
-        if (adx > SWIPE_MIN && adx > ady * 1.5) { onSwipe(dx < 0 ? 'next' : 'prev'); }
-        else if (adx < TAP_SLOP && ady < TAP_SLOP && dt < TAP_MAX_MS) { onTap(); }
+        if (adx > SWIPE_MIN && adx > ady * 1.5) { onSwipe(dx < 0 ? 'next' : 'prev'); return; }
+        if (adx < TAP_SLOP && ady < TAP_SLOP && dt < TAP_MAX_MS) {
+          // Double-tap guard. touch-action:auto is the only value that pinches in a
+          // Safari tab (see injectStyles), but it also restores double-tap-to-zoom.
+          // Swallow the second tap so a zoom gesture doesn't ALSO toggle play/pause
+          // twice. We can't preventDefault the zoom itself without touch-action, and
+          // wouldn't want to — the whole point is to let the user zoom. Deliberately
+          // not deferring the first tap by the double-tap window: that would put
+          // ~300ms of lag on every play/pause, which is worse than the rare case of a
+          // double-tap-to-zoom leaving playback toggled once.
+          var now = Date.now();
+          if (now - lastTapAt < DBLTAP_MS) { lastTapAt = 0; return; }
+          lastTapAt = now;
+          onTap();
+        }
       });
       tap.addEventListener('pointercancel', function () { gp = null; });
       document.body.appendChild(tap);
