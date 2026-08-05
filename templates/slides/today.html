@@ -216,50 +216,24 @@
     function tossHtml(ev, lm) {
         var t = lm && lm.toss;
         if (!t) return '';
-        // Club name, not the team designation: our side from the feed winner name
-        // ("Wendover CC Friendly XI" -> "Wendover CC"), the opposition from the
-        // fixture's clean club name.
-        var who = t.is_wendover ? (clubOnly(t.winner) || 'Wendover')
-                                : (ev.opposition || clubOnly(t.winner));
+        // The feed names the toss winner's club directly (`winner_club`) — no
+        // stripping a team designation off "Wendover CC Friendly XI".
+        var who = t.winner_club || t.winner || '';
         return '<div class="event-toss"><b>' + esc(who) + '</b> won the toss, elected to ' + esc(t.decision) + '</div>';
     }
-    // Club name only — drop the trailing team designation ("1st XI", "- 3rd XI",
-    // junior "U12 …"/"Under 12 …") since the card header already names the team.
-    function clubOnly(name) {
-        var s = String(name || '').trim();
-        // The club portion ends at its "CC"/"Cricket Club" suffix — drop any team
-        // designation after it ("Wendover CC Friendly XI" -> "Wendover CC").
-        var cc = s.match(/^(.*?\b(?:CC|Cricket Club))\b/i);
-        if (cc) return cc[1].trim();
-        // No club suffix — strip numbered/junior designations as a fallback.
-        return s.replace(/\s*[-–]?\s*\d+(?:st|nd|rd|th)\s+XI\s*$/i, '')
-                .replace(/\s+(?:U\d+|Under\s+\d+)\b.*$/i, '')
-                .trim();
-    }
-    // A side-led result ("<side> won/lost/conceded by …") with the winning side
-    // shown as its clean fixture club name — ours from the baked our_club, the
-    // opposition from ev.opposition — instead of the club+team designation the feed
-    // bakes into the phrase ("Wendover Friendly XI won …" -> "Wendover CC won …").
-    // Verdict-only phrases ("Match tied/drawn/abandoned") aren't side-led and pass
-    // through unchanged.
-    function resultClub(res, ev) {
-        var s = String(res == null ? '' : res);
-        var vm = s.match(/^(.*?\S)\s+(\b(?:won|win|lost|conceded)\b.*)$/i);
-        if (!vm) return s;
-        var club = /wendover/i.test(vm[1]) ? (ev.our_club || clubOnly(vm[1]))
-                                           : (ev.opposition || clubOnly(vm[1]));
-        return club ? club + ' ' + vm[2] : s;
+    // Is this innings ours? Structural: the feed says which side is at home, the
+    // fixture says whether that's us. Never a name test — a team name bundles an
+    // arbitrary designation and a club's own name can end in "XI".
+    function oursInnings(ev, inn) {
+        if (typeof inn.is_home === 'boolean') return inn.is_home === !!ev.is_home;
+        return String(inn.side || '').toLowerCase().indexOf('wendover') !== -1;
     }
     function inningsLine(ev, inn, batsHtml) {
         if (!inn) return '';
         // Gold marks OUR score only; the opposition's innings stays white.
-        var ours = String(inn.side || '').toLowerCase().indexOf('wendover') !== -1;
-        // Prefer the authoritative club name from the fixture (ev.opposition = the
-        // PC opposition_club_name) over parsing the feed's batting-side string —
-        // that string bundles the team designation and can't be split reliably
-        // ("Captain Scott Invitation XI Sunday 1st XI"). Our own side, and any
-        // unknown opposition, fall back to clubOnly() on the feed name.
-        var sideName = ours ? clubOnly(inn.side) : (ev.opposition || clubOnly(inn.side));
+        var ours = oursInnings(ev, inn);
+        // The batting side's club name comes from the feed itself.
+        var sideName = inn.club || inn.side || '';
         // Batters (current innings only) sit on the same row after the team name,
         // dot-separated. The whole name+batters line ellipsises as one if too long.
         var bats = batsHtml ? '<span class="event-inn-sep">·</span><span class="event-inn-bats">' + batsHtml + '</span>' : '';
@@ -278,8 +252,12 @@
         if (lm && lm.complete) {
             // Keep the final scorecard (both innings) and lead with a result headline
             // — gold when Wendover won. Provisional until the scorer finalises it.
-            var res = resultClub(lm.result || lm.leader_text || lm.score_text || 'Result', ev);
-            var wendWon = /wendover/i.test(res) && /\bwon\b/i.test(res);
+            var res = lm.result_club || lm.result || lm.leader_text || lm.score_text || 'Result';
+            // Gold only when WE won — read off the feed's per-team verdict, matched
+            // to us by home/away rather than by name.
+            var ourSide = (lm.teams || []).filter(function (t) { return t.is_home === !!ev.is_home; })[0];
+            var wendWon = ourSide ? ourSide.outcome === 'won'
+                                  : (/wendover/i.test(res) && /\bwon\b/i.test(res));
             var banner = '<div class="event-result' + (wendWon ? ' win' : '') + '">' + esc(res) +
                 (lm.final ? '' : '<span class="prov"> · to be confirmed</span>') + '</div>';
             var lines = (lm.innings || []).map(function (i) { return inningsLine(ev, i, ''); }).join('');
@@ -307,15 +285,6 @@
     }
 
     function shortClub(name) { return esc(String(name || '').replace(/\s+(CC|Cricket Club)$/i, '')); }
-    // PC result_description "Denham CC - 1st XI - Won" -> "Denham won"; verdict-only
-    // strings ("Match Drawn"/"Match Tied") pass through unchanged. Returns RAW text
-    // (the el-score cell escapes it), so don't esc() here.
-    function shortResult(desc) {
-        var parts = String(desc || '').split(' - ');
-        if (parts.length < 2) return String(desc || '');
-        var club = String(parts[0]).replace(/\s+(CC|Cricket Club)$/i, '');
-        return club + ' ' + parts[parts.length - 1].toLowerCase();
-    }
     // Batting side reads white-bold, the other muted — "who's in" without spending
     // gold (reserved for Wendover). Points-vs-Wendover dropped from the board.
     function leagueSide(s, isBatting) {
@@ -390,20 +359,17 @@
             // so the score sheds its (redundant) team name here.
             var bare = inn ? ((inn.runs != null ? inn.runs : 0) + '/' + (inn.wickets != null ? inn.wickets : 0) +
                               ' (' + (inn.overs || '0') + ' ov)') : '';
-            // Which listed side is batting (home vs away) → gold on the left. The
-            // innings `side` carries the XI suffix ("Amersham CC - 3rd XI"), so match
-            // it by club-name prefix against the card's home/away club names.
+            // Which listed side is batting (home vs away) → gold on the left.
+            // By team id: PC tags each innings with `team_batting_id`, so this needs
+            // no name comparison at all.
             var battingHome = null;
-            if (inn && inn.side) {
-                var s = String(inn.side).toLowerCase();
-                if (m.home && s.indexOf(String(m.home).toLowerCase()) === 0) battingHome = true;
-                else if (m.away && s.indexOf(String(m.away).toLowerCase()) === 0) battingHome = false;
-            }
+            if (inn && inn.team_batting_id && m.home_team_id)
+                battingHome = String(inn.team_batting_id) === String(m.home_team_id);
             // Second innings underway → surface what they're chasing (the first
             // innings total), since the row only shows the current innings score.
             var chase = (!m.complete && inns.length >= 2 && inns[0].runs != null) ? inns[0].runs : null;
             LEAGUE_SCORES[String(m.match_id)] = {
-                score: m.complete ? shortResult(m.result) : bare,
+                score: m.complete ? (m.result_club || m.result || '') : bare,
                 done: !!m.complete,
                 battingHome: battingHome,
                 chase: chase

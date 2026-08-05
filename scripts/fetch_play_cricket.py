@@ -8,6 +8,7 @@ so local builds work using committed fixture files.
 
 import json
 import os
+from datetime import datetime
 import sys
 import urllib.request
 from pathlib import Path
@@ -54,6 +55,11 @@ def main():
         print(f"  Fetching league table for {team['name']} (league {league_id})...")
         try:
             data = fetch_league_table(league_id, api_token)
+            # When this snapshot was taken. Consumers that overlay TODAY's results
+            # on the table (the live strip's ladder) must know whether the table
+            # already counts them, or they'd add the same 22 points twice. A file
+            # without this key predates the field, so it necessarily predates today.
+            data["fetched_at"] = datetime.now().isoformat(timespec="seconds")
             out_path = data_dir / f"league_table_{league_id}.json"
             out_path.write_text(json.dumps(data, indent=2))
             print(f"    → {out_path.relative_to(ROOT)}")

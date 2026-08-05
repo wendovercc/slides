@@ -1980,11 +1980,10 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
     return events
 
 
-def build_live_config():
-    """Write site/live-config.json — today's pollable matches (the day's events
-    that have a pc_id) = the live-proxy Worker's poll list (LIVE_CONFIG_URL). The
-    `today` slide bakes the full schedule itself; this is only what the Worker
-    needs to know which matches to poll."""
+def _todays_events():
+    """Today's events assembled from the committed data files — the shared source
+    for every live surface built outside the today slide (live-config, live-strip),
+    so they can't disagree about what's on today."""
     teams_by_id = load_teams()
     locs = json.loads((CONTENT / "locations.json").read_text()).get("locations", [])
     loc_names = {l["id"]: l["name"] for l in locs}
@@ -1996,8 +1995,16 @@ def build_live_config():
     all_fixtures = json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {}
     tr = FETCHED / "cs365_training.json"
     training = json.loads(tr.read_text()).get("sessions", []) if tr.exists() else []
-    events = todays_events(teams_by_id, training, all_fixtures, loc_lookup, loc_names,
-                           _load_yt_broadcasts(), _load_live_seed())
+    return todays_events(teams_by_id, training, all_fixtures, loc_lookup, loc_names,
+                         _load_yt_broadcasts(), _load_live_seed()), teams_by_id
+
+
+def build_live_config():
+    """Write site/live-config.json — today's pollable matches (the day's events
+    that have a pc_id) = the live-proxy Worker's poll list (LIVE_CONFIG_URL). The
+    `today` slide bakes the full schedule itself; this is only what the Worker
+    needs to know which matches to poll."""
+    events, _ = _todays_events()
     matches = [e for e in events if e.get("type") == "match" and e.get("pc_id")]
     out = {"generated_at": int(datetime.now().timestamp()),
            "date": _today().isoformat(), "matches": matches}
@@ -2153,7 +2160,7 @@ def _team_tla(club_name):
     Initials of the significant words; a single-word club takes its first 3 letters.
     A manual override map can refine collisions later."""
     words = [w for w in re.split(r"[^A-Za-z0-9]+", club_name or "")
-             if w and w.lower() not in ("cc", "cricket", "club", "the", "and")]
+             if w and w.lower() not in ("cc", "cricket", "club", "the", "and", "xi")]
     if not words:
         return (club_name or "?")[:3].upper()
     if len(words) == 1:
@@ -2167,73 +2174,143 @@ def _club_of(team_name):
     return re.sub(r"\s*-\s*.*$", "", team_name or "").strip()
 
 
-def _strip_league(comp_id, comp_label):
-    """The division as an ordered list of teams (by current league position) for
-    the strip: short tag + whether it's our row. One equal tile per team; the order
-    will later shift live as results are predicted."""
+def _table_counts_today(raw, ev):
+    """Could this league-table snapshot already include today's results?
+
+    The ladder overlays today's points onto the table, so it has to know whether
+    the table is a BEFORE picture. `fetched_at` (written by fetch_play_cricket)
+    settles it: fetched on an earlier day, or early enough today that no match had
+    finished, means the table is clean. A file with no `fetched_at` predates that
+    field entirely, so it also predates today. Unparseable → assume the worst and
+    let the ladder stand still rather than double-count."""
+    stamp = raw.get("fetched_at")
+    if not stamp:
+        return False
+    try:
+        when = datetime.fromisoformat(stamp)
+    except (ValueError, TypeError):
+        return True
+    if when.date() < _today():
+        return False
+    # Fetched today: safe only if it predates the day's cricket. Compare against
+    # today's earliest start (a result can't be in the table before the game).
+    start = (ev.get("time") or "11:00")[:5]
+    try:
+        hh, mm = (int(x) for x in start.split(":"))
+    except ValueError:
+        hh, mm = 11, 0
+    return (when.hour, when.minute) >= (hh, mm)
+
+
+def _strip_league_view(ev, our_team_id, by_comp):
+    """A league VIEW for one of our matches today: the division as an ordered list
+    of teams (current league position), plus the day's fixtures in that division so
+    the strip can bind each tile to a match in the live feeds.
+
+    Only the context is baked — no live state. Every tile channel (bat/bowl role,
+    win/loss fill, certainty, ghost move) is derived at runtime from the feeds.
+    None when the division has no committed table (nothing to ladder)."""
+    comp_id = ev.get("competition_id")
     p = FETCHED / f"league_table_{comp_id}.json"
     if not comp_id or not p.exists():
         return None
+    standings, win_points = _league_standings(comp_id)
     try:
-        lt = json.loads(p.read_text())["league_table"][0]
+        raw = json.loads(p.read_text())
+        lt = raw["league_table"][0]
     except (ValueError, OSError, KeyError, IndexError):
         return None
     teams = []
     for r in lt.get("values", []):
         club = _club_of(r.get("column_1"))
+        tid = str(r.get("team_id") or "")
+        st = standings.get(tid) or {}
         teams.append({
             "tla": _team_tla(club),
-            "ours": club.lower().startswith("wendover cc"),
+            # The club name is what the live feeds name a batting side by, so it's
+            # the join key for "is this tile's team batting?" (team ids don't appear
+            # in a scorecard). Kept alongside the id, which joins tile → fixture.
+            "club": club,
+            "team_id": tid,
+            "ours": tid == our_team_id,
+            "points": st.get("points"),
         })
-    return {"name": comp_label, "teams": teams}
+    if not teams:
+        return None
+    # Today's matches in this division. Ours is polled through the rich WCC feed
+    # (`wcc-live`, keyed by pc_id); everyone else's through the slow league feed
+    # (`wcc-league`, keyed by match_id) — hence the `ours` flag per fixture.
+    # `home_team_id` is what turns the RV feed's per-innings `is_home` into a team
+    # id, so a tile binds to a side without matching any name.
+    opp_id = str(ev.get("opposition_team_id") or "")
+    fixtures = [{"match_id": ev["pc_id"], "ours": True,
+                 "team_ids": [our_team_id, opp_id],
+                 "home_team_id": our_team_id if ev.get("is_home", True) else opp_id}]
+    for om in by_comp.get(str(comp_id), []):
+        if str(om.get("match_id")) == str(ev["pc_id"]):
+            continue   # our own game, already added as the rich one
+        fixtures.append({"match_id": om.get("match_id"), "ours": False,
+                         "team_ids": [str(om.get("home_team_id") or ""),
+                                      str(om.get("away_team_id") or "")],
+                         "home_team_id": str(om.get("home_team_id") or "")})
+    return {
+        "mode": "league",
+        "pc_id": ev["pc_id"],
+        # The featured XI + division, echoing the ticker's gold flag so the two
+        # chrome surfaces read as one.
+        "team_label": ev.get("team_name") or "",
+        "name": ev.get("competition") or "",
+        "win_points": win_points,
+        # Whether TVCL Win/Lose scoring applies — the only points system we know
+        # (Match Rules §9). Off for any other league, which just means the ladder
+        # can't price a result and so never reorders for it.
+        "tvcl": "thames valley" in (ev.get("league_name") or "").lower(),
+        # True when the table snapshot may ALREADY include today's results, in
+        # which case adding today's points again would double-count and jump a
+        # tile twice. See _table_counts_today.
+        "table_counts_today": _table_counts_today(raw, ev),
+        "teams": teams,
+        "fixtures": fixtures,
+    }
 
 
-def _mock_strip_data():
-    """TEMPORARY UI mock: the real Div 6C order with an illustrative spread of live
-    tile states laid over it, purely to view the tile visuals (tint = result lean,
-    opacity = certainty, bat/bowl glyph, ghost move-arrow). Remove once fed live.
-
-    Each overlay: role (bat/bowl glyph), lean (win/loss tint), certainty (tint
-    opacity 0–1), ghost (pending up/down move), provisional (done-not-published,
-    dashed), idle ('none' = no match, 'nodata' = match on but silent feed)."""
-    league = _strip_league("135855", "Div 6C")
-    if not league:
-        return {"league": None}
-    spread = [
-        {"lean": "win",  "certainty": 1.00},                                 # HW  published win (G)
-        {"lean": "win",  "certainty": 0.90, "provisional": True},            # DEN done, unpublished (F)
-        {"role": "bat",  "lean": "loss", "certainty": 0.62, "ghost": "down"},# MB  chasing us, behind on DLS (D)
-        {"role": "bowl", "certainty": 0.12, "ghost": "down"},                # HUR 1st inns bowling (B)
-        {"role": "bowl", "lean": "win",  "certainty": 0.62, "ghost": "up"},  # WEN defending 249, ahead (E) — ours
-        {"idle": "none"},                                                    # MR  no match today (A)
-        {"idle": "nodata"},                                                  # TP  match on, no live data (A2)
-        {"role": "bat",  "certainty": 0.12},                                 # LEE 1st inns batting (C)
-        {"lean": "loss", "certainty": 1.00},                                 # AME published loss (G)
-        {"role": "bat",  "lean": "win",  "certainty": 0.70, "ghost": "up"},  # WN  chasing, ahead (D)
-    ]
-    for i, t in enumerate(league["teams"]):
-        if i < len(spread):
-            t.update(spread[i])
-    # The featured XI whose division this is — matches the ticker's left flag, so
-    # the header can keep the two chrome surfaces visibly in sync.
-    league["team_label"] = "1st XI"
-    return {"mode": "league", "league": league}
+def _strip_friendly_view(ev, our_team_id):
+    """A two-tile VIEW for a match with no league ladder behind it (friendlies,
+    cups, junior formats): just the two sides, same tile look. Order here is
+    provisional — the runtime puts the side that batted first on top once the feed
+    says who did — and the chase panel fills the space below."""
+    opp_id = str(ev.get("opposition_team_id") or "")
+    ours = {"tla": _team_tla(ev.get("our_club") or "Wendover CC"),
+            "club": ev.get("our_club") or "Wendover CC",
+            "team_id": our_team_id, "ours": True}
+    opp_club = ev.get("opposition") or ev.get("opposition_team") or ""
+    opp = {"tla": _team_tla(opp_club), "club": opp_club, "team_id": opp_id, "ours": False}
+    return {
+        "mode": "friendly",
+        "pc_id": ev["pc_id"],
+        "team_label": ev.get("team_name") or "Friendly",
+        "name": ev.get("competition") or "",
+        "teams": [ours, opp],
+        "fixtures": [{"match_id": ev["pc_id"], "ours": True,
+                      "team_ids": [our_team_id, opp_id],
+                      "home_team_id": our_team_id if ev.get("is_home", True) else opp_id}],
+    }
 
 
-def _mock_strip_friendly():
-    """TEMPORARY UI mock: a two-tile friendly (no league table) — the same tile look
-    as the league view. The side that batted first sits on top; the chasing side is
-    the 2nd tile, with a chase-stats panel filling the space beneath it. Mirrored
-    win/loss fills, bat/bowl roles. Header collapses to 'Friendly'. Remove once fed
-    live."""
-    teams = [
-        # Batted first, now defending → top tile.
-        {"tla": "CSI", "ours": False, "role": "bowl", "lean": "loss", "certainty": 0.62},
-        # Chasing → 2nd tile; the panel below shows this side's chase.
-        {"tla": "WEN", "ours": True,  "role": "bat",  "lean": "win",  "certainty": 0.62,
-         "chase": {"runs": 71, "balls": 78, "rr": 5.2, "wkts": 7}},
-    ]
-    return {"mode": "friendly", "league": {"name": None, "team_label": "Friendly", "teams": teams}}
+def _strip_views(events, teams_by_id):
+    """One view per WCC match today (league ladder or two-tile friendly), in the
+    day's order. The strip shows one at a time — the ticker's featured match picks
+    which, so the two chrome surfaces stay in step."""
+    by_comp = _load_league_today()
+    views = []
+    for ev in events:
+        if ev.get("type") != "match" or not ev.get("pc_id"):
+            continue
+        team = teams_by_id.get(ev.get("team"), {})
+        our_team_id = str(team.get("play_cricket_team_id") or "")
+        view = _strip_league_view(ev, our_team_id, by_comp) if ev.get("competition_id") else None
+        views.append(view or _strip_friendly_view(ev, our_team_id))
+    return views
 
 
 def build_live_strip(env):
@@ -2241,21 +2318,23 @@ def build_live_strip(env):
     iframe on the right band (like the ticker): one equal-height tile per team in
     the division, ordered by league position.
 
-    Data is baked at build time. WCC_LIVE_MOCK=1 bakes a real division for design
-    work; otherwise the strip renders empty (hidden) until it's wired to the feed."""
+    What's baked is CONTEXT only — today's matches, their divisions and the day's
+    fixtures in them. Live state arrives at runtime from the player's `wcc-live`
+    (our matches, ball-by-ball) and `wcc-league` (everyone else's, coarse) feeds.
+    No match today → no views → the strip stays hidden.
+
+    Off-day testing: build with WCC_TODAY set to a fixture date, then open
+    /live-strip/?sim=league (or ?sim=friendly) to drive the real render path from a
+    simulated match — see assets/js/live-strip-sim.js."""
     out_dir = SITE / "live-strip"
     out_dir.mkdir(parents=True, exist_ok=True)
-    mock = os.environ.get("WCC_LIVE_MOCK", "").strip().lower()
-    if mock in ("friendly", "f"):
-        data = _mock_strip_friendly()
-    elif mock in ("1", "true", "on", "yes", "league", "l"):
-        data = _mock_strip_data()
-    else:
-        data = {"mode": None, "league": None}
+    events, teams_by_id = _todays_events()
+    views = _strip_views(events, teams_by_id)
+    data = {"date": _today().isoformat(), "views": views}
     html = env.get_template("live-strip.html").render(strip_json=json.dumps(data))
     (out_dir / "index.html").write_text(html)
-    n = len((data.get("league") or {}).get("teams") or [])
-    print(f"  live-strip → /live-strip/ ({n} tiles; mock={mock or 'off'})")
+    modes = ", ".join(f"{v['team_label']}:{v['mode']}" for v in views) or "none"
+    print(f"  live-strip → /live-strip/ ({len(views)} view(s): {modes})")
 
 
 def build_live_matches(env, slide_meta):

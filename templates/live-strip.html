@@ -76,6 +76,18 @@
         .clabel { font-size: 1.4vh; font-weight: 700; letter-spacing: 0.04em;
             text-transform: uppercase; color: rgba(255,255,255,0.6); }
 
+        /* Chase-panel caption. Only shown once the match is over, naming the block
+           so final numbers can't read as a chase still in progress — muting alone
+           would be ambiguous (it looks like stale data). Fixed height like the
+           header, so it doesn't take a share of the tile flex. */
+        .panel-cap { flex-shrink: 0; height: 2.4vh;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.3vh; font-weight: 900; letter-spacing: 0.14em;
+            text-transform: uppercase; color: rgba(255,255,255,0.5); }
+        /* Settled stats: a touch quieter than the live ones, under that caption. */
+        .stat-tile.done { background: rgba(255,255,255,0.04); }
+        .stat-tile.done .cval { color: rgba(255,255,255,0.78); }
+
         /* Our team: a thick gold bar just OUTSIDE the tile's left edge. */
         .tile.ours { box-shadow: -0.6vh 0 0 0 var(--gold); }
 
@@ -97,9 +109,16 @@
             width: 3vh; height: 3vh; color: #fff; }
         .role svg { width: 100%; height: 100%; display: block; }
 
-        /* Ghost arrow, bottom-right: white, the pending move (shape carries direction). */
+        /* Ghost arrow, bottom-right: white, the pending move (shape carries direction,
+           the numeral its size — places, not points). */
         .ghost { position: absolute; bottom: 0.7vh; right: 0.9vh; z-index: 1;
             font-size: 2.8vh; line-height: 1; color: #fff; opacity: 0.9; }
+        .ghost i { font-style: normal; font-size: 1.9vh; font-weight: 900;
+            margin-left: 0.15vh; vertical-align: 0.35vh; }
+
+        /* Committed ladder moves ride this (FLIP, see playMoves). Long enough to
+           read as a climb rather than a jump-cut; the fill keeps its own timing. */
+        .tile[data-k] { transition: transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1); }
     </style>
 </head>
 <body>
@@ -108,9 +127,13 @@
 (function () {
     var root = document.getElementById('strip');
 
-    // Baked at build time: division ordered by league position, each tile carrying
-    // its live-state channels (mock spread for now). Live feed replaces this later.
+    // Baked at build time: today's matches as VIEWS (one per match) — a division
+    // ordered by league position plus the day's fixtures in it, or a two-tile
+    // friendly. Context only: every live channel below is derived at runtime from
+    // the player's feeds (`wcc-live` = our matches ball-by-ball, `wcc-league` =
+    // everyone else's, coarse).
     var STRIP = {{ strip_json | safe }};
+    var VIEWS = (STRIP && STRIP.views) || [];
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -147,53 +170,573 @@
         // The tile shows the abbreviation; a chase (object) is rendered separately by
         // the panel below, never on the tile.
         inner += '<span class="tla">' + esc(t.tla) + '</span>';
-        if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + (t.ghost === 'up' ? '▲' : '▼') + '</span>';
+        // The arrow carries direction, the numeral how far — a one-place nudge and a
+        // four-place surge are very different things, and the arrow alone hid that.
+        // Bare arrow for a single place, so the common case stays quiet.
+        if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + (t.ghost === 'up' ? '▲' : '▼') +
+            (t.ghostN > 1 ? '<i>' + t.ghostN + '</i>' : '') + '</span>';
         if (t.idle === 'nodata') inner += '<span class="dot"></span>';
 
-        return '<div class="' + cls.join(' ') + '">' + inner + '</div>';
+        return '<div class="' + cls.join(' ') + '"' + (t.key ? ' data-k="' + esc(t.key) + '"' : '') +
+               '>' + inner + '</div>';
     }
 
-    // Chase stats as full-size tiles (one per stat, stacked) under the 2nd (chasing)
-    // tile during a 2nd innings. Balls left is optional (needs the overs allotment).
-    // Returns {html, count} so the trailing spacer knows how many tiles were added.
+    // One full-size stat tile (same footprint as a team tile): value over caption.
+    function statTile(val, label, done) {
+        return '<div class="tile stat-tile' + (done ? ' done' : '') + '">' +
+               '<span class="cval">' + esc(val) + '</span>' +
+               '<span class="clabel">' + label + '</span></div>';
+    }
+
+    // The target the first innings set — shown once that innings is closed, sitting
+    // directly under the side that set it. Null while they're still batting (there
+    // is no target yet) and whenever the innings can't be read.
+    function targetOf(card) {
+        var inns = (card && card.innings) || [];
+        if (!inns.length) return null;
+        if (inns.length < 2 && !inns[0].closed) return null;
+        return (inns[0].runs || 0) + 1;
+    }
+
+    // Chase stats as full-size tiles, stacked under the 2nd (chasing) tile. These
+    // OUTLIVE the match: once it's over the same three numbers say how it finished
+    // — what was still needed, with how many wickets and balls left — under a FINAL
+    // caption so they can't be misread as a chase still running. The required rate
+    // is the one live-only stat: there's nothing left to require it over.
+    // Returns {html, count} so the trailing spacer knows how many TILES were added
+    // (the caption is a fixed-height row, not a flex tile, so it doesn't count).
     function chaseTiles(c) {
-        function stat(val, label) {
-            return '<div class="tile stat-tile"><span class="cval">' + esc(val) + '</span>' +
-                   '<span class="clabel">' + label + '</span></div>';
-        }
-        var html = stat(c.runs, 'Runs left'), n = 1;
-        if (c.balls != null) { html += stat(c.balls, 'Balls left'); n++; }
-        if (c.rr != null) { html += stat(c.rr, 'Run rate'); n++; }
-        if (c.wkts != null) { html += stat(c.wkts, 'Wkts left'); n++; }
+        var html = c.done ? '<div class="panel-cap">Final</div>' : '';
+        html += statTile(c.runs, 'Runs left', c.done);
+        var n = 1;
+        if (c.balls != null) { html += statTile(c.balls, 'Balls left', c.done); n++; }
+        if (!c.done && c.rr != null) { html += statTile(c.rr, c.rr_label || 'Run rate'); n++; }
+        if (c.wkts != null) { html += statTile(c.wkts, 'Wkts left', c.done); n++; }
         return { html: html, count: n };
     }
 
-    function header(l) {
-        if (!l) return '';
-        var xi = l.team_label ? '<span class="head-xi">' + esc(l.team_label) + '</span>' : '';
-        var div = l.name ? '<div class="head-div">' + esc(l.name) + '</div>' : '';
+    function header(v) {
+        if (!v) return '';
+        var xi = v.team_label ? '<span class="head-xi">' + esc(v.team_label) + '</span>' : '';
+        var div = v.name ? '<div class="head-div">' + esc(v.name) + '</div>' : '';
         if (!xi && !div) return '';
         return '<div class="head">' + xi + div + '</div>';
     }
 
+    // ---- feed state ---------------------------------------------------------
+    // Two independent feeds, two cadences (see live-engine.js): our matches arrive
+    // rich and fast keyed by pc_id; the division's other matches arrive lean and
+    // slow keyed by match_id. Both are just caches here — every render re-derives
+    // from whatever is currently held, so a missing feed degrades to 'nodata'
+    // tiles rather than a stale picture.
+    var liveByPc = {}, leagueById = {};
+    var featuredPc = null;   // the ticker's current match, when it tells us
+
+    // ---- side resolution ----------------------------------------------------
+    // Everything here binds by ID, never by name. Both feeds identify sides
+    // structurally — RV per innings/team with `is_home`, PC with `team_batting_id`
+    // against `home_team_id` — and the baked fixture says which team id is at home,
+    // so a tile resolves to 'home' or 'away' and the two meet there.
+    //
+    // This used to be a name join, and it was the wrong idea: a scorecard names a
+    // side by TEAM ("Wendover CC Friendly XI"), our context by CLUB ("Wendover CC"),
+    // with an arbitrary designation tail between them — and a club's own name can
+    // itself end in "XI" ("Captain Scott Invitation XI Sunday 1st XI"), so no amount
+    // of suffix-stripping is safe. A failed join was silent and looked like two
+    // unrelated rendering bugs.
+
+    // Which side of its fixture a tile's team is.
+    function tileSide(team, fx) {
+        if (!fx || !team.team_id || !fx.home_team_id) return null;
+        return String(team.team_id) === String(fx.home_team_id) ? 'home' : 'away';
+    }
+    // Which side an innings belongs to. RV states it outright; PC gives the batting
+    // team's id to compare against the card's home team.
+    function inningsSide(card, inn) {
+        if (typeof inn.is_home === 'boolean') return inn.is_home ? 'home' : 'away';
+        if (inn.team_batting_id && card.home_team_id)
+            return String(inn.team_batting_id) === String(card.home_team_id) ? 'home' : 'away';
+        return null;
+    }
+    var other = function (side) { return side === 'home' ? 'away' : 'home'; };
+
+    // Win/loss for one side of a completed match — again without reading prose.
+    // Published results come from the feed's own verdict (RV states it per team, PC
+    // as the winning team's id). Between "decided" and "published" neither exists
+    // yet, so fall back to the scorecard: whoever has more runs is winning. A tie,
+    // draw or abandonment leans neither way.
+    function outcomeFor(card, side) {
+        var t = (card.teams || []).filter(function (x) {
+            return (x.is_home ? 'home' : 'away') === side; })[0];
+        if (t && t.outcome) {
+            return t.outcome === 'won' ? 'win' : t.outcome === 'lost' ? 'loss' : null;
+        }
+        if ('result_applied_to' in card) {   // PC card: null = nobody won
+            if (!card.result_applied_to) return null;
+            var winner = String(card.result_applied_to) === String(card.home_team_id) ? 'home' : 'away';
+            return winner === side ? 'win' : 'loss';
+        }
+        var runs = {};
+        (card.innings || []).forEach(function (inn) {
+            var s = inningsSide(card, inn);
+            if (s) runs[s] = (runs[s] || 0) + (inn.runs || 0);
+        });
+        if (runs.home == null || runs.away == null || runs.home === runs.away) return null;
+        return (runs[side] > runs[other(side)]) ? 'win' : 'loss';
+    }
+
+    // ---- resources + win probability ---------------------------------------
+    // APPROXIMATE Duckworth-Lewis Standard Edition resource table (% of a 50-over
+    // innings remaining, by overs left × wickets lost), bilinearly interpolated.
+    // Good to a few points, which is all a fill height needs — but it is NOT the
+    // official table, so don't reuse it for anything that decides a match.
+    var DLS_OVERS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50];
+    var DLS_WKTS = [0, 2, 5, 7, 9];
+    var DLS = [
+        /*  0 ov */[0, 0, 0, 0, 0],
+        /*  5 ov */[17.9, 17.6, 16.4, 14.9, 7.0],
+        /* 10 ov */[32.1, 30.8, 26.1, 20.6, 7.5],
+        /* 15 ov */[45.2, 43.0, 33.6, 23.6, 7.6],
+        /* 20 ov */[56.6, 52.4, 39.5, 24.9, 7.6],
+        /* 25 ov */[66.5, 60.4, 43.4, 25.7, 7.6],
+        /* 30 ov */[75.1, 67.3, 45.7, 25.9, 7.6],
+        /* 35 ov */[82.7, 73.0, 47.4, 26.1, 7.6],
+        /* 40 ov */[89.3, 77.6, 48.4, 26.3, 7.6],
+        /* 45 ov */[95.0, 81.0, 49.1, 26.4, 7.6],
+        /* 50 ov */[100.0, 83.8, 49.5, 26.5, 7.6]
+    ];
+    function lerpIdx(grid, v) {
+        if (v <= grid[0]) return [0, 0, 0];
+        var last = grid.length - 1;
+        if (v >= grid[last]) return [last, last, 0];
+        for (var i = 1; i <= last; i++) {
+            if (v <= grid[i]) return [i - 1, i, (v - grid[i - 1]) / (grid[i] - grid[i - 1])];
+        }
+        return [last, last, 0];
+    }
+    function resourcePct(oversLeft, wktsLost) {
+        if (!(oversLeft > 0) || wktsLost >= 10) return 0;
+        var o = lerpIdx(DLS_OVERS, oversLeft), w = lerpIdx(DLS_WKTS, wktsLost);
+        function at(oi) {
+            var a = DLS[oi][w[0]], b = DLS[oi][w[1]];
+            return a + (b - a) * w[2];
+        }
+        var lo = at(o[0]), hi = at(o[1]);
+        return lo + (hi - lo) * o[2];
+    }
+
+    // Overs as a ball count ("39.4" -> 238). Cricket's .1-.5 fractions are balls,
+    // not decimals, so this can't be a plain parseFloat.
+    function ballsOf(overs) {
+        var s = String(overs == null ? '' : overs).trim();
+        if (!s) return 0;
+        var p = s.split('.');
+        return (parseInt(p[0], 10) || 0) * 6 + (p.length > 1 ? (parseInt(p[1], 10) || 0) : 0);
+    }
+    // The innings allotment, inferred from how the FIRST innings closed rather than
+    // any max_overs field (unreliable in the feed — see the DLS overs note): a side
+    // that was neither bowled out nor declared, and stopped on a whole over, was
+    // stopped BY the allotment. Anything else leaves it unknown, and the chase
+    // model falls back to its wickets-only form.
+    function allotmentOvers(first) {
+        if (!first || (first.wickets || 0) >= 10 || first.declared) return null;
+        var b = ballsOf(first.overs);
+        return (b > 0 && b % 6 === 0) ? b / 6 : null;
+    }
+
+    function logistic(x) { return 1 / (1 + Math.exp(-x)); }
+
+    // Chase state + win probability for the SIDE BATTING SECOND. One place, one
+    // model, deliberately coarse: par from the DLS-style resource split, then a
+    // logistic on runs-vs-par whose spread shrinks with the resources left — so an
+    // early chase sits near 50/50 (little movement on the ladder) and certainty
+    // grows on its own as the game runs out of road.
+    function chaseState(inns) {
+        if (!inns || inns.length !== 2) return null;
+        var first = inns[0], cur = inns[1];
+        var firstRuns = first.runs || 0;
+        var target = firstRuns + 1;
+        var runsLeft = Math.max(0, target - (cur.runs || 0));
+        var wktsLost = cur.wickets || 0, wktsLeft = Math.max(0, 10 - wktsLost);
+        var allot = allotmentOvers(first);
+        var bowled = ballsOf(cur.overs);
+        var ballsLeft = allot != null ? Math.max(0, allot * 6 - bowled) : null;
+        var p;
+        if (allot != null) {
+            var oversLeft = ballsLeft / 6;
+            var rTot = resourcePct(allot, 0) || 1;
+            var rRem = resourcePct(oversLeft, wktsLost);
+            var par = firstRuns * (1 - rRem / rTot);
+            // Spread of the runs still to come, as a share of the first-innings
+            // total. It closes faster than sqrt(resources) would suggest, because a
+            // side ahead of par with wickets in hand can simply see the game out —
+            // the outcome settles quicker than a symmetric run-race implies.
+            var sigma = Math.max(4, 0.13 * firstRuns * Math.pow(rRem / rTot, 0.8));
+            p = logistic(((cur.runs || 0) - par) / sigma);
+        } else {
+            // Allotment unknown (first innings bowled out or declared): no overs
+            // axis, so judge on wickets alone — roughly 20 runs a wicket left —
+            // and keep the certainty ceiling low, because this is a weak read.
+            var exp = wktsLeft * 20;
+            p = logistic((exp - runsLeft) / Math.max(10, 0.6 * exp || 10));
+            p = 0.5 + (p - 0.5) * 0.4;
+        }
+        return {
+            runs: runsLeft, balls: ballsLeft, wkts: wktsLeft, p: p,
+            // Required rate is the number that matters in a chase; without an
+            // allotment there are no balls left to require it over, so fall back to
+            // the rate actually being scored. The label follows the choice.
+            // Always one decimal place, so a whole-number rate doesn't jump the
+            // column ("7" beside "6.8"). String, not number, for that reason.
+            rr: ballsLeft ? (runsLeft / (ballsLeft / 6)).toFixed(1)
+                          : (bowled ? ((cur.runs || 0) / (bowled / 6)).toFixed(1) : null),
+            rr_label: ballsLeft ? 'Req rate' : 'Run rate'
+        };
+    }
+
+    // A match card + WHICH SIDE of it a tile is -> that tile's channels. The single
+    // point where feed shapes become tile state; everything above it is model,
+    // everything below it is paint. A side we can't resolve (a seeded match with no
+    // team ids) reads as a silent feed rather than guessing.
+    function assess(card, side) {
+        if (!card || card.phase === 'pre' || card.phase === 'no-feed') return { idle: 'nodata' };
+        if (!side) return { idle: 'nodata' };
+        var inns = card.innings || [];
+        if (card.complete) {
+            var lean = outcomeFor(card, side);
+            // `final` is the scorer's confirmation (our rich feed only). Decided but
+            // unconfirmed shows the clock instead of a role glyph.
+            var prov = card.final === false;
+            return { lean: lean, certainty: lean ? 1 : 0, provisional: prov };
+        }
+        if (!inns.length) return { idle: 'nodata' };
+        var cur = inns[inns.length - 1];
+        var batting = inningsSide(card, cur) === side;
+        var out = { role: batting ? 'bat' : 'bowl' };
+        var chase = chaseState(inns);
+        if (chase) {
+            // p is the chasing side's; mirror it for the side defending.
+            var p = batting ? chase.p : 1 - chase.p;
+            out.lean = p >= 0.5 ? 'win' : 'loss';
+            out.certainty = Math.min(0.95, Math.abs(2 * p - 1));
+            out.p = p;
+        } else {
+            out.certainty = 0;   // first innings — a role, no lean
+        }
+        return out;
+    }
+
+    // The chase panel's numbers, live or final. Deliberately NOT part of a tile's
+    // state: the panel describes the match, not the side, and it has to outlive the
+    // innings that produced it.
+    function chaseStats(card) {
+        var st = chaseState((card && card.innings) || []);
+        if (!st) return null;
+        return { runs: st.runs, balls: st.balls, wkts: st.wkts, rr: st.rr,
+                 rr_label: st.rr_label, done: !!(card && card.complete) };
+    }
+
+    // ---- tile binding -------------------------------------------------------
+    function cardFor(view, fx) {
+        if (!fx) return null;
+        return fx.ours ? liveByPc[String(fx.match_id)] : leagueById[String(fx.match_id)];
+    }
+    function fixtureForTeam(view, teamId) {
+        var fxs = view.fixtures || [];
+        for (var i = 0; i < fxs.length; i++) {
+            if ((fxs[i].team_ids || []).indexOf(teamId) !== -1) return fxs[i];
+        }
+        return null;
+    }
+
+    // ---- league points ------------------------------------------------------
+    // TVCL Win/Lose (Match Rules §9) — the system every senior division we play in
+    // uses. A PORT of tvclPoints() in live-worker/src/rv.mjs, which is the
+    // authority and carries the unit tests; keep the two in step. It has to exist
+    // here because the ladder prices OTHER clubs' matches, which arrive on the lean
+    // PC feed with no points attached (our own match carries the server's figures,
+    // preferred below when present).
+    var batFirstRuns = function (r) { return r < 100 ? 0 : Math.min(5, 1 + Math.floor((r - 100) / 25)); };
+    var batSecondFixed = function (r) { return r < 100 ? 0 : Math.min(3, 1 + Math.floor((r - 100) / 25)); };
+    var bowlSecondPts = function (w) { return w >= 2 ? Math.min(8, w - 1) : 0; };
+    var bowlFirstPts = function (w) { return Math.min(5, Math.ceil(w / 2)); };
+    function pctTargetPts(second, first) {
+        if (!first) return 0;
+        var p = (second / first) * 100;
+        return p > 95 ? 5 : p > 90 ? 4 : p > 85 ? 3 : p > 80 ? 2 : p > 75 ? 1 : 0;
+    }
+    // [pointsForTheSideThatBattedFirst, pointsForTheSideThatChased], or null when
+    // the outcome isn't a clean win/tie/washout.
+    function tvclPoints(inns, resultText) {
+        if (!inns || inns.length < 2) return null;
+        var i1 = inns[0], i2 = inns[1], r1 = i1.runs || 0, r2 = i2.runs || 0;
+        var t = String(resultText || '');
+        if (/abandon|no result|wash|cancel/i.test(t)) return [7, 7];
+        if (/\btied?\b/i.test(t) || r1 === r2) return [14, 14];
+        var firstWon = r1 > r2;
+        return [
+            firstWon ? 22 : batFirstRuns(r1) + bowlSecondPts(i2.wickets || 0),
+            firstWon ? bowlFirstPts(i1.wickets || 0) + batSecondFixed(r2) + pctTargetPts(r2, r1) : 22
+        ];
+    }
+
+    // What one side actually earned, once its match is decided. Prefers the
+    // server-computed figure on our own rich card; falls back to the port above for
+    // the division's other matches. Null when it can't be priced — which the ladder
+    // treats as "not final", so it holds position rather than guessing.
+    function settledPoints(view, card, side) {
+        if (!view.tvcl || !card || !card.complete) return null;
+        var inns = card.innings || [];
+        if (inns.length < 2) return null;
+        var idx = -1;
+        for (var i = 0; i < inns.length; i++) if (inningsSide(card, inns[i]) === side) { idx = i; break; }
+        if (idx < 0) return null;
+        if (inns[idx].points != null) return inns[idx].points;
+        var pts = tvclPoints(inns, card.result);
+        return pts ? pts[idx] : null;
+    }
+
+    // A LOSS IS NOT ZERO. TVCL gives the beaten side batting + bowling bonus points
+    // — a team bowled out for 150 that took 6 wickets still banks 8. So the value of
+    // an unfinished match is a blend, and even a near-certain loss is worth
+    // something. This average stands in for the loser's bonus while a match is
+    // still running; once it's decided, settledPoints() replaces it with the real
+    // figure. Deliberately a single documented constant, not a model.
+    var LOSS_BONUS = 7;
+    function expectedPoints(p, winPoints) {
+        return p * winPoints + (1 - p) * LOSS_BONUS;
+    }
+
+    // ---- the ladder ---------------------------------------------------------
+    // Three orders, doing three different jobs:
+    //   DISPLAY   — where tiles actually sit. League order, with a swap applied only
+    //               when BOTH teams involved are final (settled, or not playing at
+    //               all). An unfinished match is a barrier: nothing may jump a team
+    //               whose result is still unknown, so the ladder moves once, when
+    //               it's earned, instead of twice.
+    //   BASELINE  — every unfinished match priced at its neutral expectation.
+    //   PROJECTED — the same, but priced at what's ACTUALLY happening out there.
+    // The ghost is BASELINE → PROJECTED, so it means "how today is going versus what
+    // was expected of it" — not "who has a fixture". At the first ball the two
+    // orders are identical and the strip is arrow-free; arrows appear only as
+    // matches diverge, and grow as certainty does.
+    function ladder(view, rows) {
+        var wp = view.win_points;
+        // No points system, or a table that may already count today, and the whole
+        // overlay is unsafe — show the league's own order and no arrows.
+        if (!wp || view.table_counts_today) return rows;
+
+        var neutral = expectedPoints(0.5, wp);
+        rows.forEach(function (r) {
+            var known = r.points != null;
+            r.ptsNow = known ? r.points + (r.settledPts || 0) : null;
+            r.final = r.idle === 'none' || r.settledPts != null;
+            var pending = known && !r.final && r.idle !== 'none';
+            r.base = known ? r.ptsNow + (pending ? neutral : 0) : null;
+            // p is only known once a chase is on; before that a match sits at its
+            // neutral value, which is exactly why nothing moves in a first innings.
+            r.proj = known ? r.ptsNow + (pending ? expectedPoints(r.p != null ? r.p : 0.5, wp) : 0) : null;
+        });
+        if (rows.some(function (r) { return r.ptsNow == null; })) return rows;
+
+        // DISPLAY: adjacent swaps only, and only between two final teams.
+        var out = rows.slice(), swapped = true, guard = 0;
+        while (swapped && guard++ < 50) {
+            swapped = false;
+            for (var i = 0; i + 1 < out.length; i++) {
+                var a = out[i], b = out[i + 1];
+                if (a.final && b.final && b.ptsNow > a.ptsNow) {
+                    out[i] = b; out[i + 1] = a; swapped = true;
+                }
+            }
+        }
+
+        // GHOST: rank under BASELINE vs under PROJECTED. Shown only for matches
+        // still in play — a settled team has nothing pending, and its tile has
+        // already moved.
+        var byBase = rows.slice().sort(function (x, y) { return y.base - x.base || rows.indexOf(x) - rows.indexOf(y); });
+        var byProj = rows.slice().sort(function (x, y) { return y.proj - x.proj || rows.indexOf(x) - rows.indexOf(y); });
+        rows.forEach(function (r) {
+            if (r.final || r.idle) return;
+            var move = byBase.indexOf(r) - byProj.indexOf(r);
+            if (move > 0) { r.ghost = 'up'; r.ghostN = move; }
+            else if (move < 0) { r.ghost = 'down'; r.ghostN = -move; }
+        });
+        return out;
+    }
+
+    function leagueTiles(view) {
+        var rows = (view.teams || []).map(function (team) {
+            var fx = fixtureForTeam(view, team.team_id);
+            var card = fx ? cardFor(view, fx) : null;
+            var side = fx ? tileSide(team, fx) : null;
+            var state = fx ? assess(card, side) : { idle: 'none' };
+            var t = { key: team.team_id, tla: team.tla, ours: team.ours, points: team.points,
+                      settledPts: fx ? settledPoints(view, card, side) : null };
+            for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
+            return t;
+        });
+        return ladder(view, rows);
+    }
+
+    // Two tiles: the side that batted first on top (once the feed says who), the
+    // chaser below with its chase panel. Before a ball is bowled the baked order
+    // (us first) stands. With only two sides, our own id resolves both — whichever
+    // side we aren't is the opposition — so a fixture missing the opposition's team
+    // id still renders.
+    function friendlyTiles(view) {
+        var card = liveByPc[String(view.pc_id)];
+        var fx = (view.fixtures || [])[0];
+        var teams = (view.teams || []).slice();
+        var ourSide = tileSide(teams[0].ours ? teams[0] : teams[1], fx);
+        var sides = teams[0].ours ? [ourSide, other(ourSide)] : [other(ourSide), ourSide];
+        var first = card && (card.innings || [])[0];
+        if (first && ourSide) {
+            var firstSide = inningsSide(card, first);
+            if (firstSide && firstSide !== sides[0]) { teams.reverse(); sides.reverse(); }
+        }
+        return teams.map(function (team, i) {
+            var state = assess(card, ourSide ? sides[i] : null);
+            var t = { tla: team.tla, ours: team.ours };
+            for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
+            return t;
+        });
+    }
+
+    // ---- view selection -----------------------------------------------------
+    // The strip shows ONE match's context at a time. The ticker's featured match
+    // picks it, so the two chrome surfaces name the same game; standalone (or
+    // before the ticker speaks) it falls back to cycling the matches that have
+    // something live to show.
+    var VIEW_CYCLE_MS = 20000;
+    var cycleIdx = 0, cycleTimer = null;
+
+    function viewHasContent(v) {
+        return (v.fixtures || []).some(function (fx) {
+            var c = cardFor(v, fx);
+            return !!c && (c.phase === 'live' || c.phase === 'break' || c.complete);
+        });
+    }
+    function pickView() {
+        if (!VIEWS.length) return null;
+        if (featuredPc != null) {
+            for (var i = 0; i < VIEWS.length; i++) {
+                if (String(VIEWS[i].pc_id) === String(featuredPc)) return VIEWS[i];
+            }
+        }
+        var live = VIEWS.filter(viewHasContent);
+        var pool = live.length ? live : VIEWS;
+        return pool[cycleIdx % pool.length];
+    }
+
+    // ---- render -------------------------------------------------------------
+    // FLIP for committed ladder moves: measure where each tile is, let the render
+    // put it somewhere else, then start it back at the old position and let CSS
+    // carry it. Without this a promotion is a jump-cut and the eye misses it —
+    // the movement IS the information. Keyed by team id, so it survives the
+    // wholesale innerHTML rewrite. No-ops in any environment without layout.
+    var raf = window.requestAnimationFrame || function (f) { f(); };
+    function tilePositions() {
+        var out = {};
+        if (!root.querySelectorAll) return out;
+        Array.prototype.forEach.call(root.querySelectorAll('[data-k]'), function (el) {
+            if (el.getBoundingClientRect) out[el.getAttribute('data-k')] = el.getBoundingClientRect().top;
+        });
+        return out;
+    }
+    function playMoves(before) {
+        if (!root.querySelectorAll) return;
+        Array.prototype.forEach.call(root.querySelectorAll('[data-k]'), function (el) {
+            if (!el.getBoundingClientRect || !el.style) return;
+            var was = before[el.getAttribute('data-k')];
+            if (was == null) return;
+            var delta = was - el.getBoundingClientRect().top;
+            if (Math.abs(delta) < 1) return;
+            el.style.transition = 'none';
+            el.style.transform = 'translateY(' + delta + 'px)';
+            raf(function () { el.style.transition = ''; el.style.transform = ''; });
+        });
+    }
+
+    var lastKey = '';
+
     function render() {
-        var league = STRIP && STRIP.league;
-        var teams = (league && league.teams) || [];
-        if (!teams.length) { root.classList.remove('show'); return; }
+        var view = pickView();
+        if (!view) { root.classList.remove('show'); lastKey = ''; return; }
+        var tiles = view.mode === 'friendly' ? friendlyTiles(view) : leagueTiles(view);
+        if (!tiles.length) { root.classList.remove('show'); lastKey = ''; return; }
         // Same tiles for both views; the friendly view caps them at the 10-tile
         // height, then fills the space below with the chase panel (2nd innings) or an
         // empty spacer, both soaking up the remaining flex share.
-        var body = teams.map(tile).join('');
-        if (STRIP.mode === 'friendly') {
-            var chase = teams[1] && teams[1].chase, extra = 0;
-            if (chase) { var ct = chaseTiles(chase); body += ct.html; extra = ct.count; }
-            body += '<div class="spacer" style="flex:' + Math.max(1, 10 - teams.length - extra) + '"></div>';
+        var body;
+        if (view.mode === 'friendly') {
+            // Reads top-to-bottom as the match itself: the side that batted, the
+            // target they set, the side chasing it, then how that chase is going
+            // (or, once it's over, how it went).
+            var card = liveByPc[String(view.pc_id)];
+            var target = targetOf(card), stats = chaseStats(card), used = tiles.length;
+            body = tile(tiles[0]);
+            if (target != null) { body += statTile(target, 'Target', !!(card && card.complete)); used++; }
+            body += tiles.slice(1).map(tile).join('');
+            if (stats) { var ct = chaseTiles(stats); body += ct.html; used += ct.count; }
+            body += '<div class="spacer" style="flex:' + Math.max(1, 10 - used) + '"></div>';
+        } else {
+            body = tiles.map(tile).join('');
         }
-        root.innerHTML = header(league) + body;
+        var html = header(view) + body;
+        if (html === lastKey) return;   // nothing changed — leave the DOM (and its transitions) alone
+        lastKey = html;
+        var before = tilePositions();
+        root.innerHTML = html;
+        playMoves(before);
         root.classList.add('show');
     }
 
+    // ---- feeds in ------------------------------------------------------------
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (!d) return;
+        if (d.type === 'wcc-live') {
+            // Past the engine's grace window a failed poll broadcasts no matches at
+            // all. Drop what we hold rather than laddering a frozen picture — a
+            // silent-feed dot is honest, a stale fill isn't.
+            if (!d.matches) liveByPc = {};
+            (d.matches || []).forEach(function (m) { if (m.pc_id != null) liveByPc[String(m.pc_id)] = m; });
+            render();
+        } else if (d.type === 'wcc-league') {
+            (d.matches || []).forEach(function (m) { if (m.match_id != null) leagueById[String(m.match_id)] = m; });
+            render();
+        } else if (d.type === 'wcc-featured') {
+            // The ticker naming its current match. Null/absent → back to cycling.
+            var pc = d.pc_id == null ? null : String(d.pc_id);
+            if (pc !== featuredPc) { featuredPc = pc; render(); }
+        }
+    });
+    // Ask the engine for the last of each feed at once, so a mid-interval load
+    // paints without waiting a whole poll cycle (same handshake as the ticker).
+    try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'wcc-league-request' }, '*'); } catch (e) {}
+
+    // Cycle only matters while nothing is telling us what's featured.
+    cycleTimer = setInterval(function () {
+        if (featuredPc != null) return;
+        cycleIdx++;
+        render();
+    }, VIEW_CYCLE_MS);
+
     render();
+
+    // Off-day testing: /live-strip/?sim=league|friendly drives the real feed
+    // handlers above from a simulated match, so what's exercised is the shipping
+    // render path, not a parallel mock.
+    var sim = new URLSearchParams(window.location.search).get('sim');
+    if (sim) {
+        window.WCC_STRIP_VIEWS = VIEWS;
+        var s = document.createElement('script');
+        s.src = '/assets/js/live-strip-sim.js';
+        s.setAttribute('data-sim', sim);
+        document.body.appendChild(s);
+    }
 })();
 </script>
 </body>

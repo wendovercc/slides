@@ -101,6 +101,99 @@ enforce a minimum gap so two matches don't fight over the screen.
 - Same interrupt engine for the clip takeover — the ticker is the ambient state, the
   clip is the takeover.
 
+## Presentation C — the live strip (right band)
+
+The vertical partner of the ticker footer: the same player-owned chrome, showing
+**where the day is leaving the league table** rather than the score of any one ball.
+
+- **One equal tile per team**, in current league position order. Channels: fill
+  **colour** = result lean (the points green/red, never washed out), fill **height**
+  = certainty, bat/bowl glyph = live role, clock = decided but not yet published,
+  muted dot = match on but the feed is silent, dimmed tile = no match today, ghost
+  arrow = a *pending* move the table hasn't taken yet.
+- A match with no ladder behind it (friendly, cup, junior) collapses to a **two-tile
+  view** that reads top-to-bottom as the match itself: the side that batted first,
+  the **target** they set (appearing the moment that innings closes), the side
+  chasing it, then full-size **chase stat tiles** — runs left / balls left /
+  required rate / wickets left.
+- Those chase stats **outlive the match**. Once it's decided the same numbers say
+  how it finished (what was still needed, with how many wickets and balls left)
+  under a **FINAL** caption, with the tiles a touch quieter. The caption carries the
+  meaning: muting alone would read as stale data rather than a settled result. The
+  required rate is the one live-only stat — there's nothing left to require it over.
+- **Baked vs live:** the build bakes only *context* (today's matches, their
+  divisions, the day's fixtures in them — `build_live_strip`). Every channel above
+  is derived at runtime in `templates/live-strip.html` from the two feeds the player
+  broadcasts: `wcc-live` (our matches, ball-by-ball, keyed by `pc_id`) and
+  `wcc-league` (the division's other matches, coarse, keyed by `match_id`).
+- **Which match is on show:** the ticker announces its current segment as
+  `wcc-featured`, the engine relays it, and the strip ladders that match's division —
+  so the two chrome surfaces never sit on different games. Standalone, or before the
+  ticker speaks, the strip cycles the matches that have something live.
+- **Win probability** drives the fill height, the ghost arrows and the reorder. It
+  comes from a chase model: DLS-style par, then a logistic on runs-vs-par whose
+  spread closes as resources run out — so an early chase sits near 50/50 and settles
+  on its own. The resource table is an **approximation** of the Standard Edition,
+  good to a few points; fine for a fill height, not for deciding anything. First
+  innings gets a role glyph and no lean — there's nothing honest to say yet.
+
+### How the ladder moves
+
+Three orders, each doing a different job:
+
+- **Display** — where tiles actually sit. League order, with a swap applied only
+  when **both** teams involved are final (settled, or not playing at all). An
+  unfinished match is a barrier: nothing may jump a team whose result is still
+  unknown. So the ladder moves **once, when it's earned**, rather than moving on one
+  result and moving back an hour later when another lands.
+- **Baseline** — every unfinished match priced at its neutral expectation.
+- **Projected** — the same, priced at what's actually happening out there.
+
+The **ghost arrow is baseline → projected**, so it means *"how today is going versus
+what was expected of it"* — not *"who has a fixture"*. At the first ball the two
+orders are identical and the strip is arrow-free; arrows appear only as matches
+diverge, and grow with certainty. Arrows carry the number of places (`▲3`), bare for
+a single place. A settled team shows no arrow: it has nothing pending, and its tile
+has already moved. Committed moves FLIP-animate — the movement is the information,
+so a jump-cut would waste it.
+
+**A loss is not zero points.** TVCL pays the beaten side batting and bowling bonuses
+— a team bowled out for 150 that took 6 wickets still banks 8 — so an unfinished
+match is worth `p × 22 + (1−p) × ~7`, and even a near-certain defeat has value. Once
+a match is decided the estimate is replaced by the real figure from `tvclPoints()`.
+The strip carries a **port** of that function (the division's other matches arrive on
+the lean PC feed with no points attached); `live-worker/src/rv.mjs` is the authority
+and holds the unit tests — keep the two in step.
+
+**The double-count trap.** The ladder overlays today's points onto a league table
+baked at build time. If a build runs *after* a result publishes, that match is in the
+table **and** gets its points added again — the tile jumps twice. `fetch_play_cricket`
+now stamps each table with `fetched_at`, and the build sets `table_counts_today` when
+the snapshot may already include the day's results; the strip then shows the league's
+own order and no arrows rather than a wrong ladder. Non-TVCL divisions likewise never
+reorder — a result we can't price leaves that team non-final, i.e. a barrier.
+- **Innings allotment** is inferred from how the first innings closed (neither bowled
+  out nor declared, stopped on a whole over), never from a `max_overs` field. Unknown
+  allotment → the chase model falls back to a wickets-only read with a low certainty
+  ceiling, and the panel drops "balls left".
+
+### Testing it without a live match
+
+There is no cricket most days and none at all out of season, so the strip has a
+simulator that drives the **shipping** render path — not a parallel mock — by
+fabricating the two feeds in the Worker's normalised shapes:
+
+```
+WCC_TODAY=2026-08-08 WCC_LIVE_ENABLED=1 python3 scripts/build.py   # a league Saturday
+open http://localhost:8000/live-strip/?sim=league                  # or ?sim=friendly
+```
+
+One tick = one over, so a full round of the division plays out in about three
+minutes, passing through every tile state (roles, a chase turning either way, a
+decided-but-unpublished result, a silent feed, a team with no match). The build must
+have baked views for the chosen day, hence `WCC_TODAY`. See
+`assets/js/live-strip-sim.js`.
+
 ## Player-profile enrichment (a third opportunity)
 
 When the live feed shows a **new batter at the crease** (a dismissal opens a gap and

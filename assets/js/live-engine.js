@@ -175,6 +175,18 @@
       try { e.source.postMessage(Object.assign({ type: 'wcc-live', status: lastStatus }, last || {}), '*'); } catch (err) {}
     });
 
+    // Featured-match relay: the ticker announces which match its current segment
+    // belongs to, and the other chrome surfaces (the strip's ladder) follow it, so
+    // the two never drift onto different games on their own cadences. The parent is
+    // just the hub — it holds no opinion about what's featured.
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (!d || d.type !== 'wcc-featured') return;
+      framesOf().forEach(function (f) {
+        try { if (f && f.contentWindow && f.contentWindow !== e.source) f.contentWindow.postMessage(d, '*'); } catch (err) {}
+      });
+    });
+
     // --- League loop: the day's OTHER matches, polled SLOWLY and broadcast as
     // `wcc-league`. Independent of the WCC loop above — its own cadence, endpoint,
     // cache key and config — because PC-API is result-granularity, not ball-by-ball
