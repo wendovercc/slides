@@ -2055,10 +2055,23 @@ def live_poll_window(matches):
               yesterday window is already closed, so polling stops on its own
               instead of running until the next successful build.
 
-    No matches today → (None, None) = never poll."""
+    No matches today → (None, None) = never poll.
+
+    WCC_TODAY replay builds are the exception: the replayed day's window closed long
+    ago, so a local test would gate itself shut before you could look at it. When the
+    build date isn't the real date we bake the REAL day instead — open from this
+    morning, shut at tonight's midnight — so the feed is pollable for the rest of the
+    day you're actually testing on. The matches are still the replayed day's (Results
+    Vault keeps completed matches, so they poll fine). Never reachable in CI/prod,
+    where WCC_TODAY is unset and day == real_today."""
     if not matches:
         return None, None
     day = _today()
+    real_today = date.today()
+    if day != real_today:
+        real_start = datetime.combine(real_today, datetime.min.time())
+        return (real_start.isoformat(timespec="minutes"),
+                (real_start + timedelta(days=1)).isoformat(timespec="minutes"))
     lead = int(load_config().get("live_poll_lead_minutes", 30))
     day_start = datetime.combine(day, datetime.min.time())
     times = sorted(m["time"] for m in matches if m.get("time"))
@@ -2085,7 +2098,8 @@ def build_live_config():
            "poll_from": poll_from, "poll_until": poll_until, "matches": matches}
     (SITE / "live-config.json").write_text(json.dumps(out, indent=2) + "\n")
     window = f"{poll_from} → {poll_until}" if poll_from else "closed (nothing on)"
-    print(f"  live-config.json — {len(matches)} pollable match(es) today, poll window {window}")
+    replay = " [replay build: window is the REAL day]" if _today() != date.today() else ""
+    print(f"  live-config.json — {len(matches)} pollable match(es) today, poll window {window}{replay}")
 
 
 def _load_league_today():
