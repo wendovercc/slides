@@ -46,15 +46,29 @@
 
         /* All slide iframes live here. Scaling this ONE layer is a transform, so slides
            never re-lay-out their vw/vh grid — they just composite smaller — which keeps
-           the grow/shrink smooth. Off match days it stays scale(1) and fills the stage,
-           so playback is byte-for-byte the old full-bleed. */
+           the grow/shrink smooth.
+
+           The layer is a FIXED 1920x1080 design box scaled into the stage by --fit
+           (set in JS), not a stage-sized box. Slides size their whole type scale in vw
+           (--t-md: 2vw etc), so on a small viewport those resolve to a handful of CSS
+           px — and WebKit stops honouring them down there (iOS text autosizing, the
+           minimum-font-size preference, whole-px line-box rounding). Text then renders
+           taller than the vh-based rows budgeted for it and the last rows of a full
+           scorecard fall out the bottom of .slide's overflow:hidden. Laying out at
+           1920x1080 always and scaling the result keeps every slide in wall-sized CSS
+           px, so a phone renders exactly what the wall does. --fit multiplies the live
+           band rather than replacing it. */
         #slide-layer {
-            position: absolute; inset: 0; z-index: 2;
+            position: absolute; top: 0; left: 0; z-index: 2;
+            width: 1920px; height: 1080px;
             transform-origin: top left;
-            transform: scale(1);
+            transform: scale(var(--fit, 1));
             transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        body.live-chrome #slide-layer { transform: scale(calc(1 - var(--live-band))); }
+        body.live-chrome #slide-layer { transform: scale(calc(var(--fit, 1) * (1 - var(--live-band)))); }
+        /* Refitting (load, resize, rotate) must snap; only the live-chrome
+           grow/shrink animates. */
+        body.no-fit-anim #slide-layer { transition: none; }
 
         #slide-layer iframe {
             position: absolute; inset: 0;
@@ -240,6 +254,23 @@
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
+
+        // Scale the fixed 1920x1080 slide layer into the stage (see #slide-layer).
+        // Measured off the stage element rather than recomputed from innerWidth so it
+        // tracks the CSS min()/dvh sizing exactly, including iOS's dynamic viewport.
+        // clientWidth, not getBoundingClientRect: preview mode puts its own scale() on
+        // the stage and the fit must stay a pure layout measurement.
+        function fitLayer() {
+            const w = document.getElementById('stage').clientWidth;
+            if (!w) return;
+            document.body.classList.add('no-fit-anim');
+            document.documentElement.style.setProperty('--fit', w / 1920);
+            requestAnimationFrame(() => requestAnimationFrame(
+                () => document.body.classList.remove('no-fit-anim')));
+        }
+        fitLayer();
+        window.addEventListener('resize', fitLayer);
+        window.addEventListener('orientationchange', fitLayer);
 
         // Live needs BOTH the build flag and a provisioned device (see the same
         // constant in screen/player.html). Without a key we present exactly as if
