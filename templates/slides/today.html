@@ -149,10 +149,15 @@
 <div class="today-list" id="today-list"></div>
 <div class="today-empty" id="today-empty" hidden>Nothing scheduled at the club today</div>
 
+{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-window.js"></script>{% endif %}
 <script>
 (function () {
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
-    var LIVE_ENABLED = {{ 'true' if live_enabled else 'false' }};
+    // Build flag AND a provisioned device — an unkeyed device presents exactly as
+    // if live_enabled were false (no feed badges, no live pill, no polling), since
+    // the feed is unreachable to it anyway. Mirrors LIVE_ON in the players.
+    var LIVE_ENABLED = {{ 'true' if live_enabled else 'false' }}
+        && !!(window.WccLiveKey && window.WccLiveKey.get());
     var EVENTS = {{ (slide._events or []) | tojson }};
     var listEl = document.getElementById('today-list');
     var emptyEl = document.getElementById('today-empty');
@@ -418,16 +423,18 @@
 
     window.addEventListener('message', function (e) {
         var d = e.data;
-        if (!d) return;
+        if (!d || !LIVE_ENABLED) return;   // no key → stay on the baked paint above
         if (d.type === 'wcc-live') render(d, d.status || 'ok');
         else if (d.type === 'wcc-league') { applyLeague(d.matches); render(lastFeed, lastStatus); }
     });
 
-    // Live enrichment (poll / engine broadcast) is gated behind config.live_enabled.
-    // Off = the slide stays on its baked schedule paint above and never touches the
-    // live endpoint, so this unfinished feature ships dark.
+    // Live enrichment (poll / engine broadcast) is gated behind config.live_enabled
+    // AND a key on this device (LIVE_ENABLED above). Off = the slide stays on its
+    // baked schedule paint and never touches the live endpoint.
     {% if live_enabled %}
-    if (window.top !== window.self) {
+    if (!LIVE_ENABLED) {
+        // No key: nothing more to do — the baked paint above is the whole slide.
+    } else if (window.top !== window.self) {
         // Embedded: the player's live-engine owns the poll loop and broadcasts
         // wcc-live (handled above). Ask it for the last feed now so the first live
         // paint doesn't wait a whole poll cycle; its periodic broadcast backstops
@@ -436,21 +443,41 @@
     } else {
         var params = new URLSearchParams(location.search);
         var pcs = params.getAll('pc');
+        var explicitPcs = pcs.length > 0;
         if (!pcs.length) pcs = EVENTS.filter(function (e) { return e.type === 'match' && e.pc_id != null; })
                                      .map(function (e) { return e.pc_id; });
-        var key = localStorage.getItem('wccLiveKey') || '';
+        // Standalone: self-poll, but only with a key, only inside the day's poll
+        // window, and stop dead on a 403 — the same three gates the engine applies
+        // (see live-engine.js / live-window.js). An unkeyed, out-of-hours or refused
+        // device must not sit here hitting the Worker every 20s.
+        var timer = null, pollWindow = null;
         var poll = function () {
-            if (!pcs.length) return;
+            var key = (window.WccLiveKey && window.WccLiveKey.get()) || '';
+            if (!pcs.length || !key) { render(null, 'nokey'); return; }
+            var w = window.WccLiveWindow ? WccLiveWindow.state(pollWindow) : 'open';
+            if (w === 'closed') { render(null, 'closed'); return; }   // terminal
+            if (w === 'early') { clearTimeout(timer); timer = setTimeout(poll, WccLiveWindow.msUntilOpen(pollWindow)); return; }
             var qs = '?' + pcs.map(function (p) { return 'pc=' + encodeURIComponent(p); }).join('&');
-            fetch(ENDPOINT + qs, { headers: key ? { 'Authorization': 'Bearer ' + key } : {} })
+            fetch(ENDPOINT + qs, { headers: { 'Authorization': 'Bearer ' + key } })
                 .then(function (r) {
-                    if (r.ok) return r.json().then(function (feed) { render(feed, 'ok'); });
-                    render(null, r.status === 403 ? 'forbidden' : 'error');
+                    if (r.ok) return r.json().then(function (feed) { render(feed, 'ok'); schedule(); });
+                    if (r.status === 403) { render(null, 'forbidden'); return; }  // terminal
+                    render(null, 'error'); schedule();
                 })
-                .catch(function () { render(null, 'offline'); });
+                .catch(function () { render(null, 'offline'); schedule(); });
         };
-        poll();
-        setInterval(poll, 20000);
+        function schedule() { clearTimeout(timer); timer = setTimeout(poll, 20000); }
+        // A key arriving (cog in another tab) restarts the loop without a reload.
+        if (window.WccLiveKey && window.WccLiveKey.onChange)
+            window.WccLiveKey.onChange(function () { clearTimeout(timer); poll(); });
+        // Same source of truth as the engine. An explicit ?pc= skips the window,
+        // matching the engine's caller-supplied-ids behaviour.
+        if (explicitPcs) poll();
+        else fetch('/live-config.json', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) { if (cfg && window.WccLiveWindow) pollWindow = WccLiveWindow.parse(cfg); })
+            .catch(function () {})
+            .then(function () { poll(); });
     }
     {% endif %}
 })();

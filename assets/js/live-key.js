@@ -19,15 +19,35 @@
   var KEY = 'wccLiveKey';
   var PARAM = 'k';
 
+  // Key-change subscribers. The live engine stops dead without a key (and after a
+  // 403), so it needs to hear about a key arriving to restart itself rather than
+  // sit idle until the next reload: the cog in another tab, a `storage` event from
+  // a second window, or a console WccLiveKey.set all resume it in place.
+  var listeners = [];
+  function onChange(fn) { if (typeof fn === 'function') listeners.push(fn); }
+  function fire() {
+    var v = get();
+    listeners.forEach(function (fn) { try { fn(v); } catch (e) {} });
+  }
+
   function get() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
   function set(v) {
     try {
       v = String(v == null ? '' : v).trim();
       if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY);
+      fire();
       return true;
     } catch (e) { return false; }
   }
-  function clear() { try { localStorage.removeItem(KEY); return true; } catch (e) { return false; } }
+  function clear() { try { localStorage.removeItem(KEY); fire(); return true; } catch (e) { return false; } }
+
+  // Cross-tab: `storage` fires in every OTHER tab on the origin (a null e.key is
+  // a whole-store clear, which counts).
+  try {
+    window.addEventListener('storage', function (e) {
+      if (!e || e.key === null || e.key === KEY) fire();
+    });
+  } catch (e) {}
 
   // Capture ?k=<token> into localStorage and strip it from the URL so the token
   // isn't left sitting in the address bar / referrer. Only same-page rewrite — no
@@ -50,5 +70,5 @@
 
   capture();
 
-  window.WccLiveKey = { get: get, set: set, clear: clear, capture: capture, storageKey: KEY };
+  window.WccLiveKey = { get: get, set: set, clear: clear, capture: capture, onChange: onChange, storageKey: KEY };
 })();

@@ -279,10 +279,17 @@
 <script src="/assets/js/preload-gate.js"></script>
 <script src="/assets/js/refresh.js"></script>
 <script src="/assets/js/player-core.js"></script>
-{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
+{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-window.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');
+// Live needs BOTH the build flag and a provisioned device. The flag is decided at
+// build time for everyone; the access key is per-device, and the site is public —
+// so an unprovisioned visitor must present exactly as if live_enabled were false:
+// no live slides in the deck, no ticker/strip/flash chrome, no poller. One constant
+// stands in for the flag everywhere below.
+const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
+    && !!(window.WccLiveKey && window.WccLiveKey.get());
 let _currentSlug = null;
 function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }
 if (PREVIEW) document.body.classList.add('preview');
@@ -339,6 +346,10 @@ function slidesForCtx(show, ctx, today) {
         .filter(s => s.slide_active !== false)
         .filter(s => !s.slide_expires || s.slide_expires >= today)
         .filter(s => !s.expires       || s.expires       >= today)
+        // Live slides only exist for a provisioned device; without a key they're
+        // as absent as they'd be with live_enabled=false. Filtering here (not at
+        // the call site) keeps shownSignature's view of the deck consistent too.
+        .filter(s => LIVE_ON || !s._live)
         .filter(s => matchesContext(s, ctx));
 }
 
@@ -499,6 +510,7 @@ async function init() {
         return f;
     });
     {% if live_enabled %}
+    if (LIVE_ON) {
     // Live chrome, in the L the retracting slide layer uncovers: ticker along the
     // bottom band, standings strip up the right. Both sit on the stage (not the slide
     // layer) so they don't scale with it.
@@ -518,6 +530,7 @@ async function init() {
     flashFrame.className = 'flash';
     flashFrame.src = '/live-flash/';
     stage.appendChild(flashFrame);
+    }
     {% endif %}
     applyDebugScale();
 
@@ -586,7 +599,7 @@ async function init() {
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
-        {% if live_enabled %}if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
+        {% if live_enabled %}if (LIVE_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
     }
 

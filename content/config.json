@@ -5,6 +5,8 @@
   },
   "_comment_live_enabled": "Master switch for the live-match feature set (live.wendovercc.org poller, live-match slides, live-aware today slide, ticker + news-flash overlays). Off = none of it is built or polled, so other changes can ship without turning on this unfinished work.",
   "live_enabled": false,
+  "_comment_live_poll_lead_minutes": "How long before the day's first start the live poll window opens (live-config.json poll_from) — scorers open a match and settle the toss before the first ball. The window always shuts at midnight, which is also the safeguard if the nightly build fails: a stale config's window has already closed. Outside the window no device touches live.wendovercc.org.",
+  "live_poll_lead_minutes": 30,
   "default_panel_duration": 20,
   "_comment_last_match_max_age_days": "How long a team's last-match PACKAGE (intro → scorecards → reels → result) stays in the decks, counted from the match date. Long enough to cover the following weekend, so Saturday's game is still the full story for a Sunday friendly, and it lapses before the next fixture replaces it anyway. In practice it only bites teams that have STOPPED playing (juniors at season's end). When the package lapses the team's standalone last-match-result card takes over automatically — see build_slideshows.",
   "last_match_max_age_days": 10,

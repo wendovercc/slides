@@ -132,6 +132,7 @@
         </div>
     </div>
     <script src="/assets/js/live-key.js"></script>
+    <script src="/assets/js/live-window.js"></script>
     <script src="/assets/js/hls.min.js"></script>
     <script src="/assets/js/hls-cache.js"></script>
 
@@ -903,15 +904,32 @@
         try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
     } else {
         // Standalone dev: self-poll and drive our own rotation once data is in.
-        var key = localStorage.getItem('wccLiveKey') || '';
-        var startedAuto = false;
+        // Keyed only, inside the day's poll window only, and terminal on 403 — the
+        // same three gates as live-engine.js, so an unkeyed, out-of-hours or refused
+        // device never sits here hitting the Worker every 15s.
+        var startedAuto = false, timer = null, forbidden = false, pollWindow = null;
         var poll = function () {
-            fetch(ENDPOINT + '?pc=' + encodeURIComponent(PC_ID), { headers: key ? { 'Authorization': 'Bearer ' + key } : {} })
-                .then(function (r) { return r.ok ? r.json() : null; })
+            var key = (window.WccLiveKey && window.WccLiveKey.get()) || '';
+            if (!key || forbidden) return;
+            var w = window.WccLiveWindow ? WccLiveWindow.state(pollWindow) : 'open';
+            if (w === 'closed') return;
+            if (w === 'early') { clearTimeout(timer); timer = setTimeout(poll, WccLiveWindow.msUntilOpen(pollWindow)); return; }
+            fetch(ENDPOINT + '?pc=' + encodeURIComponent(PC_ID), { headers: { 'Authorization': 'Bearer ' + key } })
+                .then(function (r) {
+                    if (r.status === 403) { forbidden = true; return null; }
+                    return r.ok ? r.json() : null;
+                })
                 .then(function (data) { if (!data) return; onFeed(data); if (!startedAuto && views.length) { startedAuto = true; beginFromStart(); } })
-                .catch(function () {});
+                .catch(function () {})
+                .then(function () { if (!forbidden) { clearTimeout(timer); timer = setTimeout(poll, 15000); } });
         };
-        poll(); setInterval(poll, 15000);
+        if (window.WccLiveKey && window.WccLiveKey.onChange)
+            window.WccLiveKey.onChange(function () { forbidden = false; clearTimeout(timer); poll(); });
+        fetch('/live-config.json', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) { if (cfg && window.WccLiveWindow) pollWindow = WccLiveWindow.parse(cfg); })
+            .catch(function () {})
+            .then(function () { poll(); });
     }
 })();
 </script>

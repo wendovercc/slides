@@ -224,9 +224,11 @@
         {% endfor %}
         </div>
         {% if live_enabled %}
-        <iframe id="ticker-frame" class="ticker" src="/live-ticker/"></iframe>
-        <iframe id="strip-frame" class="strip" src="/live-strip/"></iframe>
-        <iframe id="flash-frame" class="flash" src="/live-flash/"></iframe>
+        {#- src is deferred to data-src and only applied when LIVE_ON (see below):
+            an unprovisioned device must not even load the live chrome pages. -#}
+        <iframe id="ticker-frame" class="ticker" data-src="/live-ticker/"></iframe>
+        <iframe id="strip-frame" class="strip" data-src="/live-strip/"></iframe>
+        <iframe id="flash-frame" class="flash" data-src="/live-flash/"></iframe>
         {% endif %}
     </div>
 
@@ -234,10 +236,22 @@
     <script src="/assets/js/preload-gate.js"></script>
     <script src="/assets/js/refresh.js"></script>
     <script src="/assets/js/player-core.js"></script>
-    {% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
+    {% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-window.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
+
+        // Live needs BOTH the build flag and a provisioned device (see the same
+        // constant in screen/player.html). Without a key we present exactly as if
+        // live_enabled were false: the chrome iframes never get a src, the live
+        // slides drop out of the deck, and the poller never starts.
+        const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
+            && !!(window.WccLiveKey && window.WccLiveKey.get());
+        if (LIVE_ON) {
+            document.querySelectorAll('#stage iframe[data-src]').forEach(f => { f.src = f.dataset.src; });
+        } else {
+            document.querySelectorAll('#stage iframe[data-src]').forEach(f => f.remove());
+        }
 
         let _currentSlug = null;
         function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }
@@ -284,7 +298,11 @@
 
         const today = new Date().toISOString().slice(0, 10);
         const allSlides = {{ show.slides | tojson }}.map((s, i) => {
-            const reason = (s.expires && s.expires < today) ? `expired ${s.expires}` : null;
+            // _i stays the index into the baked iframe list, so slides are dropped
+            // by _shown rather than removed from the array.
+            const reason = (s.expires && s.expires < today) ? `expired ${s.expires}`
+                : (s._live && !LIVE_ON) ? 'live feature set — no access key on this device'
+                : null;
             return { ...s, _i: i, _shown: !reason, _reason: reason };
         });
         const slides = allSlides.filter(s => s._shown);
@@ -349,7 +367,7 @@
             });
             // One live-feed poll loop for the whole deck, broadcasting to every
             // slide iframe (live-aware slides render it; others ignore it).
-            {% if live_enabled %}if (window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
+            {% if live_enabled %}if (LIVE_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
             if (PREVIEW) startReloadTicker();
         }
 

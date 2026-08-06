@@ -57,6 +57,62 @@
 
     function key() { try { return localStorage.getItem(keyName) || ''; } catch (e) { return ''; } }
 
+    // --- The access gate, client side ------------------------------------------
+    // The Worker's bearer check runs INSIDE the Worker, so every unauthorised poll
+    // still costs a Worker invocation. A device with no key, or with a key the
+    // Worker refuses, would otherwise sit at the SLOW cadence forever (2,880 hits
+    // a day, each one guaranteed to 403) — the site is public, so that's every
+    // casual visitor too. So both are terminal here, not backoff cases:
+    //   no key      → never start either loop
+    //   403         → stop dead; the token is either right or wrong, never flaky
+    // We resume only when the key CHANGES to something we haven't had refused
+    // (a same-value re-set doesn't retry a known-bad token). In practice a Pi
+    // reseeds via ?k= on its next reload, and the bar iPad via the home-page cog;
+    // WccLiveKey.onChange catches the live case without waiting for either.
+    var stopped = false;     // hard-stopped: no polling at all until the key changes
+    var refused = null;      // the key value the Worker 403'd, so we don't retry it
+
+    function halt(reason) {
+      stopped = true;
+      refused = reason === 'forbidden' ? key() : null;
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (leagueTimer) { clearTimeout(leagueTimer); leagueTimer = null; }
+      lastStatus = reason;
+      // Slides show their baked schedule with a "No feed" badge — same honest
+      // degraded paint as any other unreachable-feed case.
+      broadcast(null, reason);
+      onState(null, reason);
+    }
+
+    function resume() {
+      if (!stopped) return;
+      var k = key();
+      if (!k || k === refused) return;
+      stopped = false; refused = null; fails = 0;
+      poll();
+      if (leagueIds && leagueIds.length) leaguePoll();
+    }
+
+    // --- The poll window (the other half of the gate) ---------------------------
+    // live-config.json says when today is worth polling at all: open shortly before
+    // the first start, shut at midnight (see live-window.js / build.py). Outside it
+    // we make no requests — asleep before the window, stopped for good after it.
+    // The midnight close is also the stale-config safeguard: if the nightly build
+    // fails, yesterday's window has already ended, so the wall stops rather than
+    // polling on until the next successful build.
+    var pollWindow = null;   // set once live-config.json resolves; null = no opinion
+    var cfgReady = null;     // promise for that resolution, so the league loop can wait
+
+    function windowState() {
+      return window.WccLiveWindow ? window.WccLiveWindow.state(pollWindow) : 'open';
+    }
+
+    // Arm the gate before anything below can poll. The config resolution still
+    // runs while stopped — it's same-origin and free, and it leaves pcs/cfgById
+    // ready so a key arriving later resumes into a working loop immediately.
+    if (!key()) halt('nokey');
+    if (window.WccLiveKey && window.WccLiveKey.onChange) window.WccLiveKey.onChange(resume);
+
     // Worker URL: ?pc= the resolved ids (works pre-deploy + shares the cache key
     // with standalone slides); a bare URL only as a fallback when the config gave
     // us nothing, letting the Worker's own config drive if it has one.
@@ -151,10 +207,19 @@
     }
 
     function poll() {
+      if (stopped) return;
       var k = key();
-      fetch(url(), { headers: k ? { 'Authorization': 'Bearer ' + k } : {} })
+      if (!k) { halt('nokey'); return; }
+      var w = windowState();
+      // Past midnight (or a day with nothing on) — done, and nothing will reopen
+      // it before the next reload picks up a fresh config.
+      if (w === 'closed') { halt('closed'); return; }
+      // Not yet: re-check without touching the network.
+      if (w === 'early') { schedule(window.WccLiveWindow.msUntilOpen(pollWindow)); return; }
+      fetch(url(), { headers: { 'Authorization': 'Bearer ' + k } })
         .then(function (r) {
-          if (!r.ok) { onFail(r.status === 403 ? 'forbidden' : 'error'); return; }
+          if (r.status === 403) { halt('forbidden'); return; }
+          if (!r.ok) { onFail('error'); return; }
           return r.json().then(function (feed) {
             fails = 0; last = feed; lastStatus = 'ok';
             broadcast(feed, 'ok');
@@ -211,12 +276,24 @@
       });
     }
     function leaguePoll() {
+      if (stopped) return;
       var k = key();
-      fetch(leagueUrl(), { headers: k ? { 'Authorization': 'Bearer ' + k } : {} })
-        .then(function (r) { return r.ok ? r.json() : null; })
+      if (!k) { halt('nokey'); return; }
+      // Same window as the WCC loop — the other-games feed is context around our
+      // match, so it has no reason to be awake when our match isn't.
+      var w = windowState();
+      if (w === 'closed') { halt('closed'); return; }
+      if (w === 'early') { leagueTimer = setTimeout(leaguePoll, window.WccLiveWindow.msUntilOpen(pollWindow)); return; }
+      fetch(leagueUrl(), { headers: { 'Authorization': 'Bearer ' + k } })
+        .then(function (r) {
+          // Same gate, same verdict — a 403 here stops the WCC loop too, since
+          // both feeds sit behind the one token.
+          if (r.status === 403) { halt('forbidden'); return null; }
+          return r.ok ? r.json() : null;
+        })
         .then(function (feed) { if (feed) { leagueLast = feed; leagueBroadcast(); } })
         .catch(function () { /* keep last good; retry next tick */ })
-        .then(function () { leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
+        .then(function () { if (!stopped) leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
     }
     // Answer a slide that joins mid-interval with the last league feed at once.
     window.addEventListener('message', function (e) {
@@ -233,22 +310,33 @@
           .filter(function (id) { return id != null; });
       })
       .catch(function () { leagueIds = []; })
+      // Wait for the WCC config before the first league poll, so the window is in
+      // hand — otherwise a fast league config could fire one request through an
+      // as-yet-unknown (and possibly closed) window.
+      .then(function () { return cfgReady; })
       .then(function () { if (leagueIds && leagueIds.length) leaguePoll(); });
 
-    // Resolve the poll list from the same-origin config (unless the caller passed
-    // ids explicitly), then start polling. A failed/empty config still starts the
-    // loop — poll() falls back to the bare Worker URL and idles if there's nothing.
+    // Resolve the poll list AND the poll window from the same-origin config, then
+    // start polling. Caller-supplied ids (tests/debug) skip the fetch and so carry
+    // no window — deliberate, so an explicit ?pc= isn't silently time-gated.
+    // A config that fails to LOAD leaves pollWindow null (no opinion) and falls back
+    // to the bare Worker URL, as before: a broken config shouldn't blind the wall on
+    // a match day. A config that loads and says "nothing today" closes the window.
     if (pcs && pcs.length) {
       poll();
     } else {
-      fetch(configUrl, { cache: 'no-store' })
+      // Assigned synchronously here, before any league-config callback can run, so
+      // the league loop's `return cfgReady` above always sees the real promise.
+      cfgReady = fetch(configUrl, { cache: 'no-store' })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (cfg) {
-          var ms = (cfg && cfg.matches) || [];
+          if (!cfg) return;
+          var ms = cfg.matches || [];
           pcs = ms.map(function (m) { return m.pc_id; }).filter(function (id) { return id != null; });
           ms.forEach(function (m) { if (m.pc_id != null) cfgById[String(m.pc_id)] = m; });
+          if (window.WccLiveWindow) pollWindow = window.WccLiveWindow.parse(cfg);
         })
-        .catch(function () { /* keep pcs null → bare fallback */ })
+        .catch(function () { /* keep pcs null + window null → bare fallback */ })
         .then(function () { poll(); });
     }
   }
