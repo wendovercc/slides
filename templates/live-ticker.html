@@ -119,9 +119,24 @@
     }
     // Spell out dismissals now there's room: "c Smith b Jones" -> "caught Smith,
     // bowled Jones"; "b Jones" -> "bowled Jones"; whole-phrase ones pass through.
+    // The special cases below are all real RV output, not hypotheticals:
+    //   "c & b M Robinson"        caught and bowled — the fielder IS the bowler
+    //   "lbw  b T Duff"           note the double space RV emits after lbw
+    //   "ro (H Godden,J Roan)"    run-outs are abbreviated 'ro', never "run out"
     function expandHow(how) {
-        var s = String(how || '').trim();
+        var s = String(how || '').trim().replace(/\s+/g, ' ');
         if (!s || /^(run out|not out|retired|hit wicket|timed out|obstruct|handled)/i.test(s)) return s;
+        // Run out, with whoever RV credited: "ro (A,B)" -> "run out (A, B)".
+        var ro = s.match(/^ro\b\s*(?:\((.*)\))?$/i);
+        if (ro) return 'run out' + (ro[1] ? ' (' + ro[1].split(',').map(function (n) { return n.trim(); }).join(', ') + ')' : '');
+        // Caught and bowled: one name, said once.
+        var cb = s.match(/^c\s*&\s*b\s+(.*)$/i);
+        if (cb) return 'caught and bowled ' + cb[1];
+        // lbw: the trailing "b X" is the bowler's credit, exactly as in "c X b Y",
+        // so it expands the same way. Matched explicitly only because the generic
+        // rule below would leave the stray space RV puts after "lbw".
+        var lbw = s.match(/^lbw\s+b\s+(.*)$/i);
+        if (lbw) return 'lbw, bowled ' + lbw[1];
         return s.replace(/^c\s+/i, 'caught ').replace(/^st\s+/i, 'stumped ')
                 .replace(/^b\s+/i, 'bowled ').replace(/\sb\s+/i, ', bowled ');
     }
