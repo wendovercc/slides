@@ -72,14 +72,30 @@
            grow/shrink animates. */
         body.no-fit-anim #slide-layer { transition: none; }
 
+        /* visibility, not just opacity — this is a MEMORY control, not a cosmetic one.
+           Every slide in the deck is a live iframe stacked at inset:0, so all of them
+           are "on screen" at once. An opacity:0 layer is still visible for compositing:
+           WebKit keeps a backing store for each one, sized 1920x1080 x the device scale
+           (the fixed design box, NOT the small on-screen size), and pinch-zoom multiplies
+           that area by the square of the page scale. A 38-slide deck on a 3x phone
+           therefore allocates tens of MB per hidden slide and the WebContent process gets
+           jetsammed — "A problem repeatedly occurred". visibility:hidden drops the backing
+           store; only the slide(s) actually being seen cost anything.
+
+           The transition carries `visibility` so the crossfade still works: CSS holds
+           `visible` for the whole duration whenever either endpoint is visible, so the
+           incoming frame shows instantly and the outgoing one only goes hidden once its
+           fade has finished. Never hide a frame with `display:none` — that would re-lay-out
+           the slide document and lose its carousel/video state. */
         #slide-layer iframe {
             position: absolute; inset: 0;
             width: 100%; height: 100%;
             border: none;
             opacity: 0;
-            transition: opacity 0.8s ease;
+            visibility: hidden;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
         }
-        #slide-layer iframe.active { opacity: 1; }
+        #slide-layer iframe.active { opacity: 1; visibility: visible; }
 
         /* Live-highlight news-flash: a dedicated overlay iframe the player raises above
            everything (slides AND chrome) — a clip takeover is full-bleed 16:9. */
