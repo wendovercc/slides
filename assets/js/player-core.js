@@ -61,6 +61,11 @@
       // scrollable at 1x (html,body are overflow:hidden + overscroll-behavior:none), so
       // a single-finger drag still reaches the swipe handler.
       '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:auto;}' +
+      // Zoomed: no crossfade. The fade is what puts two full-size slide surfaces on
+      // screen at once, which is the allocation the phone can't absorb at page scale
+      // (see the pressure valve in start()). Instant swap instead, so exactly one
+      // slide frame is ever visible while pinched in.
+      'body.wcc-zoomed #slide-layer iframe{transition:none!important;}' +
       // Centre-screen play/pause feedback flashed on tap / Space. Above the tap
       // surface, below the bar; never intercepts input.
       '#wcc-fb{position:fixed;inset:0;z-index:55;display:flex;align-items:center;' +
@@ -254,9 +259,60 @@
       // counts[i] is a property of the SLIDE, not of this document instance — keep it,
       // so next()/prev() still know the panel count before the reload handshakes.
     }
+    /* ---- pinch-zoom pressure valve ------------------------------------------
+     * Zoom is where this actually falls over, and the reason is structural, not
+     * per-slide. Measured on an iPhone XS: /slide/leaderboard-senior/ opened on
+     * its own survives full zoom; the same slide inside a deck does not. The
+     * difference is that WebKit TILES the main frame — only the visible tiles are
+     * rasterised, so a standalone slide costs a screenful however far you zoom —
+     * whereas a slide in a deck is an iframe, a separate render surface that is
+     * not tiled that way, so it allocates its whole 1920x1080 layer at device
+     * scale x page scale. One of those the phone survives; one of those plus two
+     * more live documents it does not.
+     *
+     * So while the user is pinched in, collapse the window to the visible slide
+     * alone and refuse to put a second full-size surface beside it. Everything
+     * here reverses on pinch-out. */
+    var zoomed = false;
+    var ZOOM_IN = 1.05;
+    var cancelGesture = function () {};   // set by buildControls (interactive only)
+    function effRadius() { return winRadius === null ? null : (zoomed ? 0 : winRadius); }
+
+    function onZoomChange() {
+      // Interactive only. A wall is unwindowed and untouched, so the valve has
+      // nothing to give there — and a desktop page-zoom on a kiosk preview must
+      // never be able to clear the rotation timer and stall the deck.
+      if (!interactive) return;
+      var vv = window.visualViewport;
+      var z = !!(vv && vv.scale > ZOOM_IN);
+      if (z === zoomed) return;
+      zoomed = z;
+      // Kill the crossfade while zoomed: a fade holds the outgoing AND incoming
+      // frame visible together, which is precisely the two-full-size-surfaces case
+      // there is no headroom for. Without the transition the swap is instant and
+      // only one frame is ever visible.
+      if (document.body) document.body.classList.toggle('wcc-zoomed', zoomed);
+      if (zoomed) {
+        cancelGesture();
+        clearTimer();          // don't auto-advance under the user while they're reading
+      } else if (interactive && playing) {
+        if (items[current].video) resumeVideoProgress(); else panelTimer();
+      }
+      if (winRadius === null) return;
+      if (zoomed) {
+        // Free the neighbours NOW rather than on the usual deferred prune — the
+        // whole point is headroom at the moment the zoomed surface is allocated.
+        if (pruneTimer) { clearTimeout(pruneTimer); pruneTimer = null; }
+        for (var i = 0; i < n; i++) if (!inWindow(i, current)) unloadFrame(i);
+      } else {
+        reconcileWindow(current);   // pinch-out: warm the neighbours back up
+      }
+    }
+
     function inWindow(i, c) {
-      if (winRadius === null) return true;
-      for (var d = -winRadius; d <= winRadius; d++) {
+      var r = effRadius();
+      if (r === null) return true;
+      for (var d = -r; d <= r; d++) {
         if (((c + d) % n + n) % n === i) return true;
       }
       return false;
@@ -671,14 +727,10 @@
       // While the user is pinched in, the browser owns the surface: a drag pans the
       // magnified view and a second finger keeps pinching. Our tap/swipe nav stands
       // down for the duration so the two gesture sets never fight, and resumes the
-      // moment they pinch back out to a fitted view.
-      var zoomed = false;
-      var vv = window.visualViewport;
-      if (vv) {
-        var onZoom = function () { zoomed = vv.scale > 1.05; if (zoomed) gp = null; };
-        vv.addEventListener('resize', onZoom);
-        onZoom();
-      }
+      // moment they pinch back out to a fitted view. `zoomed` is now owned by
+      // start() (the windowing valve reads it too); this just drops any gesture in
+      // flight when a pinch begins.
+      cancelGesture = function () { gp = null; };
       tap.addEventListener('pointerdown', function (e) {
         gp = zoomed ? null : { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
       });
@@ -803,6 +855,13 @@
     // Seed the load state from whatever the player template already started. The
     // first activate() pulls the rest of the opening window in.
     items.forEach(function (it, i) { if (frameIsLive(i)) watchLoad(i); });
+
+    // Watch pinch-zoom in both modes: a wall never fires this (no touch, scale
+    // stays 1), so it costs the kiosk nothing but the listener.
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', onZoomChange);
+      onZoomChange();
+    }
 
     if (interactive) {
       buildControls();
