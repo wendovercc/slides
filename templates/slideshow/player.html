@@ -19,6 +19,19 @@
                `band` of width on the left and `band` of height at the bottom — an L that
                tiles the frame with no black bars. Keep the scale derived from the band. */
             --live-band: 0.08;
+            /* Safe area. The PWA head sets viewport-fit=cover, so on a notched iPhone
+               the viewport runs edge to edge and the bottom of the frame sits UNDER the
+               home indicator — which lands squarely on the live ticker in landscape.
+               iOS gives web content no way to hide or dim that indicator, so the stage
+               is inset by the reported insets instead. Every inset is 0px on the wall
+               and on any non-notched device, so kiosk playback is bit-identical. */
+            --sa-t: env(safe-area-inset-top, 0px);
+            --sa-r: env(safe-area-inset-right, 0px);
+            --sa-b: env(safe-area-inset-bottom, 0px);
+            --sa-l: env(safe-area-inset-left, 0px);
+            --safe-w: calc(100vw - var(--sa-l) - var(--sa-r));
+            --safe-h: calc(100vh - var(--sa-t) - var(--sa-b));
+            --safe-h: calc(100dvh - var(--sa-t) - var(--sa-b));
         }
         /* Height in dvh, not %: `height:100%` resolves against the initial containing
            block, which in mobile Safari is the LARGE viewport (the chrome-hidden size).
@@ -34,12 +47,13 @@
            On a 16:9 wall it fills the screen exactly (no bars). */
         #stage {
             position: absolute;
-            top: 50%; left: 50%;
+            /* Centred in the SAFE box, not the viewport: in landscape the notch inset
+               is on one side only, so centring on 50vw would shove the stage under it. */
+            top: calc(var(--sa-t) + var(--safe-h) / 2);
+            left: calc(var(--sa-l) + var(--safe-w) / 2);
             transform: translate(-50%, -50%);
-            width: min(100vw, 177.78vh);
-            height: min(56.25vw, 100vh);
-            width: min(100vw, 177.78dvh);
-            height: min(56.25vw, 100dvh);
+            width: min(var(--safe-w), calc(var(--safe-h) * 16 / 9));
+            height: min(calc(var(--safe-w) * 9 / 16), var(--safe-h));
             background: var(--matte);
             overflow: hidden;
         }
