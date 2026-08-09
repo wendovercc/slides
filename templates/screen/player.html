@@ -561,15 +561,23 @@ async function init() {
     const CACHE_OK = !!(window.WccVideoCache && WccVideoCache.supported);
 
     // Create every slide iframe up front (hidden by default: iframe{opacity:0}).
-    // frames[] stays index-aligned with slides[]. The gate awaits their load events.
+    // frames[] stays index-aligned with slides[]. On an unwindowed deck they all get
+    // a src now and the gate awaits every load event, as before. On a windowed one
+    // (see WccPlayer.windowRadius) only the opening frames load — the player pulls
+    // the rest in around the current slide and tears down what leaves the window, so
+    // the process never holds the whole deck as live documents. Every frame carries
+    // its url in data-src either way; that's what the player reloads from.
     const slideLayer = document.getElementById('slide-layer');
     const stage = document.getElementById('stage');
-    const frames = slides.map(s => {
+    const WIN = WccPlayer.windowRadius();
+    const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
-        f.src = `/slide/${s.slug}/`;
+        f.dataset.src = `/slide/${s.slug}/`;
+        if (WIN === null || i <= WIN) f.src = f.dataset.src;
         slideLayer.appendChild(f);
         return f;
     });
+    const bootFrames = WIN === null ? frames : frames.slice(0, WIN + 1);
     {% if live_enabled %}
     if (LIVE_ON) {
     // Live chrome, in the L the retracting slide layer uncovers: ticker along the
@@ -673,8 +681,11 @@ async function init() {
     }
 
     // Watch mode (the walls): the hard loading gate. Nothing is revealed until every
-    // clip is stored (or has exhausted bounded retries) AND every iframe has loaded.
-    const { failed } = await WccPreloadGate.run({ videos: precache.videos || [], frames });
+    // clip is stored (or has exhausted bounded retries) AND every iframe that was
+    // given a src has loaded — the whole deck on the walls, the opening window on a
+    // windowed deck (the rest don't exist yet, so awaiting them would just burn the
+    // gate's iframe timeout).
+    const { failed } = await WccPreloadGate.run({ videos: precache.videos || [], frames: bootFrames });
 
     // Drop any video slide whose clip(s) didn't store, so the show never opens on a
     // clip that can't play (a later refresh — Phase 3 — picks it back up). Never blank

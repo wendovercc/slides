@@ -124,7 +124,24 @@
     document.head.appendChild(s);
   }
 
-  window.WccPlayer = { start: start };
+  /* How many slides either side of the current one stay live documents; null = all
+   * of them (no windowing). See the windowing block inside start() for why this
+   * exists. Kiosk (the walls) is deliberately unwindowed: they have the memory and
+   * the loading gate's whole promise is that every slide is warm before anything is
+   * revealed. `?window=2` / `?window=off` force it either way for testing.
+   * The players call this too — they must not give every iframe a src up front on a
+   * windowed deck, or the boot peak is exactly the resident set we're avoiding. */
+  function windowRadius(params) {
+    var v = params.get('window');
+    if (v === 'off' || v === 'none') return null;
+    if (v != null && /^\d+$/.test(v)) return parseInt(v, 10);
+    return params.has('interactive') ? 1 : null;
+  }
+
+  window.WccPlayer = {
+    start: start,
+    windowRadius: function () { return windowRadius(new URLSearchParams(location.search)); }
+  };
 
   function start(opts) {
     var items = opts.items || [];
@@ -169,12 +186,107 @@
     var FLASH_MAX_MS = opts.flashMaxMs || 65000;          // recover if the frame never reports done
     function flashWin() { return flashItem && flashItem.frame ? flashItem.frame.contentWindow : null; }
 
-    function frameWin(i) { return items[i].frame.contentWindow; }
+    /* ---- frame windowing: a MEMORY control, not a perf tweak -----------------
+     * Every slide in the deck is a live iframe stacked at inset:0. `visibility:
+     * hidden` (see the players' CSS) drops the compositor backing store for the
+     * ones you can't see, but it does not reclaim the documents themselves — on a
+     * 37-slide deck that's 37 parsed DOMs, style trees, JS heaps and decoded
+     * images all resident in one WebContent process. On a phone that baseline sits
+     * close to the jetsam ceiling, and pinch-zoom — which re-rasterises the visible
+     * slide's wall-sized 1920x1080 layer at device scale x page scale SQUARED —
+     * pushes it over: "A problem repeatedly occurred".
+     *
+     * So on small touch surfaces only current +/- winRadius stay live; the rest are
+     * torn down. Teardown replaces the iframe with a fresh srcless clone, which is
+     * the only way to be sure the document is really gone (navigating to about:blank
+     * leaves a document behind and adds joint-session-history entries). That means
+     * `items[i].frame` is re-pointed as the deck moves — nothing may cache a slide
+     * frame element across a slide change. Read frames fresh (the live engine's
+     * `frames:` callback already does).
+     *
+     * The cost is that a slide is a fresh document each time it comes round, so its
+     * carousel/video state doesn't persist. Nothing depends on it: every arrival
+     * already sends reset/goto-panel/restart-auto. */
+    var winRadius = windowRadius(params);
+    var pendingCmds = items.map(function () { return []; });
+    var loaded = items.map(function () { return false; });
+    var pruneTimer = null;
+    var PRUNE_DELAY_MS = 1200;   // longer than the 0.8s crossfade: the outgoing frame is still fading
+
+    function frameUrl(i) {
+      var f = items[i].frame;
+      return f.dataset.src || f.getAttribute('src') || '';
+    }
+    function frameIsLive(i) { return !!items[i].frame.getAttribute('src'); }
+    function post(i, msg) {
+      try { items[i].frame.contentWindow.postMessage(msg, '*'); } catch (e) {}
+    }
+    function markLoaded(i) {
+      loaded[i] = true;
+      var q = pendingCmds[i];
+      pendingCmds[i] = [];
+      q.forEach(function (m) { post(i, m); });
+    }
+    function watchLoad(i) {
+      var f = items[i].frame;
+      try {
+        if (f.contentDocument && f.contentDocument.readyState === 'complete') { markLoaded(i); return; }
+      } catch (e) {}
+      f.addEventListener('load', function () { markLoaded(i); }, { once: true });
+    }
+    function loadFrame(i) {
+      if (frameIsLive(i)) return;
+      loaded[i] = false;
+      items[i].frame.src = frameUrl(i);
+      watchLoad(i);
+    }
+    function unloadFrame(i) {
+      if (!frameIsLive(i)) return;
+      var f = items[i].frame;
+      var fresh = f.cloneNode(false);
+      fresh.removeAttribute('src');
+      fresh.classList.remove('active');
+      fresh.dataset.src = frameUrl(i);
+      f.parentNode.replaceChild(fresh, f);
+      items[i].frame = fresh;
+      loaded[i] = false;
+      pendingCmds[i] = [];
+      // counts[i] is a property of the SLIDE, not of this document instance — keep it,
+      // so next()/prev() still know the panel count before the reload handshakes.
+    }
+    function inWindow(i, c) {
+      if (winRadius === null) return true;
+      for (var d = -winRadius; d <= winRadius; d++) {
+        if (((c + d) % n + n) % n === i) return true;
+      }
+      return false;
+    }
+    // Loads run now (the neighbours need the whole dwell to warm up); teardown is
+    // deferred past the crossfade, and re-reads `current` when it fires so it never
+    // tears down a frame the user has swiped back to. The timer is NOT restarted per
+    // nav — a continuous swipe would keep pushing it back and let the resident set
+    // grow, which is the thing this exists to stop. Pruning mid-swipe is safe: the
+    // outgoing slide is current-1, still inside the window.
+    function reconcileWindow(c) {
+      if (winRadius === null) return;
+      for (var i = 0; i < n; i++) if (inWindow(i, c)) loadFrame(i);
+      if (pruneTimer) return;
+      pruneTimer = setTimeout(function () {
+        pruneTimer = null;
+        for (var j = 0; j < n; j++) if (!inWindow(j, current)) unloadFrame(j);
+      }, PRUNE_DELAY_MS);
+    }
+
     function send(i, action, extra) {
-      try { frameWin(i).postMessage(Object.assign({ type: 'wcc-cmd', action: action }, extra || {}), '*'); }
-      catch (e) {}
+      var msg = Object.assign({ type: 'wcc-cmd', action: action }, extra || {});
+      // A frame still loading has no bridge listening yet, so hold its commands and
+      // flush them in order once it does. Unwindowed decks are fully loaded before
+      // anything is sent (the gate guarantees it), so this path never runs there.
+      if (winRadius !== null && !loaded[i]) { pendingCmds[i].push(msg); return; }
+      post(i, msg);
     }
     function activate(i) {
+      reconcileWindow(i);   // before .active — a cold frame needs its src first
       items.forEach(function (it, j) { it.frame.classList.toggle('active', j === i); });
       current = i;
       shownAt = Date.now();
@@ -688,6 +800,10 @@
     window.WccPlayer.flash = enqueueFlash;
 
     /* ---- go ---- */
+    // Seed the load state from whatever the player template already started. The
+    // first activate() pulls the rest of the opening window in.
+    items.forEach(function (it, i) { if (frameIsLive(i)) watchLoad(i); });
+
     if (interactive) {
       buildControls();
       // Learn every slide's panel count up front. On the gated path the iframes
@@ -696,6 +812,9 @@
       // stay null — which breaks next()'s `panelIndex < counts-1` test (it collapses
       // to `< 0`, so next always leaves the slide) while prev() still steps clips.
       // Ping now that we're listening; the bridge answers with a fresh wcc-slide.
+      // On a windowed deck most of these queue until their frame is pulled in — by
+      // which time the bridge's own load-time wcc-slide has already filled `counts`,
+      // so the flushed ping is a harmless second answer.
       items.forEach(function (it, i) { send(i, 'ping'); });
       // Start paused so the commentator drives timing — but if the deck opens on a
       // video slide, play it (there's no preceding non-video to advance from, and a

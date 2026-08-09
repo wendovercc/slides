@@ -264,7 +264,10 @@
     <div id="stage">
         <div id="slide-layer">
         {% for slide in show.slides %}
-            <iframe id="frame-{{ loop.index0 }}" src="/slide/{{ slide.slug }}/"></iframe>
+            {#- src is deferred to data-src and applied below: on a windowed deck only
+                the opening frames may load, and dropped slides (expired / live-gated)
+                should never load at all. -#}
+            <iframe id="frame-{{ loop.index0 }}" data-src="/slide/{{ slide.slug }}/"></iframe>
         {% endfor %}
         </div>
         {% if live_enabled %}
@@ -308,10 +311,13 @@
         // slides drop out of the deck, and the poller never starts.
         const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
             && !!(window.WccLiveKey && window.WccLiveKey.get());
+        // Named explicitly rather than matched on [data-src]: the slide frames defer
+        // their src the same way (see #slide-layer above) and must not be swept up here.
+        const liveChrome = () => document.querySelectorAll('#ticker-frame, #strip-frame, #flash-frame');
         if (LIVE_ON) {
-            document.querySelectorAll('#stage iframe[data-src]').forEach(f => { f.src = f.dataset.src; });
+            liveChrome().forEach(f => { f.src = f.dataset.src; });
         } else {
-            document.querySelectorAll('#stage iframe[data-src]').forEach(f => f.remove());
+            liveChrome().forEach(f => f.remove());
         }
 
         let _currentSlug = null;
@@ -368,6 +374,16 @@
         });
         const slides = allSlides.filter(s => s._shown);
 
+        // Give the slide frames their src, synchronously (the baked src used to start
+        // loading during parse — don't hand that back). An unwindowed deck loads every
+        // shown slide exactly as before; a windowed one loads only the opening frames
+        // and the player streams the rest in around the current slide. Dropped slides
+        // keep their data-src and never load either way.
+        const WIN = WccPlayer.windowRadius();
+        const frameOf = s => document.getElementById(`frame-${s._i}`);
+        const bootSlides = WIN === null ? slides : slides.slice(0, WIN + 1);
+        bootSlides.forEach(s => { const f = frameOf(s); f.src = f.dataset.src; });
+
         function markCurrentSlideByI(_i) {
             document.querySelectorAll('#dbg-slides .slide-row').forEach(el => el.classList.remove('now'));
             document.querySelector(`#dbg-slides .slide-row[data-idx="${_i}"]`)?.classList.add('now');
@@ -419,7 +435,7 @@
                     panel_duration: s.panel_duration,
                     group: s._group || null,   // slide-set membership (drives hats later)
                     video: (s._videos || []).length > 0 || !!s._is_video,  // video slide → auto-plays on forward arrival
-                    frame: document.getElementById(`frame-${s._i}`),
+                    frame: frameOf(s),
                 })),
                 onShow: idx => { _currentSlug = finalSlides[idx].slug; if (PREVIEW) markCurrentSlideByI(finalSlides[idx]._i); },
                 shouldReloadNow,
@@ -471,7 +487,10 @@
                 return;
             }
 
-            const frames = slides.map(s => document.getElementById(`frame-${s._i}`));
+            // Only wait on the frames that were actually given a src — on a windowed
+            // deck the rest don't exist yet, and awaiting them would just burn the
+            // gate's iframe timeout.
+            const frames = bootSlides.map(frameOf);
             const { failed } = await WccPreloadGate.run({ videos: precache.videos || [], frames });
 
             // Drop any video slide whose clip(s) didn't store (network fallback via a
