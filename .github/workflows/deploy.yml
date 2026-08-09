@@ -50,6 +50,15 @@ jobs:
           PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
           PLAY_CRICKET_SITE_ID: ${{ secrets.PLAY_CRICKET_SITE_ID }}
 
+      # Today's OTHER games in the leagues we're playing in — the poll list behind
+      # live-league.json (the strip's ladder + the today board's league context).
+      # Scoped to competitions WCC has a game in today, so it costs nothing on a
+      # day with no league cricket.
+      - run: python scripts/fetch_league_fixtures.py
+        env:
+          PLAY_CRICKET_API_TOKEN: ${{ secrets.PLAY_CRICKET_API_TOKEN }}
+          PLAY_CRICKET_SITE_ID: ${{ secrets.PLAY_CRICKET_SITE_ID }}
+
       # Results Vault token is self-generated; match ids come from fixtures.json
       # (above), so this must run after fetch_fixtures.py. The Play Cricket token
       # is optional — used only to attribute fielders to dismissals.
