@@ -25,9 +25,18 @@
         display: flex;
         flex-direction: column;
         opacity: 0;
-        transition: opacity 0.4s ease-in-out;
+        /* visibility, not opacity alone — this is a MEMORY control, the same one the
+           players apply to inactive slide frames. Stacked panels all sit at inset:0,
+           so an opacity:0 panel is still painted content, and pinch-zoom multiplies
+           every panel's raster cost by the square of the page scale. Multi-panel
+           slides are the ones that jetsam an iPhone XS at full zoom; single-panel
+           slides never do. visibility:hidden skips the subtree's paint while keeping
+           its layout, and the transition carries it so the crossfade still works.
+           See docs/design-conventions.md, "Carousel slides". */
+        visibility: hidden;
+        transition: opacity 0.4s ease-in-out, visibility 0.4s ease-in-out;
     }
-    .panel.panel-active { opacity: 1; }
+    .panel.panel-active { opacity: 1; visibility: visible; }
     /* Tab typography/underline come from the base. Tab count is data-driven
        (up to five), so this nav is the one that may need to wrap. */
     .panel-nav { gap: 3vw; margin-top: 1.2vh; flex-wrap: wrap; }

@@ -176,6 +176,18 @@ timer.
   panels a slide has. The slide's total on-screen time is *derived*:
   `panel_duration × panel count`. It does **not** compute a per-panel slice from
   a total — that arithmetic lives in the build (see "Panel duration" below).
+- **An inactive panel must be `visibility: hidden`, not just `opacity: 0`.**
+  Panels are stacked absolutely at `inset: 0`, so all of them are "on screen"
+  at once; an `opacity: 0` panel is still painted content. On a phone that cost
+  is multiplied by the square of the pinch-zoom page scale (slides lay out at a
+  fixed 1920x1080 — see the players' `#slide-layer`), and multi-panel slides
+  were reliably jetsamming an iPhone XS at full zoom while single-panel slides
+  never did. Hide with `visibility: hidden` and carry it through the fade
+  (`transition: opacity 0.4s ease-in-out, visibility 0.4s ease-in-out`), so CSS
+  holds `visible` for the whole duration whenever either endpoint is visible and
+  the crossfade is unchanged. Never use `display: none` — it re-lays-out the
+  panel on every switch. This mirrors what the players do to inactive slide
+  frames, for exactly the same reason.
 - Rotation is handled by the shared **`assets/js/carousel.js`**, not a bespoke
   inline script. Each carousel sets its config and loads the module (markup is
   the standard `.panel-nav`/`.panel-tab` + panel selector):
