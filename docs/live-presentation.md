@@ -101,7 +101,7 @@ enforce a minimum gap so two matches don't fight over the screen.
 - Same interrupt engine for the clip takeover — the ticker is the ambient state, the
   clip is the takeover.
 
-## Presentation C — the live strip (right band)
+## Presentation C — the live strip (left band)
 
 The vertical partner of the ticker footer: the same player-owned chrome, showing
 **where the day is leaving the league table** rather than the score of any one ball.

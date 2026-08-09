@@ -5,6 +5,11 @@
   },
   "_comment_live_enabled": "Master switch for the live-match feature set (live.wendovercc.org poller, live-match slides, live-aware today slide, ticker + news-flash overlays). Off = none of it is built or polled, so other changes can ship without turning on this unfinished work.",
   "live_enabled": true,
+  "_comment_league_abbr": "Short forms for the live chrome's gold flag, which is one band wide (~138px) and has no room for a full league name. Keyed by Play-Cricket's league_name, exact match. A league with no entry here falls back to its division alone, so an unmapped league is untidy, never broken. Keep these to ~4 characters and to what people actually say at the club.",
+  "league_abbr": {
+    "Thames Valley Cricket League": "TVCL",
+    "Bucks Cricket Competitions": "Bucks"
+  },
   "_comment_live_poll_lead_minutes": "How long before the day's first start the live poll window opens (live-config.json poll_from) — scorers open a match and settle the toss before the first ball. The window always shuts at midnight, which is also the safeguard if the nightly build fails: a stale config's window has already closed. Outside the window no device touches live.wendovercc.org.",
   "live_poll_lead_minutes": 30,
   "default_panel_duration": 20,

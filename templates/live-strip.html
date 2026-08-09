@@ -8,6 +8,13 @@
         @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
         :root {
             --gold: #d4af37; --text: #fff; --matte: #08152c;
+            /* The gold spine down the strip's INNER edge, which meets the ticker's
+               gold top border at the bottom-left corner so the two chrome surfaces
+               read as one L-shaped frame. Same on-screen thickness as that border
+               (0.15vw of the STAGE): this iframe is only the live band wide, so a
+               stage vw is 1/0.08 of a strip vw — hence 0.15 / 0.08. Keep in step
+               with --live-band in the players and .ticker-bar's border-top. */
+            --rule: 1.875vw;
             /* Match the points badges elsewhere (--accent-win / --accent-loss). */
             --win: 45, 122, 45; --loss: 139, 26, 26;   /* rgb triples */
         }
@@ -15,36 +22,26 @@
         html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
             font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--text); }
 
-        /* The column reveals with the rest of the live chrome. */
+        /* The column reveals with the rest of the live chrome. It carries no header
+           of its own: the ticker's gold flag, directly below it in the bottom-left
+           corner, names the featured XI and its division for BOTH surfaces. */
         .strip {
             position: absolute; inset: 0; display: flex; flex-direction: column;
             background: var(--matte);
-            padding: 1vh 0.5vh; gap: 0.6vh;
+            border-right: var(--rule) solid var(--gold);
+            /* No padding at all: tiles run edge to edge, from the frame across to
+               the gold spine, and top to bottom from the frame down onto the
+               ticker's gold rule — the spine already runs the full height, and the
+               slide beside the strip starts flush at the top, so any inset here
+               leaves both ends of the column short of the chrome it belongs to.
+               The GAP stays, and stays matte: fill height is the certainty channel,
+               so without a break two adjacent settled tiles merge into one
+               double-height fill and stop being countable. A rule instead of a gap
+               would read as a table border and compete with the spine. */
+            padding: 0; gap: 0.4vh;
             opacity: 0; transition: opacity 0.4s ease;
         }
         .strip.show { opacity: 1; }
-
-        /* Subordinate header: names the division (and the featured XI, echoing the
-           ticker's gold flag) so the strip is self-explanatory and reads as in sync
-           with the ticker. Deliberately not tile-styled — a caption, not a row.
-
-           Fixed height, not content height: the strip is narrow enough that a long
-           division name wraps, and the wrap point is decided by glyph advance widths
-           that round differently at each zoom level — so a content-height header
-           flips between 2 and 3 lines and shunts every tile below it. Pinning the
-           height makes the tiles' origin independent of how the caption wraps.
-           The caption is clamped to 2 lines and centred in the box. */
-        .head { flex-shrink: 0; height: 6vh; overflow: hidden;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            text-align: center;
-            border-bottom: 0.12vh solid rgba(255,255,255,0.14); }
-        .head-xi { display: inline-block; font-size: 1.5vh; font-weight: 900;
-            letter-spacing: 0.06em; text-transform: uppercase; color: var(--gold); }
-        .head-div { font-size: 1.7vh; font-weight: 900; letter-spacing: 0.07em;
-            text-transform: uppercase; color: rgba(255,255,255,0.55); margin-top: 0.2vh;
-            line-height: 1.15;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden; }
 
         /* One equal-height tile per team, ordered by league position. Channels:
            - FILL colour   = result lean (green win / red loss), always the full points colour
@@ -56,7 +53,7 @@
         .tile {
             position: relative; flex: 1; min-height: 0; overflow: hidden;
             display: flex; align-items: center; justify-content: center;
-            background: rgba(255,255,255,0.06); border-radius: 0.6vh;
+            background: rgba(255,255,255,0.06);
         }
         /* Certainty fill: full points colour, rising from the bottom to `height`. */
         .fill { position: absolute; left: 0; right: 0; bottom: 0; z-index: 0;
@@ -88,8 +85,13 @@
         .stat-tile.done { background: rgba(255,255,255,0.04); }
         .stat-tile.done .cval { color: rgba(255,255,255,0.78); }
 
-        /* Our team: a thick gold bar just OUTSIDE the tile's left edge. */
-        .tile.ours { box-shadow: -0.6vh 0 0 0 var(--gold); }
+        /* Our team: a thick gold bar down the tile's left edge. A real border, not
+           an inset shadow: the tile now reaches the frame, so there is no gutter
+           left to hang an outside bar in — and an INSET shadow would be painted
+           under the .fill child and disappear as certainty rose. The border also
+           holds the fill off it, since an absolutely positioned child resolves
+           against the padding box. */
+        .tile.ours { border-left: 0.6vh solid var(--gold); }
 
         /* Idle 'none' (no match): flatter base and a dimmed TLA so it recedes. */
         .tile.idle-none { background: rgba(255,255,255,0.03); }
@@ -213,14 +215,6 @@
         if (!c.done && c.rr != null) { html += statTile(c.rr, c.rr_label || 'Run rate'); n++; }
         if (c.wkts != null) { html += statTile(c.wkts, 'Wkts left', c.done); n++; }
         return { html: html, count: n };
-    }
-
-    function header(v) {
-        if (!v) return '';
-        var xi = v.team_label ? '<span class="head-xi">' + esc(v.team_label) + '</span>' : '';
-        var div = v.name ? '<div class="head-div">' + esc(v.name) + '</div>' : '';
-        if (!xi && !div) return '';
-        return '<div class="head">' + xi + div + '</div>';
     }
 
     // ---- feed state ---------------------------------------------------------
@@ -683,7 +677,7 @@
         } else {
             body = tiles.map(tile).join('');
         }
-        var html = header(view) + body;
+        var html = body;
         if (html === lastKey) return;   // nothing changed — leave the DOM (and its transitions) alone
         lastKey = html;
         var before = tilePositions();

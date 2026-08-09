@@ -2091,6 +2091,20 @@ def live_poll_window(matches):
     return start.isoformat(timespec="minutes"), (day_start + timedelta(days=1)).isoformat(timespec="minutes")
 
 
+def _competition_short(ev):
+    """The competition as the live chrome's gold flag says it — "TVCL Div 6C".
+
+    That flag is one live band wide (~138px at wall scale), so neither the league
+    name nor "Division" fits: the league comes from the authored `league_abbr` map
+    (content/config.json) and "Division" is clipped to "Div". Degrades a step at a
+    time — an unmapped league drops to the division alone, a match with no division
+    to the league's short form, and one with neither to "" (the flag then shows the
+    XI only) — so a new competition is untidy, never broken."""
+    div = re.sub(r"\bDivision\b", "Div", (ev.get("competition") or "").strip())
+    lg = load_config().get("league_abbr", {}).get((ev.get("league_name") or "").strip(), "")
+    return " ".join(p for p in (lg, div) if p)
+
+
 def build_live_config():
     """Write site/live-config.json — today's pollable matches (the day's events
     that have a pc_id) = the live-proxy Worker's poll list (LIVE_CONFIG_URL), plus
@@ -2098,7 +2112,8 @@ def build_live_config():
     slide bakes the full schedule itself; this is only what the Worker needs to
     know which matches to poll."""
     events, _ = _todays_events()
-    matches = [e for e in events if e.get("type") == "match" and e.get("pc_id")]
+    matches = [dict(e, competition_short=_competition_short(e))
+               for e in events if e.get("type") == "match" and e.get("pc_id")]
     poll_from, poll_until = live_poll_window(matches)
     out = {"generated_at": int(datetime.now().timestamp()),
            "date": _today().isoformat(),
@@ -2412,7 +2427,7 @@ def _strip_views(events, teams_by_id):
 
 def build_live_strip(env):
     """Render the live vertical-strip page (/live-strip/). Player-owned chrome
-    iframe on the right band (like the ticker): one equal-height tile per team in
+    iframe on the left band (like the ticker): one equal-height tile per team in
     the division, ordered by league position.
 
     What's baked is CONTEXT only — today's matches, their divisions and the day's

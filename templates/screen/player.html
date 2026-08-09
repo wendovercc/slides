@@ -81,7 +81,14 @@
             transform: scale(var(--fit, 1));
             transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        body.live-chrome #slide-layer { transform: scale(calc(var(--fit, 1) * (1 - var(--live-band)))); }
+        /* Retract toward the TOP-RIGHT: scale about the top-left as always, then push
+           the shrunken layer right by the band, so the uncovered L is left + bottom.
+           The offset is in stage px — the design box is 1920 wide, scaled by --fit —
+           because a transform's translate resolves before its scale. */
+        body.live-chrome #slide-layer {
+            transform: translateX(calc(1920px * var(--fit, 1) * var(--live-band)))
+                       scale(calc(var(--fit, 1) * (1 - var(--live-band))));
+        }
         /* Refitting (load, resize, rotate) must snap; only the live-chrome
            grow/shrink animates. */
         body.no-fit-anim #slide-layer { transition: none; }
@@ -129,12 +136,13 @@
             z-index: 1; pointer-events: none; background: transparent;
         }
 
-        /* Live strip: the right band the retracting slide layer uncovers (the
+        /* Live strip: the LEFT band the retracting slide layer uncovers (the
            vertical partner of the ticker footer). Full height minus the footer band
-           so the two meet at the bottom-right corner without overlapping. Same z /
-           reveal / no-input rules as the ticker. */
+           so the two meet at the bottom-left corner without overlapping — where the
+           ticker's gold flag sits, acting as the header for both. Same z / reveal /
+           no-input rules as the ticker. */
         iframe.strip {
-            position: absolute; top: 0; right: 0;
+            position: absolute; top: 0; left: 0;
             width: calc(var(--live-band) * 100%);
             height: calc((1 - var(--live-band)) * 100%); border: none;
             z-index: 1; pointer-events: none; background: transparent;
