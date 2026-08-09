@@ -279,11 +279,11 @@
         {% endif %}
     </div>
 
-    <script src="/assets/js/video-cache.js"></script>
-    <script src="/assets/js/preload-gate.js"></script>
-    <script src="/assets/js/refresh.js"></script>
-    <script src="/assets/js/player-core.js"></script>
-    {% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-window.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
+    <script src="/assets/js/video-cache.js?v={{ asset_version }}"></script>
+    <script src="/assets/js/preload-gate.js?v={{ asset_version }}"></script>
+    <script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
+    <script src="/assets/js/player-core.js?v={{ asset_version }}"></script>
+    {% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script><script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script><script src="/assets/js/live-engine.js?v={{ asset_version }}"></script>{% endif %}
     <script>
         const PREVIEW = new URLSearchParams(window.location.search).has('preview');
         if (PREVIEW) document.body.classList.add('preview');
@@ -379,7 +379,13 @@
         // shown slide exactly as before; a windowed one loads only the opening frames
         // and the player streams the rest in around the current slide. Dropped slides
         // keep their data-src and never load either way.
-        const WIN = WccPlayer.windowRadius();
+        // Guarded, not just `WccPlayer.windowRadius()`: GitHub Pages serves this HTML
+        // with max-age=600 and /assets/js with max-age=14400, so for up to four hours
+        // after a deploy a client can pair fresh HTML with stale JS. An unguarded call
+        // throws here, and since the frames only carry data-src that leaves a blank
+        // stage with no player at all. Falling back to null = load everything = exactly
+        // the pre-windowing behaviour, which is the right thing for old JS anyway.
+        const WIN = (window.WccPlayer && WccPlayer.windowRadius) ? WccPlayer.windowRadius() : null;
         const frameOf = s => document.getElementById(`frame-${s._i}`);
         const bootSlides = WIN === null ? slides : slides.slice(0, WIN + 1);
         bootSlides.forEach(s => { const f = frameOf(s); f.src = f.dataset.src; });

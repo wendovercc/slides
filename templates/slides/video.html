@@ -200,8 +200,8 @@
         }
         {% endif %}
     </style>
-    <script src="/assets/js/video-cache.js"></script>
-    <script src="/assets/js/slide-bridge.js"></script>
+    <script src="/assets/js/video-cache.js?v={{ asset_version }}"></script>
+    <script src="/assets/js/slide-bridge.js?v={{ asset_version }}"></script>
 </head>
 <body>
 {% if slide.layout is defined and slide.layout == 'fullbleed' %}

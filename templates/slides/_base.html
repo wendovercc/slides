@@ -182,7 +182,7 @@
         body .set-nav .panel-tab.active::after { animation: none; transform: scaleX(1); }
         {% block styles %}{% endblock %}
     </style>
-    <script src="/assets/js/slide-bridge.js"></script>
+    <script src="/assets/js/slide-bridge.js?v={{ asset_version }}"></script>
 </head>
 <body>
     <div class="slide">{% block content %}{% endblock %}</div>

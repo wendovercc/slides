@@ -318,12 +318,12 @@
 <div id="stage">
     <div id="slide-layer"></div>
 </div>
-<script src="/assets/js/context.js"></script>
-<script src="/assets/js/video-cache.js"></script>
-<script src="/assets/js/preload-gate.js"></script>
-<script src="/assets/js/refresh.js"></script>
-<script src="/assets/js/player-core.js"></script>
-{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-window.js"></script><script src="/assets/js/hls-cache.js"></script><script src="/assets/js/live-engine.js"></script>{% endif %}
+<script src="/assets/js/context.js?v={{ asset_version }}"></script>
+<script src="/assets/js/video-cache.js?v={{ asset_version }}"></script>
+<script src="/assets/js/preload-gate.js?v={{ asset_version }}"></script>
+<script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
+<script src="/assets/js/player-core.js?v={{ asset_version }}"></script>
+{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script><script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script><script src="/assets/js/live-engine.js?v={{ asset_version }}"></script>{% endif %}
 <script>
 const LOCATION_ID = {{ location.id | tojson }};
 const PREVIEW = new URLSearchParams(window.location.search).has('preview');
@@ -569,7 +569,9 @@ async function init() {
     // its url in data-src either way; that's what the player reloads from.
     const slideLayer = document.getElementById('slide-layer');
     const stage = document.getElementById('stage');
-    const WIN = WccPlayer.windowRadius();
+    // Guarded against a fresh-HTML/stale-JS pairing after a deploy — see the same
+    // call in slideshow/player.html. null = load everything = pre-windowing behaviour.
+    const WIN = (window.WccPlayer && WccPlayer.windowRadius) ? WccPlayer.windowRadius() : null;
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
         f.dataset.src = `/slide/${s.slug}/`;

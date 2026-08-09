@@ -750,6 +750,13 @@ def make_env():
     # touching bits (poller wiring, ticker/flash overlays, standalone self-poll)
     # on this; the build gates the live-* emitters on the Python-side value below.
     env.globals["live_enabled"] = load_config().get("live_enabled", False)
+    # Cache-busting stamp on every /assets/js URL. GitHub Pages serves HTML with
+    # max-age=600 but assets with max-age=14400, so without this a client can pair
+    # fresh HTML against four-hour-stale JS — and the moment a template depends on a
+    # new function in a shared script, that pairing throws and takes the whole page
+    # down (it did: the windowing deploy blanked the iOS PWA). One stamp per build,
+    # so a deploy invalidates the scripts in lockstep with the pages that use them.
+    env.globals["asset_version"] = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     return env
 
 

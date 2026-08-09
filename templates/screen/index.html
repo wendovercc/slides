@@ -258,7 +258,7 @@
             </div>
         </div>
     </div>
-    <script src="/assets/js/live-key.js"></script>
+    <script src="/assets/js/live-key.js?v={{ asset_version }}"></script>
     <script>
         (function () {
             var cog = document.getElementById('settingsCog'),
@@ -287,7 +287,7 @@
     </script>
     {% endif %}
 
-    <script src="/assets/js/context.js"></script>
+    <script src="/assets/js/context.js?v={{ asset_version }}"></script>
     <script>
         const TEAM_NAMES = {{ team_names | tojson }};
         const YT_DATA = {{ youtube | tojson }};

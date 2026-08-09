@@ -149,7 +149,7 @@
 <div class="today-list" id="today-list"></div>
 <div class="today-empty" id="today-empty" hidden>Nothing scheduled at the club today</div>
 
-{% if live_enabled %}<script src="/assets/js/live-key.js"></script><script src="/assets/js/live-window.js"></script>{% endif %}
+{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script>{% endif %}
 <script>
 (function () {
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
