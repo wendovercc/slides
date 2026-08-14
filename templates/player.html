@@ -3,7 +3,12 @@
 <head>
     <meta charset="utf-8">
     {% include "_pwa_head.html" %}
-    <title>{{ location.name }}</title>
+    <title>{{ title }}</title>
+    {#- One player, two deck sources. `screen` mode resolves its deck from the context
+        calendar for a location (the pavilion walls, /screen/<loc>/); deck mode plays a
+        named deck (/slideshow/<slug>/, or any deck via ?deck=<slug>). Everything else —
+        the stage, the fit, the live chrome, the loading gate, the refresh — is one
+        implementation, so a fix lands in both surfaces at once. -#}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -39,14 +44,16 @@
            clipped equally at top and bottom behind the browser chrome. dvh tracks the
            visible viewport instead. The `100%` line stays first as the pre-dvh fallback. */
         html, body { width: 100%; height: 100%; height: 100dvh; overflow: hidden; background: #000; }
+        {%- if screen %}
         body:not(.preview) { cursor: none; }
+        {%- endif %}
 
         /* The 16:9 stage: the whole composition (slides + live chrome) that gets centred
            and letterboxed on any non-16:9 viewport, so the chrome travels WITH the slide
            rather than anchoring to the browser window. Its own background is the navy
            matte, revealed as the left strip + bottom band when the slide layer retracts.
            On a 16:9 wall it fills the screen exactly (no bars), so kiosk playback is
-           unchanged. Mirrors slideshow/player.html — keep the two in step. */
+           unchanged. */
         #stage {
             position: absolute;
             /* Centred in the SAFE box, not the viewport: in landscape the notch inset
@@ -178,7 +185,6 @@
             background: #161616;
             border-bottom: 1px solid #2a2a2a;
         }
-        .dbg-meta span { color: #555; }
         .dbg-watch {
             color: #66bb6a;
             text-decoration: none;
@@ -190,7 +196,12 @@
             flex-shrink: 0;
         }
         .dbg-watch:hover { background: #1b2e1b; }
+        .dbg-head { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; }
+        {%- if screen %}
 
+        /* Screen debug panel: one row per context (now + what's next), each pairing the
+           resolved context with the slides it selects. */
+        .dbg-meta span { color: #555; }
         .dbg-row {
             display: flex;
             border-bottom: 1px solid #1e1e1e;
@@ -205,14 +216,7 @@
             flex: 1;
             padding: 8px 10px;
         }
-
-        .dbg-head {
-            font-size: 10px;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: .08em;
-            margin-bottom: 4px;
-        }
+        .dbg-head { margin-bottom: 4px; }
         .dbg-head-live { color: #66bb6a; }
         .dbg-cd { color: #fff; font-weight: bold; }
         .dbg-live { color: #00e5ff; font-weight: bold; font-size: 14px; }
@@ -248,6 +252,41 @@
             background: #2a2310;
             color: #d6a14f;
         }
+        {%- else %}
+
+        /* Deck debug panel: the deck in order, dropped slides greyed with a reason. */
+        .dbg-slides { padding: 8px 14px; }
+        .slide-row { display: flex; justify-content: space-between; padding: 1px 3px; margin: 0 -3px; border-radius: 2px; }
+        .slide-row.on  { color: #66bb6a; }
+        .slide-row.off { color: #444; }
+        .slide-row.now { background: #1b2e1b; color: #a5d6a7; }
+        .slide-row a { color: inherit; text-decoration: none; }
+        .slide-row a:hover { text-decoration: underline; }
+        .slide-dur { font-size: 11px; margin-left: 6px; flex-shrink: 0; opacity: 0.6; }
+        .slide-reason { font-size: 11px; color: #e65100; padding-left: 14px; }
+        {%- endif %}
+
+        #iframe-overlay {
+            display: none;
+            position: fixed;
+            right: 0; top: 0;
+            width: 50%;
+            aspect-ratio: 16 / 9;
+            cursor: pointer;
+            z-index: 10;
+        }
+        #iframe-overlay:hover::after {
+            content: '⛶  Open current slide';
+            position: absolute;
+            bottom: 10px; right: 12px;
+            font: 11px/1 monospace;
+            color: rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.5);
+            padding: 4px 8px;
+            border-radius: 3px;
+            pointer-events: none;
+        }
+        body.preview #iframe-overlay { display: block; }
 
         #about {
             display: none;
@@ -275,28 +314,6 @@
         .about-qr { margin-left: auto; flex-shrink: 0; }
         .about-qr img { display: block; border-radius: 4px; }
         .about-footer { color: #444; font-size: 11px; margin-top: auto; }
-
-        #iframe-overlay {
-            display: none;
-            position: fixed;
-            right: 0; top: 0;
-            width: 50%;
-            aspect-ratio: 16 / 9;
-            cursor: pointer;
-            z-index: 10;
-        }
-        #iframe-overlay:hover::after {
-            content: '⛶  Open current slide';
-            position: absolute;
-            bottom: 10px; right: 12px;
-            font: 11px/1 monospace;
-            color: rgba(255,255,255,0.5);
-            background: rgba(0,0,0,0.5);
-            padding: 4px 8px;
-            border-radius: 3px;
-            pointer-events: none;
-        }
-        body.preview #iframe-overlay { display: block; }
     </style>
 </head>
 <body>
@@ -320,21 +337,31 @@
     <div class="about-footer">Built {{ built_at }} &nbsp;·&nbsp; <span id="about-reload"></span></div>
 </div>
 <!-- The 16:9 stage. Slide iframes are appended to #slide-layer and the live chrome
-     (ticker / strip / flash) to #stage itself, both from JS below — this player builds
-     its deck at runtime from the resolved context, where the slideshow player renders
-     its frames server-side. Same resulting structure either way. -->
+     (ticker / strip / flash) to #stage itself, both from JS below, once the deck has
+     been resolved — neither mode knows its slides at build time. -->
 <div id="stage">
     <div id="slide-layer"></div>
 </div>
-<script src="/assets/js/context.js?v={{ asset_version }}"></script>
+{% if screen %}<script src="/assets/js/context.js?v={{ asset_version }}"></script>{% endif %}
 <script src="/assets/js/video-cache.js?v={{ asset_version }}"></script>
 <script src="/assets/js/preload-gate.js?v={{ asset_version }}"></script>
 <script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
 <script src="/assets/js/player-core.js?v={{ asset_version }}"></script>
 {% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script><script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script><script src="/assets/js/live-engine.js?v={{ asset_version }}"></script>{% endif %}
 <script>
+const params = new URLSearchParams(window.location.search);
+const PREVIEW = params.has('preview');
+if (PREVIEW) document.body.classList.add('preview');
+{%- if screen %}
 const LOCATION_ID = {{ location.id | tojson }};
-const PREVIEW = new URLSearchParams(window.location.search).has('preview');
+{%- else %}
+// Which deck to play. `?deck=<slug>` names any deck the build emitted — an authored
+// slideshow, a match set, or a single slide — and every one of them is data
+// (/slideshow/<slug>/data.json), not a page. A per-deck page bakes its own slug as
+// the default so /slideshow/<slug>/ keeps working unchanged.
+const DECK = params.get('deck') || {{ (slug or None) | tojson }};
+{%- endif %}
+
 // Live needs BOTH the build flag and a provisioned device. The flag is decided at
 // build time for everyone; the access key is per-device, and the site is public —
 // so an unprovisioned visitor must present exactly as if live_enabled were false:
@@ -342,9 +369,9 @@ const PREVIEW = new URLSearchParams(window.location.search).has('preview');
 // stands in for the flag everywhere below.
 const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
     && !!(window.WccLiveKey && window.WccLiveKey.get());
+
 let _currentSlug = null;
 function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }
-if (PREVIEW) document.body.classList.add('preview');
 
 // Scale the fixed 1920x1080 slide layer into the stage (see #slide-layer). Measured
 // off the stage element rather than recomputed from innerWidth so it tracks the CSS
@@ -376,7 +403,7 @@ window.addEventListener('resize', applyDebugScale);
 // then STAY (sticky): grown once, they only retract after a long quiet spell, so a
 // blip or an innings break never reflows the wall. The daily rebuild/reload is the
 // real teardown. Grow/shrink is a single composited transform (the CSS on
-// #slide-layer keyed off body.live-chrome). Mirrors slideshow/player.html.
+// #slide-layer keyed off body.live-chrome).
 const LIVE_HIDE_DEBOUNCE_MS = 12 * 60 * 1000;
 let _chromeShown = false, _chromeHideTimer = null;
 function liveHasContent(feed) {
@@ -395,6 +422,31 @@ function onLiveState(feed) {
     }
 }
 
+function fmtCountdown(ms) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
+    return `${m}m ${String(sec).padStart(2,'0')}s`;
+}
+
+function startReloadTicker(reloadMs) {
+    const reloadEl = document.getElementById('about-reload');
+    const reloadAt = Date.now() + reloadMs;
+    const tick = () => {
+        if (!reloadEl) return;
+        const ms = reloadAt - Date.now();
+        if (ms > 0) {
+            reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
+            setTimeout(tick, 1000);
+        } else {
+            reloadEl.textContent = 'reload queued — waiting for cycle end';
+        }
+    };
+    tick();
+}
+
+{% if screen %}
+// ---- deck source: the context calendar --------------------------------------
 function matchesContext(s, ctx) {
     const conds = s.show_when;
     if (!conds || conds.length === 0) return true;
@@ -422,19 +474,11 @@ function slidesForCtx(show, ctx, today) {
         .filter(s => matchesContext(s, ctx));
 }
 
-
 function fmtDuration(ms) {
     const totalMins = Math.ceil(ms / 60000);
     const h = Math.floor(totalMins / 60), m = totalMins % 60;
     if (h > 0) return `${h}h ${m}m`;
     return `${m}m`;
-}
-
-function fmtCountdown(ms) {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    if (h > 0) return `${h}h ${String(m).padStart(2,'0')}m ${String(sec).padStart(2,'0')}s`;
-    return `${m}m ${String(sec).padStart(2,'0')}s`;
 }
 
 function kv(k, v) {
@@ -513,42 +557,25 @@ function renderPanel(loc, ctx, slideshowSlug, show, nextCtxs, today, contextEnd)
     setInterval(tick, 1000);
 }
 
-function markCurrentSlide(shownSlides, currentIdx) {
-    const slug = shownSlides[currentIdx]?.slug;
+function markCurrentSlide(slug) {
     document.querySelectorAll('#dbg-row-current .dbg-slide').forEach(el => {
         el.classList.toggle('now', el.dataset.slug === slug);
     });
 }
 
-function startReloadTicker(reloadMs) {
-    const reloadEl = document.getElementById('about-reload');
-    const reloadAt = Date.now() + reloadMs;
-    const tick = () => {
-        if (!reloadEl) return;
-        const ms = reloadAt - Date.now();
-        if (ms > 0) {
-            reloadEl.textContent = `reloads in ${fmtCountdown(ms)}`;
-            setTimeout(tick, 1000);
-        } else {
-            reloadEl.textContent = 'reload queued — waiting for cycle end';
-        }
-    };
-    tick();
-}
-
-async function init() {
-    const today = new Date().toISOString().slice(0, 10);
-
+/* Resolve the wall's deck: which slideshow the calendar says to play now, and which
+   of its slides this context selects. Returns null when there's nothing to show. */
+async function resolveDeck(today) {
     const [calendar, locationsData] = await Promise.all([
         fetch('/context_calendar.json').then(r => r.json()),
         fetch('/locations.json').then(r => r.json()),
     ]);
 
     const loc = locationsData.locations.find(l => l.id === LOCATION_ID);
-    if (!loc) return;
+    if (!loc) return null;
 
     const { context, slideshowSlug, contextStart, contextEnd } = WccContext.resolveContext(calendar, loc);
-    if (!slideshowSlug) return;
+    if (!slideshowSlug) return null;
 
     if (contextStart) {
         const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -559,27 +586,114 @@ async function init() {
     const show = await fetch(`/slideshow/${slideshowSlug}/data.json`).then(r => r.json());
     const slides = slidesForCtx(show, context, today);
 
-    if (PREVIEW) {
-        const nextCtxs = WccContext.findNextContexts(calendar, LOCATION_ID);
-        renderPanel(loc, context, slideshowSlug, show, nextCtxs, today, contextEnd);
+    // A signature of what's on screen right now: the slideshow plus the exact set of
+    // slides the current context/date selects. Re-resolving the (load-time) calendar
+    // against the wall clock and re-running the selection means any schedule advance —
+    // a new slideshow, a phase change, a slide expiring at midnight — changes the
+    // signature, so the wall reloads to follow the schedule as the blind reload did.
+    // Content changes (new data.json) ride build_version instead.
+    function shownSignature() {
+        let r;
+        try { r = WccContext.resolveContext(calendar, loc); } catch (e) { return null; }
+        if (!r.slideshowSlug) return null;
+        if (r.slideshowSlug !== slideshowSlug) return `slug:${r.slideshowSlug}`;
+        const t = new Date().toISOString().slice(0, 10);
+        return slidesForCtx(show, r.context, t).map(s => s.slug).join(',');
     }
+    const loadSig = shownSignature();
 
+    return {
+        deckSlug: slideshowSlug,
+        show,
+        slides,
+        // Guard null (a transient resolve failure) so only a real change reloads.
+        alsoReloadIf: () => { const s = shownSignature(); return s !== null && s !== loadSig; },
+        renderPreview: () => renderPanel(loc, context, slideshowSlug, show,
+                                         WccContext.findNextContexts(calendar, LOCATION_ID),
+                                         today, contextEnd),
+    };
+}
+{% else %}
+// ---- deck source: a named deck ----------------------------------------------
+function markCurrentSlide(slug) {
+    document.querySelectorAll('#dbg-slides .slide-row').forEach(el => el.classList.remove('now'));
+    document.querySelector(`#dbg-slides .slide-row[data-slug="${slug}"]`)?.classList.add('now');
+}
+
+function renderPanel(deckTitle, allSlides, shownCount) {
+    const panel = document.getElementById('dbg');
+    if (!panel) return;
+    const rows = allSlides.map(s => {
+        const cls = s._shown ? 'on' : 'off';
+        const bullet = s._shown ? '●' : '○';
+        const label = s._shown
+            ? `<a href="/slide/${s.slug}/" target="_blank">${s.slug}</a>`
+            : s.slug;
+        const reason = s._reason ? `<div class="slide-reason">↳ ${s._reason}</div>` : '';
+        return `<div class="slide-row ${cls}" data-slug="${s.slug}"><span>${bullet} ${label}</span><span class="slide-dur">${s.duration}s</span></div>${reason}`;
+    }).join('');
+    panel.innerHTML =
+        `<div class="dbg-meta"><span>Preview of slides for slideshow <strong>${deckTitle}</strong></span><a class="dbg-watch" href="${window.location.href.replace(/[?&]preview\b/, '')}" target="_blank">Watch</a></div>` +
+        `<div class="dbg-slides"><div class="dbg-head">Slides (${shownCount} of ${allSlides.length})</div><div id="dbg-slides">${rows}</div></div>`;
+}
+
+/* Resolve a named deck: fetched, not baked, so one shell plays every slideshow,
+   match set and single slide. Returns null when there's nothing to play. */
+async function resolveDeck(today) {
+    if (!DECK) return null;   // bare shell with no ?deck= — nothing to play
+    let show;
+    try { show = await fetch(`/slideshow/${DECK}/data.json`).then(r => r.json()); } catch (e) { return null; }
+
+    const allSlides = (show.slides || []).map(s => {
+        const reason = (s.expires && s.expires < today) ? `expired ${s.expires}`
+            : (s._live && !LIVE_ON) ? 'live feature set — no access key on this device'
+            : null;
+        return { ...s, _shown: !reason, _reason: reason };
+    });
+    const slides = allSlides.filter(s => s._shown);
+
+    return {
+        deckSlug: DECK,
+        show,
+        slides,
+        // Fixed deck (no context switching), but the shown set drops expired slides
+        // at midnight — reload on a date rollover to match.
+        alsoReloadIf: () => new Date().toISOString().slice(0, 10) !== today,
+        renderPreview: () => renderPanel(show.title, allSlides, slides.length),
+    };
+}
+{% endif %}
+
+async function init() {
+    const today = new Date().toISOString().slice(0, 10);
+
+    const resolved = await resolveDeck(today);
+    if (!resolved) return;
+    const { deckSlug, show, slides, alsoReloadIf, renderPreview } = resolved;
+    {%- if not screen %}
+    // The deck names the page (a screen keeps its location name, which is fixed).
+    if (show.title) document.title = show.title;
+    {%- endif %}
+    slides.forEach((s, i) => { s._i = i; });   // index into frames[], below
+
+    if (PREVIEW) renderPreview();
     if (slides.length === 0) return;
 
     const CACHE_OK = !!(window.WccVideoCache && WccVideoCache.supported);
 
-    // Create every slide iframe up front (hidden by default: iframe{opacity:0}).
-    // frames[] stays index-aligned with slides[]. On an unwindowed deck they all get
-    // a src now and the gate awaits every load event, as before. On a windowed one
-    // (see WccPlayer.windowRadius) only the opening frames load — the player pulls
-    // the rest in around the current slide and tears down what leaves the window, so
-    // the process never holds the whole deck as live documents. Every frame carries
-    // its url in data-src either way; that's what the player reloads from.
+    // One iframe per shown slide, frames[] index-aligned with slides[]. An unwindowed
+    // deck gives them all a src now and the gate awaits every load event; a windowed
+    // one loads only the opening frames and the player streams the rest in around the
+    // current slide, tearing down what leaves the window, so the process never holds
+    // the whole deck as live documents. Every frame carries its url in data-src either
+    // way; that's what the player reloads from.
+    // Guarded, not just `WccPlayer.windowRadius()`: GitHub Pages serves this HTML with
+    // max-age=600 and /assets/js with max-age=14400, so for up to four hours after a
+    // deploy a client can pair fresh HTML with stale JS. Falling back to null = load
+    // everything = exactly the pre-windowing behaviour, right for old JS anyway.
+    const WIN = (window.WccPlayer && WccPlayer.windowRadius) ? WccPlayer.windowRadius() : null;
     const slideLayer = document.getElementById('slide-layer');
     const stage = document.getElementById('stage');
-    // Guarded against a fresh-HTML/stale-JS pairing after a deploy — see the same
-    // call in slideshow/player.html. null = load everything = pre-windowing behaviour.
-    const WIN = (window.WccPlayer && WccPlayer.windowRadius) ? WccPlayer.windowRadius() : null;
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
         f.dataset.src = `/slide/${s.slug}/`;
@@ -588,11 +702,12 @@ async function init() {
         return f;
     });
     const bootFrames = WIN === null ? frames : frames.slice(0, WIN + 1);
+
     {% if live_enabled %}
     if (LIVE_ON) {
     // Live chrome, in the L the retracting slide layer uncovers: ticker along the
     // bottom band, standings strip up the right. Both sit on the stage (not the slide
-    // layer) so they don't scale with it.
+    // layer) so they don't scale with it. An unprovisioned device never loads them.
     const tickerFrame = document.createElement('iframe');
     tickerFrame.id = 'ticker-frame';
     tickerFrame.className = 'ticker';
@@ -617,42 +732,25 @@ async function init() {
     // (build_version). no-store so we always see the current build, not an HTTP-cached
     // copy — the whole point of the version poll.
     let precache = { videos: [], build_version: null };
-    try { precache = await fetch(`/slideshow/${slideshowSlug}/precache.json`, { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
+    try { precache = await fetch(`/slideshow/${deckSlug}/precache.json`, { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
 
-    const reloadMs = show.refresh_interval_seconds * 1000;
-
-    // A signature of what's on screen right now: the slideshow plus the exact set of
-    // slides the current context/date selects. Re-resolving the (load-time) calendar
-    // against the wall clock and re-running the selection means any schedule advance —
-    // a new slideshow, a phase change, a slide expiring at midnight — changes the
-    // signature, so the wall reloads to follow the schedule as the blind reload did.
-    // Content changes (new data.json) ride build_version instead.
-    function shownSignature() {
-        let r;
-        try { r = WccContext.resolveContext(calendar, loc); } catch (e) { return null; }
-        if (!r.slideshowSlug) return null;
-        if (r.slideshowSlug !== slideshowSlug) return `slug:${r.slideshowSlug}`;
-        const t = new Date().toISOString().slice(0, 10);
-        return slidesForCtx(show, r.context, t).map(s => s.slug).join(',');
-    }
+    const reloadMs = (show.refresh_interval_seconds || 300) * 1000;
 
     // Refresh control. PREVIEW (debug view) keeps the blind countdown + ticker; watch
     // mode uses version-aware refresh: poll build_version, prewarm new clips, prune old,
-    // and reload on a schedule advance via shownSignature().
+    // and reload when the deck source says what's shown has changed.
     let shouldReloadNow, onReload;
     if (PREVIEW) {
         let reloadPending = false;
         setTimeout(() => { reloadPending = true; }, reloadMs);
         shouldReloadNow = () => reloadPending;
     } else {
-        const loadSig = shownSignature();
         const refresh = WccRefresh.start({
-            url: `/slideshow/${slideshowSlug}/precache.json`,
+            url: `/slideshow/${deckSlug}/precache.json`,
             version: precache.build_version,
             videos: precache.videos || [],
             pollMs: reloadMs,
-            // Guard null (a transient resolve failure) so only a real change reloads.
-            alsoReloadIf: () => { const s = shownSignature(); return s !== null && s !== loadSig; },
+            alsoReloadIf,
         });
         shouldReloadNow = refresh.shouldReloadNow;
         onReload = refresh.onReload;
@@ -666,11 +764,11 @@ async function init() {
                 panel_duration: s.panel_duration,
                 group: s._group || null,   // slide-set membership (drives hats later)
                 video: (s._videos || []).length > 0 || !!s._is_video,  // video slide → auto-plays on forward arrival
-                frame: frames[slides.indexOf(s)],
+                frame: frames[s._i],
             })),
             onShow: i => {
                 _currentSlug = finalSlides[i].slug;
-                if (PREVIEW) markCurrentSlide(finalSlides, i);
+                if (PREVIEW) markCurrentSlide(_currentSlug);
             },
             shouldReloadNow,
             onReload,
@@ -683,7 +781,7 @@ async function init() {
     }
 
     // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
-    // today's behaviour: prime in the background, start immediately, no gate.
+    // the ungated path: prime in the background, start immediately, no gate.
     if (PREVIEW || !CACHE_OK) {
         if (CACHE_OK) WccVideoCache.prime(precache.videos || []).catch(() => {});
         startPlayer(slides);

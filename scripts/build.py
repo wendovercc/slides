@@ -3485,6 +3485,10 @@ def build_match_packages(env, slide_meta):
             "members": members,
             "group": slug_prefix,
             "active": True,
+            # Names the set's own deck page (/slideshow/<set slug>/) — the set
+            # header's two constant heading levels, which is how the package reads
+            # on screen: "Match Highlights · Wendover CC 1st XI".
+            "title": f"{set_title} · {title}",
             # A match fades: the full package is worth the airtime while it's the
             # club's recent news, then gives way to the one-card result (see
             # `standalone` below). Dated from the match, so a team still playing
@@ -3533,6 +3537,120 @@ def _recency_ordered(merged):
     return out
 
 
+def _resolve_deck(entries, slide_meta, sets, default_panel_duration, today_iso,
+                  label="", deck_rules=True):
+    """Resolve authored deck entries into the ordered slide list a player runs.
+
+    Merges each entry with its slide's computed meta (duration, active, expires).
+    A set reference expands to its members contiguously, each tagged with the group
+    id and carrying any set-level expiry; entry-level keys (e.g. show_when) are
+    inherited by every member. Unknown slugs and data-skipped slides are dropped.
+    Both players read the derived `duration` from here — neither knows about panels.
+
+    `deck_rules` covers the rules that are about *deck composition* rather than the
+    slide itself: dropping expired entries, and suppressing a standalone card that a
+    set in the same deck already contains. Auto-decks (one slide or one set, at
+    /slideshow/<slug>/) turn them off — they're permalinks, and an expired card is
+    still the thing that URL names.
+    """
+    # A set that has aged out is dropped here rather than left to the players'
+    # runtime `expires` filter, because the two rules have to agree: while a
+    # package runs it suppresses its standalone twin (below), so the twin can
+    # only resurface if the same pass that retires the package sees it go. The
+    # build is nightly and these expiries are date-granular, so evaluating here
+    # is exactly as timely as evaluating in the player.
+    def live_set(s):
+        if not deck_rules:
+            return s.get("active", True)
+        return s.get("active", True) and not (s.get("expires") and s["expires"] < today_iso)
+
+    # Slides this deck must NOT carry because a set it expands already contains
+    # the same card (last-match-result-{team} duplicates the package's own
+    # `-result` member). Collected up front so the order of the two entries in
+    # the deck doesn't matter.
+    superseded = {s["standalone"] for e in entries
+                  for s in [sets.get(e.get("slug"))]
+                  if s and s.get("standalone") and live_set(s)} if deck_rules else set()
+
+    merged = []
+    for entry in entries:
+        entry_slug = entry.get("slug")
+
+        if entry_slug in superseded:
+            print(f"  {label}: '{entry_slug}' covered by its match package — skipped")
+            continue
+
+        if entry_slug in sets:
+            s = sets[entry_slug]
+            if not live_set(s):
+                continue
+            if entry.get("skip_when_empty") and s.get("empty"):
+                print(f"  {label}: '{entry_slug}' has no content — skipped")
+                continue
+            inherited = {k: v for k, v in entry.items() if k != "slug"}
+            for member_slug in s["members"]:
+                meta = slide_meta.get(member_slug)
+                if not meta or meta.get("_skip"):
+                    continue
+                member_entry = {**inherited, **meta, "slug": member_slug, "_group": s["group"]}
+                if s.get("expires") is not None:
+                    member_entry["expires"] = s["expires"]
+                    member_entry["slide_expires"] = s["expires"]
+                member_entry.setdefault("duration", default_panel_duration)
+                merged.append(member_entry)
+            continue
+
+        meta = slide_meta.get(entry_slug)
+        if meta is None:
+            print(f"  {label}: unknown slide '{entry_slug}' — skipped")
+            continue
+        if meta.get("_skip"):
+            continue
+        # Opt-in per deck: drop a slide that built with no data behind it (e.g.
+        # the today board on a day with nothing on). Other decks still carry it.
+        if entry.get("skip_when_empty") and meta.get("_empty"):
+            print(f"  {label}: '{entry_slug}' has no content — skipped")
+            continue
+        # Retired here as well as at runtime, for the same reason as live_set():
+        # a lapsed result card must be gone from the pass that decides whether
+        # its package still covers it.
+        if deck_rules and meta.get("slide_expires") and meta["slide_expires"] < today_iso:
+            continue
+        merged_entry = {**entry, **meta}
+        merged_entry.setdefault("duration", default_panel_duration)
+        merged.append(merged_entry)
+
+    return _recency_ordered(merged)
+
+
+def _write_deck_data(out_dir, show, build_version):
+    """Write the two files a player fetches for a deck, and return the clip count.
+
+    data.json is the resolved deck (the players build their iframes from it, so no
+    deck is baked into HTML — one shell serves every deck via ?deck=<slug>).
+    precache.json is the offline player's build-time asset manifest: every clip URL
+    this deck can show, deduped in first-seen order, plus a build_version. A
+    deterministic list (vs. runtime crawling) gives the loading gate an exact
+    denominator and the pruner an exact keep-set.
+    See docs/player-offline-architecture.md.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "data.json").write_text(json.dumps(show))
+
+    seen = set()
+    precache_videos = []
+    for s in show["slides"]:
+        for src in s.get("_videos") or []:
+            if src not in seen:
+                seen.add(src)
+                precache_videos.append(src)
+    (out_dir / "precache.json").write_text(json.dumps({
+        "build_version": build_version,
+        "videos": precache_videos,
+    }))
+    return len(precache_videos)
+
+
 def build_slideshows(env, slide_meta, sets=None):
     # slide_meta (from build_slides/build_match_packages) carries each slide's
     # computed duration, active/expires, and a _skip flag for slides with no data
@@ -3551,110 +3669,31 @@ def build_slideshows(env, slide_meta, sets=None):
     site_url = preview_cfg.get("site_url", "")
     qr_data_url = generate_qr_data_url(site_url) if site_url else ""
 
+    default_refresh = config.get("default_refresh_interval_seconds", 300)
+
+    # Slugs an authored deck already owns. Authored wins: `fantasy-league` is both a
+    # slide and a hand-written deck of that one slide, and the deck is the richer
+    # answer, so no auto-deck is generated over it.
+    authored = {p.stem for p in (CONTENT / "slideshows").glob("*.json")}
+
     homepage_shows = []
     for show_path in sorted((CONTENT / "slideshows").glob("*.json")):
         show = json.loads(show_path.read_text())
         slug = show_path.stem
 
-        # Merge each entry with its slide's computed meta (duration, active,
-        # expires). A set reference expands to its members contiguously, each
-        # tagged with the group id and carrying any set-level expiry; entry-level
-        # keys (e.g. show_when) are inherited by every member. Unknown slugs and
-        # data-skipped slides are dropped. Both players read the derived
-        # `duration` from here — neither knows about panels.
-        # A set that has aged out is dropped here rather than left to the players'
-        # runtime `expires` filter, because the two rules have to agree: while a
-        # package runs it suppresses its standalone twin (below), so the twin can
-        # only resurface if the same pass that retires the package sees it go. The
-        # build is nightly and these expiries are date-granular, so evaluating here
-        # is exactly as timely as evaluating in the player.
-        def live_set(s):
-            return s.get("active", True) and not (s.get("expires") and s["expires"] < today_iso)
-
-        # Slides this deck must NOT carry because a set it expands already contains
-        # the same card (last-match-result-{team} duplicates the package's own
-        # `-result` member). Collected up front so the order of the two entries in
-        # the deck doesn't matter.
-        superseded = {s["standalone"] for e in show.get("slides", [])
-                      for s in [sets.get(e.get("slug"))]
-                      if s and s.get("standalone") and live_set(s)}
-
-        merged = []
-        for entry in show.get("slides", []):
-            entry_slug = entry.get("slug")
-
-            if entry_slug in superseded:
-                print(f"  slideshow/{slug}: '{entry_slug}' covered by its match package — skipped")
-                continue
-
-            if entry_slug in sets:
-                s = sets[entry_slug]
-                if not live_set(s):
-                    continue
-                if entry.get("skip_when_empty") and s.get("empty"):
-                    print(f"  slideshow/{slug}: '{entry_slug}' has no content — skipped")
-                    continue
-                inherited = {k: v for k, v in entry.items() if k != "slug"}
-                for member_slug in s["members"]:
-                    meta = slide_meta.get(member_slug)
-                    if not meta or meta.get("_skip"):
-                        continue
-                    member_entry = {**inherited, **meta, "slug": member_slug, "_group": s["group"]}
-                    if s.get("expires") is not None:
-                        member_entry["expires"] = s["expires"]
-                        member_entry["slide_expires"] = s["expires"]
-                    member_entry.setdefault("duration", default_panel_duration)
-                    merged.append(member_entry)
-                continue
-
-            meta = slide_meta.get(entry_slug)
-            if meta is None:
-                print(f"  slideshow/{slug}: unknown slide '{entry_slug}' — skipped")
-                continue
-            if meta.get("_skip"):
-                continue
-            # Opt-in per deck: drop a slide that built with no data behind it (e.g.
-            # the today board on a day with nothing on). Other decks still carry it.
-            if entry.get("skip_when_empty") and meta.get("_empty"):
-                print(f"  slideshow/{slug}: '{entry_slug}' has no content — skipped")
-                continue
-            # Retired here as well as at runtime, for the same reason as live_set():
-            # a lapsed result card must be gone from the pass that decides whether
-            # its package still covers it.
-            if meta.get("slide_expires") and meta["slide_expires"] < today_iso:
-                continue
-            merged_entry = {**entry, **meta}
-            merged_entry.setdefault("duration", default_panel_duration)
-            merged.append(merged_entry)
-        show["slides"] = _recency_ordered(merged)
-
-        template = env.get_template("slideshow/player.html")
-        html = template.render(show=show, slug=slug, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
+        merged = _resolve_deck(show.get("slides", []), slide_meta, sets,
+                               default_panel_duration, today_iso,
+                               label=f"slideshow/{slug}")
+        show["slides"] = merged
 
         out_dir = SITE / "slideshow" / slug
         out_dir.mkdir(parents=True, exist_ok=True)
-        (out_dir / "index.html").write_text(html)
-
-        # data.json consumed by the smart player at runtime
-        (out_dir / "data.json").write_text(json.dumps(show))
-
-        # precache.json — the offline player's build-time asset manifest: every
-        # clip URL this slideshow can show, deduped in first-seen order, plus a
-        # build_version. A deterministic list (vs. runtime crawling) gives the
-        # loading gate an exact denominator and the pruner an exact keep-set.
-        # See docs/player-offline-architecture.md.
-        seen = set()
-        precache_videos = []
-        for s in merged:
-            for src in s.get("_videos") or []:
-                if src not in seen:
-                    seen.add(src)
-                    precache_videos.append(src)
-        (out_dir / "precache.json").write_text(json.dumps({
-            "build_version": build_version,
-            "videos": precache_videos,
-        }))
-        print(f"  slideshow/{slug}  ({len(precache_videos)} clip(s) to precache)")
+        (out_dir / "index.html").write_text(
+            env.get_template("player.html").render(
+                screen=False, title=show["title"], slug=slug, preview=preview_cfg,
+                built_at=built_at, qr_data_url=qr_data_url))
+        n_clips = _write_deck_data(out_dir, show, build_version)
+        print(f"  slideshow/{slug}  ({n_clips} clip(s) to precache)")
 
         # A deck can legitimately build with nothing in it — the archive decks empty
         # out between seasons, and in any fixture gap longer than
@@ -3670,6 +3709,57 @@ def build_slideshows(env, slide_meta, sets=None):
                 "rank": show["homepage_rank"],
                 "description": show.get("description"),
             })
+
+    # ── Auto-decks ────────────────────────────────────────────────────────────
+    # Every set and every slide is also playable on its own, in the same player
+    # frame, at /slideshow/?deck=<slug> — so a feature only has to be built in the
+    # player, never twice for "slide viewed directly" and "slide in a show".
+    # A set gets a page as well (a dozen or so, and they're the shareable ones:
+    # /slideshow/match-denham-cc/ plays the whole match package). Bare slides get
+    # data only — ~240 near-identical shells is what the ?deck= param exists to
+    # avoid. /slide/<slug>/ is untouched: it stays the raw frame the player embeds.
+    n_sets = n_slides = 0
+    for set_slug, s in sorted(sets.items()):
+        if set_slug in authored:
+            continue
+        merged = _resolve_deck([{"slug": set_slug}], slide_meta, sets,
+                               default_panel_duration, today_iso,
+                               label=f"slideshow/{set_slug}", deck_rules=False)
+        if not merged:
+            continue
+        deck = {"title": s.get("title", set_slug), "slides": merged,
+                "refresh_interval_seconds": default_refresh}
+        out_dir = SITE / "slideshow" / set_slug
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "index.html").write_text(
+            env.get_template("player.html").render(
+                screen=False, title=deck["title"], slug=set_slug, preview=preview_cfg,
+                built_at=built_at, qr_data_url=qr_data_url))
+        _write_deck_data(out_dir, deck, build_version)
+        n_sets += 1
+
+    for slide_slug, meta in sorted(slide_meta.items()):
+        if slide_slug in authored or slide_slug in sets or meta.get("_skip"):
+            continue
+        merged = _resolve_deck([{"slug": slide_slug}], slide_meta, sets,
+                               default_panel_duration, today_iso,
+                               label=f"slideshow/{slide_slug}", deck_rules=False)
+        if not merged:
+            continue
+        deck = {"title": slide_slug, "slides": merged,
+                "refresh_interval_seconds": default_refresh}
+        _write_deck_data(SITE / "slideshow" / slide_slug, deck, build_version)
+        n_slides += 1
+
+    print(f"  auto-decks: {n_sets} set page(s), {n_slides} slide deck(s)")
+
+    # The bare shell, which plays whatever ?deck= names. Every auto-deck URL is
+    # this page plus a param; the per-deck pages above are the same shell with the
+    # slug baked in as the default.
+    (SITE / "slideshow" / "index.html").write_text(
+        env.get_template("player.html").render(
+            screen=False, title="Slideshow", slug=None, preview=preview_cfg,
+            built_at=built_at, qr_data_url=qr_data_url))
 
     return sorted(homepage_shows, key=lambda x: x["rank"])
 
@@ -3739,9 +3829,10 @@ def build_screen_locations(env, homepage_shows=None):
     )
     print("  index.html")
 
-    player_tmpl = env.get_template("screen/player.html")
+    player_tmpl = env.get_template("player.html")
     for loc in screen_locs:
-        html = player_tmpl.render(location=loc, preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
+        html = player_tmpl.render(screen=True, location=loc, title=loc["name"],
+                                  preview=preview_cfg, built_at=built_at, qr_data_url=qr_data_url)
         out_dir = SITE / "screen" / loc["id"]
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html)

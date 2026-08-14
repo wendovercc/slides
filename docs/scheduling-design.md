@@ -285,8 +285,9 @@ the calendar entry at build time, so the player fetches exactly two files at run
 
 ## Smart Player
 
-`templates/screen/player.html` fetches `context_calendar.json`, resolves the current
-context, then filters the slideshow's entries against that context.
+`templates/player.html` in screen mode (one player, two deck sources) fetches
+`context_calendar.json`, resolves the current context, then filters the slideshow's
+entries against that context.
 
 ```javascript
 async function init() {

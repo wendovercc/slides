@@ -3,7 +3,7 @@
 > Status: **proposed design, not yet built.** Planning source of truth for
 > rearchitecting the players to pre-download and locally store all slideshow assets
 > before playback, under full app control, with **one code path on Pi, iPad and
-> desktop**. Read `assets/js/player-core.js`, `templates/screen/player.html`,
+> desktop**. Read `assets/js/player-core.js`, `templates/player.html`,
 > `templates/slides/video.html`, `docs/issue-video-cache.md` and
 > `docs/raspberry-pi.md` alongside this.
 
@@ -39,7 +39,7 @@ bytes. This is not subject to the per-entry limit and is fully under app control
 ## What already exists
 
 - PWA scaffolding is in place but inert: `templates/manifest.webmanifest` and
-  `templates/_pwa_head.html` (included by `screen/player.html`), icons from
+  `templates/_pwa_head.html` (included by `player.html`), icons from
   `build.py:build_pwa()`. **No service worker is registered anywhere** — and this
   design does not require one (see below).
 - Videos are **content-addressed**: fingerprinted filenames on `videos.wendovercc.org`

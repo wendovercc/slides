@@ -96,8 +96,9 @@ Slides with `valid_from` / `valid_until` dates in their JSON are automatically i
 
 | URL | Description |
 |-----|-------------|
-| `slides.wendovercc.org/slideshow/[slug]` | Slideshow player for a named display |
-| `slides.wendovercc.org/slide/[slug]` | Individual slide as a standalone page |
+| `slides.wendovercc.org/slideshow/[slug]` | Player for an authored slideshow, or a match set (e.g. `match-denham-cc`) |
+| `slides.wendovercc.org/slideshow/?deck=[slug]` | The same player over any deck — including a single slide |
+| `slides.wendovercc.org/slide/[slug]` | The raw slide frame, as embedded by the player (no player chrome) |
 | `slides.wendovercc.org/data/[file].json` | Generated data files (raw stats etc.) |
 
 ---
