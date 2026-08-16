@@ -292,11 +292,20 @@ CATEGORY_MAP = {
 }
 
 
+# Category icon, Name, Value, Week Points — the shape every real row arrives in.
+TOTW_ROW_WIDTH = 4
+
+
 def post_process_team_of_week(data):
-    """Replace image src in first cell with human-readable category name."""
+    """Replace image src in first cell with human-readable category name.
+
+    Rows narrower than a full row are dropped: between gameweeks the table
+    renders Ant Design's single-cell "No Data" placeholder, which is otherwise
+    carried through as a row and blows up consumers indexing by column.
+    """
     out_rows = []
     for row in data["rows"]:
-        if not row:
+        if len(row) < TOTW_ROW_WIDTH:
             continue
         category = CATEGORY_MAP.get(row[0], row[0])
         out_rows.append([category] + list(row[1:]))

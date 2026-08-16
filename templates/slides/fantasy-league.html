@@ -242,7 +242,10 @@
     <div class="panels">
 
         <div class="panel panel-active">
-            {% set totw_rows = slide._team_of_week.rows %}
+            {# Between gameweeks the source table can yield a short placeholder
+               row; drop anything without a points cell so it can't break the
+               build, and an all-short table falls through to the empty state. #}
+            {% set totw_rows = slide._team_of_week.rows | selectattr('3', 'defined') | list %}
             {% set ns = namespace(max_pts=0) %}
             {% for r in totw_rows %}
                 {% set p = r[3]|int %}
