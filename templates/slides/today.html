@@ -3,9 +3,11 @@
 {#- Today: a time-ordered board of the whole day's club activity — every team's
     matches + training — BAKED IN at build time (slide._events → todays_events),
     so it renders statically offline. The live feed only ENRICHES match rows by
-    pc_id (score / at-crease / last wicket). Card head mirrors the last-match
-    set-header (our team gold · vs · opposition; Home/Away pill + square location
-    badge stacked right). Reason-aware when a match has no live score. -#}
+    pc_id (score / at-crease / last wicket). One card per WCC fixture: head
+    (our team gold · vs · opposition; Home/Away + location badges) → competition
+    subtitle → a MATCH TABLE of that division's games, ours marked by the house
+    colour convention. Everything about a game is inline on its row:
+    side batting first, each club with its score, then the result. -#}
 {% block styles %}
     .today-head { display: flex; align-items: baseline; gap: 1.2vw; margin-bottom: 2.2vh; }
     .today-title { font-size: var(--t-lg); font-weight: 700; }
@@ -17,27 +19,40 @@
         box-shadow: 0 0 0 0 rgba(255,59,59,0.6); animation: live-pulse 1.8s infinite; }
     @keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(255,59,59,0.55); }
         70% { box-shadow: 0 0 0 0.9vw rgba(255,59,59,0); } 100% { box-shadow: 0 0 0 0 rgba(255,59,59,0); } }
-    .today-updated { margin-left: auto; font-size: var(--t-xs); color: var(--muted); opacity: 0.7; }
+    /* Reserved for a poll fault (see POLL_TROUBLE) — empty whenever the feed is
+       healthy, since per-match freshness is reported on the rows themselves. */
+    .today-updated { margin-left: auto; font-size: var(--t-xs); color: #ff9b3d; }
 
     /* Tile stack: packed from the top, surplus falls below the last tile. */
     .today-list { flex: 1; display: flex; flex-direction: column; gap: 1.1vh; min-height: 0; align-content: start; }
 
-    .event { display: flex; gap: 1.2vw; align-items: flex-start; flex-shrink: 0;
+    /* The card stacks: a top block (time rail + head) over the full-width match
+       table, so a row's status cell can sit in the SAME column as the start time. */
+    .event { --rail: 5.5vw; --rail-gap: 1.2vw;
+        display: flex; flex-direction: column; flex-shrink: 0;
         background: rgba(255,255,255,0.04); border: var(--hair) solid rgba(255,255,255,0.08);
         border-radius: var(--radius); padding: 1.1vh 1.1vw; }
-    .event.is-live { background: rgba(255,91,91,0.06); border-color: rgba(255,91,91,0.35); }
+    .event-top { display: flex; gap: var(--rail-gap); align-items: flex-start; }
 
-    .event-time { width: 5.5vw; flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
-        font-variant-numeric: tabular-nums; line-height: 1.15;
-        display: flex; flex-direction: column; gap: 0.5vh; }
+    /* Left rail: the start time up top, each match's feed status below on its row.
+       One width shared by both so they line up (--rail / --rail-gap). */
+    .event-time { width: var(--rail); flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
+        font-variant-numeric: tabular-nums; line-height: 1.15; }
     .event-time .tbc { font-size: var(--t-xs); font-weight: 400; color: var(--muted); }
-    /* Feed-status badge under the time (left rail). Only for pollable matches when
-       live is enabled; conveys the states the detail column no longer spells out. */
+    /* Feed-status badge, in the rail on the match's own table row. Only for pollable
+       matches when live is enabled; conveys the states no scoreline can. */
     .feed-badge { font-size: var(--t-xs); font-weight: 700; line-height: 1;
         text-transform: uppercase; letter-spacing: 0.03em; }
     .feed-badge.live { color: #ff6b6b; }
     .feed-badge.brk  { color: var(--gold); }
     .feed-badge.res  { color: var(--light-blue); }
+    /* Other-division game under way. Deliberately NOT the red "● Live": PC-API is
+       result-granularity on a 5-15 min sync, so it can say what state a game is in
+       but never that a score is current. Calmer type keeps that promise honest. */
+    .feed-badge.play { color: var(--text); }
+    /* Scored, but the scorer has gone quiet — amber, deliberately warmer than the
+       gold BREAK so a stall never reads as a scheduled pause. */
+    .feed-badge.stale { color: #ff9b3d; }
     .feed-badge.wait { color: var(--muted); font-weight: 400; }
     .feed-badge.off  { color: var(--muted); font-weight: 400; opacity: 0.6; }
 
@@ -52,87 +67,90 @@
     .event-teams .opp-team { font-size: var(--t-xs); font-weight: 400; opacity: 0.55; margin-left: 0.5vw; }
 
     .event-tags { flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 0.5vh; }
-    .ha { font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
-        border-radius: 0; padding: 0.1vh 0.55vw;
+    /* Home/Away pill + location badge: the Team Focus Schedule tab's sizing and
+       styling verbatim (team.html .home-pill/.away-pill and .loc-badge) — --t-sm
+       rather than the old --t-xxs, and rounded, so the two boards agree. */
+    .ha { font-size: var(--t-sm); letter-spacing: 0.08em; text-transform: uppercase;
+        border-radius: var(--radius); padding: 0.1vh 0.55vw;
         background: rgba(60,180,80,0.3); border: var(--hair) solid rgba(60,180,80,0.5); }
     .ha.away { background: rgba(180,100,40,0.3); border-color: rgba(180,100,40,0.5); }
     .ha.train { background: rgba(180,200,228,0.16); border-color: rgba(180,200,228,0.3); color: var(--light-blue); }
-    /* Location badge: square corners (deliberately not rounded). */
-    .loc-badge { max-width: 12vw; background: var(--accent); color: var(--navy-1);
-        font-size: var(--t-xxs); font-weight: 700; letter-spacing: 0.02em; padding: 0.15vh 0.6vw;
-        border-radius: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Inverted location badge (navy on gold), as Team Focus. The max-width is the
+       one local addition: this board's right rail isn't width-constrained by a
+       tile, so a long ground name would otherwise crowd out the teams line. */
+    .loc-badge { display: inline-block; max-width: 16vw; background: var(--accent); color: var(--navy-1);
+        font-size: var(--t-sm); font-weight: 700; letter-spacing: 0.02em; padding: 0.2vh 0.7vw;
+        border-radius: var(--radius-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .event-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5vw;
         font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
     .event-meta .dot { opacity: 0.4; }
-    .event-meta .live { color: #ff6b6b; font-weight: 700; }
-    .event-meta .brk { color: var(--gold); font-weight: 700; }
-    .event-meta .res { color: var(--light-blue); font-weight: 700; }
-    .event-meta .stream { color: #ff8a8a; font-weight: 700; }
 
-    .event-detail { font-size: var(--t-sm); margin-top: 0.2vh; }
-    .event-detail .sub { color: var(--muted); font-size: var(--t-sm); }
-    /* Live innings scoreline — batting club (crest + name) left, score + overs
-       floated right in gold, mirroring the last-match Innings panel .scoreline. */
-    /* The innings lines + batters form one tight scorecard unit (small gaps within);
-       larger separation to the division block comes from .event-league below. */
-    .event-inn { display: flex; align-items: center; justify-content: space-between;
-        gap: 0.8vw; margin-top: 0.3vh; }
-    .event-inn-team { display: flex; align-items: center; min-width: 0; flex: 1; }
-    /* Team name + inline batters on one line; ellipsises as a unit if too long. */
-    .event-inn-line { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-        font-size: var(--t-sm); }
-    /* Club name is the larger anchor; both sides read white (batters stay small/muted). */
-    .event-inn-line .nm { font-size: var(--t-md); font-weight: 700; color: var(--text); }
-    .event-inn-sep { color: var(--muted); opacity: 0.5; margin: 0 0.5vw; }
-    .event-inn-bats { color: var(--muted); font-weight: 400; }
-    .event-inn-bats .crease { color: var(--text); }
-    .event-inn-bats .num { color: var(--muted); font-variant-numeric: tabular-nums; }
-    .event-inn-bats .star { color: var(--accent); }
-    /* Both sides' scores read white — no gold hero on the live scoreline. */
-    .event-inn-score { flex-shrink: 0; font-size: var(--t-md); font-weight: 900;
-        color: var(--text); font-variant-numeric: tabular-nums; }
-    .event-inn-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
-    /* Fallback "Last out" line (only when nobody's at the crease). */
-    .event-status { font-size: var(--t-sm); color: var(--muted); margin-top: 0.3vh; }
-    /* Result headline on a completed match — gold when Wendover won; sits above the
-       final innings scorelines, mirroring the toss's role while live. */
-    .event-result { font-size: var(--t-sm); font-weight: 700; color: var(--text); margin-bottom: 1vh; }
-    .event-result.win { color: var(--accent); }
-    .event-result .prov { color: var(--muted); font-weight: 400; }
-    .event-follow { font-size: var(--t-xs); color: var(--muted); opacity: 0.85; }
-    .event-follow strong { color: var(--accent); }
-    /* Toss: the first (chronologically) live datum — heads the live detail and
-       is the pre-match status line. Kept off the smallest tokens for legibility. */
-    /* Space under the toss separates it from the innings block, so the two innings
-       read as one group. */
-    .event-toss { font-size: var(--t-sm); color: var(--muted); margin-top: 0.2vh; margin-bottom: 1vh; }
-    .event-toss b { color: var(--text); font-weight: 700; }
+    /* Competition subtitle under the card head — "Thames Valley Cricket League ·
+       Division 9E", heading the match table beneath it. It occupies the slot the
+       toss / result banner used to; both of those now live on the match rows. */
+    .event-sub { font-size: var(--t-sm); font-weight: 900; text-transform: uppercase;
+        letter-spacing: 0.05em; color: var(--muted); margin: 0.4vh 0 0.6vh; }
+    .event-sub .dot { opacity: 0.4; }
+    .event-sub .stream { color: #ff8a8a; }
 
-    /* League context: the day's OTHER matches in this division, baked in. Swing
-       games (close to Wendover on points) get the gold left-rail. Scores fill in
-       live from the slow league poll (data-live spans). */
-    .event-league { margin-top: 1.1vh; border-top: var(--hair) solid rgba(255,255,255,0.07); padding-top: 0.6vh; }
-    .el-row { display: flex; align-items: baseline; gap: 0.8vw; font-size: var(--t-sm);
-        padding: 0.15vh 0; }
-    .el-time { flex-shrink: 0; width: 4vw; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .el-teams { flex: 1; min-width: 0; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* Other-division sides: muted by default; the batting side steps forward in
-       white-bold (gold stays reserved for Wendover). */
-    .el-team { font-weight: 400; color: var(--muted); }
-    .el-team.batting { font-weight: 700; color: var(--text); }
-    /* Title for the games beneath it — "Thames Valley Cricket League · Division 9E".
-       Reads as a heading (bold, full-strength) rather than a faint caption. */
-    .el-head { font-size: var(--t-sm); font-weight: 900; text-transform: uppercase;
-        letter-spacing: 0.05em; color: var(--muted); margin: 0 0 0.5vh 0; }
-    .el-v { color: var(--muted); opacity: 0.55; margin: 0 0.5vw; font-weight: 400; }
-    .el-score { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--muted); }
-    /* Live league scores stay calm white — the card's LIVE badge conveys liveness,
-       so they don't need alarm-red; our own score is the sole gold hero. */
-    .el-score.live { color: var(--text); font-weight: 700; }
-    .el-score.done { color: var(--light-blue); font-weight: 700; }
-    /* "chasing N" — the first-innings target, muted so the live score still leads. */
-    .el-chase { color: var(--muted); font-weight: 400; }
+    /* Match table: one row per game — ours and the rest of the division alike,
+       reading like the league tables (hairline-separated rows).
+       Everything about a match is inline on its row: the side batting first leads,
+       each club carries its own score, the result closes the line. Scores fill in
+       live — ours from the fast RV feed, the others from the slow league poll. */
+    /* No rule above the first match — the subtitle already separates the table from
+       the head, so it only added a line. Spacing does the work instead. */
+    .m-table { padding-top: 0.6vh; }
+    .m-row { display: flex; align-items: baseline; gap: var(--rail-gap); font-size: var(--t-ms);
+        padding: 0.45vh 0.6vw 0.45vh 0; border-bottom: var(--hair) solid rgba(255,255,255,0.08); }
+    /* Status cell — the rail column, so it reads straight down from the start time. */
+    .m-status { width: var(--rail); flex-shrink: 0; }
+    /* The house zebra stripe, as every other table slide. Set as an explicit class
+       rather than :nth-child(even): our row's `.m-extra` sub-line is a SIBLING of
+       the rows, so counting children would shift the alternation under it. */
+    .m-row.alt { background: rgba(255,255,255,0.04); }
+    /* A row whose detail line follows drops its own rule, so the scoreline and its
+       sub-line read as ONE match. The rule under the detail then separates it from
+       the next match. */
+    .m-row.tight { border-bottom: 0; }
+    /* Rules go BETWEEN matches, never around them — so the last thing in the table
+       never carries one, whether that's a row or a detail line. A single-match
+       table therefore has no rules at all. */
+    .m-table > :last-child { border-bottom: 0; }
+    /* Our game carries no row tint for now — it's distinguished by the house
+       convention instead: club white, the figure gold, result white. */
+    .m-row.ours .m-club { color: var(--text); }
+    .m-row.ours .m-score { color: var(--accent); }
+    .m-row.ours .m-res { color: var(--text); }
+    .m-time { flex-shrink: 0; width: 4vw; font-size: var(--t-sm); color: var(--muted);
+        font-variant-numeric: tabular-nums; }
+    .m-line { flex: 1; min-width: 0; }
+    .m-club { font-weight: 700; }
+    /* On the division's other games a side with no score yet stays muted, so the
+       games under way read as the live ones. Our own row is always full-strength. */
+    .m-row:not(.ours) .m-club { color: var(--muted); }
+    .m-row:not(.ours) .m-club.has-score { color: var(--text); }
+    .m-score { font-weight: 900; font-variant-numeric: tabular-nums; margin-left: 0.35vw; }
+    /* Overs stay the smaller blue supporting figure. */
+    .m-ov { font-size: var(--t-sm); font-weight: 400; color: var(--light-blue); margin-left: 0.35vw; }
+    .m-v { opacity: 0.55; font-weight: 400; margin: 0 0.5vw; }
+    /* Result rides the right edge of the row (the scoreline flexes to fill), so the
+       verdicts line up down the table rather than trailing each scoreline's length. */
+    .m-res { flex-shrink: 0; margin-left: auto; padding-left: 1vw; text-align: right; font-weight: 400; }
+    .m-row:not(.ours) .m-res { color: var(--light-blue); }
+    .m-res .prov { opacity: 0.7; }
+    /* The one sub-line the board allows, and only under OUR row: the live extras
+       that don't fit a scoreline — toss before play, batters at the crease while
+       we're in, last-out between innings. */
+    .m-extra { font-size: var(--t-sm); color: var(--muted);
+        padding: 0.25vh 0.6vw 0.45vh calc(var(--rail) + var(--rail-gap));
+        border-bottom: var(--hair) solid rgba(255,255,255,0.08); }
+    .m-extra b { color: var(--text); font-weight: 700; }
+    .m-extra .crease { color: var(--text); }
+    .m-extra .num { font-variant-numeric: tabular-nums; }
+    .m-extra .star { color: var(--accent); }
+    .m-extra .sep { opacity: 0.5; margin: 0 0.5vw; }
 
     .today-empty { flex: 1; display: flex; align-items: center; justify-content: center;
         font-size: var(--t-lg); color: var(--muted); opacity: 0.4; text-align: center; }
@@ -168,64 +186,166 @@
     // league update just re-paints from the baked schedule + the latest scores.
     var LEAGUE_SCORES = {};
     var lastFeed = null, lastStatus = 'ok';
+    // Poll states worth admitting to in the header. 'nokey' and 'closed' are normal
+    // (an unprovisioned device, or out of hours) and stay silent.
+    var POLL_TROUBLE = { offline: 'feed unreachable', error: 'feed error',
+                         forbidden: 'feed refused' };
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
     function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
     function creaseHtml(inn) { return ((inn && inn.at_crease) || []).map(function (b) {
         return '<span class="crease">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) + ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
-        }).join('<span class="event-inn-sep">·</span>'); }
+        }).join('<span class="sep">·</span>'); }
     function lastWicketHtml(inn) { var w = inn && inn.last_wicket;
         return w ? esc(w.name) + ' — ' + esc(w.how || '') + (w.fow != null ? ' @ ' + w.fow : '') : ''; }
-    function ago(t) { if (!t) return null; var s = Math.max(0, Math.round(Date.now() / 1000 - t)); return s < 60 ? s + 's' : Math.round(s / 60) + 'm'; }
     function timeCell(ev) { return ev.time ? esc(ev.time) : '<span class="tbc">TBC</span>'; }
-    // Compact feed-status badge shown under the time, in place of the old
-    // "Starts HH:MM · not yet live" detail line. Nothing when live is disabled or
-    // the match isn't pollable.
+
+    // How stale a live score may get before the badge stops claiming "Live" and
+    // starts reporting its age instead. RV is polled every ~20-30s and a syncing
+    // scorer lands well inside a minute, so five minutes of silence is a stall,
+    // not jitter.
+    var STALE_AFTER = 300;
+    // RV's per-match scorer cursor, as epoch seconds. rv.mjs normalises it, but a
+    // Worker deployed before that change still sends ASP.NET's `/Date(ms)/`, and
+    // the two roll out independently — so parse both rather than depending on the
+    // newer server.
+    function scoresUpdated(lm) {
+        var v = lm && lm.scores_updated;
+        if (v == null || v === '') return null;
+        if (typeof v === 'number') return v > 1e11 ? Math.round(v / 1000) : v;
+        var m = /\/Date\((-?\d+)/.exec(String(v));
+        return m ? Math.round(Number(m[1]) / 1000) : null;
+    }
+    function secsSince(t) { return t ? Math.max(0, Math.round(Date.now() / 1000 - t)) : null; }
+    // Coarse on purpose: at ten feet the question is "minutes or hours?", and a
+    // figure that ticks every second reads as noise.
+    function fmtAge(s) { return s < 5400 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h'; }
+
+    // The rail's status cell: ONE token answering "how current is this line?".
+    // Ordered by what it would be dishonest to hide — a broken pipe first, then a
+    // settled result, then a scheduled pause (during which silence is expected and
+    // must NOT read as a stall), then the live/stalled split, then not-yet-started.
+    // Nothing at all when live is disabled or the match isn't pollable.
     function feedBadge(ev, lm, status) {
         if (!LIVE_ENABLED || !ev.pc_id) return '';
         var cls, txt;
-        if (lm && lm.complete) { cls = 'res'; txt = 'Result'; }
-        else if (lm && lm.phase === 'live') { cls = 'live'; txt = '● Live'; }
+        var age = secsSince(scoresUpdated(lm));
+        if (status !== 'ok') { cls = 'off'; txt = 'No feed'; }
+        else if (lm && lm.complete) { cls = 'res'; txt = 'Result'; }
         else if (lm && lm.phase === 'break') { cls = 'brk'; txt = 'Break'; }
-        else if (status === 'ok') { cls = 'wait'; txt = 'Awaiting'; }
-        else { cls = 'off'; txt = 'No feed'; }
+        else if (lm && lm.phase === 'live') {
+            // Scored and current, or scored and gone quiet — in which case the age
+            // REPLACES the word, so the column stays one token wide and a stall is
+            // legible across the room.
+            if (age != null && age >= STALE_AFTER) { cls = 'stale'; txt = '↻ ' + fmtAge(age); }
+            else { cls = 'live'; txt = '● Live'; }
+        }
+        // Nothing scored yet AND the fixture says live scoring isn't switched on —
+        // the book-only game that would otherwise sit on "Awaiting" all afternoon.
+        // Deliberately guarded on having no innings, so this hint (whose in-play
+        // semantics are still unconfirmed) can never contradict a score we can see.
+        else if (lm && lm.live_scoring_allowed === false && !(lm.innings || []).length) {
+            cls = 'off'; txt = 'Not scored';
+        }
+        else { cls = 'wait'; txt = 'Awaiting'; }
         return '<span class="feed-badge ' + cls + '">' + txt + '</span>';
     }
 
+    // The same rail column for a DIVISION game. PC-API carries no scorer cursor, so
+    // this reports STATE ONLY — never freshness. Blank until the league poll has
+    // said something about the match at all, rather than asserting "not started"
+    // about a game we simply haven't heard from.
+    function leagueBadge(sc) {
+        if (!LIVE_ENABLED || !sc) return '';
+        var cls, txt;
+        if (sc.phase === 'no-feed') { cls = 'off'; txt = 'No feed'; }
+        else if (sc.done) { cls = 'res'; txt = 'Result'; }
+        else if (sc.started) { cls = 'play'; txt = 'In play'; }
+        else if (sc.phase === 'pre') { cls = 'wait'; txt = 'Awaiting'; }
+        else return '';
+        return '<span class="feed-badge ' + cls + '">' + txt + '</span>';
+    }
+
+    // Club names read as the club, not the registration: "Hurley CC" -> "Hurley".
+    // Also drops a team designation the feed may have bundled on ("Hurley CC - 2nd XI").
+    function shortClub(name) {
+        return esc(String(name || '').replace(/\s+-\s+.*$/, '')
+                                     .replace(/\s+(CC|Cricket Club)$/i, '').trim());
+    }
+    // Same "CC" trim applied inside a feed-written sentence ("Hurley CC won by 4
+    // runs"), so a result reads in the same voice as the club names beside it.
+    function shortenClubs(text) { return esc(String(text || '').replace(/\s+CC\b/g, '')); }
+    // Just the team designation off a full team name ("Hurley CC - 2nd XI" -> "2nd
+    // XI"); nothing when the name IS the club, so we never echo it twice.
+    function teamDesig(teamName, club) {
+        var t = String(teamName || '').trim();
+        var m = t.match(/\s+-\s+(.*)$/);
+        if (m) return m[1].trim();
+        return t && t !== String(club || '').trim() ? t : '';
+    }
     // Club-centric head: our team (gold) vs opposition club (+ small team name).
     function teamsHead(ev) {
         var our = '<span class="our">' + esc(ev.team_name || 'Wendover') + '</span>';
         if (!ev.opposition) return our;
-        var oppTeam = (ev.opposition_team && ev.opposition_team !== ev.opposition)
-            ? '<span class="opp-team">' + esc(ev.opposition_team) + '</span>' : '';
+        var desig = teamDesig(ev.opposition_team, ev.opposition);
+        var oppTeam = desig ? '<span class="opp-team">' + esc(desig) + '</span>' : '';
         // Points-vs-Wendover intentionally NOT shown on the match day board — it read
         // as a score and cluttered the header. The `league.opp_diff`/`others[].diff`
         // data stays baked for the (future) live sidebar's standings context.
-        return our + '<span class="e-vs">vs</span><span class="opp">' + esc(ev.opposition) + oppTeam + '</span>';
+        return our + '<span class="e-vs">vs</span><span class="opp">' + shortClub(ev.opposition) + oppTeam + '</span>';
     }
     function tags(ev, extraTop) {
         var ha = extraTop || '<span class="ha' + (ev.is_home ? '' : ' away') + '">' + (ev.is_home ? 'Home' : 'Away') + '</span>';
         var loc = ev.ground ? '<span class="loc-badge">' + esc(ev.ground) + '</span>' : '';
         return '<div class="event-tags">' + ha + loc + '</div>';
     }
-    function matchMeta(ev, lm) {
-        // Match state lives in the feed-badge; the league/division title now heads the
-        // other-games block below (no duplication). This line is just the stream flag.
+
+    // Card subtitle: the competition this fixture belongs to, plus the stream flag.
+    // A friendly (no league) just carries the flag, or nothing at all.
+    function subtitle(ev, lm) {
+        var lg = ev.league || {};
+        var div = (lg.division || ev.competition || '').trim();
         var bits = [];
+        var comp = lg.name ? esc(lg.name) + (div ? ' <span class="dot">·</span> ' + esc(div) : '') : esc(div);
+        if (comp) bits.push(comp);
         if (ev.streamed || (lm && lm.streamed)) bits.push('<span class="stream">▶ Streamed</span>');
-        return bits.length ? '<div class="event-meta">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
+        return bits.length ? '<div class="event-sub">' + bits.join(' <span class="dot">·</span> ') + '</div>' : '';
     }
 
-    // Toss line phrased club-centrically: "<team> won the toss, elected to bat/field".
-    function tossHtml(ev, lm) {
-        var t = lm && lm.toss;
-        if (!t) return '';
-        // The feed names the toss winner's club directly (`winner_club`) — no
-        // stripping a team designation off "Wendover CC Friendly XI".
-        var who = t.winner_club || t.winner || '';
-        return '<div class="event-toss"><b>' + esc(who) + '</b> won the toss, elected to ' + esc(t.decision) + '</div>';
+    // One innings as its inline score: "172 ao", "220/4 dec", "141/6", each followed
+    // by the overs in the small blue supporting type. Empty when nothing's scored.
+    function scoreHtml(inn) {
+        if (!inn || inn.runs == null) return '';
+        var w = inn.wickets == null ? 0 : inn.wickets;
+        var s = inn.declared ? (inn.runs + '/' + w + ' dec')
+              : (w >= 10 ? (inn.runs + ' ao') : (inn.runs + '/' + w));
+        return '<span class="m-score">' + s + '</span>' +
+            (inn.overs ? '<span class="m-ov">(' + esc(inn.overs) + ' ov)</span>' : '');
     }
+    function sideHtml(club, inn) {
+        var sc = scoreHtml(inn);
+        return '<span class="m-club' + (sc ? ' has-score' : '') + '">' + shortClub(club) + '</span>' + sc;
+    }
+    // A match row: side batting first leads, then the other; the result sits apart,
+    // right-aligned at the end of the row.
+    // `opts.ours` marks it as our own fixture; `opts.time` prefixes a start time.
+    function matchRow(first, second, result, opts) {
+        opts = opts || {};
+        return '<div class="m-row' + (opts.ours ? ' ours' : '') + (opts.alt ? ' alt' : '') +
+                (opts.tight ? ' tight' : '') + (opts.bare ? ' bare' : '') + '"' +
+                (opts.matchId != null ? ' data-match-id="' + esc(opts.matchId) + '"' : '') + '>' +
+            '<span class="m-status">' + (opts.status || '') + '</span>' +
+            (opts.showTime ? '<span class="m-time">' + esc(opts.time || '') + '</span>' : '') +
+            '<span class="m-line">' + (opts.bare ? '' :
+                sideHtml(first.club, first.inn) +
+                '<span class="m-v">vs</span>' +
+                sideHtml(second.club, second.inn)) +
+            '</span>' +
+            (result ? '<span class="m-res">' + result + '</span>' : '') +
+        '</div>';
+    }
+
     // Is this innings ours? Structural: the feed says which side is at home, the
     // fixture says whether that's us. Never a name test — a team name bundles an
     // arbitrary designation and a club's own name can end in "XI".
@@ -233,163 +353,142 @@
         if (typeof inn.is_home === 'boolean') return inn.is_home === !!ev.is_home;
         return String(inn.side || '').toLowerCase().indexOf('wendover') !== -1;
     }
-    function inningsLine(ev, inn, batsHtml) {
-        if (!inn) return '';
-        // Gold marks OUR score only; the opposition's innings stays white.
-        var ours = oursInnings(ev, inn);
-        // The batting side's club name comes from the feed itself.
-        var sideName = inn.club || inn.side || '';
-        // Batters (current innings only) sit on the same row after the team name,
-        // dot-separated. The whole name+batters line ellipsises as one if too long.
-        var bats = batsHtml ? '<span class="event-inn-sep">·</span><span class="event-inn-bats">' + batsHtml + '</span>' : '';
-        return '<div class="event-inn">' +
-            '<div class="event-inn-team">' +
-                '<span class="event-inn-line"><span class="nm">' + esc(sideName) + '</span>' + bats + '</span></div>' +
-            '<span class="event-inn-score">' + inn.runs + '/' + inn.wickets +
-                '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span>' +
-        '</div>';
-    }
+    // Our fixture as one row. Batting order comes from the feed (innings are
+    // chronological); before a ball is bowled we fall back to the fixture's own
+    // home-then-away order.
+    function ourRow(ev, lm, showTime, status, solo) {
+        var us = { club: (lm && (lm.innings || []).filter(function (i) { return oursInnings(ev, i); })[0] || {}).club
+                          || 'Wendover' };
+        var them = { club: ev.opposition || '' };
+        var inns = (lm && lm.innings) || [];
+        inns.forEach(function (i) { (oursInnings(ev, i) ? us : them).inn = i; });
+        // Who leads the line: the side that batted first, else home before away.
+        var first = inns.length ? (oursInnings(ev, inns[0]) ? us : them) : (ev.is_home ? us : them);
+        var second = first === us ? them : us;
 
-    function matchDetail(ev, lm, status) {
-        // Decided (scorecard complete) — show the result, provisional until the
-        // scorer finalises it. Comes before the in-play branch since phase stays
-        // 'live' until finalisation.
+        var result = '';
         if (lm && lm.complete) {
-            // Keep the final scorecard (both innings) and lead with a result headline
-            // — gold when Wendover won. Provisional until the scorer finalises it.
             var res = lm.result_club || lm.result || lm.leader_text || lm.score_text || 'Result';
-            // Gold only when WE won — read off the feed's per-team verdict, matched
-            // to us by home/away rather than by name.
-            var ourSide = (lm.teams || []).filter(function (t) { return t.is_home === !!ev.is_home; })[0];
-            var wendWon = ourSide ? ourSide.outcome === 'won'
-                                  : (/wendover/i.test(res) && /\bwon\b/i.test(res));
-            var banner = '<div class="event-result' + (wendWon ? ' win' : '') + '">' + esc(res) +
-                (lm.final ? '' : '<span class="prov"> · to be confirmed</span>') + '</div>';
-            var lines = (lm.innings || []).map(function (i) { return inningsLine(ev, i, ''); }).join('');
-            return banner + lines;
+            result = shortenClubs(res) + (lm.final ? '' : '<span class="prov"> · to be confirmed</span>');
         }
-        if (lm && (lm.phase === 'live' || lm.phase === 'break')) {
-            // Chronological: toss → 1st-innings final (once batting second) → current
-            // innings scoreline → current batters.
-            var innsArr = lm.innings || [];
-            var inn = currentInnings(lm);
+        // Built first so the row can suppress its own rule when a detail line
+        // follows — the two must read as one match, not as two table entries.
+        var extra = ourExtra(ev, lm);
+        // Pre-match with the table to itself: no score either side, no result, and
+        // no division games to line the names up against. The scoreline would only
+        // repeat the card head word for word, so the row keeps just its status.
+        // With other games listed the names stay — they're the column those rows
+        // are read against.
+        var bare = !!solo && !first.inn && !second.inn && !result;
+        return matchRow(first, second, result,
+                        { ours: true, showTime: showTime, time: ev.time, tight: !!extra,
+                          bare: bare, status: feedBadge(ev, lm, status) }) + extra;
+    }
+    // The sub-line under our row: batters at the crease while we're in, else the
+    // last wicket between innings, else the toss. Nothing once the match is decided
+    // (the result is already inline on the row).
+    function ourExtra(ev, lm) {
+        if (!lm || lm.complete) return '';
+        var inn = currentInnings(lm);
+        var body = '';
+        if (lm.phase === 'live' || lm.phase === 'break') {
             var crease = creaseHtml(inn), lastW = lastWicketHtml(inn);
-            var prior = innsArr.length >= 2 ? inningsLine(ev, innsArr[0], '') : '';
-            var innLine = inn ? inningsLine(ev, inn, crease)
-                : '<div class="event-detail"><span class="sub">' + esc(lm.score_text || 'In play') + '</span></div>';
-            // Batters now sit inline on the innings line; only fall back to a separate
-            // status line for a between-innings "Last out" when there's no one at the crease.
-            var extra = (!crease && lastW) ? '<div class="event-status">Last out: ' + lastW + '</div>' : '';
-            return tossHtml(ev, lm) + prior + innLine + extra;
+            body = crease || (lastW ? 'Last out: ' + lastW : '');
         }
-        if (!ev.pc_id) return '';  // can't poll → pure schedule row
-        // Pre-match / no-score states no longer carry a detail line — the feed
-        // status badge under the time conveys them. The toss, once made, is real
-        // content, so still surface it.
-        return status === 'ok' ? tossHtml(ev, lm) : '';
+        if (!body && lm.toss) {
+            // The feed names the toss winner's club directly (`winner_club`) — no
+            // stripping a team designation off "Wendover CC Friendly XI".
+            var t = lm.toss;
+            body = '<b>' + shortClub(t.winner_club || t.winner || '') + '</b> won the toss, elected to ' + esc(t.decision);
+        }
+        return body ? '<div class="m-extra">' + body + '</div>' : '';
     }
 
-    function shortClub(name) { return esc(String(name || '').replace(/\s+(CC|Cricket Club)$/i, '')); }
-    // Batting side reads white-bold, the other muted — "who's in" without spending
-    // gold (reserved for Wendover). Points-vs-Wendover dropped from the board.
-    function leagueSide(s, isBatting) {
-        return '<span class="el-team' + (isBatting ? ' batting' : '') + '">' + shortClub(s.club) + '</span>';
-    }
-    // The day's OTHER matches in this division, baked in; swing games rail-marked.
-    // Scores are empty placeholders until the slow league poll fills them.
-    function leagueOthers(ev) {
+    // The day's OTHER matches in this division, baked in; scores/results merged from
+    // the slow league poll (LEAGUE_SCORES), which yields the same innings shape our
+    // own rows use, so they render through matchRow identically.
+    function leagueRows(ev, showTime) {
         var lg = ev.league;
         if (!lg || !(lg.others && lg.others.length)) return '';
-        // Drop per-row times when every other game starts at our time (usual case).
-        var showTimes = lg.others.some(function (o) { return o.time && o.time !== ev.time; });
-        var rows = lg.others.map(function (o) {
-            var sc = LEAGUE_SCORES[String(o.match_id)];
-            var chase = (sc && sc.chase != null) ? '<span class="el-chase"> · chasing ' + esc(sc.chase) + '</span>' : '';
-            var score = sc ? '<span class="el-score ' + (sc.done ? 'done' : 'live') + '">' + esc(sc.score) + chase + '</span>'
-                           : '<span class="el-score" data-live></span>';
-            // Once we know who's batting, lead with them so the leading name lines up
-            // with the score on the right (reads like a scorecard: "Chesham 41/0 v Kew").
-            // Before that, keep the baked home-v-away order.
-            var awayBatting = sc && sc.battingHome === false;
-            var first = awayBatting ? o.away : o.home;
-            var second = awayBatting ? o.home : o.away;
-            var firstBatting = !!(sc && sc.battingHome != null);
-            return '<div class="el-row" data-match-id="' + esc(o.match_id) + '">' +
-                (showTimes ? '<span class="el-time">' + esc(o.time || '') + '</span>' : '') +
-                '<span class="el-teams">' + leagueSide(first, firstBatting) +
-                    '<span class="el-v">v</span>' + leagueSide(second, false) + '</span>' +
-                score +
-            '</div>';
+        return lg.others.map(function (o, i) {
+            var sc = LEAGUE_SCORES[String(o.match_id)] || {};
+            var home = { club: (o.home || {}).club, inn: sc.home };
+            var away = { club: (o.away || {}).club, inn: sc.away };
+            // Lead with whoever batted first, once the feed tells us; until then the
+            // baked home-v-away order stands.
+            var first = sc.awayFirst ? away : home;
+            var second = first === home ? away : home;
+            // Our own fixture always holds position 1, so the first league row is
+            // the table's 2nd — the one the house stripe starts on.
+            return matchRow(first, second, sc.result ? shortenClubs(sc.result) : '',
+                            { showTime: showTime, time: o.time, matchId: o.match_id,
+                              alt: i % 2 === 0, status: leagueBadge(LEAGUE_SCORES[String(o.match_id)]) });
         }).join('');
-        // The competition title now lives here (removed from the top meta line) —
-        // league name · division, heading the rest of the division's games.
-        var div = (lg.division || ev.competition || '').trim();
-        var title = lg.name ? esc(lg.name) + (div ? ' <span class="dot">·</span> ' + esc(div) : '')
-                            : esc(div);
-        var head = title ? '<div class="el-head">' + title + '</div>' : '';
-        return '<div class="event-league">' + head + rows + '</div>';
     }
 
     function matchTile(ev, lm, status) {
-        var isLive = lm && (lm.complete || lm.phase === 'live' || lm.phase === 'break' || lm.phase === 'post');
-        return '<div class="event' + (isLive ? ' is-live' : '') + '">' +
-            '<div class="event-time">' + timeCell(ev) + feedBadge(ev, lm, status) + '</div>' +
-            '<div class="event-main">' +
-                '<div class="event-head"><div class="event-teams">' + teamsHead(ev) + '</div>' + tags(ev) + '</div>' +
-                matchMeta(ev, lm) + matchDetail(ev, lm, status) + leagueOthers(ev) +
-            '</div></div>';
+        // Per-row times only earn their column when the day's games in this division
+        // don't all start together (the usual case is that they do).
+        var others = (ev.league && ev.league.others) || [];
+        var showTime = others.some(function (o) { return o.time && o.time !== ev.time; });
+        // No whole-card live tint any more: the rail's per-match status badge says
+        // which games are under way, and says it per game rather than per card.
+        return '<div class="event">' +
+            '<div class="event-top">' +
+                '<div class="event-time">' + timeCell(ev) + '</div>' +
+                '<div class="event-main">' +
+                    '<div class="event-head"><div class="event-teams">' + teamsHead(ev) + '</div>' + tags(ev) + '</div>' +
+                    subtitle(ev, lm) +
+                '</div>' +
+            '</div>' +
+            '<div class="m-table">' + ourRow(ev, lm, showTime, status, !others.length) +
+                leagueRows(ev, showTime) + '</div>' +
+        '</div>';
     }
     // Standing opening (Members Bar) — deliberately the slimmest tile on the board:
     // when it starts, what it is, where. No teams, no state, nothing to poll.
     function barTile(ev) {
         var loc = ev.ground ? '<span class="loc-badge">' + esc(ev.ground) + '</span>' : '';
-        return '<div class="event bar">' +
+        return '<div class="event bar"><div class="event-top">' +
             '<div class="event-time">' + timeCell(ev) + '</div>' +
             '<div class="event-main">' +
                 '<div class="event-head"><div class="event-teams"><span class="opp">' + esc(ev.title || 'Members Bar') + '</span></div>' +
                     '<div class="event-tags">' + loc + '</div></div>' +
-            '</div></div>';
+            '</div></div></div>';
     }
     function trainingTile(ev) {
         var teams = (ev.team_names || []).join(', ');
-        return '<div class="event training">' +
+        return '<div class="event training"><div class="event-top">' +
             '<div class="event-time">' + timeCell(ev) + '</div>' +
             '<div class="event-main">' +
                 '<div class="event-head"><div class="event-teams"><span class="opp">' + esc(ev.title || 'Training') + '</span></div>' +
                     tags(ev, '<span class="ha train">Training</span>') + '</div>' +
                 (teams ? '<div class="event-meta">' + esc(teams) + '</div>' : '') +
-            '</div></div>';
+            '</div></div></div>';
     }
 
     // Merge slow-poll league scores from the `wcc-league` feed. Card contract =
     // live-worker/src/pc.mjs buildLeagueState: { matches: [{ match_id, complete,
-    // result, score_text, phase, ... }] }. In-progress → the scoreline; done → the
-    // result. The engine's league loop + Worker /league.json endpoint are still to
-    // come; this consumer is ready for them.
+    // result_club, innings: [{ team_batting_id, runs, wickets, overs, declared }] }] }.
+    // Stored per SIDE (home/away) so a league row renders exactly like ours: each
+    // club followed by its own innings. The engine's league loop + Worker
+    // /league.json endpoint are still to come; this consumer is ready for them.
     function applyLeague(matches) {
         (matches || []).forEach(function (m) {
             if (m.match_id == null) return;
             var inns = m.innings || [];
-            var inn = inns.length ? inns[inns.length - 1] : null;
-            // Bare score for the right cell — the batting club is gold on the LEFT,
-            // so the score sheds its (redundant) team name here.
-            var bare = inn ? ((inn.runs != null ? inn.runs : 0) + '/' + (inn.wickets != null ? inn.wickets : 0) +
-                              ' (' + (inn.overs || '0') + ' ov)') : '';
-            // Which listed side is batting (home vs away) → gold on the left.
-            // By team id: PC tags each innings with `team_batting_id`, so this needs
-            // no name comparison at all.
-            var battingHome = null;
-            if (inn && inn.team_batting_id && m.home_team_id)
-                battingHome = String(inn.team_batting_id) === String(m.home_team_id);
-            // Second innings underway → surface what they're chasing (the first
-            // innings total), since the row only shows the current innings score.
-            var chase = (!m.complete && inns.length >= 2 && inns[0].runs != null) ? inns[0].runs : null;
-            LEAGUE_SCORES[String(m.match_id)] = {
-                score: m.complete ? (m.result_club || m.result || '') : bare,
-                done: !!m.complete,
-                battingHome: battingHome,
-                chase: chase
-            };
+            var rec = { result: m.complete ? (m.result_club || m.result || '') : '',
+                        // What the rail reports for this row: state, not freshness.
+                        phase: m.phase || null, done: !!m.complete, started: inns.length > 0 };
+            // Which side each innings belongs to, BY TEAM ID: PC tags every innings
+            // with `team_batting_id`, so this needs no name comparison at all.
+            inns.forEach(function (inn, i) {
+                if (!inn.team_batting_id || !m.home_team_id) return;
+                var isHome = String(inn.team_batting_id) === String(m.home_team_id);
+                rec[isHome ? 'home' : 'away'] = inn;
+                if (i === 0) rec.awayFirst = !isHome;
+            });
+            LEAGUE_SCORES[String(m.match_id)] = rec;
         });
     }
 
@@ -415,8 +514,11 @@
         listEl.innerHTML = rows.join('');
 
         pill.hidden = !(feed && feed.matches || []).some(function (m) { return (m.phase === 'live' || m.phase === 'break') && !m.complete; });
-        var a = feed && ago(feed.generated_at);
-        updatedEl.textContent = a ? 'updated ' + a + ' ago' : '';
+        // The old "updated 12s ago" measured OUR poll, not the scorers' — reassuring
+        // even while a match sat stalled for half an hour. Per-match freshness now
+        // lives in each row's status badge, so this slot reports only the one thing
+        // the badges can't: our own pipe being down.
+        updatedEl.textContent = POLL_TROUBLE[status] || '';
     }
 
     render(null, 'ok');  // initial paint from the baked schedule; feed assumed reachable
