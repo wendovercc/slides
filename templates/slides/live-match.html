@@ -166,7 +166,7 @@
     // last-match video reel), so there's one clip in flight at a time; `clipTok`
     // invalidates late events/timers from a superseded clip.
     var clipTok = 0, clipStopAt = 0, clipBackstop = null, clipCleanup = null, hls = null;
-    var dwellTimer = null;
+    var dwellTimer = null, dwellUntil = 0;
     // Prefetch-gate state (see ensurePrefetch): a reel is revealed only once its
     // clips are fully cached, so the user never sees a first-play network stream.
     var GATE = null, readySet = {}, queued = {}, prefetchQ = [], pumping = false;
@@ -705,11 +705,17 @@
 
     // ---- panel rotation (clips + scorecards share one flat panel list) ----
     function clearDwell() { if (dwellTimer) { clearTimeout(dwellTimer); dwellTimer = null; } }
-    function armDwell() {
+    // `ms` omitted = a fresh full panel; passed = the remainder of a panel whose
+    // clock must survive an in-place repaint (see onFeed).
+    function armDwell(ms) {
         clearDwell();
         if (isPaused()) return;
-        dwellTimer = setTimeout(function () { if (!isPaused()) autoAdvance(); }, PANEL_MS);
+        var wait = ms == null ? PANEL_MS : Math.max(0, ms);
+        dwellUntil = Date.now() + wait;
+        dwellTimer = setTimeout(function () { if (!isPaused()) autoAdvance(); }, wait);
     }
+    // What's left of the running panel's dwell, or null if none is armed.
+    function dwellRemaining() { return dwellTimer ? Math.max(0, dwellUntil - Date.now()) : null; }
     // Next panel, or end the slide (→ the deck advances) after the last one.
     function autoAdvance() {
         if (idx >= views.length - 1) { done(); return; }
@@ -845,7 +851,18 @@
         // Keep the pre-match panel in place (don't reset its dwell), but let a
         // newly-available toss appear and keep its tab lit after the strip rebuilds.
         if (wasIntro) { setActive(views[idx].tab); injectToss(); applyLiveXi(); return; }
+        // Repaint the scorecard in place — but NOT at the cost of its clock.
+        // gotoPanel() always clears the dwell and only re-arms it when play=true,
+        // so a feed tick landing mid-panel used to leave the panel with no timer at
+        // all: the slide never called autoAdvance, never posted wcc-done, and the
+        // wall sat on that scorecard until the player's 900s slide backstop. Polls
+        // (15s live / 30s otherwise) are shorter than a 20s panel, so the first
+        // unprotected panel — 1st Innings batting — was where it stuck, every time.
+        // Carry the remaining time across the repaint instead of restarting it, so
+        // a busy feed can't stretch a panel indefinitely either.
+        var remain = dwellRemaining();
         gotoPanel(idx, false);
+        if (remain !== null) armDwell(remain);
     }
 
     // Kiosk activation waits briefly for the first feed so a load race doesn't skip a
