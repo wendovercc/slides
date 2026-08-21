@@ -179,17 +179,74 @@ def get_leaderboard_block(player, team_filter, comp_filter):
     return player["stats"]["all"]
 
 
+def _strictest_filling(values, target_rows, floor, ceiling):
+    """Highest threshold in [floor, ceiling] that still leaves `target_rows` qualifiers.
+
+    Qualifier counts fall monotonically as the threshold rises, so walking up
+    and keeping the last threshold that fills the table finds it. If even the
+    floor can't fill the table, the floor is what we get — a short board beats
+    an empty one.
+    """
+    best = floor
+    for t in range(floor, ceiling + 1):
+        if sum(1 for v in values if v >= t) >= target_rows:
+            best = t
+    return best
+
+
+def qualification_thresholds(entries, lb_config, rows):
+    """Qualification bars for the "best average" tables.
+
+    A flat `min 2 innings / 2 overs` was far too soft by August — club-wide
+    bowling averages became a list of juniors with four overs apiece. The bar
+    is the configured one (5 innings / 10 overs), which holds all season and
+    needs no explaining; it only relaxes back towards the floor when it would
+    leave the table short of rows, which is early season, thin squads and the
+    smaller junior scopes.
+
+    Batting counts innings, not-outs included: someone who bats regularly and
+    finishes innings is exactly who these boards are for. A player yet to be
+    dismissed has no average at all and drops out downstream.
+
+    Returns (min_innings, min_overs).
+    """
+    cfg = lb_config or {}
+    floor_innings = cfg.get("floor_innings", 2)
+    floor_overs = cfg.get("floor_overs", 2)
+    bat_bar = max(floor_innings, cfg.get("min_innings", 5))
+    bowl_bar = max(floor_overs, cfg.get("min_overs", 10))
+
+    # Only players who'd actually appear count towards filling the table: an
+    # average of None (no dismissals / no wickets) is excluded downstream, so
+    # counting them here would relax the bar for rows that never render.
+    innings = [
+        e["block"]["batting"]["innings"]
+        for e in entries
+        if e["block"]["batting"].get("average") is not None
+    ]
+    overs = [
+        e["block"]["bowling"]["balls"] / 6
+        for e in entries
+        if e["block"]["bowling"].get("average") is not None
+    ]
+    return (
+        _strictest_filling(innings, rows, floor_innings, bat_bar),
+        _strictest_filling(overs, rows, floor_overs, bowl_bar),
+    )
+
+
 def build_batting_leaderboard(slide, stats_data, lb_config):
     team_filter = slide.get("teams") or slide.get("team")
     comp_filter = slide.get("competition")
     rows = lb_config.get("rows", 8)
-    min_innings = lb_config.get("min_innings", 2)
 
     entries = []
     for p in stats_data["players"].values():
         block = get_leaderboard_block(p, team_filter, comp_filter)
         if block and block["matches"] > 0:
             entries.append({"name": p["name"], "block": block})
+
+    min_innings, _ = qualification_thresholds(entries, lb_config, rows)
 
     def fmt(e):
         b = e["block"]["batting"]
@@ -230,13 +287,15 @@ def build_bowling_leaderboard(slide, stats_data, lb_config):
     team_filter = slide.get("teams") or slide.get("team")
     comp_filter = slide.get("competition")
     rows = lb_config.get("rows", 8)
-    min_balls = lb_config.get("min_overs", 2) * 6
 
     entries = []
     for p in stats_data["players"].values():
         block = get_leaderboard_block(p, team_filter, comp_filter)
         if block and block["matches"] > 0:
             entries.append({"name": p["name"], "block": block})
+
+    _, min_overs = qualification_thresholds(entries, lb_config, rows)
+    min_balls = min_overs * 6
 
     def fmt(e):
         b = e["block"]["bowling"]
@@ -267,7 +326,7 @@ def build_bowling_leaderboard(slide, stats_data, lb_config):
 
     slide["_wkts_rows"] = [fmt(e) for e in wkts_rows]
     slide["_avg_rows"] = [fmt(e) for e in avg_rows]
-    slide["_min_overs"] = lb_config.get("min_overs", 2)
+    slide["_min_overs"] = min_overs
 
 
 def build_leaderboard(slide, stats_data, lb_config):
@@ -1597,7 +1656,291 @@ def build_fantasy_teams(slide, teams_by_id, fixtures_data, player_standings):
     slide["_teams"] = cards
 
 
-def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
+def _short_opponent(name):
+    """Trim a club name to what fits a narrow 'Opponent' column.
+
+    'Maidenhead & Bray CC' → 'Maidenhead & Bray'. The suffix is noise when
+    every row in the column is a cricket club; dropping it buys three or four
+    characters of the name that actually distinguishes one row from the next.
+    """
+    s = (name or "").strip()
+    for suffix in (" Cricket Club", " CC"):
+        if s.endswith(suffix):
+            return s[: -len(suffix)].strip()
+    return s
+
+
+def _short_date(iso_date):
+    """'2026-08-01' → '1 Aug'. The weekday _fmt_date_past adds is shouty in a
+    card's sub-line, and these were nearly all Saturdays anyway."""
+    try:
+        d = datetime.strptime(iso_date, "%Y-%m-%d")
+        return d.strftime(f"{d.day} %b")
+    except (ValueError, TypeError):
+        return ""
+
+
+def _ordinal(n):
+    try:
+        n = int(n)
+    except (TypeError, ValueError):
+        return ""
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _versus(record):
+    """'v Tring Park · 20 Jun' from any record carrying opponents + date."""
+    opp = _short_opponent(record.get("opponents"))
+    return " · ".join(x for x in (f"v {opp}" if opp else "", _short_date(record.get("date"))) if x)
+
+
+# Bars for the two cards where a tiny sample would otherwise win: a 6-ball 12
+# is not the season's fastest scoring, and a single tidy over is not its most
+# economical spell.
+FAST_SCORING_MIN_RUNS = 30
+ECONOMY_MIN_BALLS = 24
+
+# Fewer cards than this and the Records tab is mostly empty grid — the younger
+# junior sides, whose scorecards carry neither fielders nor fall-of-wickets.
+MIN_RECORD_CARDS = 4
+
+
+def _card(label, category, record, value, name, detail="", sub=""):
+    """One record card, or None when the club has nothing in that category yet.
+
+    Cards carry their own discipline icon rather than sitting under a column
+    heading, so a missing one simply drops out and the rest close up. `name`
+    may be a list — a partnership gets a line per batter rather than one
+    truncated line for the pair.
+    """
+    if not record:
+        return None
+    return {
+        "label": label, "category": category, "value": value,
+        "names": name if isinstance(name, list) else [name],
+        "detail": detail, "sub": sub,
+    }
+
+
+def _players_of(record):
+    """Everyone a record credits — both batters, in a partnership's case."""
+    if record.get("batsmen"):
+        return [n for n in record["batsmen"] if n]
+    for key in ("batsman", "bowler", "fielder", "name"):
+        if record.get(key):
+            return [record[key]]
+    return []
+
+
+def _resolve_ties(specs):
+    """Choose one record per card, favouring players not already on a card.
+
+    Ties are not a rare edge here: a quarter of the club's cards are decided by
+    one, and small-integer records tie enormously (22 bowlers with a single
+    maiden apiece). The fallback this replaces was `max()` returning the first
+    maximal record, i.e. the earliest match of the season — arbitrary, and
+    invisible to anyone watching. Given the choice is free, spend it on showing
+    a different name.
+
+    Cards with one candidate settle first, then the tied ones most-constrained
+    first, each taking the candidate whose players are least used so far. Feed
+    order breaks a tie between equally-fresh candidates, so a build is
+    reproducible. This only ever picks *between equal records* — it never
+    demotes an outright winner for the sake of variety.
+    """
+    used = {}
+    picks = {}
+    for i in sorted(range(len(specs)), key=lambda i: len(specs[i]["pool"])):
+        pool = specs[i]["pool"]
+        if not pool:
+            continue
+        pick = min(
+            pool,
+            key=lambda r: (sum(used.get(n, 0) for n in _players_of(r)), pool.index(r)),
+        )
+        picks[i] = pick
+        for name in _players_of(pick):
+            used[name] = used.get(name, 0) + 1
+    return picks
+
+
+def build_highlights(records, team_filter):
+    """The season's bests for one team, as a flat list of record cards.
+
+    Each card asks a genuinely different question rather than re-ranking the
+    same list the Batting and Bowling tabs already show, and each carries its
+    own discipline icon — so the grid is nine cards, not three columns, and a
+    category with no data drops out instead of leaving a hole. Every feed is
+    optional: u9 to u12 scorecards carry no fall-of-wickets or fielder names.
+    """
+    teams = team_filter if isinstance(team_filter, list) else [team_filter]
+
+    def mine(feed):
+        rows = ((records or {}).get(feed) or {}).get("records") or []
+        return [r for r in rows if r.get("team") in teams]
+
+    knocks, stands = mine("knocks"), mine("partnerships")
+    spells, fielding = mine("spells"), mine("fielding")
+
+    def ties(rows, key, where=None):
+        """Every record sharing the best value — the tie pool, not a winner."""
+        pool = [r for r in rows if where(r)] if where else rows
+        if not pool:
+            return []
+        top = max(key(r) for r in pool)
+        return [r for r in pool if key(r) == top]
+
+    def shape(knock):
+        parts = []
+        for field, word in (("balls", "balls"), ("fours", "four"), ("sixes", "six")):
+            n = knock.get(field) or 0
+            if not n:
+                continue
+            if field == "balls":
+                parts.append(f"{n} balls")
+            else:
+                plural = "s" if word == "four" else "es"
+                parts.append(f"{n} {word}{plural if n != 1 else ''}")
+        return " · ".join(parts)
+
+    def figures(spell):
+        return f"{spell.get('overs')}-{spell.get('maidens')}-{spell.get('runs')}-{spell.get('wickets')}"
+
+    def breakdown(record, fields=("catches", "stumpings", "run_outs")):
+        words = {"catches": "ct", "stumpings": "st", "run_outs": "ro"}
+        return " · ".join(f"{record[f]} {words[f]}" for f in fields if record.get(f))
+
+    def totals(rows, fields):
+        """Season aggregates per player, as a tie pool of the joint leaders."""
+        agg = {}
+        for r in rows:
+            entry = agg.setdefault(r.get("fielder", ""), dict.fromkeys(fields, 0))
+            for f in fields:
+                entry[f] += r.get(f, 0)
+        if not agg:
+            return []
+        top = max(sum(v.values()) for v in agg.values())
+        if not top:
+            return []
+        return [
+            {"name": n, "total": sum(v.values()), **v}
+            for n, v in agg.items() if sum(v.values()) == top
+        ]
+
+    # Junior formats cap a spell at three overs, so a fixed four-over bar would
+    # empty the economy card for every side below u15. Fall back to the longest
+    # spell the scope actually bowls.
+    longest = max((r.get("balls", 0) for r in spells), default=0)
+    economy_bar = ECONOMY_MIN_BALLS if longest >= ECONOMY_MIN_BALLS else longest
+
+    # Keeping and fielding are different jobs. A keeper takes standing chances
+    # all afternoon and would win any combined table on volume alone, so their
+    # dismissals are counted separately and kept out of the outfield cards.
+    keeper_rows = [r for r in fielding if r.get("as_keeper")]
+    # Anything not the keeper's is outfield, and a stumping can only be the
+    # keeper's — so a stray one means the sheet named no keeper that day.
+    outfield_rows = [r for r in fielding if not r.get("as_keeper") and not r.get("stumpings")]
+
+    def outfield_count(r):
+        return r.get("catches", 0) + r.get("run_outs", 0)
+
+    # Discipline order is the reading order, so a full side gets a row of
+    # batting, a row of bowling and a row of fielding without needing headings
+    # to say so.
+    specs = [
+        {
+            "label": "Highest score", "category": "bat",
+            "pool": ties(knocks, lambda r: (r.get("score", 0), bool(r.get("not_out")))),
+            "render": lambda r: (
+                f"{r['score']}{'*' if r.get('not_out') else ''}",
+                r.get("batsman", ""), _versus(r), shape(r),
+            ),
+        },
+        {
+            "label": "Biggest partnership", "category": "bat",
+            "pool": ties(stands, lambda r: r.get("runs", 0)),
+            "render": lambda r: (
+                f"{r['runs']}{'*' if r.get('unbroken') else ''}",
+                r.get("batsmen") or [], _versus(r), f"{_ordinal(r.get('wicket'))} wicket",
+            ),
+        },
+        {
+            "label": "Best strike rate", "category": "bat",
+            "pool": ties(
+                knocks, lambda r: r["score"] / r["balls"],
+                lambda r: r.get("balls") and r.get("score", 0) >= FAST_SCORING_MIN_RUNS,
+            ),
+            "render": lambda r: (
+                f"{r['score'] / r['balls'] * 100:.0f}",
+                r.get("batsman", ""), _versus(r), f"{r['score']} off {r['balls']} balls",
+            ),
+        },
+        {
+            "label": "Best figures", "category": "bowl",
+            "pool": ties(spells, lambda r: (r.get("wickets", 0), -r.get("runs", 0))),
+            "render": lambda r: (
+                f"{r['wickets']}–{r['runs']}",
+                r.get("bowler", ""), _versus(r), f"{r.get('overs')} overs",
+            ),
+        },
+        {
+            "label": "Best economy", "category": "bowl",
+            "pool": ties(
+                spells, lambda r: -(r["runs"] / r["balls"] * 6),
+                lambda r: r.get("balls", 0) >= economy_bar,
+            ),
+            "render": lambda r: (
+                f"{r['runs'] / r['balls'] * 6:.2f}",
+                r.get("bowler", ""), _versus(r), figures(r),
+            ),
+        },
+        {
+            "label": "Most maidens", "category": "bowl",
+            "pool": ties(spells, lambda r: r.get("maidens", 0),
+                         lambda r: r.get("maidens", 0) > 0),
+            "render": lambda r: (
+                str(r.get("maidens", 0)), r.get("bowler", ""), _versus(r), figures(r),
+            ),
+        },
+        {
+            "label": "Most dismissals in a match", "category": "field",
+            # One catch is not a performance.
+            "pool": ties(outfield_rows, outfield_count, lambda r: outfield_count(r) >= 2),
+            "render": lambda r: (
+                str(outfield_count(r)), r.get("fielder", ""), _versus(r),
+                breakdown(r, ("catches", "run_outs")),
+            ),
+        },
+        {
+            "label": "Keeper dismissals", "category": "field",
+            "pool": totals(keeper_rows, ("catches", "stumpings", "run_outs")),
+            "render": lambda r: (str(r["total"]), r["name"], "This season", breakdown(r)),
+        },
+        {
+            "label": "Outfield dismissals", "category": "field",
+            "pool": totals(outfield_rows, ("catches", "run_outs")),
+            "render": lambda r: (
+                str(r["total"]), r["name"], "This season",
+                breakdown(r, ("catches", "run_outs")),
+            ),
+        },
+    ]
+
+    picks = _resolve_ties(specs)
+    cards = []
+    for i, spec in enumerate(specs):
+        record = picks.get(i)
+        if not record:
+            continue
+        value, name, detail, sub = spec["render"](record)
+        cards.append(_card(spec["label"], spec["category"], record, value, name, detail, sub))
+    # Below four cards the tab is mostly empty grid — the younger junior sides,
+    # whose scorecards carry neither fielders nor fall-of-wickets.
+    return cards if len(cards) >= MIN_RECORD_CARDS else []
+
+
+def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records=None):
     """Assemble the multi-panel team slide object.
 
     Panels (any with no data are omitted from slide._panels):
@@ -1740,10 +2083,12 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
         slide["_has_schedule"] = True
         panels.append("schedule")
 
-    # ── Tabs 4 & 5: Top batting / Top bowling (5 rows each table) ──────────
+    # ── Tabs 4 & 5: Top batting / Top bowling ──────────────────────────────
+    # Batting is two columns: the two tables stack down the left, the season's
+    # biggest innings run as performance lines on the right. Bowling is still
+    # two stacked halves.
     TOP_ROWS = 5
-    min_innings = (lb_config or {}).get("min_innings", 2)
-    min_balls = (lb_config or {}).get("min_overs", 2) * 6
+    RUNS_ROWS = 7
 
     slide["_top_runs"] = []
     slide["_top_avg_bat"] = []
@@ -1751,8 +2096,11 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
     slide["_top_avg_bowl"] = []
     slide["_has_top_batting"] = False
     slide["_has_top_bowling"] = False
+    # Floors stand in until the stats give us a scope to size the bar against.
+    min_innings = (lb_config or {}).get("floor_innings", 2)
+    min_overs = (lb_config or {}).get("floor_overs", 2)
     slide["_min_innings"] = min_innings
-    slide["_min_overs"] = (lb_config or {}).get("min_overs", 2)
+    slide["_min_overs"] = min_overs
 
     if stats_data:
         entries = []
@@ -1761,15 +2109,22 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
             if block and block["matches"] > 0:
                 entries.append({"name": p["name"], "block": block})
 
+        min_innings, min_overs = qualification_thresholds(entries, lb_config, TOP_ROWS)
+        min_balls = min_overs * 6
+        slide["_min_innings"] = min_innings
+        slide["_min_overs"] = min_overs
+
         def fmt_bat(e):
             b = e["block"]["batting"]
             avg = b.get("average")
+            sr = b.get("strike_rate")
             return {
                 "name": e["name"],
                 "matches": e["block"]["matches"],
                 "innings": b["innings"],
                 "not_outs": b["not_outs"],
                 "runs": b["runs"],
+                "strike_rate": f"{sr:.0f}" if sr is not None else "-",
                 "high_score_num": str(b["high_score"]) if b["high_score"] is not None else "-",
                 "high_score_not_out": bool(b.get("high_score_not_out")),
                 "average": f"{avg:.1f}" if avg is not None else "-",
@@ -1779,7 +2134,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
             [e for e in entries if e["block"]["batting"]["innings"] > 0],
             key=lambda e: e["block"]["batting"]["runs"],
             reverse=True,
-        )[:TOP_ROWS]
+        )[:RUNS_ROWS]
 
         avg_bat_rows = sorted(
             [
@@ -1829,6 +2184,11 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config):
         if slide["_top_wkts"] or slide["_top_avg_bowl"]:
             slide["_has_top_bowling"] = True
             panels.append("top_bowling")
+
+    # ── Tab 6: Highlights — the season's bests, three by three ─────────────
+    slide["_records"] = build_highlights(records, team_id)
+    if slide["_records"]:
+        panels.append("highlights")
 
     slide["_panels"] = panels
 
@@ -2768,6 +3128,17 @@ def build_slides(env):
             _honours_cache[name] = json.loads(path.read_text()) if path.exists() else None
         return _honours_cache[name]
 
+    def load_records():
+        """The four per-innings record feeds behind the team Highlights tab.
+        Each is independently optional — a missing file empties its cards, not
+        the tab."""
+        return {
+            "knocks": load_honours("season_top_knocks_this_season"),
+            "partnerships": load_honours("season_partnerships_this_season"),
+            "spells": load_honours("season_bowling_spells_this_season"),
+            "fielding": load_honours("season_fielding_this_season"),
+        }
+
     _fixtures_cache = {}
 
     def load_fixtures():
@@ -2841,7 +3212,7 @@ def build_slides(env):
         if slide.get("template") == "team":
             build_team(
                 slide, teams_by_id, load_fixtures(),
-                load_stats("this_season"), lb_config,
+                load_stats("this_season"), lb_config, load_records(),
             )
 
         if slide.get("template") == "honours":

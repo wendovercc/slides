@@ -277,6 +277,29 @@ brighter title. Any qualifier ("min 5 innings") rides inline after the title.
 Keep a plain title row for the *empty* branch, so a table with no data still
 names itself.
 
+Qualifiers on average tables are **computed, never hardcoded**: print the
+`_min_innings` / `_min_overs` the builder puts on the slide. The configured bar
+relaxes in scopes too thin to fill the table (see `qualification_thresholds()`
+in `scripts/build.py`), so the caption differs between slides.
+
+### Record cards (team Records tab)
+
+Nine season-best cards in a 3×3 grid is the pattern for "the season's bests" —
+see `.hl-grid` in `team.html`. Rules that keep it readable at 10ft: **no column
+headings** — each card carries its own discipline icon (`perf_icon`, sized to
+the label at 1.5vw, not the Form tile's 2.2vw), so a card with no data drops
+out and the rest close up. Junior scorecards carry no fall-of-wickets or
+fielder names, so short grids are normal; below four cards the tab is dropped
+entirely. Rows are `grid-auto-rows: 1fr` so they always fill the panel to the
+safe zone, and card content is vertically centred to suit whatever height that
+gives. The card's label is `--t-xs` and dim, the figure is the gold headline
+next to the name (Form-tile idiom), and detail lines are `--t-ms` at 0.55
+opacity.
+
+Gaps between cards should read as equal in both directions, which means
+converting: the canvas is 1920×1080, so 1vw is 19.2px and 1vh is 10.8px —
+a 1.6vw column gap needs a 2.85vh row gap, not 1.6vh.
+
 ### Right-hand numeric columns: vary the width
 
 Three equal narrow columns at the right edge read as one bunched block. Size

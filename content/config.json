@@ -15,9 +15,12 @@
   "default_panel_duration": 20,
   "_comment_last_match_max_age_days": "How long a team's last-match PACKAGE (intro → scorecards → reels → result) stays in the decks, counted from the match date. Long enough to cover the following weekend, so Saturday's game is still the full story for a Sunday friendly, and it lapses before the next fixture replaces it anyway. In practice it only bites teams that have STOPPED playing (juniors at season's end). When the package lapses the team's standalone last-match-result card takes over automatically — see build_slideshows.",
   "last_match_max_age_days": 10,
+  "_comment_leaderboards": "Best-average qualification: min_innings / min_overs is the bar, relaxed back towards floor_innings / floor_overs only where it would leave a table short of rows (early season, thin squads, small junior scopes).",
   "leaderboards": {
-    "min_innings": 2,
-    "min_overs": 2,
+    "min_innings": 5,
+    "min_overs": 10,
+    "floor_innings": 2,
+    "floor_overs": 2,
     "rows": 12
   },
   "preview": {

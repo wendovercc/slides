@@ -38,8 +38,11 @@
     }
     .panel.panel-active { opacity: 1; visibility: visible; }
     /* Tab typography/underline come from the base. Tab count is data-driven
-       (up to five), so this nav is the one that may need to wrap. */
-    .panel-nav { gap: 3vw; margin-top: 1.2vh; flex-wrap: wrap; }
+       (up to six), so this nav is the one that may need to wrap — and a wrapped
+       rail steals a line from the panel below. Six labels at the roomy gap
+       overrun the 73vw of main width, so the gap tightens once the rail is
+       full; five or fewer keep the original spacing. */
+    .panel-nav { gap: var(--nav-gap, 3vw); margin-top: 1.2vh; flex-wrap: wrap; }
     .empty {
         flex: 1;
         display: flex;
@@ -123,11 +126,11 @@
         color: rgba(255,255,255,0.55);
         align-items: baseline;
     }
-    /* The table title lives in the header row, spanning the rank + name
-       columns — the 'Name' heading is low-value and this reclaims a whole
-       row of vertical space in a tight panel. */
+    /* The table title lives in the header row, in the name column — the 'Name'
+       heading is low-value and this reclaims a whole row of vertical space in
+       a tight panel. */
     .col-headers .section-title {
-        grid-column: 1 / 3;
+        grid-column: 1;
         opacity: 1;
         color: rgba(255,255,255,0.8);
     }
@@ -147,7 +150,6 @@
         align-items: baseline;
     }
     .row:nth-child(even) { background: rgba(255,255,255,0.04); }
-    .pos { opacity: 0.45; text-align: right; }
     .name-cell {
         overflow: hidden;
         white-space: nowrap;
@@ -167,27 +169,124 @@
         font-variant-numeric: tabular-nums;
         color: var(--accent);
     }
-    .hs-cell {
-        display: flex;
-        justify-content: flex-end;
-        font-variant-numeric: tabular-nums;
-    }
-    .hs-star { display: inline-block; width: 0.6em; }
-
-    .bat-runs-cols,
-    .bat-avg-cols { display: grid; grid-template-columns: 2.5vw 1fr 4.5vw 3.5vw 4.5vw 5.5vw; }
+    /* No rank column: these are short tables read top-down, where the order is
+       already the point and a numbered column is just ink. */
+    .bat-runs-cols  { display: grid; grid-template-columns: 1fr 4vw 4.5vw 5.5vw; }
+    .bat-avg-cols   { display: grid; grid-template-columns: 1fr 4vw 3.5vw 5.5vw; }
     /* Widths vary by content (as the batting grids do) rather than three equal
        narrow columns jammed at the right edge: 'Best' holds a 5-27 figure and
        so is the widest. Keep in step with leaderboard.html's .wkts-grid /
        .bowlavg-grid — same columns, same widths. */
-    .bowl-wkts-cols { display: grid; grid-template-columns: 2.5vw 1fr 5.5vw 6vw 5.5vw; }
-    .bowl-avg-cols  { display: grid; grid-template-columns: 2.5vw 1fr 5.5vw 5vw 5.5vw; }
+    .bowl-wkts-cols { display: grid; grid-template-columns: 1fr 5.5vw 6vw 5.5vw; }
+    .bowl-avg-cols  { display: grid; grid-template-columns: 1fr 5.5vw 5vw 5.5vw; }
 
     .empty-mini {
         opacity: 0.4;
         font-size: var(--t-sm);
         padding-top: 0.6vh;
         font-style: italic;
+    }
+
+    /* ── Tab 6: Records — the season's bests, three by three ────────────── */
+    /* Nine cards, no column headings: each carries its own discipline icon,
+       so a category with no data drops out and the rest close up rather than
+       leaving a labelled hole. Rows share the panel height equally (1fr), so
+       three rows fill it to the safe zone — and a short side's two rows fill
+       it just as well. Row gap is set to match the column gap on the eye:
+       1.6vw is 30.7px, which is 2.85vh on a 1080 canvas. */
+    .hl-grid {
+        flex: 1;
+        min-height: 0;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-auto-rows: 1fr;
+        gap: 2.85vh 1.6vw;
+    }
+    /* Three docked bands: the record type at the top, the performance
+       centred in whatever height is left, and the match it happened in along
+       the bottom. Reading down a column, labels and footers line up across
+       cards even though the middles differ in height. */
+    .hl-card {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        background: rgba(255,255,255,0.04);
+        border-radius: var(--radius);
+        padding: 1vh 1vw;
+        min-width: 0;
+    }
+    /* Dimmed with colour, not opacity — opacity compounds onto children, and
+       it was quietly muting the gold figure that shares this row. */
+    .hl-card-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5vw;
+        font-family: 'Lato', Arial, sans-serif;
+        font-size: var(--t-xs);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: rgba(255,255,255,0.5);
+        margin-bottom: 0.6vh;
+    }
+    /* Icon sized to the label it sits beside, not to the Form tile's performer
+       line — .perf-icon's own 2.2vw would tower over --t-xs text. */
+    .hl-card-icon { display: flex; align-items: center; flex-shrink: 0; }
+    .hl-card-icon .perf-icon { width: 1.5vw; height: 1.5vw; }
+    .hl-card-title { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    /* The gold figure rides in the label band, hard right. It used to sit
+       beside the name, where it took a quarter of the widest line on the card
+       and truncated players out of their own record. */
+    .hl-card-value {
+        flex-shrink: 0;
+        font-size: var(--t-md);
+        font-weight: bold;
+        color: var(--accent);
+        font-variant-numeric: tabular-nums;
+    }
+    /* Now the full width of the card, the label band having taken the figure. */
+    .hl-card-name {
+        font-size: var(--t-md);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    /* A partnership spends two lines on names where every other card spends
+       one, so it steps down a size to keep the block the same weight. */
+    .hl-card-name-pair { font-size: var(--t-ms); }
+    /* The middle band is already centred on the card's vertical axis by
+       justify-content; text-align puts the name and its detail on the card's
+       centre-line too, so the block reads as one centred unit between the
+       left-docked label and footer. */
+    .hl-card-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        text-align: center;
+    }
+    /* The match this happened in — context, so it sits quietest and smallest,
+       docked to the floor of the card and to its right edge, under the figure
+       it qualifies. */
+    .hl-card-foot {
+        font-family: 'Lato', Arial, sans-serif;
+        font-size: var(--t-xs);
+        letter-spacing: 0.04em;
+        opacity: 0.45;
+        text-align: right;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+    .hl-card-detail {
+        font-family: 'Lato', Arial, sans-serif;
+        font-size: var(--t-ms);
+        line-height: 1.25;
+        opacity: 0.55;
+        letter-spacing: 0.04em;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
     }
 
     /* ── Tab 2: Form (match strips) ────────────────────────────────────── */
@@ -506,12 +605,13 @@
         'schedule': 'Schedule',
         'top_batting': 'Batting',
         'top_bowling': 'Bowling',
+        'highlights': 'Records',
     } %}
     <div class="header">
         <div class="title">Team Focus</div>
         <div class="subtitle">{{ slide.title }}</div>
     </div>
-    <nav class="panel-nav">
+    <nav class="panel-nav" style="--nav-gap: {% if slide._panels|length > 5 %}2vw{% else %}3vw{% endif %}">
         {% for tab in slide._panels %}
         <span class="panel-tab{% if loop.first %} active{% endif %}">{{ tab_labels[tab] }}</span>
         {% endfor %}
@@ -677,17 +777,14 @@
                             <div class="bat-runs-cols col-headers">
                                 <span class="section-title">Most runs</span>
                                 <span class="col-num">Inns</span>
-                                <span class="col-num">NO</span>
-                                <span class="col-num">HS</span>
+                                <span class="col-num">SR</span>
                                 <span class="col-num">Runs</span>
                             </div>
                             {% for r in slide._top_runs %}
                             <div class="bat-runs-cols row">
-                                <span class="pos">{{ loop.index }}</span>
                                 <span class="name-cell">{{ r.name }}</span>
                                 <span class="num">{{ r.innings }}</span>
-                                <span class="num">{{ r.not_outs }}</span>
-                                <span class="num hs-cell"><span>{{ r.high_score_num }}</span><span class="hs-star">{% if r.high_score_not_out %}*{% endif %}</span></span>
+                                <span class="num">{{ r.strike_rate }}</span>
                                 <span class="num headline">{{ r.runs }}</span>
                             </div>
                             {% endfor %}
@@ -705,16 +802,13 @@
                                 <span class="section-title">Best average<span class="qualifier-note">min {{ slide._min_innings }} innings</span></span>
                                 <span class="col-num">Inns</span>
                                 <span class="col-num">NO</span>
-                                <span class="col-num">HS</span>
                                 <span class="col-num">Avg</span>
                             </div>
                             {% for r in slide._top_avg_bat %}
                             <div class="bat-avg-cols row">
-                                <span class="pos">{{ loop.index }}</span>
                                 <span class="name-cell">{{ r.name }}</span>
                                 <span class="num">{{ r.innings }}</span>
                                 <span class="num">{{ r.not_outs }}</span>
-                                <span class="num hs-cell"><span>{{ r.high_score_num }}</span><span class="hs-star">{% if r.high_score_not_out %}*{% endif %}</span></span>
                                 <span class="num headline">{{ r.average }}</span>
                             </div>
                             {% endfor %}
@@ -742,7 +836,6 @@
                             </div>
                             {% for r in slide._top_wkts %}
                             <div class="bowl-wkts-cols row">
-                                <span class="pos">{{ loop.index }}</span>
                                 <span class="name-cell">{{ r.name }}</span>
                                 <span class="num">{{ r.overs }}</span>
                                 <span class="num">{{ r.best }}</span>
@@ -767,7 +860,6 @@
                             </div>
                             {% for r in slide._top_avg_bowl %}
                             <div class="bowl-avg-cols row">
-                                <span class="pos">{{ loop.index }}</span>
                                 <span class="name-cell">{{ r.name }}</span>
                                 <span class="num">{{ r.overs }}</span>
                                 <span class="num">{{ r.wickets }}</span>
@@ -783,6 +875,24 @@
                         <div class="empty-mini">No qualifying bowlers yet</div>
                         {% endif %}
                     </div>
+                </div>
+
+            {% elif tab == 'highlights' %}
+                <div class="hl-grid">
+                    {% for c in slide._records %}
+                    <div class="hl-card">
+                        <div class="hl-card-label">
+                            <span class="hl-card-icon">{{ perf_icon(c.category) }}</span>
+                            <span class="hl-card-title">{{ c.label }}</span>
+                            <span class="hl-card-value">{{ c.value }}</span>
+                        </div>
+                        <div class="hl-card-body">
+                            {% for n in c.names %}<div class="hl-card-name{% if c.names|length > 1 %} hl-card-name-pair{% endif %}">{{ n }}</div>{% endfor %}
+                            {% if c.sub %}<div class="hl-card-detail">{{ c.sub }}</div>{% endif %}
+                        </div>
+                        {% if c.detail %}<div class="hl-card-foot">{{ c.detail }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
             {% endif %}
 

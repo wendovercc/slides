@@ -20,6 +20,17 @@ ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
 API_BASE = "http://play-cricket.com/api/v2"
 
+# "Highest scores" tables: the smallest innings worth recording, and how many
+# to keep per team. The cap is what stops a knocks list from being every
+# scorecard in the season — a 5-row table with room for the leaderboards to
+# merge several teams needs nothing like all of them.
+KNOCK_MIN_RUNS = 25
+KNOCKS_PER_TEAM = 25
+
+# Bowling spells worth recording, for the highlights tab's best-figures and
+# most-economical cards. Two overs keeps a one-over cameo off the economy card.
+SPELL_MIN_BALLS = 12
+
 
 def load_dotenv():
     env_file = ROOT / ".env"
@@ -186,6 +197,25 @@ def determine_result(detail, our_pc_team_id):
     return None
 
 
+def _our_keeper_id(detail, our_pc_team_id):
+    """The player id our team kept wicket with, from the team sheet.
+
+    Play-Cricket flags `wicket_keeper` per player per match, which is the only
+    way to tell a keeper's catch from a slip's — `how_out` says "ct" either
+    way. The two team sheets arrive as separate dicts in `players`, so they
+    have to be merged before the away side is visible. Returns None when no
+    sheet was entered, which happens on a handful of junior fixtures.
+    """
+    sheets = {}
+    for block in detail.get("players") or []:
+        sheets.update(block)
+    side = "home_team" if str(detail.get("home_team_id", "")) == our_pc_team_id else "away_team"
+    for player in sheets.get(side) or []:
+        if player.get("wicket_keeper"):
+            return str(player.get("player_id") or "")
+    return None
+
+
 def _fmt_innings_total(innings):
     """Format an innings dict to a display string like '325-3' or '43 ao'."""
     if not innings:
@@ -235,6 +265,7 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
     else:
         return
     our_team_id = our_teams_by_pc_id[our_pc_team_id]
+    keeper_id = _our_keeper_id(detail, our_pc_team_id)
 
     result_char = determine_result(detail, our_pc_team_id)
     if result_char and match_date_str:
@@ -300,6 +331,26 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
 
                 match_players.add(player_id)
 
+                # Innings-level knocks, feeding the team slides' "Highest
+                # scores" table. Kept apart from the century records below,
+                # which are an honours-board feed with a fixed meaning — this
+                # one is just "the season's biggest innings", gated low enough
+                # that junior teams have a table at all.
+                if performances is not None and runs >= KNOCK_MIN_RUNS:
+                    performances["knocks"].append({
+                        "date": iso_date,
+                        "home_away": "H" if is_home else "A",
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "opponents_team": opp_team_designation or None,
+                        "batsman": player_name,
+                        "score": runs,
+                        "balls": balls,
+                        "fours": fours,
+                        "sixes": sixes,
+                        "not_out": not_out,
+                    })
+
                 if performances is not None and runs >= 100:
                     performances["batting"].append({
                         "date": iso_date,
@@ -315,6 +366,55 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                         "team_total": our_inn_total,
                         "oppo_total": opp_inn_total,
                         "result": result_char,
+                    })
+
+            # Partnerships, rebuilt from the fall-of-wickets list. Each entry
+            # gives the score at the fall, who was out and who was still in —
+            # so consecutive entries bracket a stand and name both batters.
+            # `fow` is absent from u9–u13 scorecards; those teams simply get no
+            # partnership records.
+            if performances is not None:
+                fow = innings.get("fow") or []
+                previous = 0
+                for fall in fow:
+                    try:
+                        at = int(fall.get("runs") or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    performances["partnerships"].append({
+                        "date": iso_date,
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "wicket": fall.get("wickets"),
+                        "runs": at - previous,
+                        "batsmen": [
+                            n for n in (fall.get("batsman_out_name"),
+                                        fall.get("batsman_in_name")) if n
+                        ],
+                        "unbroken": False,
+                    })
+                    previous = at
+                # The last pair bat on to the close: whatever is left between
+                # the final fall and the innings total is an unbroken stand,
+                # and the two not-outs are the pair.
+                try:
+                    closing = int(innings.get("runs") or 0)
+                except (TypeError, ValueError):
+                    closing = 0
+                if fow and closing > previous:
+                    not_outs = [
+                        b.get("batsman_name")
+                        for b in innings.get("bat", [])
+                        if is_not_out(b.get("how_out"))
+                    ]
+                    performances["partnerships"].append({
+                        "date": iso_date,
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "wicket": len(fow) + 1,
+                        "runs": closing - previous,
+                        "batsmen": [n for n in not_outs[:2] if n],
+                        "unbroken": True,
                     })
 
         if our_bowling:
@@ -363,6 +463,59 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                         "result": result_char,
                     })
 
+                # Every spell of consequence, for the best-figures and
+                # most-economical cards. Gated at two overs so a one-over
+                # cameo can't own the economy record.
+                if performances is not None and balls >= SPELL_MIN_BALLS:
+                    performances["spells"].append({
+                        "date": iso_date,
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "bowler": player_name,
+                        "overs": _fmt_overs(overs_str),
+                        "balls": balls,
+                        "maidens": maidens,
+                        "runs": runs,
+                        "wickets": wickets,
+                    })
+
+            # Fielding credits: the opposition's scorecard names OUR fielder on
+            # every catch, stumping and run-out. One row per player per match,
+            # which the build aggregates into season totals as well as using
+            # for the best-display-in-a-match card.
+            if performances is not None:
+                credits = {}
+                for bat in innings.get("bat", []):
+                    fielder_id = str(bat.get("fielder_id", "") or "")
+                    fielder = (bat.get("fielder_name") or "").strip()
+                    if not fielder or not fielder_id or fielder_id == "0":
+                        continue
+                    kind = (bat.get("how_out") or "").strip().lower()
+                    key = ("ct" if kind in ("ct", "caught") else
+                           "st" if kind in ("st", "stumped") else
+                           "ro" if kind in ("run out", "ro") else None)
+                    if not key:
+                        continue
+                    entry = credits.setdefault(
+                        fielder_id, {"name": fielder, "ct": 0, "st": 0, "ro": 0}
+                    )
+                    entry[key] += 1
+                for fielder_id, entry in credits.items():
+                    performances["fielding"].append({
+                        "date": iso_date,
+                        "team": our_team_id,
+                        "opponents": opp_name,
+                        "player_id": fielder_id,
+                        "fielder": entry["name"],
+                        "catches": entry["ct"],
+                        "stumpings": entry["st"],
+                        "run_outs": entry["ro"],
+                        # Keeping is a different job from fielding, and the
+                        # keeper's standing chances would swamp any outfield
+                        # record if they shared a table.
+                        "as_keeper": bool(keeper_id) and fielder_id == keeper_id,
+                    })
+
     # Increment match counts once per player per match
     for player_id in match_players:
         player = players[player_id]
@@ -398,7 +551,10 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
     players = {}
     competitions = {}
     form = {}
-    performances = {"batting": [], "bowling": []}
+    performances = {
+        "batting": [], "bowling": [], "knocks": [],
+        "partnerships": [], "spells": [], "fielding": [],
+    }
 
     our_matches_sorted = sorted(our_matches, key=lambda m: match_date(m) or date.min)
 
@@ -467,6 +623,19 @@ def fetch_season_stats(site_id, api_token, season_year, our_teams_by_pc_id):
     for key in ("batting", "bowling"):
         performances[key].sort(key=lambda r: (r["date"] or ""))
 
+    # Knocks rank by score (not-out breaks a tie — 60* beat 60), then keep the
+    # top slice per team.
+    by_team = {}
+    for k in performances["knocks"]:
+        by_team.setdefault(k["team"], []).append(k)
+    performances["knocks"] = [
+        k
+        for team_knocks in by_team.values()
+        for k in sorted(
+            team_knocks, key=lambda r: (r["score"], r["not_out"]), reverse=True
+        )[:KNOCKS_PER_TEAM]
+    ]
+
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "season": season_year,
@@ -523,6 +692,28 @@ def main():
             "records": performances["batting"],
         }, indent=2))
         print(f"  → {hundreds_path.relative_to(ROOT)} ({len(performances['batting'])} centuries)")
+
+        for name, key, unit in (
+            ("season_partnerships", "partnerships", "stands"),
+            ("season_bowling_spells", "spells", "spells"),
+            ("season_fielding", "fielding", "fielding cards"),
+        ):
+            path = data_dir / f"{name}_{label}.json"
+            path.write_text(json.dumps({
+                "generated_at": stats["generated_at"],
+                "season": year,
+                "records": performances[key],
+            }, indent=2))
+            print(f"  → {path.relative_to(ROOT)} ({len(performances[key])} {unit})")
+
+        knocks_path = data_dir / f"season_top_knocks_{label}.json"
+        knocks_path.write_text(json.dumps({
+            "generated_at": stats["generated_at"],
+            "season": year,
+            "min_runs": KNOCK_MIN_RUNS,
+            "records": performances["knocks"],
+        }, indent=2))
+        print(f"  → {knocks_path.relative_to(ROOT)} ({len(performances['knocks'])} knocks)")
 
         sixplus_path = data_dir / f"season_bowling_sixplus_{label}.json"
         sixplus_path.write_text(json.dumps({
