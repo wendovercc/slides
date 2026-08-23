@@ -1,55 +1,28 @@
-# Match Highlights — Cards & Video Export Design
+# Match Highlights — Flashcards
 
-> Status: **agreed design, not yet built.** Planning source of truth for the two
-> features that extend the ball-events curation workflow. Read
-> `scripts/ball_events.py` and `docs/design-conventions.md` alongside this.
+> Status: **built.** Planning source of truth for the flashcard layer that extends the
+> ball-events curation workflow. Read `scripts/ball_events.py` and
+> `docs/design-conventions.md` alongside this.
+>
+> **The video-export half of this document has moved.** Narration generalised from "a
+> highlights feature" to "a property of any deck", so it now lives in
+> `docs/narrated-decks.md` — which is the source of truth for the deck builder, the
+> narration recorder, the compositor and the phasing. This document covers cards only.
 
 ## Problem
 
 The curation workflow (`/curate` → `{pc_id}.curation.json` → R2 sync → build) turns
-Frogbox clips into on-wall reels, but two things are missing:
+Frogbox clips into on-wall reels, but the reels show raw action with a caption. We want
+data-driven graphic cards around a clip: a new batsman's season record, a fifty
+celebration ("first for the club"), a dismissed batsman's innings breakdown. Much of
+that content isn't typed by the editor — it's resolved from data.
 
-1. **Flashcards** — the reels show raw action with a caption. We want data-driven
-   graphic cards around a clip: a new batsman's season/career record, a fifty
-   celebration ("first for the club"), a dismissed batsman's innings breakdown.
-   Much of that content isn't typed by the editor — it's resolved from data.
-2. **A published highlights video** — a single MP4 of the whole last-match package
-   with **spoken commentary**, for YouTube. (Commentary is for the video only, not
-   the wall.)
-
-Both extend the two primitives already in place: the **curation overlay** (minimal
+Cards extend the two primitives already in place: the **curation overlay** (minimal
 diffs keyed by clip id) and **`ball_events.select()`** (newest-first, per-innings,
-pinned, capped). Cards add *intent* to the overlay resolved at build; the video adds
-a new *consumer* of the resolved package.
+capped). They add *intent* to the overlay, resolved at build.
 
----
-
-## Roles
-
-Two people, usually different:
-
-| Role | Does | Access |
-|------|------|--------|
-| **Editor** | Picks clips, writes narrative, chooses cards, records per-beat audio commentary — all in one browser sitting. Exports one zip. | Website only. No repo. |
-| **Publisher** | Lands the zip: syncs media to R2, commits, triggers the build, runs the compositor, uploads the MP4 to YouTube. | Local scripts + repo. |
-
-The editor completes curation **and** commentary without a publisher step in between.
-The handoff is a single zip.
-
----
-
-## Timeline
-
-| When | What |
-|------|------|
-| **Day 1** | Match played; Frogbox live stream on YouTube. |
-| **Evening 1** | Captains finish their scorecards on Play Cricket. |
-| **Night 1** | Overnight build produces the last-match package **without** video clips. Must still fetch Frogbox **ball-event metadata** (so Day-2 curation has a clip list) and resolve card data (from the just-built scorecard/stats). |
-| **Day 2** | Editor curates + commentates on the website (clips previewed via the **YouTube stream**), exports the zip to the publisher. |
-| **Day 2** | Publisher lands the zip; the rebuild adds clips + cards to the wall package and the compositor produces the highlights MP4 → YouTube. |
-
-Because card data derives from Play Cricket (built Night 1), by Day 2 the editor sees
-**real figures**, not placeholders.
+Roles, the day-by-day workflow and the one-sitting constraint are described in
+`docs/narrated-decks.md`, since they're shared with narration.
 
 ---
 
@@ -57,13 +30,22 @@ Because card data derives from Play Cricket (built Night 1), by Day 2 the editor
 
 ### Model
 
-Cards are **solid, full-frame beats** inserted before/after a clip. No blur-behind, no
-video showing through. (A corner/lower-third overlay style is a deferred, additive
-extension — an alpha overlay over sharp video — but is **not** in v1.)
+Cards are **overlays over padded live footage** — a graphic that extends the reel-tag
+square downward while the footage keeps running underneath. They are *not* solid
+full-frame stills; an earlier draft of this document said so and was wrong.
+
+The clip's bounds are widened to carry them: `start`/`end` are the tight **action**, and
+the clip actually played is the action widened by per-card **pads**, so a `pre` card has
+lead-in footage to sit over and a `post` card lead-out footage. Card windows are
+clip-relative and computed in `emit_reel`.
 
 The editor picks a card **type** from a registry and supplies only the params known at
 curation time (e.g. which player). The content is **resolved at build** from existing
 data, exactly as slides are.
+
+In interactive mode a card is a **hold point** — `next()` stops on it. See
+`docs/narrated-decks.md` ("Hold points") for the pacing rule and for what the video does
+underneath a held card.
 
 ### Overlay schema
 
@@ -82,8 +64,7 @@ The curation overlay gains a `cards` array per clip, alongside `players`/`tags`:
 - `at` — `pre` / `post`, relative to the clip in the sequence.
 - `type` — a key into the **card registry** (below).
 - `player` / `value` / … — editor-supplied params; everything else is data-resolved.
-- *(A `style` field is reserved for the future corner overlay; v1 renders solid
-  full-frame only.)*
+- *(A `style` field is reserved for alternative card treatments; v1 renders one style.)*
 
 ### Card registry
 
@@ -114,84 +95,31 @@ built, so previews show real figures.
 
 ---
 
-## Feature 2 — Highlights video
+## Narration & video export — moved
 
-### Editor: narration
+The narration recorder, the deck builder, the compositor and the phasing now live in
+`docs/narrated-decks.md`. The design there supersedes the version this document used to
+carry, in three ways worth knowing if you remember the old text:
 
-In the same sitting, a **narration mode** in the curate tool plays the assembled package
-in order (clips via the YouTube stream, cards as real HTML, slides). The editor:
+- **Beats are addressed as `(slide, panel)`** — the coordinates the player already uses —
+  not by bespoke `intro` / `clip:<id>` / `card:<clip>/<pre|post><n>` refs. A video clip
+  *is* a panel (`video.html` registers the reel as a carousel of clips), so `next()`
+  already steps clip-by-clip. A card is a qualifier on a clip atom.
+- **Cards composite as alpha overlays**, not solid full-frame stills: the card is
+  screenshot with a transparent background and `overlay`-ed onto the R2 clip over its
+  window. The old "solid cards remove the only hard part" reasoning no longer applies —
+  and didn't match what was actually built.
+- **Audio is one continuous take with cue timestamps**, sliced afterwards, rather than
+  per-beat recordings with a `dwell` each. Video adapts to the audio, so `fit` is gone.
 
-- advances **static beats** manually (captures a `dwell`),
-- sets `fit` on **clip beats** (only matters when commentary outruns a clip's trim),
-- records **per-beat mic audio** (audio-only `MediaRecorder`) — any single beat can be
-  re-recorded without disturbing the rest.
-
-Output is a `{pc_id}.narration.json` timeline plus the audio files:
-
-```jsonc
-{
-  "clip_audio": "duck",
-  "beats": [
-    { "ref": "intro",              "audio": "a01.webm", "dwell": 6.2 },
-    { "ref": "clip:3452112",       "audio": "a02.webm", "fit": "freeze" },
-    { "ref": "card:3452112/post0", "audio": "a03.webm", "dwell": 4.0 },
-    { "ref": "result",             "audio": "a09.webm", "dwell": 8.0 }
-  ]
-}
-```
-
-`ref` ids: `intro` / `scorecard` / `clip:<id>` / `card:<clip>/<pre|post><n>` / `result`.
-`dwell` for static beats; `fit` (`freeze` = hold last frame / `roll` = let footage run)
-for clip beats.
-
-The whole export — `curation.json` + `narration.json` + audio — is a single zip.
-
-### Publisher: deterministic composite (not screen recording)
-
-The finished video is **assembled with ffmpeg from separate assets**, not captured from
-a live playback:
-
-1. Headless Chrome screenshots each slide and each solid card → PNG stills.
-2. ffmpeg assembles the timeline: stills held for their `dwell`, R2 clips trimmed to
-   `start`/`end`, `xfade` transitions, commentary audio placed on the timeline, clip
-   audio ducked under a known gain → MP4.
-
-Because every card is a **solid full-frame** still, nothing is composited *over* playing
-video — no blur filter, no footage-dependent overlay. The result is frame-perfect,
-reproducible, and runs without a GPU. The one hard requirement: the render plays **R2
-clip files, not the YouTube embed** (an embed captures black; an R2 `<video>` composites
-cleanly).
-
-Trade-off vs. screen-recording the HTML playback: more code (a real compositor mapping
-the narration timeline to an ffmpeg filtergraph, plus the HTML→still renderer), but no
-generational quality loss, no dropped-frame risk, and deterministic re-renders. Solid
-cards are what remove the only hard part of this route.
-
-> **Deferred upgrade path:** if quality ever needs it, clip beats can move to a
-> frame-accurate seek-per-frame renderer without changing the editor tool, the data
-> model, or the card layer.
-
----
-
-## Phasing
-
-| Phase | Scope | Ships |
-|-------|-------|-------|
-| **A** | Card component + registry + resolvers; `/curate` Cards UI; `build.py` slots card beats into the on-wall reels. | Cards on the wall, independent of the video feature. |
-| **B** | Editor narration mode: plays the package, captures `dwell`/`fit`, records per-beat audio, exports the zip. | The editor's one-sitting workflow. |
-| **C** | Publisher `publish {pc_id} bundle.zip`: sync media to R2, commit, build, run the compositor, upload MP4. | The published highlights video. |
-
-Order is **A → B → C**: A stands alone, B needs A's cards to narrate, C needs A+B's
-timeline and audio to composite.
-
-### Prerequisites
+### Still true, and still prerequisites
 
 - The overnight build must fetch Frogbox **ball-event metadata** so Day-2 curation has a
   clip list; card data comes from the built scorecard/stats.
-- The final render must use **R2 files**, not the YouTube embed.
+- The final render must use **R2 files**, not the YouTube embed (an embed captures black).
 
 ### Deferred (non-blocking)
 
-- Corner / lower-third overlay cards (additive alpha overlay over sharp video).
+- Corner / lower-third card styling as a distinct option (`style` field).
 - YouTube upload automation (manual upload via YouTube Studio for now).
 - Frame-accurate clip rendering.
