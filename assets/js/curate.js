@@ -14,6 +14,12 @@
  * The working state (`edits`) IS the overlay: it holds only what differs from the
  * fetched defaults, keyed by clip id. Player roles store only *corrections* to the
  * auto tags (a name → role-list override, [] to drop an auto tag, a new name to add).
+ *
+ * Hand-added clips are the exception to "only the diff": when the ball-by-ball feed
+ * missed a moment the stream still covers (scoring stopped early), "＋ Add event"
+ * mints an `m1`/`m2`… entry holding the *whole* event. `materialiseManual` turns each
+ * back into a fetched-shaped skeleton in `state.match.events`, so every other part of
+ * this file — list, scrubber, roles, cards, export — treats it like any other clip.
  */
 (function () {
   "use strict";
@@ -57,9 +63,16 @@
   // ---- State -----------------------------------------------------------
   var LS_PREFIX = "wcc-curate:";
   var state = {
-    match: null, byId: {}, edits: {}, committed: {}, selected: null, player: null,
+    match: null, fetched: [], byId: {}, edits: {}, committed: {}, selected: null, player: null,
     roster: [], squad: [], cycle: 0,
   };
+
+  // ---- Hand-added clips -------------------------------------------------
+  // The event types the badge styling knows, and the window a new clip opens
+  // with — a rough grab you then trim precisely on the scrubber.
+  var MANUAL_TYPES = ["wicket", "four", "six", "other"];
+  var MANUAL_LEN = 12;
+  function isManual(id) { var e = state.edits[id]; return !!(e && e.manual); }
 
   // ---- DOM helpers -----------------------------------------------------
   var $ = function (sel, root) { return (root || document).querySelector(sel); };
@@ -106,6 +119,9 @@
   // Effective offset = running sum of offset_adjustment over clips up to and
   // including this one, in match order. One step correction carries forward.
   function effOffset(id) {
+    // A hand-added clip's bounds were read off the stream, so they are already
+    // drift-corrected; shifting them again would move them off the action.
+    if (isManual(id)) return 0;
     var sum = 0, evs = chronoEvents();
     for (var i = 0; i < evs.length; i++) {
       var e = state.edits[evs[i].id];
@@ -217,10 +233,19 @@
     try { localStorage.removeItem(LS_PREFIX + state.match.pc_match_id); } catch (e) {}
     state.edits = JSON.parse(JSON.stringify(state.committed));
     state.selected = null;
+    materialiseManual();
     renderList(); renderEditor(); updateDirty();
   }
   function setTrim(id, key, value) {
     var e = edit(id);
+    // A hand-added clip has no fetched default to fall back to, so its bounds must
+    // always stay stored — dropping one (as "same as default" would) leaves it with
+    // no window at all once the overlay is reloaded.
+    if (isManual(id)) {
+      if (value != null && !isNaN(value)) e[key] = value;
+      cleanup(id);
+      return;
+    }
     if (value == null || isNaN(value) || value === ev(id)[key]) delete e[key];
     else e[key] = value;
     cleanup(id);
@@ -297,6 +322,122 @@
   }
   function setCardPlayer(id, card, name) { card.player = name || ""; cleanup(id); }
 
+  // ---- Hand-added clips: overlay entry → event ------------------------
+  // Across one stream `dt_unix - start` is a constant, so a clip's video position
+  // alone dates it — that's what sorts it among the fetched events.
+  function streamEpoch() {
+    for (var i = 0; i < state.fetched.length; i++) {
+      var e = state.fetched[i];
+      if (e.dt_unix != null && e.start != null) return e.dt_unix - e.start;
+    }
+    return state.match.recording_started_utc || 0;
+  }
+  // The innings on offer, in first-seen order, each with the side that batted —
+  // an innings is what gives a hand-added clip its teams, and so its role rows.
+  function inningsOptions() {
+    var seen = {}, out = [];
+    state.fetched.forEach(function (e) {
+      if (e.innings == null || seen[e.innings]) return;
+      seen[e.innings] = 1;
+      out.push({ id: e.innings, batting_team: e.batting_team, bowling_team: e.bowling_team });
+    });
+    return out;
+  }
+  // The innings of the nearest fetched clip in video time. The two innings are
+  // contiguous blocks of one stream, so this is right everywhere but the interval.
+  function guessInnings(sec) {
+    var best = null, bestD = Infinity;
+    state.fetched.forEach(function (e) {
+      if (e.innings == null || e.start == null) return;
+      var d = Math.abs(e.start - sec);
+      if (d < bestD) { bestD = d; best = e.innings; }
+    });
+    return best;
+  }
+  // A fetched-event-shaped stand-in. Its narrative/title are deliberately blank:
+  // the real caption lives in the overlay, and baseNarrative/setBaseNarrative
+  // compare against this default to decide what to store.
+  function manualSkeleton(id, o) {
+    var teams = {};
+    inningsOptions().forEach(function (i) { if (i.id === o.innings) teams = i; });
+    return {
+      id: id, manual: true, type: o.type || "other",
+      title: "", narrative: "",
+      over: (o.over != null) ? o.over : null,
+      ball: (o.ball != null) ? o.ball : null,
+      innings: (o.innings != null) ? o.innings : null,
+      batting_team: teams.batting_team || null,
+      bowling_team: teams.bowling_team || null,
+      our_players: [],
+      youtube_url: state.match.youtube_url,
+      start: o.start, end: o.end,
+      dt_unix: streamEpoch() + (o.start || 0),
+    };
+  }
+  // Rebuild the event list = fetched clips in their fetched order, with each
+  // hand-added clip spliced into its chronological place. (Inserting rather than
+  // re-sorting keeps the fetched ordering exactly as it has always been.)
+  function materialiseManual() {
+    var list = state.fetched.slice();
+    Object.keys(state.edits).forEach(function (id) {
+      var o = state.edits[id];
+      if (!o || !o.manual || o.start == null || o.end == null) return;
+      var skel = manualSkeleton(id, o), at = list.length;
+      for (var i = 0; i < list.length; i++) {
+        if ((list[i].dt_unix || 0) > skel.dt_unix) { at = i; break; }
+      }
+      list.splice(at, 0, skel);
+    });
+    state.match.events = list;
+    state.byId = {};
+    list.forEach(function (e) { state.byId[e.id] = e; });
+  }
+
+  function nextManualId() {
+    var n = 0;
+    Object.keys(state.edits).forEach(function (k) {
+      var m = /^m(\d+)$/.exec(k);
+      if (m) n = Math.max(n, parseInt(m[1], 10));
+    });
+    return "m" + (n + 1);
+  }
+  // "＋ Add event": grab a window opening at wherever the YouTube scrubber is
+  // sitting, then select it so the usual scrubber/cycle controls trim it.
+  function addManualEvent() {
+    if (!state.match) return;
+    var t = (state.player && state.player.getCurrentTime) ? state.player.getCurrentTime() : null;
+    if (t == null) { alert("Load the video first — a new clip starts from the player's current position."); return; }
+    var start = Math.max(0, Math.round(t)), id = nextManualId();
+    state.edits[id] = {
+      manual: true, type: "other", innings: guessInnings(start),
+      start: start, end: start + MANUAL_LEN,
+      match: { include: true },
+    };
+    persistDraft();
+    materialiseManual();
+    renderList();
+    select(id);
+  }
+  function deleteManualEvent(id) {
+    if (!confirm("Delete this hand-added event?")) return;
+    delete state.edits[id];
+    if (state.selected === id) state.selected = null;
+    persistDraft();
+    materialiseManual();
+    renderList();
+    renderEditor();
+  }
+  // The event fields a fetched clip would have carried. `type`/`innings`/`over`/
+  // `ball` all feed the skeleton, so the list is rebuilt after each change.
+  function setManualField(id, key, value) {
+    var e = edit(id);
+    if (value == null || value === "") delete e[key]; else e[key] = value;
+    persistDraft();
+    materialiseManual();
+    renderList();
+    renderEditor();
+  }
+
   // ---- Match list ------------------------------------------------------
   function loadMatchList() {
     return Promise.all([
@@ -322,8 +463,8 @@
   function loadMatch(id) {
     stopPlayhead(); state.scrub = null;
     return fetch("data/" + id + ".json").then(function (r) { return r.json(); }).then(function (data) {
-      state.match = data; state.byId = {};
-      (data.events || []).forEach(function (e) { state.byId[e.id] = e; });
+      state.match = data;
+      state.fetched = (data.events || []).slice();
       state.squad = data.squad || [];
       state.committed = data.curation || {};
       // Prefer a locally-saved draft (may contain unexported work) over committed.
@@ -331,6 +472,7 @@
       try { var raw = localStorage.getItem(LS_PREFIX + data.pc_match_id); if (raw) draft = JSON.parse(raw); } catch (e) {}
       state.edits = draft || JSON.parse(JSON.stringify(state.committed));
       state.selected = null;
+      materialiseManual();
       buildPlayer(data.video_id);
       renderList(); renderEditor(); updateDirty();
     });
@@ -351,8 +493,13 @@
   }
 
   // ---- Clip list -------------------------------------------------------
+  // A brand-new hand-added clip has no caption yet, so the row would render blank.
+  function rowTitle(id) {
+    return baseNarrative(id) || (isManual(id) ? "(hand-added — add a caption)" : "");
+  }
   function chipsFor(id) {
     var chips = [];
+    if (isManual(id)) chips.push(chip("✎", "manual"));
     var np = clipPlayers(id).length;
     if (np) chips.push(chip("\u{1F464}" + np, "player"));
     var nc = clipCards(id).length;
@@ -379,7 +526,7 @@
         }),
         el("span", { class: "badge type-" + e.type, text: e.type }),
         el("span", { class: "ov", text: (e.over != null ? e.over : "?") + "." + (e.ball != null ? e.ball : "?") }),
-        el("span", { class: "ttl", text: baseNarrative(e.id) }),
+        el("span", { class: "ttl", text: rowTitle(e.id) }),
         chipsFor(e.id),
         el("span", { class: "rng", text: fmtTime(effTrim(e.id, "start")) + "–" + fmtTime(effTrim(e.id, "end")) }),
       ]);
@@ -397,7 +544,7 @@
   // Refresh a row's dynamic bits without rebuilding the whole list.
   function syncRow(id) {
     var row = rowOf(id); if (!row) return;
-    row.querySelector(".ttl").textContent = baseNarrative(id);
+    row.querySelector(".ttl").textContent = rowTitle(id);
     row.querySelector(".rng").textContent = fmtTime(effTrim(id, "start")) + "–" + fmtTime(effTrim(id, "end"));
     row.replaceChild(chipsFor(id), row.querySelector(".chips"));
     row.classList.toggle("included", anyIncluded(id));
@@ -748,13 +895,60 @@
   function timingBlock(id) {
     // Scrubber + all controls on one row to save vertical space: the scrubber
     // takes the remaining width, the buttons sit at their natural size.
-    return el("div", { class: "timing-block" }, [
-      buildScrubber(id),
-      cycleButton(id),
-      el("button", { class: "mini", text: "Reset", title: "Reset action to the full auto clip",
-        onClick: function () { setTrim(id, "start", null); setTrim(id, "end", null); syncRow(id); renderEditor(); } }),
-      el("button", { class: "mini", text: "Preview", title: "Play the shown clip (with card pads)",
-        onClick: function () { previewShown(id); } }),
+    var kids = [buildScrubber(id), cycleButton(id)];
+    // No "auto clip" exists behind a hand-added event, so there is nothing to
+    // reset to — its bounds are the only ones it has ever had.
+    if (!isManual(id)) {
+      kids.push(el("button", { class: "mini", text: "Reset", title: "Reset action to the full auto clip",
+        onClick: function () { setTrim(id, "start", null); setTrim(id, "end", null); syncRow(id); renderEditor(); } }));
+    }
+    kids.push(el("button", { class: "mini", text: "Preview", title: "Play the shown clip (with card pads)",
+      onClick: function () { previewShown(id); } }));
+    return el("div", { class: "timing-block" }, kids);
+  }
+
+  // The event fields a fetched clip arrives with — type and innings (which supplies
+  // the teams, and so which role rows apply), plus over/ball for ordering and display.
+  function manualBar(id) {
+    var o = state.edits[id] || {};
+
+    var typeSel = el("select", { class: "manual-sel", title: "Event type" });
+    MANUAL_TYPES.forEach(function (t) {
+      var op = el("option", { value: t, text: t });
+      if ((o.type || "other") === t) op.selected = true;
+      typeSel.appendChild(op);
+    });
+    typeSel.addEventListener("change", function () { setManualField(id, "type", typeSel.value); });
+
+    var innSel = el("select", { class: "manual-sel", title: "Innings" });
+    innSel.appendChild(el("option", { value: "", text: "— innings —" }));
+    inningsOptions().forEach(function (i) {
+      var op = el("option", { value: String(i.id), text: (i.batting_team || "?") + " batting" });
+      if (o.innings === i.id) op.selected = true;
+      innSel.appendChild(op);
+    });
+    innSel.addEventListener("change", function () {
+      setManualField(id, "innings", innSel.value ? parseInt(innSel.value, 10) : null);
+    });
+
+    function num(key, title) {
+      var inp = el("input", { type: "text", inputmode: "numeric", class: "manual-num", placeholder: "–", title: title });
+      inp.value = (o[key] != null) ? String(o[key]) : "";
+      inp.addEventListener("change", function () {
+        var v = parseInt(inp.value, 10);
+        setManualField(id, key, isNaN(v) ? null : v);
+      });
+      return inp;
+    }
+
+    return el("div", { class: "manual-bar" }, [
+      el("span", { class: "m-lbl", text: "Hand-added" }),
+      typeSel, innSel,
+      el("span", { class: "m-lbl", text: "over" }), num("over", "Over"),
+      el("span", { class: "m-lbl", text: "ball" }), num("ball", "Ball"),
+      el("span", { class: "spacer" }),
+      el("button", { class: "mini", text: "Delete event", title: "Remove this hand-added event",
+        onClick: function () { deleteManualEvent(id); } }),
     ]);
   }
 
@@ -764,7 +958,9 @@
   function updateShiftBar() {
     var inp = $("#shift-input"); if (!inp) return;
     var id = state.selected;
-    if (id == null) { inp.value = ""; inp.disabled = true; return; }
+    // Nothing to shift on a hand-added clip: its bounds are absolute, so the box
+    // would silently drift every *later* fetched clip and leave this one untouched.
+    if (id == null || isManual(id)) { inp.value = ""; inp.disabled = true; return; }
     inp.disabled = false;
     var adj = clipOffsetAdj(id);
     inp.value = adj ? String(adj) : "";
@@ -775,6 +971,8 @@
     var id = state.selected;
     updateShiftBar();
     if (id == null) { box.appendChild(el("p", { class: "hint", text: "Select a clip to tag and trim it." })); return; }
+
+    if (isManual(id)) box.appendChild(manualBar(id));
 
     var narr = el("textarea", {
       class: "narrative", rows: "2", placeholder: "Caption…",
@@ -810,7 +1008,7 @@
   function importOverlay(file) {
     var reader = new FileReader();
     reader.onload = function () {
-      try { state.edits = JSON.parse(reader.result) || {}; state.selected = null; renderList(); renderEditor(); persistDraft(); }
+      try { state.edits = JSON.parse(reader.result) || {}; state.selected = null; materialiseManual(); renderList(); renderEditor(); persistDraft(); }
       catch (err) { alert("Could not parse curation file: " + err.message); }
     };
     reader.readAsText(file);
@@ -819,6 +1017,7 @@
   // ---- Wire up ---------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
     $("#export-btn").addEventListener("click", exportOverlay);
+    $("#add-btn").addEventListener("click", addManualEvent);
     $("#discard-btn").addEventListener("click", discardDraft);
     $("#shift-input").addEventListener("change", function () {
       var id = state.selected; if (id == null) return;

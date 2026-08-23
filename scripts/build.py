@@ -744,7 +744,10 @@ def build_curation(env):
             "competition": data.get("competition"),
             "home_name": data.get("home_name"),
             "away_name": data.get("away_name"),
-            "n_events": len(data.get("events", [])),
+            # Hand-added clips live only in the overlay, so count them too — the
+            # picker's tally should match what the page actually lists.
+            "n_events": len(data.get("events", [])) + sum(
+                1 for v in overlay.values() if isinstance(v, dict) and v.get("manual")),
         })
     index.sort(key=lambda m: (m.get("date") or ""), reverse=True)
     (out_dir / "matches.json").write_text(json.dumps(index))

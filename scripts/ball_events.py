@@ -15,6 +15,16 @@ The overlay stores only what differs from the fetched defaults, keyed by clip id
       "players": { "<Full Name>": ["batter", "bowler", "fielder", "other"] },
       "tags":    ["diving catch", "last ball"] }
 
+An entry may also be a *hand-added* clip — a moment the ball-by-ball feed never
+produced (scoring stopped early, a ball was missed) but the stream still covers.
+It is keyed ``m1``, ``m2``… and carries the whole event, not a diff:
+
+    { "manual": true, "type": "wicket", "innings": 3953155, "over": 41, "ball": 3,
+      "start": N, "end": N, "narrative": "…", "match": {"include": true} }
+
+Its bounds are absolute (drift-corrected) YouTube seconds by construction — set
+while watching the stream — so no offset applies to them.
+
 `/curate` is now scoped to match highlights only: a single ``match`` include per clip
 (no reordering — the reel is newest-first). The ``players`` map records the role(s) each
 Wendover player played in the clip; roles are auto-derived at fetch time (batter / bowler
@@ -93,7 +103,11 @@ def load_merged(pc_id, *, fetched_dir=FETCHED_MATCHES, curation_dir=CURATION_DIR
         eff_offset[str(e.get("id"))] = running
 
     merged_events = []
-    for ev in raw.get("events", []):
+    # Hand-added clips join the fetched ones and then flow through exactly the same
+    # merge below: their fields already live in the overlay, so the "override ??
+    # fetched default" reads all land on the override side. They carry no entry in
+    # `eff_offset`, which is right — their bounds are already absolute.
+    for ev in list(raw.get("events", [])) + _manual_events(overlay, raw):
         clip_id = str(ev.get("id"))
         o = overlay.get(clip_id) or {}
         offset = eff_offset.get(clip_id, 0)
@@ -153,6 +167,54 @@ def load_merged(pc_id, *, fetched_dir=FETCHED_MATCHES, curation_dir=CURATION_DIR
         })
 
     return {**raw, "events": merged_events}
+
+
+def _manual_events(overlay, raw):
+    """Skeleton events for the overlay's hand-added clips (``m1``, ``m2``, …).
+
+    Each is shaped like a fetched event so the merge, ``select`` and the reel treat
+    it identically, but every real value stays in the overlay — the skeleton's
+    narrative is deliberately blank so the merge's ``override ?? default`` reads
+    resolve to what was authored. ``dt_unix`` is derived from the clip's video
+    position: across a stream ``dt_unix - start`` is a constant, so this drops the
+    clip into its true chronological place among the fetched ones. Batting/bowling
+    teams come from its innings, which is what decides the role rows on the page.
+    An entry with no bounds is skipped — there would be nothing to play.
+    """
+    fetched = raw.get("events", []) or []
+    epoch = next((e["dt_unix"] - e["start"] for e in fetched
+                  if e.get("dt_unix") is not None and e.get("start") is not None),
+                 raw.get("recording_started_utc") or 0)
+    teams = {}
+    for e in fetched:
+        if e.get("innings") is not None and e["innings"] not in teams:
+            teams[e["innings"]] = (e.get("batting_team"), e.get("bowling_team"))
+
+    out = []
+    for clip_id, o in overlay.items():
+        if not isinstance(o, dict) or not o.get("manual"):
+            continue
+        if o.get("start") is None or o.get("end") is None:
+            continue
+        batting, bowling = teams.get(o.get("innings"), (None, None))
+        out.append({
+            "id": clip_id,
+            "manual": True,
+            "type": o.get("type") or "other",
+            "title": "",
+            "narrative": "",
+            "over": o.get("over"),
+            "ball": o.get("ball"),
+            "innings": o.get("innings"),
+            "batting_team": batting,
+            "bowling_team": bowling,
+            "our_players": [],
+            "youtube_url": raw.get("youtube_url"),
+            "start": o["start"],
+            "end": o["end"],
+            "dt_unix": epoch + o["start"],
+        })
+    return out
 
 
 def _shift(value, delta):

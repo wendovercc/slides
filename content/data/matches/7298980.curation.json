@@ -204,5 +204,31 @@
     "match": {
       "include": true
     }
+  },
+  "m1": {
+    "manual": true,
+    "type": "four",
+    "innings": 3953155,
+    "start": 17611,
+    "end": 17621,
+    "match": {
+      "include": true
+    },
+    "over": 31,
+    "ball": 2,
+    "narrative": "T Duff strikes it for 4"
+  },
+  "m2": {
+    "manual": true,
+    "type": "six",
+    "innings": 3953155,
+    "start": 17713,
+    "end": 17724,
+    "match": {
+      "include": true
+    },
+    "narrative": "T Duff cracks it over the top for six",
+    "over": 31,
+    "ball": 4
   }
 }
