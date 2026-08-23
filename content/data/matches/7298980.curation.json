@@ -1,0 +1,208 @@
+{
+  "3776406": {
+    "start": 1724,
+    "end": 1734.5,
+    "match": {
+      "include": true
+    }
+  },
+  "3776692": {
+    "start": 3049,
+    "end": 3070,
+    "match": {
+      "include": true
+    }
+  },
+  "3778450": {
+    "end": 3495,
+    "start": 3483,
+    "match": {
+      "include": true
+    }
+  },
+  "3781667": {
+    "start": 5441,
+    "end": 5458,
+    "match": {
+      "include": true
+    }
+  },
+  "3782322": {
+    "start": 5843,
+    "end": 5855,
+    "match": {
+      "include": true
+    }
+  },
+  "3782323": {
+    "start": 6084,
+    "end": 6098,
+    "match": {
+      "include": true
+    }
+  },
+  "3783838": {
+    "start": 6570,
+    "end": 6586,
+    "match": {
+      "include": true
+    }
+  },
+  "3784933": {
+    "start": 7220,
+    "end": 7232,
+    "match": {
+      "include": true
+    }
+  },
+  "3785551": {
+    "start": 7889,
+    "end": 7904,
+    "match": {
+      "include": true
+    }
+  },
+  "3785552": {
+    "start": 8054,
+    "end": 8065,
+    "match": {
+      "include": true
+    }
+  },
+  "3790019": {
+    "offset_adjustment": -100,
+    "start": 10544,
+    "end": 10560,
+    "match": {
+      "include": true
+    }
+  },
+  "3792603": {
+    "offset_adjustment": 100
+  },
+  "3792960": {
+    "offset_adjustment": -40,
+    "start": 13272,
+    "end": 13283,
+    "match": {
+      "include": true
+    }
+  },
+  "3793935": {
+    "offset_adjustment": 40,
+    "start": 13552,
+    "end": 13569,
+    "match": {
+      "include": true
+    }
+  },
+  "3793936": {
+    "start": 13603,
+    "end": 13608,
+    "match": {
+      "include": true
+    }
+  },
+  "3793937": {
+    "start": 13628,
+    "end": 13636,
+    "match": {
+      "include": true
+    }
+  },
+  "3793938": {
+    "start": 13680,
+    "end": 13688,
+    "match": {
+      "include": true
+    }
+  },
+  "3794079": {
+    "start": 14113,
+    "end": 14119,
+    "match": {
+      "include": true
+    }
+  },
+  "3794324": {
+    "start": 14274,
+    "end": 14279,
+    "match": {
+      "include": true
+    }
+  },
+  "3794681": {
+    "start": 14432,
+    "end": 14437,
+    "match": {
+      "include": true
+    }
+  },
+  "3795079": {
+    "start": 14845,
+    "end": 14854,
+    "match": {
+      "include": true
+    }
+  },
+  "3795634": {
+    "start": 15146,
+    "end": 15151,
+    "match": {
+      "include": true
+    }
+  },
+  "3796270": {
+    "start": 15669,
+    "end": 15685
+  },
+  "3796553": {
+    "start": 15776,
+    "end": 15783,
+    "match": {
+      "include": true
+    }
+  },
+  "3796554": {
+    "start": 15796,
+    "end": 15806,
+    "match": {
+      "include": true
+    }
+  },
+  "3796852": {
+    "start": 16100,
+    "end": 16117,
+    "cards": [
+      {
+        "at": "post",
+        "type": "dismissal_summary",
+        "player": "George Jackson"
+      }
+    ],
+    "match": {
+      "include": true
+    }
+  },
+  "3798649": {
+    "start": 16279,
+    "end": 16289,
+    "cards": [
+      {
+        "at": "post",
+        "type": "dismissal_summary",
+        "player": "James Harrington"
+      }
+    ],
+    "match": {
+      "include": true
+    }
+  },
+  "3798650": {
+    "start": 17511,
+    "end": 17521,
+    "match": {
+      "include": true
+    }
+  }
+}
