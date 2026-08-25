@@ -167,15 +167,44 @@ stills, clip segments, card alpha overlays, `xfade` — can be built and validat
 existing last-match deck before any editor tooling exists. Narration then becomes "durations
 come from cues instead of defaults, plus an audio track".
 
-### Enumerating atoms at build time
+### Enumerating atoms at build time — **built (phase 1)**
 
 Both producers need each slide's atom count, and the build already knows it (`_panels`,
-`FIXED_PANEL_COUNTS`, clip count) — but `data.json` publishes only `duration` and
-`panel_duration`, so a consumer has to infer the count by division. **Publish an explicit
-atom list per slide instead.** It serves the derived timeline, the compositor and the deck
-builder, and it lets record mode stop depending on the runtime `wcc-slide` handshake for
-counts — which `player-core.js` already carries a startup `ping` workaround for, because
-`counts` staying null collapses `next()`'s `panelIndex < counts-1` test.
+`FIXED_PANEL_COUNTS`, clip count) — but `data.json` published only `duration` and
+`panel_duration`, so a consumer had to infer the count by division. Each slide now
+publishes an explicit atom list instead. It serves the derived timeline, the compositor and
+the deck builder, and it lets record mode stop depending on the runtime `wcc-slide`
+handshake for counts — which `player-core.js` already carries a startup `ping` workaround
+for, because `counts` staying null collapses `next()`'s `panelIndex < counts-1` test.
+
+`slide_atoms` (`build.py`) computes it and every `slide_meta` writer carries it through, so
+it lands in `data.json` as `slide._atoms`:
+
+```jsonc
+// static slide: one atom per panel
+[ { "panel": 0, "duration": 20 }, { "panel": 1, "duration": 20 } ]
+
+// reel: one atom per clip, split at its card windows, each carrying its media segment
+[ { "panel": 6, "duration": 4.0, "card": "pre",
+    "media": { "src": "https://videos…/c1f1.mp4", "in": 0.0, "out": 4.0 } },
+  { "panel": 6, "duration": 5.002,
+    "media": { "src": "https://videos…/c1f1.mp4", "in": 4.0, "out": 9.002 } } ]
+```
+
+Two decisions worth recording:
+
+- **A card atom's duration is its window length, not its registry `dwell`.** They're the
+  same number in the normal case — the pad *is* the dwell — but a curation override changes
+  the pad without changing the registry, and the window is what the wall actually plays.
+  So a silent render stays frame-for-frame what the screens show. A zero-width window
+  (no pad) yields no card atom, because the wall shows no card either.
+- **Clip atoms carry `media` ranges rather than leaving the compositor to re-derive them.**
+  The pad footage under a card and the action between the pads are different segments of one
+  R2 file, and the split point is only known here.
+
+`_atoms` is absent on live-match slides: their panels are whatever the feed has produced by
+render time, so the build cannot enumerate them. Consumers treat a missing list as
+"unknown" rather than "none". `data.json` also now carries the deck's `build_version`.
 
 ---
 
@@ -209,6 +238,10 @@ Consequences worth knowing:
 
 One document for both producers. `duration` is authoritative in both cases; in a recorded
 timeline it equals the beat's segment length, with `cue` retained as provenance.
+
+The derived half is built: `scripts/timeline.py <deck-slug>` flattens a built deck's atom
+lists into this document (`source: "derived"`, `clip_audio` defaulting to `keep`). A clip
+beat carries the `media` segment from its atom; a static beat carries none.
 
 ```jsonc
 {
@@ -398,7 +431,7 @@ clip before committing to `keep`.
 
 | Phase | Scope | Ships |
 |---|---|---|
-| **1** | Build-time atom list; derived timeline generator. | Pure build work, no UI. |
+| **1** ✅ | Build-time atom list (`slide_atoms`); derived timeline generator (`scripts/timeline.py`). | Pure build work, no UI. |
 | **2** | Silent compositor: stills, clip segments, card overlays, `loudnorm`, `xfade`. | **An MP4 of any existing deck, with no editor tooling at all.** |
 | **3** | Pre-resolved card catalogue. | Real figures in the `/curate` picker; unresolvable cards greyed out. |
 | **4** | Runtime deck injection; `video.html` runtime clip list. | The editor-tooling keystone — serves narration preview and the deck builder. |

@@ -652,6 +652,62 @@ def build_video_slide(slide):
     slide["_override_duration"] = True
 
 
+def slide_atoms(slide, panel_count, panel_duration):
+    """The slide's atom list: every point a narrator or the compositor can stop on.
+
+    An atom is `(slide, panel)` plus an optional card qualifier — see
+    docs/narrated-decks.md. Published into slide_meta (and so into data.json) so
+    that the derived timeline, the compositor and record mode all read counts and
+    durations from the build, rather than inferring a panel count by dividing
+    `duration` by `panel_duration` or waiting on the runtime `wcc-slide` handshake.
+
+    A static slide gives one atom per panel, each holding `panel_duration`.
+
+    A video slide gives one atom per clip, split at its card windows: the pad a
+    card overlays becomes an atom of its own, so `next()` has somewhere to stop and
+    the compositor has a segment to hold the last frame of. Clip atoms carry their
+    media range (`src` plus `in`/`out` seconds within the R2 file); their durations
+    come from the trim and never from `panel_duration`, which `build_video_slide`
+    sets to `total + 30` as a safety net.
+
+    A card atom's duration is the length of its window, i.e. the pad footage it
+    overlays — which is what the wall plays, so a silent render of a reel is
+    frame-for-frame what the screens show. That equals the card type's configured
+    `dwell` unless the curation overlay overrode the pad for this clip.
+    """
+    if slide.get("template") != "video":
+        return [{"panel": i, "duration": panel_duration} for i in range(panel_count)]
+
+    atoms = []
+    for i, v in enumerate(slide.get("videos") or []):
+        src = v.get("_video_src")
+        dur = round(float(v.get("_video_duration") or 0.0), 3)
+        cards = {c.get("at"): c for c in (v.get("cards") or []) if c.get("window")}
+
+        def _clamp(x):
+            return round(min(max(float(x), 0.0), dur), 3)
+
+        pre_end = _clamp(cards["pre"]["window"][1]) if "pre" in cards else 0.0
+        post_start = _clamp(cards["post"]["window"][0]) if "post" in cards else dur
+        post_start = max(post_start, pre_end)
+
+        segments = [("pre", 0.0, pre_end), (None, pre_end, post_start),
+                    ("post", post_start, dur)]
+        segments = [seg for seg in segments if seg[2] - seg[1] > 0.001]
+        # A clip whose pads swallow it whole (or that has no resolved duration)
+        # still has to contribute exactly one atom, or the panel count is wrong.
+        if not segments:
+            segments = [(None, 0.0, dur)]
+
+        for card, a, b in segments:
+            atom = {"panel": i, "duration": round(b - a, 3)}
+            if card:
+                atom["card"] = card
+            if src:
+                atom["media"] = {"src": src, "in": round(a, 3), "out": round(b, 3)}
+            atoms.append(atom)
+    return atoms
+
 def _curation_scorecards():
     """Index the recent scorecards in fixtures.json by match_id (as a string).
 
@@ -2915,6 +2971,11 @@ def build_live_matches(env, slide_meta):
         (out_dir / "index.html").write_text(tmpl.render(slide=slide, slug=slug))
         slide_meta[slug] = {"slide_active": True, "slide_expires": None,
                             "duration": slide["duration"],
+                            # No `_atoms`: this slide's panels are whatever the live
+                            # feed has produced by the time it renders, so the build
+                            # can't enumerate them. Live decks aren't narrated or
+                            # composited (docs/narrated-decks.md), so nothing needs
+                            # them — a consumer treats a missing list as "unknown".
                             # Marks this as part of the live feature set, so a device
                             # with no access key can drop it at runtime and present
                             # exactly as if live_enabled were false (the flag is
@@ -3296,6 +3357,7 @@ def build_slides(env):
             "slide_expires": slide.get("expires"),
             "duration": slide["duration"],
             "panel_duration": slide["panel_duration"],
+            "_atoms": slide_atoms(slide, panel_count, slide["panel_duration"]),
             "_videos": slide_video_srcs(slide),
             # Built, but with no data behind it this build. Decks opt out per entry
             # with skip_when_empty rather than the slide vanishing everywhere.
@@ -3518,6 +3580,7 @@ def build_match_packages(env, slide_meta):
             "slide_expires": expires,
             "duration": default_panel_duration,
             "panel_duration": default_panel_duration,
+            "_atoms": slide_atoms(slide, 1, default_panel_duration),
             # The match this slide reports on, ISO. A run of consecutive
             # recency-bearing slides in a deck plays newest first — see
             # build_slideshows.
@@ -3708,6 +3771,7 @@ def build_match_packages(env, slide_meta):
             slide_meta[slug] = {
                 "slide_active": True, "slide_expires": None,
                 "duration": slide["duration"], "panel_duration": slide["panel_duration"],
+                "_atoms": slide_atoms(slide, len(slide["videos"]), slide["panel_duration"]),
                 "_videos": slide_video_srcs(slide),
             }
             print(f"  slide/{slug} — reel ({len(slide['videos'])} clips, {slide['duration']:.0f}s)")
@@ -4009,7 +4073,10 @@ def _write_deck_data(out_dir, show, build_version):
     See docs/player-offline-architecture.md.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "data.json").write_text(json.dumps(show))
+    # Stamped in so anything derived from this deck (a timeline, a composite) can
+    # record which build it came from, and warn when the live site has moved past
+    # it. The players ignore the key.
+    (out_dir / "data.json").write_text(json.dumps({**show, "build_version": build_version}))
 
     seen = set()
     precache_videos = []
