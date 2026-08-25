@@ -556,6 +556,42 @@
     // moment it parses — behind the loading gate that races the cache prime and roughly
     // doubles cold-boot mobile data. preload="none" keeps the element idle until then.
     if (window.parent === window) showVideo(0);
+
+    // Render-side hook. The compositor (scripts/compose.py) screenshots the reel's
+    // overlay layer — tag, caption and card — as a transparent PNG and lays it over
+    // the R2 footage, so it has to drive these exact components rather than
+    // re-implement their markup. One layout feeds both the wall and the video.
+    // See docs/narrated-decks.md.
+    window.WccReel = {
+        clipCount: count,
+        // Dress the page as it looks at one beat: clip `panel`, optionally with its
+        // "pre"/"post" card open. Nothing plays — the caller wants a still. Returns
+        // false on a non-reel video slide, which has no overlay layer to shoot.
+        frame: function (panel, at) {
+            if (!cardEl) return false;
+            // Standalone pages auto-start clip 0; a running video would fire
+            // timeupdate and updateCard() would undo what we set up here.
+            videoEls.forEach(function (x) { x.pause(); });
+            current = Math.max(0, Math.min(count - 1, panel || 0));
+            activeCardKey = null;
+            setBallCaption();
+            cardEl.classList.remove('show');
+            if (!at) return true;
+            var cards = ((VIDEOS[current] || {}).cards) || [];
+            for (var j = 0; j < cards.length; j++) {
+                if (cards[j].at !== at) continue;
+                renderCard(cards[j]);
+                cardEl.classList.add('show');
+                // A pre card must not carry the ball's narrative — it hasn't
+                // happened yet. Same rule as updateCard().
+                if (at === 'pre' && captionEl) {
+                    captionEl.textContent = ''; captionEl.style.display = 'none';
+                }
+                return true;
+            }
+            return true;
+        }
+    };
 })();
 </script>
 </body>

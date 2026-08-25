@@ -387,21 +387,84 @@ and lets the freeze story stop at the pin.
 
 ---
 
-## The compositor
+## The compositor — **built (phase 2)**
 
-Deterministic assembly from separate assets — **not** a screen recording:
+`scripts/compose.py`. Deterministic assembly from separate assets — **not** a screen
+recording:
 
 1. Headless Chrome screenshots each static atom (`/slide/<slug>/` at the right panel) → PNG.
-2. Card overlays screenshot **with a transparent background** → PNG with alpha.
+   The panel is selected by posting the player's own `wcc-cmd` messages (`take-over`, then
+   `goto-panel`), so there is no second way to address a panel. A slide opened on its own at
+   a 1920×1080 viewport is already the wall's frame — `--fit` is a player concern.
+2. The reel's **overlay layer** screenshot **with a transparent background** → PNG with alpha.
 3. ffmpeg assembles: stills held for their beat duration; clip segments trimmed from the
    **R2 files** (never the YouTube embed — an embed captures black); `tpad=stop_mode=clone`
-   for card holds and mid-clip freezes; the card PNG `overlay`-ed across its window;
+   for card holds and mid-clip freezes; the overlay PNG `overlay`-ed across the beat;
    `xfade` transitions; the take laid on the timeline → MP4.
+
+Each beat is encoded to one segment on a single profile (1920×1080, 30fps, h264 + **PCM**
+audio in `.mov`), so beats within a slide join with the concat demuxer at `-c copy`, and only
+the slide-level joins re-encode. AAC is encoded exactly once, in the final master pass.
+Segments, stills and overlays are cached in the work directory and reused, which makes a
+re-render after a tweak cheap.
+
+### Two ways a render drifts out of sync
+
+Both were live bugs, both found by measuring the first full render against its timeline, and
+both accumulate silently across a long reel — the 2nd-innings reel is 29 clips, so anything
+that slips per clip is a second or more by the end.
+
+- **AAC priming, once per segment.** Every AAC stream starts with priming samples the
+  decoder discards. Concatenating N of them with `-c copy` therefore loses that much audio N
+  times: the reel stamped 157.348s of audio but decoded to **155.947s**, so each clip's sound
+  landed ~48ms early and the audio ran steadily ahead of the picture. Intermediate segments
+  carry PCM instead; there is no priming to lose, and the single AAC encode at the end has
+  nothing to accumulate against.
+- **Frame quantisation, once per beat.** Video is snapped to whole frames whatever duration
+  is asked for; audio is not. A 6.016s beat produced 6.000s of video against 6.016s of audio.
+  `frame_align()` rounds every beat to the frame grid before anything is cut to it — at 30fps
+  and 48kHz a frame is exactly 1600 samples, so a frame-aligned beat is sample-aligned too
+  and both streams land together.
+
+Worth knowing for phase 8: **a recorded timeline's durations will be quantised the same
+way**, so a cue lands on the nearest frame (±17ms). That is well inside the boundary-nudge
+tolerance the review step needs anyway.
+
+Ruled out while diagnosing: the R2 clips themselves are clean — both streams start at 0.000
+and decoded audio matches its stamped duration — and the curation bounds play no part, so
+neither the fetch nor the trim needs defending against this.
+
+Every render now ends with `check_sync()`, which **decodes** the audio rather than trusting
+the container's stamp, and warns when the two streams are more than a frame and a half
+apart. That distinction is the whole point: the reel that ran 1.4s out still stamped exactly
+the right duration in its header.
 
 The alpha-overlay step is what resolves the stale "solid full-frame cards" premise in
 `docs/match-highlights.md`: cards are overlays over padded footage, and compositing them
 that way keeps the render frame-perfect, GPU-free and reproducible, with one card HTML
 component feeding both the wall and the video.
+
+### The overlay layer is the whole layer, not just the card
+
+Step 2 shoots the reel's *entire* overlay — top-left tag, per-clip caption and any open card
+— rather than the card alone, via a `window.WccReel.frame(panel, at)` hook in
+`templates/slides/video.html`. Two reasons, one discovered in the build:
+
+- **The tag is load-bearing.** It conceals the Frogbox HIGHLIGHTS/QR watermark burned into
+  the top-left of every clip. A render that drops it shows the artefact for the whole video.
+- **A card is not independent of the caption.** A `pre` card blanks the ball's narrative so
+  it can't spoil the outcome. Shooting the layer as a unit means that rule lives in one
+  place — the slide — instead of being re-derived by the compositor.
+
+The hook drives the real components and pauses playback first (a standalone page auto-starts
+clip 0, and a running `timeupdate` would fight the setup).
+
+### Crossfades go between slides, not between clips
+
+`--fade` (default 0.5s) applies at **slide** boundaries only. Panel and clip steps inside a
+slide are hard cuts, which is what the wall does — a montage of boundary fours dissolving
+into each other reads as mush. Parts shorter than the fade degrade to a cut rather than
+crossfading a two-second clip into nothing.
 
 ### Clip audio
 
@@ -419,6 +482,22 @@ inaudible and loud from clip to clip. Normalise per clip in the compositor with 
 the R2 files stay a faithful source. It also makes `duck` meaningful in the narrated case —
 ducking a normalised bed under commentary at a known gain, rather than an unpredictable one.
 
+Built: `loudnorm=I=-16:TP=-1.5:LRA=11` per clip beat. A full match render of clips
+measuring −28.7 to −42.7 lands at **−16.6 LUFS integrated, −1.7 dBFS true peak**. Single-pass
+`loudnorm` is loose on true peak on its own, and a crossfade briefly sums two beds, so a
+final `alimiter` pass caps the master; it copies the video stream, so it costs nothing but
+an audio re-encode. With no narration to duck under, `duck` is simply a quieter bed (−12 dB).
+
+**Trap:** `alimiter`'s `level` option defaults to *on*, which normalises the signal **up** to
+the limit — it is a maximiser, not a ceiling. Left at the default it took the render from
+−16.5 to −12.9 LUFS and pushed its true peak to +0.4 dBFS, the exact opposite of the
+intent. `level=disabled` is required, with the ceiling at 0.7 to leave room for AAC
+inter-sample overshoot.
+
+A third pitfall sits next to these: **`loudnorm` re-stamps its output PTS** (it runs a
+lookahead), which pushed `apad`'s padding past the `-t` cut and left every normalised beat
+84ms short of its video. `asetpts=N/SR/TB` after `loudnorm` is load-bearing, not tidying.
+
 Two caveats: one sampled clip peaked at exactly 0.0 dB, which usually indicates clipping
 upstream that `loudnorm` cannot undo; and whole-clip levels say nothing about whether the
 *interesting* moment (bat contact, the appeal, the celebration) is audible from a fixed
@@ -432,7 +511,7 @@ clip before committing to `keep`.
 | Phase | Scope | Ships |
 |---|---|---|
 | **1** ✅ | Build-time atom list (`slide_atoms`); derived timeline generator (`scripts/timeline.py`). | Pure build work, no UI. |
-| **2** | Silent compositor: stills, clip segments, card overlays, `loudnorm`, `xfade`. | **An MP4 of any existing deck, with no editor tooling at all.** |
+| **2** ✅ | Silent compositor (`scripts/compose.py`): stills, clip segments, overlay layer, `loudnorm`, `xfade`. | **An MP4 of any existing deck, with no editor tooling at all.** |
 | **3** | Pre-resolved card catalogue. | Real figures in the `/curate` picker; unresolvable cards greyed out. |
 | **4** | Runtime deck injection; `video.html` runtime clip list. | The editor-tooling keystone — serves narration preview and the deck builder. |
 | **5** | Card hold points in interactive mode. | Consistent nav; prerequisite for narrating cards. |
