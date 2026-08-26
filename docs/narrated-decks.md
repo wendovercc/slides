@@ -1,7 +1,7 @@
 # Narrated Decks — Deck Builder, Narration & Video Export
 
-> Status: **agreed design, not yet built.** Planning source of truth for the deck
-> builder, the narration recorder and the compositor — including **silent** decks, which
+> Status: **phases 1–5 built; 6 (deck builder) and 7 (record mode) designed, not built.**
+> Planning source of truth for the deck builder, the narration recorder and the compositor — including **silent** decks, which
 > render to video with no editor sitting at all. Supersedes the "Feature 2 — Highlights
 > video" half of `docs/match-highlights.md`. Read `assets/js/player-core.js`,
 > `assets/js/slide-bridge.js` and `scripts/build.py` (`_resolve_deck`, `_write_deck_data`,
@@ -316,17 +316,120 @@ derived duration.
 
 ---
 
-## The deck builder
+## The deck builder — `/deck`
 
 An editor-facing tool that produces a **frozen, literal deck** — the same
-`{title, slides:[…]}` shape the player already consumes, so its output is directly playable.
+`{title, slides:[…]}` shape the player already consumes, so its output is directly
+playable *and* directly renderable.
 
-**Starting from an existing slideshow and customising is the common case, and it is nearly
-free:** `data.json` is *already* the resolved snapshot. `_resolve_deck` has applied set
-expansion, `_skip`, expiry and supersession before writing it. So the builder fetches a
-deck's `data.json`, presents a literal list of slides, and lets the editor delete, reorder
-and add. Output carries no set references, no `show_when`, no expiry rules — nothing left to
-re-resolve.
+**It is not only a narration prerequisite.** An assembled deck plus the phase-2
+compositor is a complete product on its own: the editor exports `deck.json`, the
+publisher runs `timeline.py --data deck.json` into `compose --timeline`, and a
+customised highlights video comes out with nobody narrating anything. That path is why
+the builder now comes *before* record mode — see Phasing.
+
+**Starting from an existing slideshow and customising is the common case**, and the
+motivating example is a small one: dropping player-profile slides between the pre-match
+slide and the first innings reel. Today that is a *publisher* capability (edit
+`content/slideshows/*.json`, rebuild) and there is no way to do it with website-only
+access, let alone inside one sitting.
+
+### What the build already gives it
+
+Three things that turn out to exist already, which is most of the reason this is small:
+
+- **`data.json` is already the resolved snapshot.** `_resolve_deck` has applied set
+  expansion, `_skip`, expiry and supersession before writing it. So the builder fetches a
+  deck's `data.json`, presents a literal list of slides, and lets the editor delete,
+  reorder and add. Output carries no set references, no `show_when`, no expiry rules —
+  nothing left to re-resolve.
+- **Every slide already has its own auto-deck.** `build_slideshows` writes
+  `/slideshow/<slide-slug>/data.json` for every non-authored slide (and every set). So
+  "add a slide this deck doesn't contain" is a fetch of that slide's own deck, and it
+  arrives with `_atoms`, `duration` and `panel_duration` already computed. The builder
+  never re-derives a slide entry, and no second copy of `slide_atoms` appears in JS.
+- **`timeline.py` already takes a deck *document*, not a slug** (`--data`). An exported
+  deck therefore renders through the existing pipeline unchanged.
+
+What is missing is only an **index**: `slide_meta` knows every slug, but nothing
+publishes the list, so a builder has nothing to browse. `site/slides.json` — slug,
+`title`, `template`, set/group membership, panel count, duration and the
+`_empty` / `_live` / expired flags — collected in the loop that already writes the
+auto-decks. That is phase 6a, and it is the only build-side work the builder needs.
+
+### The screen
+
+Two columns, in the `/curate` idiom — same editor, same machine, same dense navy chrome.
+
+**Left: the deck.** One row per slide.
+
+```
+⠿  [REEL]  Innings 1 — highlights   last-match-1st-xi-innings-1-reel   31 atoms · 2:14  ▲▼ ×
+⠿  [TEAM]  Pre-match                last-match-1st-xi-intro             4 atoms · 1:20  ▲▼ ×
+```
+
+- **Drag to reorder**, with ▲▼ on every row as the reliable fallback — dense tool, cheap
+  buttons, and no keyboard trap.
+- **An insertion caret sits between rows** and is the target of "add": click a gap to move
+  it, then click a catalogue entry. Precise and keyboard-reachable, where drag-from-
+  catalogue is neither.
+- **Set members carry a coloured stripe** down the left edge, so a contiguous run reads as
+  one block and a split is visible before the warning explains it.
+- **Duration is editable on static slides only.** For a silent render, dwell is the *only*
+  pacing control the editor has, so it belongs here; a reel's duration comes from its
+  trims and is read-only. Overriding a static slide rewrites its `_atoms` durations
+  uniformly — which is exactly how `slide_atoms` computed them.
+
+**Right: preview above, catalogue below.**
+
+- The **preview** is an iframe of the selected slide's own auto-deck
+  (`/slideshow/<slug>/?interactive`), with a **wall / archive toggle** on `?ctx` — archive
+  wording is what the video will say, and it is what the narrator will read.
+- The **catalogue** is a filterable list from `site/slides.json`, grouped by kind, marking
+  slides the deck already contains.
+
+**No thumbnail grid.** Both ways of getting one are worse than one big preview pane:
+build-time stills mean a headless-Chrome pass over every slide every night, and live
+mini-iframes mean dozens of simultaneous slide documents — the exact allocation that
+produced the iOS WebContent OOM.
+
+### The warnings panel
+
+Non-blocking and stated rather than enforced, because each of these is sometimes what the
+editor meant:
+
+| Warning | Why |
+|---|---|
+| **This splits the *Last Match* set** | Set membership is baked at build time: `set-nav.js` drives a step strip rendered *into* each member. Insert a slide mid-set and the next member still shows "3 of 5" for a sequence that no longer runs. Cosmetic, member slides only — worth saying, not worth making the strip deck-aware until it bites. |
+| **Live-match slide** | No `_atoms` (panels are feed-driven), so it can be neither narrated nor rendered. The one warning that is nearly an error. |
+| **Empty / expired / inactive slide** | `_empty` is built-but-no-data-this-build; the deck rules that would normally drop it were resolved away. |
+| **Reel has no resolved clips** | Expected during the sitting — R2 sync happens on the publisher's rebuild. "Renders after the rebuild", not "broken". |
+| **Deck is older than the site** | `build_version` drift, the same guard the compositor applies. |
+
+### Drafts, storage and the hand-offs
+
+**A draft *is* a deck, so `deck-store.js` is the draft store.** `WccDeckStore.list()` is
+the deck library the picker shows, preview plays the draft key directly instead of copying
+it, and `?deck=local:<key>` needs no second concept — one storage convention on this
+origin, as phase 4 intended. `put()` already returns false on quota (a 29-clip reel plus
+atoms is not small), and the builder must surface that as a real error rather than a
+silent non-save.
+
+Two hand-offs join the sitting:
+
+- **From `/curate`** — a reel row offers "use my curated clips", reading the curation
+  draft out of localStorage and attaching it as that slide entry's `videos`. That is the
+  phase-4 `set-clips` path, driven from UI instead of the console.
+- **To record mode** — "Narrate →" opens `/slideshow/?deck=local:<key>&record&ctx=archive`.
+  This settles where narration starts: **the front door is `/deck`**, so record mode never
+  needs a deck picker of its own.
+
+**Export** is `deck.json`: the literal deck plus `build_version` and `source: "builder"`.
+Publisher chain is `timeline.py --data deck.json` → `compose --timeline`; a
+`compose --deck-file` shortcut is a one-liner if that gets tedious.
+
+One small player addition the preview wants: **a start index** (`&start=<n>`), so "play
+from here" does not mean watching from the top every time.
 
 ### Freezing, in three layers
 
@@ -426,7 +529,7 @@ and trims (in the browser), card content (pre-resolved), clip playback (YouTube 
 the player gains the ability to accept an **injected** deck object alongside `?deck=<slug>`,
 and `video.html` the ability to take its clip list at runtime rather than only from the
 baked-in blob. Both are also exactly what the deck builder needs. No UI: this is the seam
-phases 6 and 7 hang their tooling on.
+phases 6 (`/deck`) and 7 (record mode) hang their tooling on.
 
 **`?deck=local:<key>` plays a deck out of the browser.** `assets/js/deck-store.js` is the
 handover — `WccDeckStore.put/get/remove/list` over `localStorage["wcc-deck:<key>"]`. Chosen
@@ -473,7 +576,7 @@ third-party script and the stylesheet no rules for something it never renders.
 The mp4 path was moved into its source verbatim — `crossfadeTo`, `ensurePlayable`,
 `reapObjUrls` are character-identical — because it is what the screens run.
 
-**Exercising it** (there is no UI until phase 7). In the browser console on the site:
+**Exercising it** (there is no UI until phase 6b). In the browser console on the site:
 
 ```js
 WccDeckStore.put('draft', { title: 'Draft', slides: [
@@ -500,11 +603,168 @@ reconcile step behind a web button.
 
 ---
 
+## Record mode & `/narrate` — **proposed**
+
+Narration is **two surfaces**, and conflating them is the main trap:
+
+| Surface | Is | Where |
+|---|---|---|
+| **Record** | the deck, near-fullscreen, minimal HUD | `player-core.js` mode #3: `/slideshow/?deck=local:<key>&record` |
+| **Review** | beat table, waveform, boundary nudge, re-record, export | `/narrate`, a `/curate`-idiom page that *hosts* the player in an iframe |
+
+Record mode goes *into* the player, as a mode alongside kiosk and interactive, sharing
+`next`/`prev`/`arrive`/`applyState` — so a tap does exactly what it does on the bar iPad
+and hold points cannot diverge. The review workbench is emphatically not in there.
+
+Entry is from `/deck`, which already holds the deck; `/narrate` is purely post-take.
+
+### The session
+
+```
+/deck     assemble  →  Narrate →
+/slideshow?record   Rehearse → Arm → Record
+/narrate            Review → Export narration.zip
+```
+
+**Rehearse is not a nicety.** The narrator needs one pass to learn what is coming — a
+2nd-innings reel is 29 clips, which is a lot of surprise. It costs nothing: interactive
+mode with the HUD up and the mic off.
+
+**Arm** is mic permission, a level check and a 3-2-1. The take starts before the first
+atom does, so there is lead-in silence to trim against.
+
+### The HUD
+
+The deck must dominate, so this is a strip in the letterbox band `placeBar` already
+measures — not a panel.
+
+- **REC dot + take clock.** The take is the artefact; its clock is the one true time.
+- **Beat position** — `beat 14/61 · innings 1 reel · clip 3 · pre-card`. From `_atoms`, so
+  it is known up front and does not wait on the runtime `wcc-slide` handshake.
+- **A "next up" prompt** — the highest-value element on the screen. For a clip, its
+  curated narrative; for a card, **the resolved figures from the catalogue**, because the
+  narrator has to say them aloud (that is what makes phase 3 load-bearing); for a static
+  slide, its title.
+- **What the current atom is doing** — for a clip, a thin remaining-time bar, so the
+  narrator can see the auto-cue coming; for a hold, a `HOLD — → to advance` state. The
+  existing `#wcc-bar-progress` fill is the first, and `hold: true` already freezes it.
+- **A live level meter**, with a clip warning. A take that turns out silent or clipped
+  after twenty minutes is the worst outcome the feature has.
+
+Everything else — prev, home, fullscreen — comes off the bar while recording. It is a
+performance surface.
+
+### Input map — interactive's, unchanged
+
+**Record mode keeps interactive's bindings.** The right arrow cues; tap and Space stay
+play/pause, exactly as they do on the bar iPad.
+
+| Input | Does |
+|---|---|
+| **→** (and PageDown) | **Cue** — advance an atom, stamp the timestamp |
+| tap / **Space** | pause — captured as a `freezes[]` entry on the current beat |
+| **←** | nothing (see below) |
+| **Esc** | stop the take |
+
+The argument for remapping was real and is worth recording, because it will come back the
+first time somebody records a long reel: cue is the *constant* action and pause is the
+rare one, so on target size alone cue deserves the tap surface. It lost on cost of change
+— **this is a keybinding, revisitable after one real sitting**, whereas divergence between
+record and interactive is the kind of thing that quietly becomes permanent. Two upsides
+fall out of keeping them the same: pause needs no new capture path (it is already the
+`pauseAuto` call the freeze model wants), and nothing about `?record` has to be re-learned
+by someone who has used the iPad.
+
+PageDown rides along with → for free and makes a Bluetooth page-turner pedal work, which
+matters when you are standing at a mic rather than sitting at a screen.
+
+**Backwards is disabled during a take.** A continuous take plus a jump backwards is
+incoherent — the audio keeps running while the video rewinds. "I fluffed that one" becomes
+a review-time re-record, which costs the narrator nothing (keep talking; fix it later) and
+keeps the timeline monotonic. The alternative — scrap-last-beat-and-back-up, truncating
+the take at the last cue — is buildable but makes the take non-continuous, and the whole
+invariant rests on it being continuous.
+
+So `?record` adds a HUD, a recorder and one *subtraction* (`prev`). Hold points (phase 5)
+are untouched.
+
+### Crash safety
+
+Losing a twenty-minute take to a reload is a re-do across a whole sitting, so this shapes
+the UX rather than just the plumbing:
+
+- `MediaRecorder` with a ~1s **timeslice**, each chunk appended to **IndexedDB** as it
+  arrives.
+- Every cue and freeze timestamp written to localStorage as it happens.
+- `/narrate` offers **"recover unfinished take"** on load.
+
+The point is that a crash lands the editor in Review with everything up to the crash,
+rather than at zero.
+
+### Audio
+
+- **Clip audio is muted while recording, with a toggle.** Speakers bleed into the mic, and
+  the render mixes the R2 audio itself under `loudnorm`/`duck`, so hearing it live buys
+  only timing feel. The toggle is there for anyone wearing headphones.
+- **Take-to-video alignment.** `MediaRecorder.start()` does not begin capturing when it
+  returns, so cues stamped off `performance.now()` sit tens of ms out. Derive t=0 from an
+  `AudioContext` timestamp taken at first-chunk arrival — and, belt and braces, put a
+  **global offset nudge in Review** (one slider, ±500 ms, applied to every cue). Cheap,
+  and it covers whatever the browser actually does.
+- Frame quantisation (`frame_align`, ±17 ms) is comfortably inside this.
+
+### Review & re-record
+
+A table over a waveform of the take, one row per beat:
+
+```
+#   atom            duration   [▸]  [waveform slice]  [◂ nudge ▸]  [re-record]  notes
+```
+
+- **Nudge** drags a cue boundary a few hundred ms either way — the mid-word case. It
+  reflows only the two adjacent beats.
+- **Re-record** plays that beat's video from its start (holding the last frame if the
+  narrator runs long) while capturing a replacement segment. On save that beat's
+  `duration` becomes the segment length and **the segment list is authoritative from there
+  on**; the UI badges re-recorded rows and says the timeline reflowed.
+- **Flags raised without being asked**: a beat with no audio at all, a beat where the take
+  still has energy at the cue boundary (mid-word), a clip beat whose commentary overruns
+  badly.
+- **"Play from beat N"** drives the hosted player with the take laid over it — the closest
+  thing to a render without spending minutes on `compose.py`.
+
+### Export
+
+```
+narration.zip
+  deck.json          the frozen deck, as played
+  timeline.json      source:"recorded" — durations, cues, freezes, audio refs
+  take.webm          the continuous master
+  segments/b14.webm  re-records only
+```
+
+Publisher side is phase 8: `compose.py --timeline timeline.json`. `/narrate` warns at
+export time if the site's `build_version` has moved past the deck's — the drift guard,
+surfaced where the editor can still act on it.
+
+### Settled, and what would reopen it
+
+- **The prompter carries existing content only** — curated clip narrative, resolved card
+  figures, slide title. Authored per-beat script notes were rejected for v1: they need a
+  beat-level editing surface in `/deck`, and the content the narrator must speak is
+  already resolved and on hand. Reopen if rehearsals show people writing notes elsewhere.
+- **Rehearse is its own state**, HUD up and mic off, rather than deferring to
+  `?interactive&ctx=archive`. The whole value of a rehearsal is seeing the next-up prompts
+  in place, and plain interactive mode has no HUD to show them in.
+- **Keybindings are provisional** by explicit decision — see the input map above.
+
+---
+
 ## Roles & workflow
 
 | Role | Does | Access |
 |---|---|---|
-| **Editor** | Builds the deck, curates clips, picks cards, narrates. Exports one zip. | Website only. No repo. |
+| **Editor** | Curates clips and cards (`/curate`), assembles the deck (`/deck`), narrates it (`/narrate`). Exports `deck.json`, or a narration zip. | Website only. No repo. |
 | **Publisher** | Lands the zip: syncs media to R2, commits, builds, runs the compositor **while the match is still the team's last**, uploads to YouTube. | Local scripts + repo. |
 
 | When | What |
@@ -512,7 +772,7 @@ reconcile step behind a web button.
 | Day 1 | Match played; Frogbox live stream on YouTube. |
 | Evening 1 | Captains finish scorecards on Play Cricket. |
 | Night 1 | Overnight build: package without clips, but fetches Frogbox ball-event metadata **and emits the card catalogue**. |
-| Day 2 | Editor builds the deck, curates, narrates, exports the zip. |
+| Day 2 | Editor curates, assembles the deck, and (optionally) narrates it. Exports `deck.json` alone for a silent render, or the narration zip. |
 | Day 2 | Publisher lands it; rebuild adds clips + cards to the wall package; compositor produces the MP4. |
 
 Narrated decks are **not** played on the wall. That keeps narration from outliving its deck,
@@ -615,7 +875,7 @@ that slips per clip is a second or more by the end.
   and 48kHz a frame is exactly 1600 samples, so a frame-aligned beat is sample-aligned too
   and both streams land together.
 
-Worth knowing for phase 8: **a recorded timeline's durations will be quantised the same
+Worth knowing for phase 7: **a recorded timeline's durations will be quantised the same
 way**, so a cue lands on the nearest frame (±17ms). That is well inside the boundary-nudge
 tolerance the review step needs anyway.
 
@@ -704,14 +964,27 @@ clip before committing to `keep`.
 | **3** ✅ | Pre-resolved card catalogue (`_card_catalogue`, `resolve_card`). | Real figures in the `/curate` picker; unresolvable cards greyed out. |
 | **4** ✅ | Runtime deck injection (`deck-store.js`, `?deck=local:<key>`); `video.html` runtime clip list + YouTube clip source. | The editor-tooling keystone — serves narration preview and the deck builder. |
 | **5** ✅ | Card hold points in interactive mode (`edge`/`step`/`hold` over the bridge, `?holds`). | Consistent nav; prerequisite for narrating cards. |
-| **6** | Record mode: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
-| **7** | Deck builder UI. | Editor-authored decks, frozen at build time. |
+| **6a** | Slide catalogue: `site/slides.json` over `slide_meta`. | The index the builder browses. |
+| **6b** | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
+| **7** | Record mode + `/narrate`: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
 | **8** | Narrated composite + publisher `publish` flow. | The commentated MP4. |
 
-2 needs 1; 6 needs 4 and 5, and wants 3 to be worth doing; 7 needs 4; 8 needs 2 and 6.
-Phases 1–2 deliver a publishable video on their own, which is why they come first: the
-entire render pipeline gets built and debugged against a real deck before any of the
-editor-facing machinery exists.
+2 needs 1; 6 needs 4; 7 needs 4, 5 and 6, and wants 3 to be worth doing; 8 needs 2 and 7.
+
+**The deck builder was moved in front of record mode**, having originally been phase 7.
+Two reasons, both found while planning the record-mode UX:
+
+- **It ships on its own.** An assembled deck plus the phase-2 compositor is a complete
+  feature — customised silent highlights, with nobody narrating — and it is the natural
+  answer to a week when the narrator is unavailable. Nothing in it depends on record mode.
+- **It removes an invented entry point.** Without it, the only way to reach a deck worth
+  narrating is a built slug or a `WccDeckStore.put` typed into the console, so record mode
+  would have had to grow a deck picker it has no business owning. With `/deck` in front,
+  narration starts from a deck that already exists.
+
+Phases 1–2 still deliver a publishable video before any editor-facing machinery exists,
+which is why they came first: the whole render pipeline was built and debugged against a
+real deck.
 
 **Implementation stance:** record mode goes *into* `player-core.js` as a mode alongside
 kiosk and interactive, sharing `next`/`prev`/`arrive`/`applyState` — not a wrapper poking at
@@ -728,4 +1001,9 @@ risky beats bolted-on and forked.
 - YouTube upload automation — manual via YouTube Studio for now.
 - Frame-accurate clip rendering (a seek-per-frame renderer), if quality ever demands it.
   It changes neither the editor tool, the data model, nor the card layer.
-- Persistence for editor-built decks beyond the browser (localStorage + zip export in v1).
+- Persistence for editor-built decks beyond the browser (localStorage + `deck.json` export
+  in v1).
+- Making the `set-nav` step strip deck-aware, so inserting a slide mid-set renumbers it.
+  Baked at build time today; a split set shows a stale step count on its members. Cosmetic,
+  and the builder warns instead.
+- Backwards navigation during a recording take (`prev` is disabled under `?record`).
