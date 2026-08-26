@@ -720,6 +720,25 @@ def slide_atoms(slide, panel_count, panel_duration):
             atoms.append(atom)
     return atoms
 
+
+def slide_title(slide, slug):
+    """A human label for the slide, for the catalogue and the deck builder.
+
+    Authored slides carry their own ``title``. Match-package members don't — they
+    are generated, and what identifies one is the set plus which step of it it is,
+    which is exactly what the set strip already says (``_set_steps`` /
+    ``_set_step``). The set slug carries the rest of the context in the catalogue,
+    so "1st XI — Innings 1" is the whole label a row needs.
+
+    Falls back to the slug, which every slide has.
+    """
+    steps = slide.get("_set_steps")
+    idx = slide.get("_set_step")
+    if steps and idx is not None and 0 <= idx < len(steps):
+        return f"{slide.get('_set_subtitle') or slug} — {steps[idx]}"
+    return slide.get("title") or slug
+
+
 def _curation_scorecards():
     """Index the recent scorecards in fixtures.json by match_id (as a string).
 
@@ -3101,6 +3120,8 @@ def build_live_matches(env, slide_meta):
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(tmpl.render(slide=slide, slug=slug))
         slide_meta[slug] = {"slide_active": True, "slide_expires": None,
+                            "_title": slide_title(slide, slug),
+                            "_template": slide["template"],
                             "duration": slide["duration"],
                             # No `_atoms`: this slide's panels are whatever the live
                             # feed has produced by the time it renders, so the build
@@ -3486,6 +3507,13 @@ def build_slides(env):
         slide_meta[slug] = {
             "slide_active": slide.get("active", True),
             "slide_expires": slide.get("expires"),
+            # Label + kind, for the slide catalogue the deck builder browses
+            # (site/slides.json) — see slide_title. They ride in slide_meta because
+            # that is the only thing build_slideshows has when it writes the index;
+            # flowing on into each deck entry is a small bonus, since an editor-built
+            # deck's rows can then name themselves from data.json alone.
+            "_title": slide_title(slide, slug),
+            "_template": slide.get("template"),
             "duration": slide["duration"],
             "panel_duration": slide["panel_duration"],
             "_atoms": slide_atoms(slide, panel_count, slide["panel_duration"]),
@@ -3709,6 +3737,10 @@ def build_match_packages(env, slide_meta):
         slide_meta[slug] = {
             "slide_active": True,
             "slide_expires": expires,
+            "_title": slide_title(slide, slug),
+            # `template` is the Jinja object here, not a name; its `.name` is the
+            # load path, e.g. `slides/match-intro.html` -> `match-intro`.
+            "_template": Path(template.name).stem,
             "duration": default_panel_duration,
             "panel_duration": default_panel_duration,
             "_atoms": slide_atoms(slide, 1, default_panel_duration),
@@ -3929,6 +3961,7 @@ def build_match_packages(env, slide_meta):
             (out_dir / "index.html").write_text(video_tmpl.render(slide=slide, slug=slug))
             slide_meta[slug] = {
                 "slide_active": True, "slide_expires": None,
+                "_title": slide_title(slide, slug), "_template": "video",
                 "duration": slide["duration"], "panel_duration": slide["panel_duration"],
                 "_atoms": slide_atoms(slide, len(slide["videos"]), slide["panel_duration"]),
                 "_videos": slide_video_srcs(slide),
@@ -4253,6 +4286,60 @@ def _write_deck_data(out_dir, show, build_version):
     return len(precache_videos)
 
 
+def write_slide_catalogue(slide_meta, sets, build_version):
+    """Publish ``site/slides.json`` — the index of every slide this build produced.
+
+    Phase 6a of docs/narrated-decks.md. The deck builder needs to *browse* slides,
+    and nothing published the list: ``slide_meta`` knows every slug, but it only
+    ever reached the browser folded into a deck that already contained the slide.
+    Adding a slide the current deck does not have therefore had no source at all.
+
+    Deliberately thin — enough to list, group, filter and warn on, and no more. The
+    full slide entry (durations, ``_atoms``, ``videos``) comes from the slide's own
+    auto-deck at ``/slideshow/<slug>/data.json`` when the editor actually inserts
+    it, so a slide entry has exactly one definition rather than two. Every slide
+    here has such a deck: the auto-deck loop below skips only authored deck slugs
+    (whose deck contains that same slide anyway) and set slugs (which are not
+    slides).
+
+    ``atoms: null`` means *unknown*, not none — a live-match slide's panels are
+    whatever the feed has produced by render time, which is also why it can be
+    neither narrated nor composited.
+    """
+    members = {m: set_slug for set_slug, s in (sets or {}).items()
+               for m in s.get("members", [])}
+    slides = []
+    for slug, meta in sorted(slide_meta.items()):
+        if meta.get("_skip"):
+            continue
+        atoms = meta.get("_atoms")
+        slides.append({
+            "slug": slug,
+            "title": meta.get("_title") or slug,
+            "template": meta.get("_template"),
+            "atoms": len(atoms) if atoms is not None else None,
+            "duration": meta.get("duration"),
+            "panel_duration": meta.get("panel_duration"),
+            "set": members.get(slug),
+            "active": meta.get("slide_active", True),
+            "expires": meta.get("slide_expires"),
+            "empty": bool(meta.get("_empty")),
+            "live": bool(meta.get("_live")),
+        })
+    catalogue = {
+        "build_version": build_version,
+        "slides": slides,
+        # Sets are insertable as a unit ("add the whole Last Match package"), and
+        # naming them is also what lets the builder warn that an insertion has split
+        # one — see the warnings panel in docs/narrated-decks.md.
+        "sets": [{"slug": set_slug, "title": s.get("title") or set_slug,
+                  "members": s.get("members", [])}
+                 for set_slug, s in sorted((sets or {}).items())],
+    }
+    (SITE / "slides.json").write_text(json.dumps(catalogue, indent=2))
+    print(f"  slides.json: {len(slides)} slide(s), {len(catalogue['sets'])} set(s)")
+
+
 def build_slideshows(env, slide_meta, sets=None):
     # slide_meta (from build_slides/build_match_packages) carries each slide's
     # computed duration, active/expires, and a _skip flag for slides with no data
@@ -4362,6 +4449,8 @@ def build_slideshows(env, slide_meta, sets=None):
         env.get_template("player.html").render(
             screen=False, title="Slideshow", slug=None, preview=preview_cfg,
             built_at=built_at, qr_data_url=qr_data_url))
+
+    write_slide_catalogue(slide_meta, sets, build_version)
 
     return sorted(homepage_shows, key=lambda x: x["rank"])
 

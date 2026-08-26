@@ -1,6 +1,7 @@
 # Narrated Decks — Deck Builder, Narration & Video Export
 
-> Status: **phases 1–5 built; 6 (deck builder) and 7 (record mode) designed, not built.**
+> Status: **phases 1–5 and 6a built; 6b (deck builder UI) and 7 (record mode) designed,
+> not built.**
 > Planning source of truth for the deck builder, the narration recorder and the compositor — including **silent** decks, which
 > render to video with no editor sitting at all. Supersedes the "Feature 2 — Highlights
 > video" half of `docs/match-highlights.md`. Read `assets/js/player-core.js`,
@@ -351,11 +352,35 @@ Three things that turn out to exist already, which is most of the reason this is
 - **`timeline.py` already takes a deck *document*, not a slug** (`--data`). An exported
   deck therefore renders through the existing pipeline unchanged.
 
-What is missing is only an **index**: `slide_meta` knows every slug, but nothing
-publishes the list, so a builder has nothing to browse. `site/slides.json` — slug,
-`title`, `template`, set/group membership, panel count, duration and the
-`_empty` / `_live` / expired flags — collected in the loop that already writes the
-auto-decks. That is phase 6a, and it is the only build-side work the builder needs.
+What was missing is only an **index**: `slide_meta` knows every slug, but nothing
+published the list, so a builder had nothing to browse.
+
+#### The slide catalogue — **built (phase 6a)**
+
+`write_slide_catalogue` (`build.py`) publishes `site/slides.json` at the end of
+`build_slideshows`: one thin entry per slide — slug, title, template, atom count,
+durations, set membership, and the `active` / `expires` / `empty` / `live` flags —
+plus the set registry, so a whole match package is insertable as a unit and the builder
+can tell when an insertion has split one. 243 slides and 19 sets on a current build.
+
+Three decisions worth recording:
+
+- **The entry is thin on purpose.** It carries enough to list, group, filter and warn
+  on, and no more. When the editor actually inserts a slide, the full entry comes from
+  that slide's own auto-deck (`/slideshow/<slug>/data.json`), so **a slide entry has one
+  definition rather than two** and no JS port of `slide_atoms` ever appears. Every
+  catalogued slide has such a deck: the auto-deck loop skips only authored deck slugs —
+  whose deck contains that same slide anyway — and set slugs, which are not slides.
+- **`atoms: null` means *unknown*, not none.** Only the live-match slide has it, for the
+  same reason it has no `_atoms`: its panels are whatever the feed produced by render
+  time. It is the one catalogue entry that cannot be narrated or composited.
+- **`_title` and `_template` ride in `slide_meta`**, added by all four writers
+  (`build_slides`, the match-package `emit`, `emit_reel`, `build_live_matches`), because
+  `slide_meta` is the only thing `build_slideshows` has when it writes the index.
+  `slide_title` composes a label for the generated members that have no `title` of their
+  own, from the set strip's own step names — "1st XI — Innings 1". They flow on into each
+  deck entry in `data.json`, which is a small bonus rather than the point: an
+  editor-built deck's rows can name themselves from the deck document alone.
 
 ### The screen
 
@@ -964,7 +989,7 @@ clip before committing to `keep`.
 | **3** ✅ | Pre-resolved card catalogue (`_card_catalogue`, `resolve_card`). | Real figures in the `/curate` picker; unresolvable cards greyed out. |
 | **4** ✅ | Runtime deck injection (`deck-store.js`, `?deck=local:<key>`); `video.html` runtime clip list + YouTube clip source. | The editor-tooling keystone — serves narration preview and the deck builder. |
 | **5** ✅ | Card hold points in interactive mode (`edge`/`step`/`hold` over the bridge, `?holds`). | Consistent nav; prerequisite for narrating cards. |
-| **6a** | Slide catalogue: `site/slides.json` over `slide_meta`. | The index the builder browses. |
+| **6a** ✅ | Slide catalogue: `site/slides.json` over `slide_meta` (`write_slide_catalogue`, `slide_title`). | The index the builder browses. |
 | **6b** | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
 | **7** | Record mode + `/narrate`: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
 | **8** | Narrated composite + publisher `publish` flow. | The commentated MP4. |
