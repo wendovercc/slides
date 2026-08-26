@@ -19,14 +19,32 @@
   var count = 1;       // panel count (1 for plain slides)
   var current = 0;     // active panel index
 
+  /* Where this slide's own navigation sits within itself, for the player's
+   * next()/prev(). Panels are the default atom, but a reel's atoms are finer than
+   * its panels — a card hold is a stop *inside* a clip — so a controller may answer
+   * for itself. `last` false means a forward tap has somewhere to go in here;
+   * `last` true means it must cross to the next slide. */
+  function edge() {
+    if (ctrl && ctrl.edge) { try { return ctrl.edge(); } catch (e) { /* fall through */ } }
+    return { first: current === 0, last: current === count - 1 };
+  }
+
   function post(type, extra) {
     try {
-      parent.postMessage(Object.assign({ type: type, panel: current, panels: count }, extra || {}), '*');
+      parent.postMessage(Object.assign(
+        { type: type, panel: current, panels: count }, edge(), extra || {}), '*');
     } catch (e) { /* not embedded — ignore */ }
   }
 
   window.WccSlide = {
-    // Carousel controller: { count, show(i), startAuto(), pauseAuto(), restartCurrent() }
+    // Capability flag: this bridge understands atom-level navigation (`edge`/`step`
+    // on a controller, first/last on every message). A slide template may deploy
+    // hours before this file does — GH Pages caches HTML for 10 minutes and /assets
+    // for 4 — so a reel must check this before it starts holding on cards, or an old
+    // bridge would drop the step that releases the hold and wedge the reel.
+    atoms: true,
+    // Carousel controller: { count, show(i), startAuto(), pauseAuto(), restartCurrent(),
+    //                        edge()?, step(delta)? }
     register: function (c) {
       ctrl = c;
       count = c.count || 1;
@@ -52,6 +70,14 @@
     ctrl.show(i); // controller updates `current` via notifyPanel
   }
 
+  // One step of the player's nav. A controller with finer atoms than panels handles
+  // it itself (a reel releases a card hold rather than skipping the clip); everyone
+  // else steps a panel.
+  function step(d) {
+    if (ctrl && ctrl.step) { ctrl.step(d); return; }
+    show(current + d);
+  }
+
   window.addEventListener('message', function (e) {
     var d = e.data;
     if (!d || d.type !== 'wcc-cmd') return;
@@ -70,8 +96,8 @@
       case 'restart-auto':                    // kiosk: slide just became visible —
         if (ctrl) { setPaused(false); ctrl.show(0); ctrl.startAuto(); } // rotate afresh from panel 0
         break;
-      case 'next-panel': show(current + 1); break;
-      case 'prev-panel': show(current - 1); break;
+      case 'next-panel': step(1); break;
+      case 'prev-panel': step(-1); break;
       case 'goto-panel': show(typeof d.index === 'number' ? d.index : current); break;
       case 'reset':      show(0); break;
       case 'ping':       post('wcc-slide'); break; // parent (re)requests count

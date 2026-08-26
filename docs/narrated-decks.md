@@ -77,7 +77,7 @@ expressible — `{slug, panels:[2]}` with the player restricting `counts[]` — 
 
 ---
 
-## Hold points
+## Hold points — **built (phase 5)**
 
 Making a card addressable means `next()` must be able to stop on it.
 
@@ -104,6 +104,48 @@ mistimed tap.
 a recorder attached; the two must not diverge in what a tap does. **Kiosk is unaffected** —
 it has no `next()`/`prev()`, so cards continue to overlay rolling footage on the wall
 exactly as they do today.
+
+### How it is wired
+
+The reel's atoms are finer than its panels, and a panel is a clip everywhere else — in
+`_atoms`, in `goto-panel`, in `compose.py`'s still addressing. So none of that moved.
+What was added is one question the player asks the slide instead of answering itself:
+
+- **`first` / `last` ride on every bridge message** (`slide-bridge.js`). The default is the
+  panel arithmetic the player used to do inline; a controller may override it with `edge()`.
+  The reel answers `last: false` while it is holding on a *pre* card of the final clip,
+  because that hold is still an atom of this slide — and `true` once the action is rolling,
+  so the tap that leaves a post-card hold crosses to the next slide through the player's own
+  `fwdSlide` rather than waiting for a `wcc-done` that a paused deck would never act on.
+- **`next-panel`/`prev-panel` route through a controller `step(delta)`** if it has one. The
+  reel spends a forward step on releasing a pre-card hold; everything else is a clip step,
+  exactly as before. Backwards is always a clip step — replaying a moment mid-clip is
+  deferred.
+- **`hold: true` on the echo stops the player's clocks.** A hold clears the slide-advance
+  backstop and freezes the countdown fill; releasing it re-arms both over what is *left* of
+  the clip, which the reel reports as the echo's `dur`. Without this the reel's
+  `panel_duration` backstop (whole reel + 30s) would eventually carry the deck off a card
+  mid-sentence, and the pause/resume and pinch-out paths would each re-arm it behind the
+  hold's back.
+- **The freeze frame is seeked, not just paused.** `timeupdate` fires a few times a second,
+  so pausing where the tick lands would stop an arbitrary fraction of a second *into* the
+  action the pre card exists to precede. Both clip sources gained `seek(t)`, and the hold
+  lands the playhead exactly on the pad's end. `updateCard` then early-returns while
+  holding, so a late tick can't retract the card the hold just dressed.
+
+Two things a hold must not be mistaken for: the **stall watchdog** treats it like a pause
+(no playback progress for 15s is otherwise a dead clip to be skipped), and `restartCurrent`
+— the bridge's un-pause — refuses to resume a held clip, so a hold outlives the user's
+pause and is released only by a forward tap.
+
+**Enabling it: `?holds` on the slide iframe URL**, set by the player only in interactive
+mode. It rides on the URL rather than over the bridge for the same reason `?ctx` does — a
+windowed deck re-loads its frames as it moves, and a URL survives that with no handshake.
+It is deliberately *not* on the debug panel's open-slide links: a slide opened on its own
+has nothing to release a hold with. The reel also checks `WccSlide.atoms` before it holds
+at all, because this template can deploy up to four hours before `/assets` does (GH Pages
+caches HTML for 10 minutes and `/assets` for 4), and an old bridge would drop the step that
+releases the hold.
 
 ### What the video does under a card
 
@@ -661,7 +703,7 @@ clip before committing to `keep`.
 | **2** ✅ | Silent compositor (`scripts/compose.py`): stills, clip segments, overlay layer, `loudnorm`, `xfade`. | **An MP4 of any existing deck, with no editor tooling at all.** |
 | **3** ✅ | Pre-resolved card catalogue (`_card_catalogue`, `resolve_card`). | Real figures in the `/curate` picker; unresolvable cards greyed out. |
 | **4** ✅ | Runtime deck injection (`deck-store.js`, `?deck=local:<key>`); `video.html` runtime clip list + YouTube clip source. | The editor-tooling keystone — serves narration preview and the deck builder. |
-| **5** | Card hold points in interactive mode. | Consistent nav; prerequisite for narrating cards. |
+| **5** ✅ | Card hold points in interactive mode (`edge`/`step`/`hold` over the bridge, `?holds`). | Consistent nav; prerequisite for narrating cards. |
 | **6** | Record mode: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
 | **7** | Deck builder UI. | Editor-authored decks, frozen at build time. |
 | **8** | Narrated composite + publisher `publish` flow. | The commentated MP4. |

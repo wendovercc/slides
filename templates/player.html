@@ -360,6 +360,16 @@ if (PREVIEW) document.body.classList.add('preview');
 // spends minutes on it. See docs/narrated-decks.md.
 const CTX = params.get('ctx');
 const SLIDE_Q = CTX ? `?ctx=${encodeURIComponent(CTX)}` : '';
+// What the EMBEDDED slides get, on top of that. Card hold points are a property of
+// interactive mode: a reel stops on a card's last pad frame and waits to be stepped
+// on. The wall has no next() to release one with — and neither has a slide opened on
+// its own from the debug panel, which is why this rides on the iframe src rather than
+// on SLIDE_Q. Carried as a URL flag rather than over the bridge because a windowed
+// deck re-loads its frames as it moves and a URL survives that with no handshake, the
+// same reason ?ctx is passed this way. See docs/narrated-decks.md.
+const FRAME_Q = params.has('interactive')
+    ? (SLIDE_Q ? `${SLIDE_Q}&holds=1` : '?holds=1')
+    : SLIDE_Q;
 {%- if screen %}
 const LOCATION_ID = {{ location.id | tojson }};
 {%- else %}
@@ -721,7 +731,7 @@ async function init() {
     const stage = document.getElementById('stage');
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
-        f.dataset.src = `/slide/${s.slug}/${SLIDE_Q}`;
+        f.dataset.src = `/slide/${s.slug}/${FRAME_Q}`;
         // A slide entry may carry its own clip list — the editor sitting curates clips
         // no build has seen, so the reel page's baked blob is not what should play.
         // Pushed in on every load (a windowed deck re-loads frames as it moves), and

@@ -160,6 +160,12 @@
     var current = 0;
     var counts = items.map(function () { return null; }); // panel count per item
     var panelIndex = 0;
+    // Atom edges reported by the CURRENT slide (null = not heard from yet, fall back
+    // to the panel arithmetic). A reel's atoms are finer than its panels — a card
+    // hold is a stop inside a clip — so the slide, not the player, says whether a tap
+    // still has somewhere to go before the slide boundary. See docs/narrated-decks.md.
+    var edgeFirst = null, edgeLast = null;
+    var slideHold = false;   // the current slide is frozen on a card, waiting for a tap
     // Interactive starts paused: the commentator drives timing. (Kiosk ignores this
     // flag entirely — it runs its own whole-slide rotation.) Forward arrival onto a
     // video slide flips this true so the clip plays; see arrive().
@@ -295,7 +301,7 @@
       if (zoomed) {
         cancelGesture();
         clearTimer();          // don't auto-advance under the user while they're reading
-      } else if (interactive && playing) {
+      } else if (interactive && playing && !slideHold) {
         if (items[current].video) resumeVideoProgress(); else panelTimer();
       }
       if (winRadius === null) return;
@@ -342,6 +348,7 @@
       post(i, msg);
     }
     function activate(i) {
+      if (i !== current) { edgeFirst = edgeLast = null; slideHold = false; }   // stale the moment we leave
       reconcileWindow(i);   // before .active — a cold frame needs its src first
       items.forEach(function (it, j) { it.frame.classList.toggle('active', j === i); });
       current = i;
@@ -574,6 +581,10 @@
       updatePlayBtn();
       if (p) {
         send(current, 'resume');
+        // A card hold outlives the pause: the slide stays frozen until a forward tap
+        // releases it, so arming the slide-advance backstop here would eventually
+        // carry the deck off a card nobody has finished talking over.
+        if (slideHold) return;
         // Video slides own a per-clip countdown; resume continues it rather than
         // resetting (panelTimer would blank the bar). Others get a fresh panel.
         if (items[current].video) resumeVideoProgress(); else panelTimer();
@@ -585,9 +596,21 @@
     // when you step across slides, including between slide-set members). When
     // playing, the per-panel timer restarts; when paused, applyState re-pauses
     // the incoming slide.
+    // Slides that predate atom edges send neither field; leaving the flags null keeps
+    // the panel arithmetic in charge for them.
+    function setEdges(d) {
+      if (typeof d.first === 'boolean') edgeFirst = d.first;
+      if (typeof d.last === 'boolean') edgeLast = d.last;
+    }
+    function atLastAtom() {
+      return edgeLast !== null ? edgeLast : panelIndex >= (counts[current] || 1) - 1;
+    }
+    function atFirstAtom() {
+      return edgeFirst !== null ? edgeFirst : panelIndex <= 0;
+    }
     function next() {
       clearTimer();
-      if (panelIndex < (counts[current] || 1) - 1) {
+      if (!atLastAtom()) {
         send(current, 'next-panel');
         if (playing) panelTimer(); else progressReset();
       } else {
@@ -596,7 +619,7 @@
     }
     function prev() {
       clearTimer();
-      if (panelIndex > 0) {
+      if (!atFirstAtom()) {
         send(current, 'prev-panel');
         if (playing) panelTimer(); else progressReset();
       } else {
@@ -825,15 +848,26 @@
       if (d.type === 'wcc-slide') {
         var first = counts[idx] == null;
         counts[idx] = d.panels;
+        if (idx === current) setEdges(d);
         // Re-apply state on the current slide's handshake (covers the load race
         // where our first commands arrived before the bridge was listening).
         if (idx === current && first && Date.now() - shownAt < 2000) applyState(playing ? 0 : panelIndex);
       } else if (d.type === 'wcc-panel' && idx === current) {
         panelIndex = d.panel;
-        // Video reel: restart the countdown for the clip now playing, so the bar
-        // tracks the current clip rather than the whole reel. Only while playing —
-        // a paused reel leaves the bar reset until it resumes.
-        if (items[current].video && playing && d.dur > 0) startProgress(d.dur * 1000);
+        setEdges(d);
+        if (!items[current].video) return;
+        // A card hold: the reel has frozen on a pad's last frame and is waiting for a
+        // tap, so nothing may run underneath it — not the countdown fill, and not the
+        // slide-advance backstop, which would otherwise carry the deck off the card
+        // mid-sentence. Releasing the hold re-arms both over what is left of the clip.
+        slideHold = !!d.hold;
+        if (d.hold) { clearTimer(); progressFreeze(); return; }
+        if (!playing) return;
+        if (d.hold === false) armAdvanceTimer((items[current].panel_duration || 20) * 1000);
+        // Restart the countdown for the clip now playing, so the bar tracks the
+        // current clip rather than the whole reel. Only while playing — a paused reel
+        // leaves the bar reset until it resumes.
+        if (d.dur > 0) startProgress(d.dur * 1000);
       }
     });
 

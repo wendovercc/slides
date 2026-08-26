@@ -106,11 +106,18 @@
            (navy fill, gold border, following the slide design tokens), it is decoupled
            from the top-left tag so it reads clearly at 10 feet. JS toggles .show as the
            playhead enters/leaves the card's window; it scales up from a hair under full
-           size so the entrance is soft. Sizes here are a first pass — easy to tune. */
+           size so the entrance is soft.
+           The HEIGHT is not free: the card must reach past the bottom of the narrative
+           caption (.reel-tag-caption, bottom edge at --reel-narr-bottom + --reel-narr-h),
+           which is positioned to rest on the Frogbox stats banner burned into the
+           footage. Under a card the footage is pad — and now, with hold points, a frozen
+           pad frame — by which point Frogbox has moved its graphics on, so a caption left
+           poking out below the card hangs over nothing. 82vh centred clears it; the card
+           grows symmetrically, so raising this eats headroom at the top too. */
         .reel-card {
             position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%) scale(0.97);
-            width: 75vw; height: 75vh; box-sizing: border-box;
+            width: 75vw; height: 82vh; box-sizing: border-box;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             text-align: center; gap: 1vh; padding: 6vh 6vw;
             background: var(--navy-2); border: 0.3vw solid var(--accent);
@@ -329,6 +336,38 @@
     var cardEl = document.getElementById('reel-card');
     var activeCardKey = null;
 
+    // ---- Card hold points (interactive nav) ------------------------------
+    // A card has no intrinsic duration, so it is where a narrator's tap sets the
+    // dwell: the pad under it plays through at natural speed and then FREEZES on its
+    // last frame until the player steps on. A clip carrying both cards is therefore
+    // three atoms — pre-card (holds) → action (rolls, flowing into the lead-out) →
+    // post-card (holds) — and the action is never interrupted mid-flight.
+    //
+    // Interactive only. The wall has no next()/prev() to release a hold with, so a
+    // hold there would simply stop the screens; `?holds` is set by the player on the
+    // slide URL (like ?ctx) and is absent in kiosk. See docs/narrated-decks.md.
+    var HOLDS = (function () {
+        try {
+            return new URLSearchParams(location.search).has('holds')
+                && !!(window.WccSlide && WccSlide.atoms);
+        } catch (e) { return false; }
+    })();
+    var phase = 'action';   // which atom of the current clip: 'pre' | 'action' | 'post'
+    var holding = false;    // frozen on a pad's last frame, waiting for the player
+
+    // A card's window, or null when it has no pad to play (a zero-width window means
+    // the wall shows no card either).
+    function cardWindow(i, at) {
+        var cards = (VIDEOS[i] && VIDEOS[i].cards) || [];
+        for (var j = 0; j < cards.length; j++) {
+            if (cards[j].at !== at) continue;
+            var w = cards[j].window || [0, 0];
+            if (w[1] > w[0]) return w;
+        }
+        return null;
+    }
+    function preHoldAt(i) { var w = HOLDS ? cardWindow(i, 'pre') : null; return w ? w[1] : null; }
+
     // Default caption for the current clip (the ball's own narrative). A pre card
     // blanks this until the action starts (see updateCard).
     function setBallCaption() {
@@ -360,6 +399,9 @@
     // card and the next one drops in fresh.
     function updateCard(t) {
         if (!cardEl) return;
+        // A hold has already dressed the page for its card and stopped the clip a
+        // hair short of the boundary; a late timeupdate must not retract it.
+        if (holding) return;
         var cards = (VIDEOS[current] && VIDEOS[current].cards) || [];
         var hit = null;
         for (var j = 0; j < cards.length; j++) {
@@ -479,9 +521,11 @@
 
         function bind(v) {
             v.addEventListener('timeupdate', function () {
-                if (+v.dataset.idx === current) updateCard(v.currentTime);
+                if (+v.dataset.idx !== current) return;
+                if (checkHold(v.currentTime)) return;   // the hold dresses the card itself
+                updateCard(v.currentTime);
             });
-            v.addEventListener('ended', function () { advanceFrom(+v.dataset.idx); });
+            v.addEventListener('ended', function () { endOfClip(+v.dataset.idx); });
             v.addEventListener('error', function () {
                 var i = +v.dataset.idx;
                 if (i === current && !isPaused()) {
@@ -544,6 +588,10 @@
             },
             pause: function () { if (videoEls[current]) videoEls[current].pause(); },
             resume: function () { if (videoEls[current]) videoEls[current].play(); },
+            // Land exactly on a hold frame: timeupdate only fires a few times a
+            // second, so without this the freeze would sit an arbitrary fraction of
+            // a second into the action it is meant to stop short of.
+            seek: function (t) { var v = videoEls[current]; if (v) { try { v.currentTime = t; } catch (e) {} } },
             pauseAll: function () { videoEls.forEach(function (x) { x.pause(); }); },
             teardown: function () { this.mount([]); },
             time: function () { return videoEls[current] ? videoEls[current].currentTime : NaN; }
@@ -592,7 +640,7 @@
                 if (!ready) return;
                 var clip = VIDEOS[current] || {};
                 var t = player.getCurrentTime() - (clip.start || 0);
-                if (isFinite(t)) updateCard(t);
+                if (isFinite(t) && !checkHold(t)) updateCard(t);
             }, 200);
         }
 
@@ -624,7 +672,7 @@
                                     if (queued !== null) { var q = queued; queued = null; showVideo(q); }
                                 },
                                 onStateChange: function (e) {
-                                    if (e.data === YT.PlayerState.ENDED) advanceFrom(current);
+                                    if (e.data === YT.PlayerState.ENDED) endOfClip(current);
                                 }
                             }
                         });
@@ -645,6 +693,9 @@
             pause: function () { if (ready) player.pauseVideo(); },
             resume: function () { if (ready) player.playVideo(); },
             pauseAll: function () { if (ready) player.pauseVideo(); },
+            // Clip-relative, like every other time in here (the segment start is the
+            // clip's zero).
+            seek: function (t) { if (ready) player.seekTo(((VIDEOS[current] || {}).start || 0) + t, true); },
             teardown: function () {
                 if (poll) { clearInterval(poll); poll = null; }
                 if (player && player.destroy) player.destroy();
@@ -665,6 +716,10 @@
         if (!SRC || !VIDEOS[i]) return;
         var prev = current;
         current = i;
+        // Synchronously, before the source's async show: a stray timeupdate from the
+        // outgoing clip must not test the new clip's playhead against the old atom.
+        phase = preHoldAt(i) != null ? 'pre' : 'action';
+        holding = false;
         SRC.show(i, prev, function () { showVideoNow(i); });
     }
 
@@ -698,7 +753,75 @@
         {% endif %}
         // Report the clip's duration so the player's countdown tracks the current
         // clip rather than sweeping the whole reel.
-        if (window.WccSlide) WccSlide.notifyPanel(i, { dur: clipDuration(i) });
+        report();
+    }
+
+    // Tell the player where we are. `dur` is what its countdown should run over —
+    // the whole clip on arrival, whatever is left of it when a hold releases.
+    function report(extra) {
+        if (window.WccSlide) {
+            WccSlide.notifyPanel(current, Object.assign({ dur: clipDuration(current) }, extra || {}));
+        }
+    }
+
+    // ---- Holds -----------------------------------------------------------
+    // Where the reel's atoms are finer than its panels. The bridge asks for this on
+    // every message so the player knows whether a tap has somewhere to go in here:
+    // a pre-card hold on the final clip is still an atom of this slide, so `last`
+    // only becomes true once that clip's action is rolling.
+    function edge() {
+        return { first: current === 0, last: current === count - 1 && phase !== 'pre' };
+    }
+
+    // Called on every playhead tick. Returns true when it has taken the frame over,
+    // in which case the caller leaves the card alone.
+    function checkHold(t) {
+        if (!HOLDS || holding || phase !== 'pre') return false;
+        var at = preHoldAt(current);
+        if (at == null || t < at - 0.02) return false;
+        enterHold('pre', at, at);
+        return true;
+    }
+
+    // Freeze on the pad's last frame with its card up. The pre pad ends on the frame
+    // before the action — the bowler at the point of delivery, and spoiler-safe,
+    // since a pre card already blanks the ball's narrative; the post pad ends on the
+    // last frame of the clip.
+    // `at` is the pad's end (a hair inside its card window is where the card is read
+    // from); `seekTo` nails the frame, and is null for a post hold — the clip has
+    // already stopped on its last frame, and seeking to the very end risks firing
+    // `ended` a second time.
+    function enterHold(kind, at, seekTo) {
+        phase = kind;
+        clearStall();                       // a hold is not a stall
+        if (SRC) {
+            SRC.pause();
+            if (seekTo != null && SRC.seek) SRC.seek(seekTo);
+        }
+        updateCard(Math.max(0, at - 0.01));
+        holding = true;
+        report({ hold: true });
+    }
+
+    function releaseHold() {
+        holding = false;
+        phase = 'action';
+        if (!isPaused()) { SRC.resume(); armStall(current); }
+        var t = SRC ? SRC.time() : NaN;
+        report({ hold: false, dur: Math.max(0, clipDuration(current) - (isFinite(t) ? t : 0)) });
+    }
+
+    // One step of the player's nav (slide-bridge routes next-panel/prev-panel here).
+    // Forward out of a pre-card hold resumes the action rather than skipping the
+    // clip; everything else is a clip step, exactly as before. Backwards is always a
+    // clip step — replaying a moment mid-clip is deferred (docs/narrated-decks.md).
+    function step(d) {
+        if (d > 0 && holding) {
+            if (phase === 'pre') { releaseHold(); return; }
+            advanceFrom(current);            // post-card hold: on to the next clip
+            return;
+        }
+        showVideo(Math.max(0, Math.min(count - 1, current + d)));
     }
 
     // A built clip carries its measured file duration; a runtime one is a stream
@@ -708,6 +831,17 @@
         if (v._video_duration) return v._video_duration;
         if (v.start != null && v.end != null) return Math.max(0, v.end - v.start);
         return 0;
+    }
+
+    // A clip reaching its natural end. With a post card up that end is a hold point:
+    // the lead-out pad has just played, so freeze on the last frame until the player
+    // steps on. Errors and stalls deliberately bypass this — a bad clip must still be
+    // skipped rather than parked on.
+    function endOfClip(i) {
+        if (i !== current) return;
+        var post = HOLDS ? cardWindow(i, 'post') : null;
+        if (post && !holding) { enterHold('post', post[1], null); return; }
+        advanceFrom(i);
     }
 
     // Advance out of clip i: to the next clip, or end the whole slide if it was the
@@ -733,7 +867,7 @@
         stallLastT = -1; stallSince = Date.now();
         stallTimer = setInterval(function () {
             if (i !== current) { clearStall(); return; }   // moved on / taken over
-            if (isPaused()) { stallSince = Date.now(); return; }   // a hold is not a stall
+            if (isPaused() || holding) { stallSince = Date.now(); return; }   // a deliberate freeze is not a stall
             var t = SRC ? SRC.time() : NaN;
             if (!isFinite(t)) { stallSince = Date.now(); return; } // source still coming up
             if (t > stallLastT + 0.05) { stallLastT = t; stallSince = Date.now(); return; }
@@ -760,6 +894,8 @@
         SRC = next;
         current = 0;
         activeCardKey = null;
+        phase = preHoldAt(0) != null ? 'pre' : 'action';
+        holding = false;
         count = baked ? SRC.adopt() : SRC.mount(VIDEOS);
         if (window.WccSlide) {
             WccSlide.register({
@@ -767,7 +903,11 @@
                 show: function (i) { showVideo(i); },
                 startAuto: function () {},
                 pauseAuto: function () { clearStall(); SRC.pause(); },
-                restartCurrent: function () { SRC.resume(); armStall(current); }
+                // Un-pausing must not run a held clip past its hold point: the freeze
+                // outlives the user's pause and is released only by a forward step.
+                restartCurrent: function () { if (holding) return; SRC.resume(); armStall(current); },
+                edge: edge,
+                step: step
             });
         }
         if (window.WccReel) WccReel.clipCount = count;
@@ -804,6 +944,7 @@
             if (SRC) SRC.pauseAll();
             current = Math.max(0, Math.min(count - 1, panel || 0));
             activeCardKey = null;
+            holding = false;   // this hook dresses the page itself; no freeze to keep
             setBallCaption();
             cardEl.classList.remove('show');
             if (!at) return true;
