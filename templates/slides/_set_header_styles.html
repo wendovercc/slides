@@ -43,11 +43,14 @@
         max-width: 40vw;
         min-width: 0;
     }
+    /* Typography matches the Team Focus tiles' .strip-meta / .fix-meta rows
+       (team.html) — same size, tracking and pill treatment, so the match header
+       and the team slide read as one family. */
     .set-meta .meta-row {
         display: flex;
         align-items: center;
         gap: 0.6vw;
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         text-transform: uppercase;
         letter-spacing: 0.08em;
     }
@@ -59,16 +62,20 @@
         padding: 0.1vh 0.55vw;
     }
     .set-meta .away-pill { background: rgba(180,100,40,0.3); border: var(--hair) solid rgba(180,100,40,0.5); }
+    /* Ground badge: the Team Focus .loc-badge, size and radius included. The top
+       margin is its own — the badge needs air under the date row, which the
+       tile's bottom-docked layout provides for free and this stack does not. */
+    .set-meta .meta-where { margin-top: 0.8vh; }
     .set-meta .loc-badge {
         display: inline-block;
         max-width: 100%;
         background: var(--accent);
         color: var(--navy-1);
-        font-size: var(--t-xs);
+        font-size: var(--t-sm);
         font-weight: 700;
         letter-spacing: 0.02em;
         padding: 0.2vh 0.7vw;
-        border-radius: 0;
+        border-radius: var(--radius-sm);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

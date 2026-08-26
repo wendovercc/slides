@@ -221,13 +221,36 @@
         <div id="reel-caption" class="reel-tag-caption" style="display:none"></div>
         <div id="reel-panel" class="reel-panel">
             <div class="reel-tag-square">
-                {% if slide._set_title %}<div class="reel-tag-kicker">{{ slide._set_title }}</div>{% endif %}
+                {#- Title: the same heading the static members carry ("Last Match" on
+                    the wall, "Match Highlights" in a render), so the reel reads as part
+                    of the same package. -#}
+                {% if slide._set_title %}<div class="reel-tag-kicker"{% if slide._set_title_archive is defined and slide._set_title_archive %} data-archive="{{ slide._set_title_archive }}"{% endif %}>{{ slide._set_title }}</div>{% endif %}
+                {#- Both sides named in full, in a fixed order (whoever batted first is
+                    on top, on BOTH reels), with a gold dot on the side batting in this
+                    reel. Dot on top = 1st innings, dot below = 2nd — which is why the
+                    order must not be re-sorted per reel. No innings number needed: this
+                    says which innings it is *and* who is batting. -#}
                 <div class="reel-tag-fixture">
-                    <span class="rt-team">{{ slide._set_subtitle }}</span>
-                    {% if slide._set_opp_club %}<span class="rt-vs">vs</span><span class="rt-opp">{{ slide._set_opp_club }}</span>{% endif %}
+                    {% for side in slide._rt_sides %}
+                    {% if not loop.first %}<span class="rt-vs">vs</span>{% endif %}
+                    <span class="rt-side{% if side.batting %} rt-batting{% endif %}">{{ side.club }}{% if side.desig %}<span class="rt-desig">{{ side.desig }}</span>{% endif %}</span>
+                    {% endfor %}
                 </div>
-                {% if slide._innings_label %}<div class="reel-tag-label">{{ slide._innings_label }}</div>{% endif %}
             </div>
+            {#- Archive-only meta: the fixture's date and venue, below the square.
+                Hidden on the wall (the host slide's header already says all this,
+                and the square is sized to the Frogbox bug); shown under
+                ?ctx=archive, where the video stands alone. It grows the panel
+                DOWNWARD so the square keeps its calibrated --reel-tag-size. -#}
+            {% if slide._set_date is defined and (slide._set_date or slide._set_ground) %}
+            <div class="reel-tag-meta">
+                {% if slide._set_date %}<div class="rt-date">{{ slide._set_date }}</div>{% endif %}
+                <div class="rt-where">
+                    {% if slide._set_is_home %}<span class="rt-venue rt-home">Home</span>{% else %}<span class="rt-venue rt-away">Away</span>{% endif %}
+                    {% if slide._set_ground %}<span class="rt-ground">{{ slide._set_ground }}</span>{% endif %}
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
     <div id="reel-card" class="reel-card">

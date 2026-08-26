@@ -25,6 +25,8 @@
     .tc-name { font-size: var(--t-md); font-weight: 900; line-height: 1.05; margin-top: 1.2vh; }
     /* Score matches the innings scorecard headline: gold, same weight/size. */
     .tc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; margin-top: 0.8vh; }
+    /* Same split as the scorecard headline: gold score, muted overs. */
+    .tc-overs { font-size: var(--t-sm); font-weight: 700; color: var(--muted); margin-left: 0.4vw; }
     .tc-result-row { margin-top: 3vh; }
     .result-pill {
         font-weight: bold;
@@ -69,8 +71,8 @@
     <div class="no-match">No matches played yet</div>
     {% else %}
 
-    {% set our_col = {"crest": slide._our_crest, "name": slide._our_name, "result": slide._our_result, "label": slide._our_result_label, "points": slide._our_points, "score": slide._our_score, "performers": slide._our_performers} %}
-    {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_name, "result": slide._opp_result, "label": slide._opp_result_label, "points": slide._opp_points, "score": slide._opp_score, "performers": slide._opp_performers} %}
+    {% set our_col = {"crest": slide._our_crest, "name": slide._our_name, "result": slide._our_result, "label": slide._our_result_label, "points": slide._our_points, "score": slide._our_score, "overs": slide._our_overs, "performers": slide._our_performers} %}
+    {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_name, "result": slide._opp_result, "label": slide._opp_result_label, "points": slide._opp_points, "score": slide._opp_score, "overs": slide._opp_overs, "performers": slide._opp_performers} %}
     {% set columns = [our_col, opp_col] if slide._our_left else [opp_col, our_col] %}
 
     <div class="result-columns{% if slide._set_steps is not defined or not slide._set_steps %} no-strip{% endif %}">
@@ -83,7 +85,7 @@
             {#- Score + result-pill rows always reserve their height (nbsp / hidden
                 placeholder) so an unpublished side still lines its performers up
                 with the other column. -#}
-            <div class="tc-score">{{ c.score or '&nbsp;' }}</div>
+            <div class="tc-score">{{ c.score or '&nbsp;' }}{% if c.overs %}<span class="tc-overs">({{ c.overs }})</span>{% endif %}</div>
             <div class="tc-result-row">
                 {% if c.result %}<span class="result-pill result-{{ c.result }}">{{ c.label }}{% if c.points is not none %} · {{ c.points }} pts{% endif %}</span>
                 {% else %}<span class="result-pill" style="visibility:hidden">&nbsp;</span>{% endif %}

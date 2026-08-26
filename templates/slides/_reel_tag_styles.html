@@ -94,31 +94,88 @@
             display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
             text-align: center; gap: 0.9vh; padding: 1vh 0.9vw; box-sizing: border-box;
         }
-        /* 1 — Title kicker (e.g. "Last Match" / "Today's Match"): the host title
-           rendered as a small muted eyebrow above the fixture. */
+        /* 1 — Title kicker ("Last Match" on the wall, "Match Highlights" in a
+           render): the host title rendered as a small muted eyebrow above the sides. */
         .reel-tag-kicker {
             font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.14em;
             text-transform: uppercase; color: var(--muted); line-height: 1.1;
         }
-        /* 2 — Fixture: our team (gold) / vs / the opposition (white), stacked on three
-           centred lines. Echoes the header's .subtitle, broken to fit the square. The
-           auto top+bottom margins centre it vertically in the gap between the pinned
-           kicker and innings, so longer (multi-line) names stay balanced. */
+        /* 2 — The two sides, in batting order, each named in full (club + XI) on its
+           own centred line with "vs" between. Both in white: neither side is the
+           subject of a highlights reel, and gold is spent on the dot instead.
+           .rt-batting marks who is at the crease — the innings context, in the one
+           form that helps a viewer who missed the toss. The auto top+bottom margins
+           centre the block, so longer (multi-line) names stay balanced.
+           (.rt-team/.rt-opp below are the live surfaces' variant of the same block —
+           live-match.html and live-flash.html, where "our team vs them" is right.) */
         .reel-tag-fixture {
             margin: auto 0;
             font-size: var(--t-sm); font-weight: 700; line-height: 1.2; color: var(--text);
         }
         .reel-tag-fixture .rt-team,
         .reel-tag-fixture .rt-vs,
+        .reel-tag-fixture .rt-side,
         .reel-tag-fixture .rt-opp { display: block; }
+        .reel-tag-fixture .rt-side { color: var(--text); }
+        /* XI designation — the square's echo of the header subtitle's .sub-opp-sub:
+           smaller and muted, so the club name carries the line and the team is
+           supporting detail. Inline, so short names keep to one line. */
+        .reel-tag-fixture .rt-desig {
+            font-size: var(--t-xs); font-weight: 400; color: var(--muted);
+            margin-left: 0.35em;
+        }
+        /* Gold dot = batting. Sized off the text so it tracks --t-sm, and given a
+           negative left margin so the dot hangs into the padding rather than
+           shunting a centred name off-axis. */
+        .reel-tag-fixture .rt-batting::before {
+            content: '●';
+            color: var(--accent);
+            font-size: 0.7em;
+            vertical-align: 0.15em;
+            margin-right: 0.35em;
+            margin-left: -1.05em;
+        }
         .reel-tag-fixture .rt-team { color: var(--accent); }
         .reel-tag-fixture .rt-vs { color: var(--text); opacity: 0.55; font-weight: 400; }
         .reel-tag-fixture .rt-opp { color: var(--text); }
-        /* 3 — Innings: the active panel tab, docked to the bottom of the square (the
-           fixture's auto bottom-margin absorbs the slack above it) just above the
-           panel's own gold border, which reads as the sequence strip's underline — so
-           no separate rule is needed here. */
+        /* 3 — Innings, docked to the bottom of the square. Still used by the live
+           reel (live-match.html); the curated reel now carries its innings on the
+           title's second line instead (see .rt-innings above). */
         .reel-tag-label {
             font-size: var(--t-xs); font-weight: 900; text-transform: uppercase;
             letter-spacing: 0.08em; color: var(--text); line-height: 1.1;
+        }
+        /* Archive-only meta strip. The wall's reel tag carries no date or venue —
+           the host slide's header does, and the square's size is calibrated to the
+           Frogbox bug, so it must not grow. A rendered video has no host slide and
+           no "last match" context, so under ?ctx=archive (slide-bridge.js) this
+           block appears BELOW the square, extending the navy panel downward and
+           leaving the square's geometry untouched. Echoes .set-meta in miniature:
+           gold date, Home/Away pill, ground badge. Its gold top border keeps the
+           innings label underlined exactly as it is on the wall; the panel's own
+           bottom border then closes the strip. Names wrap rather than ellipsing —
+           the panel width is fixed and a truncated ground reads worse than two lines. */
+        .reel-tag-meta { display: none; }
+        body.ctx-archive .reel-tag-meta {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 0.5vh; text-align: center;
+            padding: 0.8vh 0.6vw 1vh;
+            border-top: 0.3vw solid var(--accent);
+            font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.08em;
+            line-height: 1.15;
+        }
+        .reel-tag-meta .rt-date { color: var(--accent); font-weight: 700; }
+        .reel-tag-meta .rt-where {
+            display: flex; flex-direction: column; align-items: center; gap: 0.5vh;
+        }
+        .reel-tag-meta .rt-venue {  /* same green/orange split as .set-meta's pills */
+            background: rgba(60,180,80,0.3); border: var(--hair) solid rgba(60,180,80,0.5);
+            border-radius: var(--radius); padding: 0.1vh 0.55vw; color: var(--text);
+        }
+        .reel-tag-meta .rt-away {
+            background: rgba(180,100,40,0.3); border: var(--hair) solid rgba(180,100,40,0.5);
+        }
+        .reel-tag-meta .rt-ground {
+            background: var(--accent); color: var(--navy-1);
+            font-weight: 700; letter-spacing: 0.02em; padding: 0.2vh 0.5vw;
         }

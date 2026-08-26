@@ -74,7 +74,9 @@
                     {% if row.team_id == slide._league_team_id %}{% set _mp = slide._our_match_points %}{% set _res = slide._our_result %}
                     {% elif row.team_id == slide._opp_team_id %}{% set _mp = slide._opp_match_points %}{% set _res = slide._opp_result %}{% endif %}
                     <span class="name">
-                        <span class="name-text">{{ _np[0] }}{% if _np|length > 1 %}<span class="team-desig">{{ _np[1] }}</span>{% endif %}</span>
+                        {#- Club names lose their " CC" here as everywhere else in the package (drop_cc);
+                            these rows come straight from the league feed, so it happens in the template. -#}
+                        <span class="name-text">{{ _np[0] | drop_cc }}{% if _np|length > 1 %}<span class="team-desig">{{ _np[1] }}</span>{% endif %}</span>
                         {% if _mp is not none %}<span class="match-pts-badge{% if _res %} result-{{ _res }}{% endif %}">{{ _mp }} pts</span>{% endif %}
                     </span>
                 {% elif label|lower == 'pts' %}

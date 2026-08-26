@@ -16,6 +16,7 @@ import qrcode
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 import ball_events
+import clip_ids
 
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
@@ -580,14 +581,25 @@ def build_pwa(env):
 
 
 def clean():
-    if SITE.exists():
-        shutil.rmtree(SITE)
-    SITE.mkdir()
+    """Empty site/ without removing site/ itself.
+
+    Deleting the directory races Finder on macOS: with the folder open, a
+    .DS_Store is recreated inside it mid-walk and `shutil.rmtree(SITE)` dies with
+    "Directory not empty". Clearing the *contents* leaves nothing to race — a
+    file that reappears afterwards just sits in an otherwise empty tree, which is
+    exactly what a fresh build wants.
+    """
+    SITE.mkdir(parents=True, exist_ok=True)
+    for child in SITE.iterdir():
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child, ignore_errors=True)
+        else:
+            child.unlink(missing_ok=True)
 
 
 def video_fingerprint(url: str, start, end) -> str:
-    key = f"{url}:{start if start is not None else 0}-{end if end is not None else ''}"
-    return hashlib.sha256(key.encode()).hexdigest()[:12]
+    """Manifest key for a clip — see scripts/clip_ids.py (shared with the sync)."""
+    return clip_ids.fingerprint(url, start, end)
 
 
 def _load_manifest() -> dict:
@@ -848,6 +860,7 @@ def make_env():
         autoescape=False,
     )
     env.filters["tojson"] = json.dumps
+    env.filters["drop_cc"] = drop_cc
     sponsor_dir = ASSETS / "images" / "sponsors"
     env.globals["sponsors"] = [
         {"name": p.stem.replace("-", " ").title(), "src": f"/assets/images/sponsors/{p.name}"}
@@ -1360,18 +1373,27 @@ def _fmt_date_future(iso_date, today):
     return datetime.combine(d, datetime.min.time()).strftime(f"%a {d.day} %b").upper()
 
 
-def _short_innings_total(total):
+def _split_innings_total(total):
+    """(score, overs) — e.g. ("184/7", "45.0"). Split because the two want
+    different type where they're shown together: the score is the headline, the
+    overs are supporting detail in the smaller muted style. Either may be "".
+    """
     if not total:
-        return ""
+        return "", ""
     runs = total.get("runs", 0)
     wickets = total.get("wickets") or None
-    overs = total.get("overs") or ""
     if wickets is None:
         score = str(runs)
     elif int(wickets) >= 10:
         score = f"{runs} ao"
     else:
         score = f"{runs}/{int(wickets)}"
+    return score, str(total.get("overs") or "")
+
+
+def _short_innings_total(total):
+    """The two joined into one string, for places that render a plain score."""
+    score, overs = _split_innings_total(total)
     return f"{score} ({overs})" if overs else score
 
 
@@ -1545,6 +1567,25 @@ def _select_match_highlights(scorecard, max_hl=2):
                 add(_bowl_highlight("top_wicket_taker", top_w))
 
     return out
+
+
+# Our club as it reads on the match package — see drop_cc.
+OUR_CLUB = "Wendover"
+
+
+def drop_cc(name):
+    """Club name without its trailing "CC" — "Tring Park CC" → "Tring Park".
+
+    Used across the match package, where every name on screen is a cricket club
+    and the suffix is pure repetition. NOT used on the location badge: there the
+    name is a *ground*, and "Wendover CC" is what a visitor is looking for on a
+    signpost. Also a Jinja filter (`| drop_cc`) for names that only exist in the
+    template, e.g. league-table rows.
+    """
+    if not name:
+        return name
+    out = re.sub(r"\s+(CC|C\.C\.?|Cricket Club)$", "", str(name).strip(), flags=re.I)
+    return out or name
 
 
 def _split_opp_name(opp_full, opp_club):
@@ -3600,17 +3641,22 @@ def build_match_packages(env, slide_meta):
     # see load_pinned_matches). A pin reuses its team's real team_id for crest /
     # stats / league lookups but takes its own slug prefix and heading, and skips
     # the standalone latest-result card (that slot belongs to the live last match).
-    # (slug_prefix, team_id, match, set_title, standalone_result)
-    jobs = [(f"last-match-{tid}", tid, m, "Last Match", True)
+    # `set_title` is the wall heading; `archive_title` replaces it under
+    # ?ctx=archive (slide-bridge.js), the mode the video compositor renders in —
+    # "Last Match" is true only on the wall, and false the moment the clip is a
+    # standalone YouTube video. See docs/narrated-decks.md.
+    # (slug_prefix, team_id, match, set_title, archive_title, standalone_result)
+    jobs = [(f"last-match-{tid}", tid, m, "Last Match", "Match Highlights", True)
             for tid, m in sorted(last_matches.items())]
     for pin in load_pinned_matches():
         if not pin.get("_package"):
             print(f"  pinned match '{pin.get('slug')}': missing package snapshot — skipped")
             continue
+        pin_title = pin.get("title", "Match Highlights")
         jobs.append((pin["slug"], pin["team_id"], pin["_package"],
-                     pin.get("title", "Match Highlights"), False))
+                     pin_title, pin_title, False))
 
-    for slug_prefix, team_id, m, set_title, standalone_result in jobs:
+    for slug_prefix, team_id, m, set_title, archive_title, standalone_result in jobs:
         team = teams_by_id.get(team_id, {})
         title = team.get("name", team_id)
 
@@ -3623,6 +3669,12 @@ def build_match_packages(env, slide_meta):
         opp_club, opp_team = _split_opp_name(
             m.get("opposition_name", ""), m.get("opposition_club_name", "")
         )
+        # Every name on these slides is a cricket club, so " CC" says nothing and
+        # costs width in tight boxes (the reel tag, the two-column result). Stripped
+        # once here and at OUR_CLUB below, which covers the subtitle, the tape, the
+        # toss line, the innings headlines, the result columns and description, and
+        # the reel tag. The ground badge keeps its full name — that's a place.
+        opp_club = drop_cc(opp_club)
         date_formatted = fmt_match_date(m.get("match_date", ""))
         ground = m.get("ground_name") or ""
         is_home = m.get("is_home", True)
@@ -3645,8 +3697,8 @@ def build_match_packages(env, slide_meta):
         # (labels stay innings-level): batting then bowling. Both carry the innings
         # headline (batting club + readable score).
         # (batting_club, total, batting_rows, bowling_club, bowling_rows)
-        our_innings = ("Wendover CC", m.get("our_total"), our_batting, opp_club, their_bowling)
-        their_innings = (opp_club, m.get("their_total"), their_batting, "Wendover CC", our_bowling)
+        our_innings = (OUR_CLUB, m.get("our_total"), our_batting, opp_club, their_bowling)
+        their_innings = (opp_club, m.get("their_total"), their_batting, OUR_CLUB, our_bowling)
         ordered = [our_innings, their_innings] if we_bat_first else [their_innings, our_innings]
         labels = ["1st Innings", "2nd Innings"]
         innings_present = []   # unique innings labels with any content (for the strip)
@@ -3658,7 +3710,8 @@ def build_match_packages(env, slide_meta):
             label = labels[i]
             innings_present.append(label)
             innings_bat_club[i] = bat_club
-            scoreline = {"_bat_club": bat_club, "_score_readable": _short_innings_total(total)}
+            _score, _overs = _split_innings_total(total)
+            scoreline = {"_bat_club": bat_club, "_score_readable": _score, "_score_overs": _overs}
             if batting:
                 innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-batting", label, {
                     "_mode": "batting", "_batting": batting,
@@ -3691,7 +3744,9 @@ def build_match_packages(env, slide_meta):
         iso = _iso_from_dmy(m.get("match_date", ""))
         if iso:
             _dt = datetime.strptime(iso, "%Y-%m-%d")
-            date_short = _dt.strftime(f"%a {_dt.day} %b")
+            # Year included: a match package IS the club record, and the archive
+            # render (see _set_title_archive) is watched long after the season.
+            date_short = _dt.strftime(f"%a {_dt.day} %b %Y")
         else:
             date_short = ""
         # Shared header fields. Subtitle is the team only; the match context (date,
@@ -3704,7 +3759,8 @@ def build_match_packages(env, slide_meta):
             "_set_opp_team": opp_team,
             "_set_ground": ground,
         }
-        set_common = {"_set_title": set_title, "_set_subtitle": title, **set_meta_fields}
+        set_common = {"_set_title": set_title, "_set_title_archive": archive_title,
+                      "_set_subtitle": title, **set_meta_fields}
 
         def with_strip(step_label):
             return {**set_common, "_set_steps": steps, "_set_step": steps.index(step_label)}
@@ -3728,6 +3784,18 @@ def build_match_packages(env, slide_meta):
             bat_club = innings_bat_club.get(innings_idx, "")
             bat_crest = ("/assets/images/wcc-logo.png"
                          if "wendover" in bat_club.lower() else m.get("opposition_crest"))
+            # The tag names both sides in full (club + XI), ordered by who batted
+            # FIRST in the match — a fixed order across both reels — with a gold dot
+            # on whoever is batting in this one. The order and the dot together are
+            # the innings: dot on the top side = 1st innings, dot on the bottom =
+            # 2nd. Re-sorting per reel would destroy that signal, leaving the dot
+            # always on top and nothing to distinguish the two reels.
+            # Club and XI kept apart: the template gives the designation the smaller
+            # muted treatment the header subtitle uses (.sub-opp-sub).
+            we_bat = "wendover" in bat_club.lower()
+            ours = {"club": OUR_CLUB, "desig": title, "batting": we_bat}
+            theirs = {"club": opp_club, "desig": opp_team, "batting": not we_bat}
+            sides = [ours, theirs] if we_bat_first else [theirs, ours]
             # Resolve each clip's cards to rendered content and place them on the
             # played clip's timeline. The R2 file is trimmed to the *played* bounds,
             # so t=0 is `start`: a pre card sits over the lead-in [0, action_start],
@@ -3752,12 +3820,13 @@ def build_match_packages(env, slide_meta):
             slide = {
                 "template": "video", "layout": "fullbleed", "reel": True,
                 "title": f"{label} Highlights",  # page <title> only; not shown on the wall
-                # Top-left square echoes this reel's host set-header: title (set label),
-                # fixture (our team vs opposition), and the innings step. _bat_crest is
-                # kept for possible reuse but no longer shown in the square.
-                "_set_title": set_title, "_set_subtitle": title,
-                "_set_opp_club": opp_club, "_set_opp_team": opp_team,
-                "_innings_label": label, "_bat_crest": bat_crest,
+                # Top-left square echoes this reel's host set-header: the same title
+                # it carries, then both sides in batting order (_rt_sides). Full
+                # set_common rather than a hand-picked few, because the archive render
+                # also shows the date/venue meta the static members' headers carry.
+                # _bat_crest is kept for possible reuse but isn't shown in the square.
+                **set_common,
+                "_innings_label": label, "_bat_crest": bat_crest, "_rt_sides": sides,
                 "videos": videos,
             }
             build_video_slide(slide)
@@ -3805,7 +3874,7 @@ def build_match_packages(env, slide_meta):
         toss_won_us = m.get("toss_won_by_us")
         toss_bat = m.get("toss_elected_bat")
         if toss_won_us is not None and toss_bat is not None:
-            toss_winner = "Wendover CC" if toss_won_us else opp_club
+            toss_winner = OUR_CLUB if toss_won_us else opp_club
             toss_line = f"{toss_winner} won the toss and elected to {'bat' if toss_bat else 'field'}"
         else:
             toss_line = m.get("toss_text") or ""
@@ -3854,7 +3923,7 @@ def build_match_packages(env, slide_meta):
         # the sequence strip) and the standalone latest-result card (no strip).
         opp_result = {"W": "L", "L": "W"}.get(result, result)
         result_desc = result_summary(
-            result, m.get("our_total"), m.get("their_total"), we_bat_first, "Wendover CC", opp_club
+            result, m.get("our_total"), m.get("their_total"), we_bat_first, OUR_CLUB, opp_club
         )
         set_result_fields = {
             "_no_match": False,
@@ -3862,16 +3931,18 @@ def build_match_packages(env, slide_meta):
             # Result lists the side that batted first on the left.
             "_our_left": we_bat_first,
             "_our_crest": "/assets/images/wcc-logo.png",
-            "_our_name": "Wendover CC",
+            "_our_name": OUR_CLUB,
             "_our_result": result, "_our_result_label": _RESULT_LABELS.get(result, result),
             "_our_points": m.get("our_points"),
-            "_our_score": _short_innings_total(m.get("our_total")),
+            "_our_score": _split_innings_total(m.get("our_total"))[0],
+            "_our_overs": _split_innings_total(m.get("our_total"))[1],
             "_our_performers": team_performers(our_batting, our_bowling, their_batting),
             "_opp_crest": m.get("opposition_crest"),
             "_opp_name": opp_club,
             "_opp_result": opp_result, "_opp_result_label": _RESULT_LABELS.get(opp_result, opp_result),
             "_opp_points": m.get("their_points"),
-            "_opp_score": _short_innings_total(m.get("their_total")),
+            "_opp_score": _split_innings_total(m.get("their_total"))[0],
+            "_opp_overs": _split_innings_total(m.get("their_total"))[1],
             "_opp_performers": team_performers(their_batting, their_bowling, our_batting),
         }
         if has_result:

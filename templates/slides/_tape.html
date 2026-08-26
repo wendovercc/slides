@@ -7,8 +7,10 @@
      _toss, _division, _h2h #}
 {% from 'slides/_perf_icon.html' import perf_icon %}
 {% macro tape(slide) %}
-    {% set our_col = {"crest": slide._our_crest, "name": "Wendover CC", "form": slide._our_form, "performers": slide._our_performers} %}
-    {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_club_name, "form": slide._opp_form, "performers": slide._opp_performers} %}
+    {#- Club names without the " CC" suffix (drop_cc): every side here is a cricket
+        club, and the two names sit at large type in narrow columns. -#}
+    {% set our_col = {"crest": slide._our_crest, "name": "Wendover", "form": slide._our_form, "performers": slide._our_performers} %}
+    {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_club_name | drop_cc, "form": slide._opp_form, "performers": slide._opp_performers} %}
     {% set columns = [our_col, opp_col] if slide._our_left else [opp_col, our_col] %}
 
     <div class="tape">

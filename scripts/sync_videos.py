@@ -31,6 +31,7 @@ from pathlib import Path
 import boto3
 
 import ball_events
+import clip_ids
 
 ROOT    = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
@@ -61,8 +62,8 @@ def r2_client():
 
 
 def fingerprint(url: str, start, end) -> str:
-    key = f"{url}:{start if start is not None else 0}-{end if end is not None else ''}"
-    return hashlib.sha256(key.encode()).hexdigest()[:12]
+    """R2 object name for a clip — see scripts/clip_ids.py (shared with the build)."""
+    return clip_ids.fingerprint(url, start, end)
 
 
 def collect_clips() -> list:
@@ -148,7 +149,7 @@ def download_clip(clip: dict) -> Path:
         cookies = os.environ.get("YOUTUBE_COOKIES_FILE")
         if cookies and os.path.exists(cookies):
             cmd += ["--cookies", cookies]
-        cmd += ["-f", "bestvideo[height<=720]+bestaudio", "--merge-output-format", "mp4", "-o", str(tmp)]
+        cmd += ["-f", clip_ids.FORMAT_SPEC, "--merge-output-format", "mp4", "-o", str(tmp)]
         if sections:
             cmd += ["--download-sections", sections, "--force-keyframes-at-cuts"]
         cmd.append(url)
@@ -167,6 +168,21 @@ def download_clip(clip: dict) -> Path:
         )
         if r.returncode != 0:
             print(f"  {fp}: ffmpeg failed — {r.stderr[:400]}")
+            return None
+
+        # A clip with no video stream is a silent failure worth catching here.
+        # yt-dlp can come back with audio only (a format briefly unavailable, a
+        # throttled retry), ffmpeg re-encodes that quite happily, and the result
+        # uploads to R2 looking like any other clip — until the compositor hits
+        # it and dies with "Stream specifier ':v' matches no streams". Verifying
+        # once, locally, is far cheaper than finding out mid-render.
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(out)],
+            capture_output=True, text=True)
+        if "video" not in probe.stdout:
+            print(f"  {fp}: downloaded file has NO video stream — discarding")
+            out.unlink(missing_ok=True)
             return None
 
         return out
@@ -292,6 +308,18 @@ def main():
         except Exception as e:
             print(f"  {fp}: upload failed — {e}")
             failed += 1
+
+    # Never prune while uploads are failing. The delete pass exists to reclaim
+    # clips nothing references any more, which assumes the upload pass did its job;
+    # if it didn't, the two halves combine into an outage — R2 emptied of the old
+    # clips with nothing put back. That is not hypothetical: a run where `yt-dlp`
+    # was missing from PATH failed all 111 downloads and deleted all 111 objects.
+    # The clips are re-derivable, so this is recoverable, but only by noticing.
+    if failed and to_delete:
+        print(f"\n  ⚠ {failed} clip(s) failed to upload — skipping the removal of "
+              f"{len(to_delete)} unreferenced object(s).")
+        print("    Fix the failures and re-run; nothing is pruned until a clean pass.")
+        to_delete = set()
 
     for fp in sorted(to_delete):
         print(f"  {fp}: removing from R2 (no longer referenced)")

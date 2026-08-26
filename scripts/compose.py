@@ -46,7 +46,12 @@ LOCAL_VIDEOS = ROOT / "content" / "data" / "fetched" / "videos"
 # concatenated stream is uniform.
 W, H, FPS = 1920, 1080, 30
 RATE = 48000
-V_ARGS = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+# Quality over encode speed: this is a master handed to YouTube, which re-encodes
+# it, so anything lost here is lost twice. `veryfast`/crf 20 measured 2.4 Mbps at
+# 1080p30 — under a third of YouTube's recommended 8 Mbps — and starved encoding
+# shows up worst on exactly what half this video is: static slides of text, where
+# sharp edges and flat fills are the first things to smear.
+V_ARGS = ["-c:v", "libx264", "-preset", "medium", "-crf", "18",
           "-pix_fmt", "yuv420p", "-r", str(FPS)]
 # Intermediate segments carry PCM, not AAC, and live in .mov (mp4 won't hold PCM).
 #
@@ -60,6 +65,11 @@ SEG_EXT = ".mov"
 A_SEG = ["-c:a", "pcm_s16le", "-ar", str(RATE), "-ac", "2"]
 A_ARGS = ["-c:a", "aac", "-b:a", "128k", "-ar", str(RATE), "-ac", "2"]
 SILENCE = f"anullsrc=r={RATE}:cl=stereo"
+# Slides render for the wall by default and for a standalone video under
+# ?ctx=archive (see slide-bridge.js): no "Last Match" heading, and the fixture's
+# date and venue on the reel tag. A render is always watched out of context, so
+# archive is the default here; --ctx wall reproduces the on-screen wording.
+DEFAULT_CTX = "archive"
 
 
 def frame_align(seconds):
@@ -141,7 +151,7 @@ class Shooter:
     nothing to scale here.
     """
 
-    def __init__(self, base_url, work):
+    def __init__(self, base_url, work, ctx=None):
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().start()
         self.browser = self._pw.chromium.launch(headless=True)
@@ -149,6 +159,14 @@ class Shooter:
             viewport={"width": W, "height": H}, device_scale_factor=1)
         self.base_url = base_url
         self.work = work
+        # Presentation context (slide-bridge.js). "archive" is the render default:
+        # a published video is watched with none of the wall's surroundings, so the
+        # slides drop wall-only wording ("Last Match") and show the fixture's date
+        # and venue on the reel tag. Part of the cache key — the same slug renders
+        # differently per context. (`slide_ctx`, not `ctx`: that's the browser
+        # context above.)
+        self.slide_ctx = ctx
+        self._suffix = f"--{ctx}" if ctx else ""
 
     def close(self):
         self.browser.close()
@@ -156,7 +174,8 @@ class Shooter:
 
     def _open(self, slug):
         page = self.ctx.new_page()
-        page.goto(f"{self.base_url}/slide/{slug}/", wait_until="load")
+        query = f"?ctx={self.slide_ctx}" if self.slide_ctx else ""
+        page.goto(f"{self.base_url}/slide/{slug}/{query}", wait_until="load")
         try:
             page.wait_for_load_state("networkidle", timeout=8000)
         except Exception:
@@ -165,7 +184,7 @@ class Shooter:
 
     def slide(self, slug, panel):
         """A static atom: the slide showing `panel`, as a PNG."""
-        out = self.work / "stills" / f"{slug}--p{panel}.png"
+        out = self.work / "stills" / f"{slug}--p{panel}{self._suffix}.png"
         if out.exists():
             return out
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -196,7 +215,7 @@ class Shooter:
 
         Returns None for a video slide with no overlay layer at all.
         """
-        out = self.work / "overlays" / f"{slug}--p{panel}--{at or 'plain'}.png"
+        out = self.work / "overlays" / f"{slug}--p{panel}--{at or 'plain'}{self._suffix}.png"
         if out.exists():
             return out
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -377,7 +396,7 @@ def check_sync(path, expected):
 
 # ── the render ────────────────────────────────────────────────────────────────
 
-def compose(tl, out_path, work, fade=0.5, limit=None):
+def compose(tl, out_path, work, fade=0.5, limit=None, ctx=DEFAULT_CTX):
     beats = tl["beats"][:limit] if limit else tl["beats"]
     if not beats:
         raise SystemExit("timeline has no beats")
@@ -387,7 +406,7 @@ def compose(tl, out_path, work, fade=0.5, limit=None):
 
     segments = []
     with serve(SITE) as base_url:
-        shooter = Shooter(base_url, work)
+        shooter = Shooter(base_url, work, ctx=ctx)
         try:
             for i, beat in enumerate(beats):
                 atom, secs = beat["atom"], frame_align(float(beat["duration"]))
@@ -453,6 +472,9 @@ def main():
     ap.add_argument("--clip-audio", choices=("keep", "duck", "mute"),
                     help="override the timeline's clip-audio treatment (segments are "
                          "cached, so pair a change with --fresh)")
+    ap.add_argument("--ctx", default=DEFAULT_CTX,
+                    help="presentation context passed to every slide as ?ctx= "
+                         f"(default: {DEFAULT_CTX}; 'wall' for the on-screen wording)")
     ap.add_argument("--limit", type=int, help="render only the first N beats")
     ap.add_argument("--fresh", action="store_true",
                     help="discard cached stills/overlays/segments first")
@@ -477,7 +499,8 @@ def main():
 
     print(f"Composing {name} ({len(tl['beats'])} beat(s), clip audio: "
           f"{tl.get('clip_audio', 'keep')})")
-    compose(tl, out, work, fade=args.fade, limit=args.limit)
+    compose(tl, out, work, fade=args.fade, limit=args.limit,
+            ctx=None if args.ctx == "wall" else args.ctx)
     print(f"\n  → {out}  ({duration_of(out):.1f}s)")
 
 

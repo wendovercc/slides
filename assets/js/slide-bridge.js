@@ -81,4 +81,36 @@
   // Announce on load too: covers plain slides (no controller) and re-announces
   // in case the parent attached its listener after the controller registered.
   window.addEventListener('load', function () { post('wcc-slide'); });
+
+  /* Presentation context.
+   *
+   * A slide renders for the wall by default. `?ctx=archive` switches it to
+   * self-contained wording — the mode scripts/compose.py renders every still and
+   * overlay in, because a published video is watched with none of the wall's
+   * context around it ("Last Match" is only true on the wall; the fixture's date
+   * and venue are only implied by the screen it is playing on).
+   *
+   * Deliberately one flag at one place rather than a second set of pages: the
+   * video and the wall stay the same slide in two modes, so they cannot drift.
+   * Two mechanisms, both opt-in per element:
+   *   - `data-archive="…"` swaps that element's text,
+   *   - `body.ctx-archive` lets CSS reveal archive-only blocks.
+   */
+  function applyContext() {
+    var ctx = null;
+    try { ctx = new URLSearchParams(location.search).get('ctx'); } catch (e) { /* older engine */ }
+    if (ctx !== 'archive') return;
+    document.body.classList.add('ctx-archive');
+    var swap = document.querySelectorAll('[data-archive]');
+    for (var i = 0; i < swap.length; i++) {
+      swap[i].textContent = swap[i].getAttribute('data-archive');
+    }
+  }
+
+  // video.html loads this in <head>, so <body> may not exist yet.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', applyContext);
+  } else {
+    applyContext();
+  }
 })();

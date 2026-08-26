@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 import ball_events
+import clip_ids
 
 ROOT = Path(__file__).parent.parent
 CONTENT = ROOT / "content"
@@ -102,7 +103,7 @@ def download_clip(clip: dict) -> bool:
         if cookies_file and os.path.exists(cookies_file):
             ytdlp_cmd += ["--cookies", cookies_file]
         ytdlp_cmd += [
-            "-f", "bestvideo[height<=720]+bestaudio",
+            "-f", clip_ids.FORMAT_SPEC,
             "--merge-output-format", "mp4",
             "-o", str(tmp_mp4),
         ]

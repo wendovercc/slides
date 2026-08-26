@@ -1,0 +1,85 @@
+{#- YouTube thumbnail, 1280x720. Not a slide: it never plays on the wall, is
+    never scaled by --fit, and is read at postage-stamp size in a feed rather than
+    from ten feet. So it uses fixed px against a fixed viewport instead of the
+    vw/vh token system, and carries only what survives being 210px wide — the two
+    crests, the two sides, and the competition/date line.
+
+    Deliberately spoiler-free: no score, no result, no winner. The reel's own cards
+    already suppress outcomes for the same reason, and a thumbnail is the one
+    surface a viewer cannot avoid seeing before pressing play. -#}
+<meta charset="utf-8">
+<title>{{ our_name }} vs {{ opp_name }}</title>
+<style>
+    @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* The bottom ~15% is reserved, not styled: YouTube lays its scrubber and
+       controls across it and stamps the duration badge into the bottom-right
+       corner, so anything put there is covered. Everything is packed upward and
+       that band left empty. The dead centre is left to the play button, which
+       lands on the dim "vs" — the one element that can afford to be obscured. */
+    body {
+        width: 1280px; height: 720px; overflow: hidden;
+        font-family: 'Lato', Arial, sans-serif;
+        color: #fff;
+        background: linear-gradient(165deg, #0f2346 0%, #0a1c3a 100%);
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: flex-start;
+        padding: 44px 60px 130px;
+    }
+    /* Kicker — the one line that says what this is. Gold, wide-tracked, with a
+       rule under it so it reads as a masthead rather than a caption. */
+    .kicker {
+        font-size: 46px; font-weight: 900; letter-spacing: 0.16em;
+        text-transform: uppercase; color: #d4af37;
+        padding-bottom: 14px; border-bottom: 5px solid #d4af37;
+    }
+    /* The fixture: crest over club over XI, either side of a dim "vs". Equal
+       columns so neither side is favoured and long names wrap symmetrically. */
+    .fixture {
+        flex: 1; display: flex; align-items: center; justify-content: center;
+        gap: 40px; width: 100%;
+    }
+    .side { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 18px; min-width: 0; }
+    .crest {
+        width: 200px; height: 200px; object-fit: contain;
+        /* Opposition crests are scraped JPEGs with white grounds — a light panel
+           behind every crest keeps ours and theirs consistent instead of one
+           floating on navy and the other in a white box. */
+        background: #fff; border-radius: 16px; padding: 12px;
+    }
+    .club { font-size: 50px; font-weight: 900; line-height: 1.05; text-align: center; }
+    .desig { font-size: 34px; font-weight: 700; color: #b4c8e4; }
+    /* "vs" sits on the CLUB-NAME line, not centred against the crests: pushed down
+       by exactly the crest height plus the column gap. Everything here is fixed
+       px against a fixed 1280x720 frame, so the offset can be stated rather than
+       computed — keep it in step with .crest's height and .side's gap. */
+    .vs {
+        font-size: 40px; font-weight: 400; color: #b4c8e4; opacity: 0.75;
+        flex-shrink: 0; align-self: flex-start;
+        margin-top: calc(200px + 18px + 6px);   /* crest + gap + optical nudge */
+    }
+    /* Competition and date ride with the masthead at the TOP rather than sitting
+       along the bottom, where YouTube's chrome would cover them. The league is
+       always named alongside the division — "Division 6C" alone means nothing to
+       anyone outside the league. */
+    .head { text-align: center; margin-top: 16px; }
+    .comp { font-size: 30px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+    .date { font-size: 26px; font-weight: 400; color: #b4c8e4; margin-top: 6px; }
+</style>
+<div class="kicker">Match Highlights</div>
+<div class="head">
+    <div class="comp">{{ competition }}</div>
+    <div class="date">{{ date_long }}{% if ground %} · {{ ground }}{% endif %}</div>
+</div>
+<div class="fixture">
+    {% for s in sides %}
+    {% if not loop.first %}<div class="vs">vs</div>{% endif %}
+    <div class="side">
+        {% if s.crest %}<img class="crest" src="{{ s.crest }}" alt="">{% endif %}
+        <div class="club">{{ s.club }}</div>
+        {% if s.desig %}<div class="desig">{{ s.desig }}</div>{% endif %}
+    </div>
+    {% endfor %}
+</div>

@@ -20,7 +20,10 @@
 {% macro set_header(slide) %}
     <div class="set-header">
         <div class="set-heading">
-            <div class="title">{{ slide._set_title }}</div>
+            {#- data-archive: the heading under ?ctx=archive, swapped in by
+                slide-bridge.js. The wall says "Last Match"; a rendered video is
+                watched out of that context and says "Match Highlights". -#}
+            <div class="title"{% if slide._set_title_archive is defined and slide._set_title_archive %} data-archive="{{ slide._set_title_archive }}"{% endif %}>{{ slide._set_title }}</div>
             {#- Subtitle: our team (gold) vs the opposition (white club + dim team
                 designation), the opposition detail having moved off the right meta. -#}
             <div class="subtitle">

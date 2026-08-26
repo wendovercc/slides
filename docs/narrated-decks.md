@@ -48,9 +48,11 @@ Worth stating, because most of this design is assembly rather than construction:
 - **Video clips are already panels.** `templates/slides/video.html` registers the reel as
   a carousel with `count` = number of clips and `show: showVideo(i)`. So `next()` already
   steps clip-by-clip inside a reel, with no special-casing.
-- **Content freezing exists.** `load_pinned_matches` (`build.py`) pins a completed match to
-  a stable set slug backed by a committed immutable
-  `content/data/matches/{id}.package.json` snapshot.
+- **Content freezing exists, and is not what we use.** `load_pinned_matches` (`build.py`)
+  pins a completed match to a stable set slug backed by a committed immutable
+  `content/data/matches/{id}.package.json` snapshot — but only the scorecard, not the
+  derived stats around it. The render is the freeze instead; see "Wall context vs render
+  context".
 
 ---
 
@@ -289,19 +291,19 @@ re-resolve.
 | Layer | Status |
 |---|---|
 | **Composition** (which slides, in what order) | **Solved automatically.** Skipped and expired slides crystallise the moment the editor builds the deck, because `data.json` is post-resolution. |
-| **Content** (what a slide *says*) | **Solved by pinning.** See below. |
+| **Content** (what a slide *says*) | **Not frozen — rendered inside the window.** See below. |
 | **Assets** (fonts, CSS, clip files) | Accepted gap. |
 
-**Content freezing is not optional for match decks.** Without a pin,
+**Match decks are rendered inside their window, not frozen.**
 `/slide/last-match-1st-xi-intro/` is a *rolling* slug — next week it renders a different
-match, and the narration composites the wrong game. `load_pinned_matches` converts it to a
-stable slug backed by an immutable committed snapshot. **Landing the editor's zip must
-therefore include pinning the match**: a line in `content/pinned-matches.json` plus the
-committed `{id}.package.json`.
+match — and `content/data/fetched/` is gitignored, so you **cannot** reproduce last week's
+deck by rebuilding at an old commit. Pinning was the answer and is no longer: it froze
+only the scorecard package, leaving stats and league panels to drift. The render is the
+freeze, and it has to happen before the team plays again. See "Wall context vs render
+context" above.
 
-This matters because `content/data/fetched/` is gitignored — you **cannot** reproduce last
-week's deck by rebuilding at an old commit, since the build re-fetches current data. The pin
-is the only content freeze available.
+Narration inherits the same window: a take is only compositable while its deck still
+resolves to the match it was recorded over.
 
 For decks containing league tables or leaderboards, content drifts nightly regardless.
 Stamp `build_version` into the deck and have the compositor warn when the live site has
@@ -372,7 +374,7 @@ reconcile step behind a web button.
 | Role | Does | Access |
 |---|---|---|
 | **Editor** | Builds the deck, curates clips, picks cards, narrates. Exports one zip. | Website only. No repo. |
-| **Publisher** | Lands the zip: syncs media to R2, **pins the match**, commits, builds, runs the compositor, uploads to YouTube. | Local scripts + repo. |
+| **Publisher** | Lands the zip: syncs media to R2, commits, builds, runs the compositor **while the match is still the team's last**, uploads to YouTube. | Local scripts + repo. |
 
 | When | What |
 |---|---|
@@ -382,8 +384,64 @@ reconcile step behind a web button.
 | Day 2 | Editor builds the deck, curates, narrates, exports the zip. |
 | Day 2 | Publisher lands it; rebuild adds clips + cards to the wall package; compositor produces the MP4. |
 
-Narrated decks are **not** played on the wall. That keeps narration from outliving its deck
-and lets the freeze story stop at the pin.
+Narrated decks are **not** played on the wall. That keeps narration from outliving its deck,
+and leaves the wall showing the live last-match set exactly as it does today.
+
+---
+
+## Wall context vs render context — **built**
+
+A match slide says things that are true *on the wall* and false the moment the same
+frames are a standalone video. "Last Match" is the obvious one; the fixture's date and
+venue are the quiet ones — on the wall they sit in the header of the slide the reel came
+out of, and on YouTube there is no such surrounding.
+
+**This is a property of the sitting, not of the content**, so it is a render-time flag
+rather than a second copy of the slide:
+
+- Every slide honours `?ctx=archive` (`slide-bridge.js`): elements carrying
+  `data-archive="…"` swap their text, and `body.ctx-archive` lets CSS reveal
+  archive-only blocks. Two mechanisms, both opt-in per element.
+- `compose.py` opens **every** still and overlay with it — `--ctx`, defaulting to
+  `archive`; `--ctx wall` reproduces the on-screen wording. It is part of the still /
+  overlay cache key, since the same slug now renders differently per context.
+- **The player forwards it to its slide iframes**, so
+  `/slideshow/<deck>/?interactive&ctx=archive` previews exactly what the render will
+  say — the whole deck, steppable, before spending minutes on a compose. Nothing reads
+  `ctx` in the player itself; it only passes it down (and onto the debug panel's
+  open-slide links). The wall never sets it.
+
+What changes today: the set heading (`Last Match` → `Match Highlights`, from
+`_set_title_archive`), and a date / Home-Away / ground strip on the reel tag. The strip
+grows `.reel-panel` **downward** so `.reel-tag-square` keeps the `--reel-tag-size`
+calibrated to the Frogbox bug. Match dates also gained the year everywhere in a match
+package — the package *is* the club record — while forward-looking schedule and
+next-match dates keep the short form.
+
+The point of one flag at one call site is that the video and the wall stay the same
+slide in two modes. A second set of pages would drift.
+
+### This replaces pinning, and accepts a hard window
+
+The MP4 is the immutable artefact; the wall only ever shows the last match. So a match
+deck is rendered from its **rolling** slug (`last-match-1st-xi-*`) while it is still that
+team's last match, and published.
+
+That is a strictly better freeze than a pin. `load_pinned_matches` only ever froze the
+*scorecard package*: the intro's player stats and the league panel still resolve from
+whatever the build fetched that night, so a pinned set drifts in exactly the places you
+would most want held. A render freezes the pixels. And fresh-at-render is the right
+semantics anyway — league position and form in a video published two days after the match
+should be the values as at publication.
+
+The cost is **no backlog**: miss the window and the match falls out of `fixtures.json`
+with no snapshot behind it. Accepted — there is little appetite for an older match. If it
+ever becomes a problem, the answer is to make pinning's point-in-time stats reliable, not
+to keep both mechanisms half-working.
+
+Pins are therefore **unused rather than removed** (`content/slideshows/video-test.json`
+still references one). Retire them as their own change once a few videos have gone out
+this way; the snapshots are cheap and R2 retention refcounts point at them.
 
 ---
 

@@ -352,6 +352,13 @@
 const params = new URLSearchParams(window.location.search);
 const PREVIEW = params.has('preview');
 if (PREVIEW) document.body.classList.add('preview');
+// Presentation context, forwarded to every slide iframe (slide-bridge.js reads it
+// there, not here). The wall never sets it; `?ctx=archive` previews the wording the
+// video compositor renders — "Match Highlights" rather than "Last Match", date and
+// venue on the reel tag — so a deck can be checked in the player before compose.py
+// spends minutes on it. See docs/narrated-decks.md.
+const CTX = params.get('ctx');
+const SLIDE_Q = CTX ? `?ctx=${encodeURIComponent(CTX)}` : '';
 {%- if screen %}
 const LOCATION_ID = {{ location.id | tojson }};
 {%- else %}
@@ -371,7 +378,7 @@ const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
     && !!(window.WccLiveKey && window.WccLiveKey.get());
 
 let _currentSlug = null;
-function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/`, '_blank'); }
+function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/${SLIDE_Q}`, '_blank'); }
 
 // Scale the fixed 1920x1080 slide layer into the stage (see #slide-layer). Measured
 // off the stage element rather than recomputed from innerWidth so it tracks the CSS
@@ -503,7 +510,7 @@ function renderSlidesCol(slides, label) {
     const head = `<div class="dbg-head">${label} (${slides.length})</div>`;
     if (!slides.length) return head + `<div class="dbg-none">—</div>`;
     return head + slides.map(s =>
-        `<div class="dbg-slide" data-slug="${s.slug}"><span>● <a href="/slide/${s.slug}/" target="_blank">${s.slug}</a></span><span class="dbg-slide-dur">${s.duration}s</span></div>`
+        `<div class="dbg-slide" data-slug="${s.slug}"><span>● <a href="/slide/${s.slug}/${SLIDE_Q}" target="_blank">${s.slug}</a></span><span class="dbg-slide-dur">${s.duration}s</span></div>`
     ).join('');
 }
 
@@ -627,7 +634,7 @@ function renderPanel(deckTitle, allSlides, shownCount) {
         const cls = s._shown ? 'on' : 'off';
         const bullet = s._shown ? '●' : '○';
         const label = s._shown
-            ? `<a href="/slide/${s.slug}/" target="_blank">${s.slug}</a>`
+            ? `<a href="/slide/${s.slug}/${SLIDE_Q}" target="_blank">${s.slug}</a>`
             : s.slug;
         const reason = s._reason ? `<div class="slide-reason">↳ ${s._reason}</div>` : '';
         return `<div class="slide-row ${cls}" data-slug="${s.slug}"><span>${bullet} ${label}</span><span class="slide-dur">${s.duration}s</span></div>${reason}`;
@@ -696,7 +703,7 @@ async function init() {
     const stage = document.getElementById('stage');
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
-        f.dataset.src = `/slide/${s.slug}/`;
+        f.dataset.src = `/slide/${s.slug}/${SLIDE_Q}`;
         if (WIN === null || i <= WIN) f.src = f.dataset.src;
         slideLayer.appendChild(f);
         return f;
