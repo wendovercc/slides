@@ -311,17 +311,29 @@ _HOW_OUT = {
 }
 
 
-def _name_key(name):
+def name_key(name):
     """(last, first-initial) from a name — tolerant of abbreviated first names.
 
     Matches the curation card's subject ("S Methari" / "Harry Godden") against a
     stats/scorecard row's full name ("Solomon Methari"). Same key shape as
-    fetch_ball_events._name_key.
+    fetch_ball_events._name_key. Also the catalogue key (see ``catalogue_key``),
+    so a card picked as "S Methari" finds the entry resolved for "Solomon Methari".
     """
     parts = (name or "").split()
     if len(parts) < 2:
         return None
     return (parts[-1].lower(), parts[0][:1].lower())
+
+
+def catalogue_key(name):
+    """``name_key`` as a JSON-object key ("methari|s"), or None for an unusable name.
+
+    The card catalogue is keyed by this rather than by the literal picked name,
+    because the same person reaches a card as a roster name or an abbreviated
+    scorecard name. `curate.js` mirrors this function.
+    """
+    key = name_key(name)
+    return f"{key[0]}|{key[1]}" if key else None
 
 
 def _trim_num(value, digits=1):
@@ -344,12 +356,12 @@ def _resolve_new_batsman(card, scorecard, player_stats, team_id):
     intro omits them and so do we. Returns None (card dropped) when the batter has no
     block for this team or no prior innings once this match is removed.
     """
-    key = _name_key(card.get("player"))
+    key = name_key(card.get("player"))
     if not key or not player_stats:
         return None
     players = player_stats.get("players") or {}
     rows = players.values() if isinstance(players, dict) else players
-    rec = next((p for p in rows if _name_key(p.get("name")) == key), None)
+    rec = next((p for p in rows if name_key(p.get("name")) == key), None)
     if not rec:
         return None
     block = (((rec.get("stats") or {}).get("by_team") or {}).get(team_id or "") or {}).get("all")
@@ -396,11 +408,11 @@ def _resolve_dismissal(card, scorecard, player_stats, team_id):
     Searches both batting cards (ours + opposition) by name; returns None when the
     subject isn't found (e.g. the scorecard has rolled off) so the card is dropped.
     """
-    key = _name_key(card.get("player"))
+    key = name_key(card.get("player"))
     if not key or not scorecard:
         return None
     rows = (scorecard.get("our_batting") or []) + (scorecard.get("their_batting") or [])
-    row = next((r for r in rows if _name_key(r.get("name")) == key), None)
+    row = next((r for r in rows if name_key(r.get("name")) == key), None)
     if not row:
         return None
     runs, balls = row.get("runs"), row.get("balls")
@@ -447,13 +459,26 @@ def resolve_cards(clip, *, scorecard=None, player_stats=None, team_id=None):
     """
     out = []
     for card in clip.get("cards") or []:
-        resolver = _CARD_RESOLVERS.get(card.get("type"))
-        if not resolver:
-            continue
-        content = resolver(card, scorecard, player_stats, team_id)
+        content = resolve_card(card.get("type"), card.get("player"), scorecard=scorecard,
+                               player_stats=player_stats, team_id=team_id)
         if content:
             out.append({"at": card.get("at"), "type": card.get("type"), **content})
     return out
+
+
+def resolve_card(card_type, player, *, scorecard=None, player_stats=None, team_id=None):
+    """Resolve one (type, player) pair to card content, or None if it won't resolve.
+
+    The subject-addressed entry point, alongside the clip-addressed ``resolve_cards``
+    above: the build-time catalogue behind the ``/curate`` picker has no clip to work
+    from — it walks the cross-product of card types and the match's players — and the
+    picker must show exactly what the reel will later render. Unknown types return
+    None, as an un-pickable card type has no figures either.
+    """
+    resolver = _CARD_RESOLVERS.get(card_type)
+    if not resolver:
+        return None
+    return resolver({"type": card_type, "player": player}, scorecard, player_stats, team_id)
 
 
 def collect_curated_clips(*, fetched_dir=FETCHED_MATCHES, curation_dir=CURATION_DIR):

@@ -75,6 +75,14 @@
       case 'goto-panel': show(typeof d.index === 'number' ? d.index : current); break;
       case 'reset':      show(0); break;
       case 'ping':       post('wcc-slide'); break; // parent (re)requests count
+      // Runtime clip list for a reel: an injected deck carries clips the build has
+      // never seen, so the player pushes them in on load and the slide rebuilds
+      // around them (re-registering, which re-announces the panel count above).
+      // Routed here rather than listened for in video.html so slides keep exactly
+      // one message surface. See docs/narrated-decks.md.
+      case 'set-clips':
+        if (window.WccReel && WccReel.setClips) WccReel.setClips(d.videos || []);
+        break;
     }
   });
 

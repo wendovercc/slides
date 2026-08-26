@@ -726,6 +726,11 @@ def _curation_scorecards():
     Draws from both ``last_match`` (one per team) and ``recent_matches`` (a list
     per team), so a just-played match can be looked up while it's still in the
     retention window. Older matches roll off — callers fall back to the roster.
+
+    Each entry is ``(scorecard, team_id)``: the team is what a card's season-form
+    figures are resolved against (``get_leaderboard_block(p, team_id, None)``), so
+    the catalogue needs it alongside the scorecard, and only these two indexes know
+    which team's match this was.
     """
     path = FETCHED / "fixtures.json"
     if not path.exists():
@@ -735,15 +740,15 @@ def _curation_scorecards():
     except Exception:
         return {}
     by_id = {}
-    for last in (fx.get("last_match") or {}).values():
+    for team_id, last in (fx.get("last_match") or {}).items():
         mid = last.get("match_id")
         if mid is not None:
-            by_id[str(mid)] = last
-    for recents in (fx.get("recent_matches") or {}).values():
+            by_id[str(mid)] = (last, team_id)
+    for team_id, recents in (fx.get("recent_matches") or {}).items():
         for sc in recents or []:
             mid = sc.get("match_id")
             if mid is not None:
-                by_id.setdefault(str(mid), sc)
+                by_id.setdefault(str(mid), (sc, team_id))
     return by_id
 
 
@@ -770,6 +775,78 @@ def _match_squad(scorecard):
     return squad
 
 
+def _card_catalogue(pc_id, scorecard, team_id, stats, roster, card_types):
+    """Pre-resolve every (card type, player) pair this match could produce.
+
+    The ``/curate`` picker only records *intent* — a type and a subject — while the
+    figures are resolved at build time by ``ball_events``. That gap is the problem:
+    an editor can pick (and narrate over) a card whose subject won't resolve, and only
+    find out when the render drops it. The subject space is small and knowable
+    (two card types x the players in the two XIs), so the build walks it and publishes
+    the answers; see docs/narrated-decks.md.
+
+    Keyed by ``ball_events.catalogue_key`` rather than by the picked name, because the
+    same person reaches a card as a roster name ("Solomon Methari") or an abbreviated
+    scorecard one ("S Methari"). The entry is exactly what the reel will render, so the
+    picker shows the real figures and the resolved *name* — which is also how a
+    (surname, initial) mismatch becomes visible at pick time.
+    """
+    # Candidates: everyone the picker can offer (the whole club roster, plus any
+    # off-roster subject a scorecard names — an opposition batter is a legitimate
+    # dismissal-card subject).
+    names_by_source = [[r["name"] for r in roster]]
+    for key in ("our_batting", "their_batting", "our_bowling", "their_bowling"):
+        names_by_source.append([(row.get("name") or "").strip()
+                                for row in (scorecard or {}).get(key) or []])
+    names = [n for src in names_by_source for n in src]
+
+    subjects = {}
+    for name in names:
+        key = ball_events.catalogue_key(name)
+        if key:
+            subjects.setdefault(key, name)
+
+    cards = {}
+    for ct in card_types:
+        key_ = ct.get("key")
+        if not key_:
+            continue
+        resolved = {}
+        for subject_key, name in subjects.items():
+            content = ball_events.resolve_card(key_, name, scorecard=scorecard,
+                                               player_stats=stats, team_id=team_id)
+            if content:
+                resolved[subject_key] = content
+        cards[key_] = resolved
+
+    return {"pc_match_id": str(pc_id), "team": team_id, "cards": cards,
+            # With no scorecard (the match has rolled out of fixtures.json) nothing
+            # resolves, and an empty catalogue must not read as "every card is
+            # unresolvable" — the picker falls back to offering everything.
+            "available": bool(scorecard and team_id),
+            "ambiguous": _ambiguous_keys(names_by_source)}
+
+
+def _ambiguous_keys(sources):
+    """Keys carrying two different people *within one* candidate source.
+
+    The card resolvers match on (surname, first initial) and take the first row that
+    matches, so two players sharing a key is a silent wrong-person risk. Compared
+    within a source, never across them: the roster's "Solomon Methari" and the
+    scorecard's "S Methari" share a key precisely because they are the same person,
+    which is the whole point of the key.
+    """
+    out = set()
+    for names in sources:
+        by_key = {}
+        for name in names:
+            key = ball_events.catalogue_key(name)
+            if key:
+                by_key.setdefault(key, set()).add(name)
+        out |= {k for k, v in by_key.items() if len(v) > 1}
+    return sorted(out)
+
+
 def build_curation(env):
     """Publish the ball-events curation tool at /curate/ (unlisted, noindex).
 
@@ -784,11 +861,35 @@ def build_curation(env):
     data_dir = out_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Scorecards, keyed by match_id, so each match's role-tag player list is the
-    # actual playing XI (from Play Cricket) rather than the whole club roster.
+    # Scorecards + the team they belong to, keyed by match_id, so each match's
+    # role-tag player list is the actual playing XI (from Play Cricket) rather than
+    # the whole club roster, and its cards resolve against the right team.
     scorecards = _curation_scorecards()
 
-    index = []
+    # Season stats: the club roster for the "add player" picker, and the source the
+    # new-batsman card's form line is resolved from.
+    stats_path = FETCHED / "player_stats_this_season.json"
+    stats = None
+    roster = []
+    if stats_path.exists():
+        try:
+            stats = json.loads(stats_path.read_text())
+            players = stats.get("players", {})
+            seen = set()
+            for p in (players.values() if isinstance(players, dict) else players):
+                name = (p.get("name") or "").strip()
+                if name and name not in seen:
+                    seen.add(name)
+                    roster.append({"name": name, "teams": p.get("teams") or []})
+            roster.sort(key=lambda r: r["name"])
+        except Exception:
+            stats, roster = None, []
+
+    card_types = load_config().get("card_types") or []
+    cards_dir = out_dir / "cards"
+    cards_dir.mkdir(parents=True, exist_ok=True)
+
+    index, n_cards = [], 0
     for f in raw_files:
         try:
             data = json.loads(f.read_text())
@@ -803,8 +904,12 @@ def build_curation(env):
             except Exception:
                 overlay = {}
         data["curation"] = overlay
-        data["squad"] = _match_squad(scorecards.get(str(pc_id)))
+        scorecard, team_id = scorecards.get(str(pc_id)) or (None, None)
+        data["squad"] = _match_squad(scorecard)
         (data_dir / f"{pc_id}.json").write_text(json.dumps(data))
+        catalogue = _card_catalogue(pc_id, scorecard, team_id, stats, roster, card_types)
+        (cards_dir / f"{pc_id}.json").write_text(json.dumps(catalogue))
+        n_cards += sum(len(v) for v in catalogue["cards"].values())
         index.append({
             "pc_match_id": pc_id,
             "team": data.get("team"),
@@ -820,30 +925,15 @@ def build_curation(env):
     index.sort(key=lambda m: (m.get("date") or ""), reverse=True)
     (out_dir / "matches.json").write_text(json.dumps(index))
 
-    # Full club roster (names + teams) for the "add player" picker on the page.
-    roster_path = FETCHED / "player_stats_this_season.json"
-    roster = []
-    if roster_path.exists():
-        try:
-            players = json.loads(roster_path.read_text()).get("players", {})
-            seen = set()
-            for p in (players.values() if isinstance(players, dict) else players):
-                name = (p.get("name") or "").strip()
-                if name and name not in seen:
-                    seen.add(name)
-                    roster.append({"name": name, "teams": p.get("teams") or []})
-            roster.sort(key=lambda r: r["name"])
-        except Exception:
-            roster = []
     (out_dir / "roster.json").write_text(json.dumps(roster))
 
     # Card registry (types + default pad seconds) — the single source of truth the
     # page's card pickers read, so the JS never hard-codes the defaults that
     # ball_events.py also relies on.
-    (out_dir / "card_types.json").write_text(json.dumps(load_config().get("card_types") or []))
+    (out_dir / "card_types.json").write_text(json.dumps(card_types))
 
     (out_dir / "index.html").write_text(env.get_template("curate/index.html").render())
-    print(f"  curation: {len(index)} match(es) → /curate/")
+    print(f"  curation: {len(index)} match(es), {n_cards} pre-resolved card(s) → /curate/")
 
 
 def copy_assets():

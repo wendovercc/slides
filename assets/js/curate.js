@@ -53,6 +53,32 @@
     return null;
   }
 
+  // ---- Card catalogue --------------------------------------------------
+  // Every (type, player) pair the build could resolve for this match, pre-resolved
+  // into the exact content the reel will render (`cards/<pc_id>.json`). Without it
+  // a card carries only intent, so an editor can pick — and later narrate over — a
+  // subject that resolves to nothing and gets silently dropped at render time.
+  // Keyed by (surname, first initial), mirroring ball_events.catalogue_key, so a
+  // card picked as "S Methari" finds the entry resolved for "Solomon Methari".
+  function catalogueKey(name) {
+    var parts = (name || "").trim().split(/\s+/);
+    if (parts.length < 2) return null;
+    return parts[parts.length - 1].toLowerCase() + "|" + parts[0].charAt(0).toLowerCase();
+  }
+  // The catalogue is only an authority when the build had the data to resolve
+  // against (a scorecard + the team). For an older match that has rolled out of
+  // fixtures.json nothing resolves, and "no entry" must not read as "unresolvable".
+  function catalogueLive() { return !!(state.cards && state.cards.available); }
+  function cardEntry(typeKey, name) {
+    if (!catalogueLive()) return null;
+    var key = catalogueKey(name);
+    return (key && (state.cards.cards[typeKey] || {})[key]) || null;
+  }
+  function cardAmbiguous(name) {
+    var key = catalogueKey(name);
+    return !!(catalogueLive() && key && state.cards.ambiguous.indexOf(key) >= 0);
+  }
+
   // ---- YouTube IFrame API readiness ------------------------------------
   var ytReady = false, ytWaiters = [];
   window.onYouTubeIframeAPIReady = function () {
@@ -64,7 +90,7 @@
   var LS_PREFIX = "wcc-curate:";
   var state = {
     match: null, fetched: [], byId: {}, edits: {}, committed: {}, selected: null, player: null,
-    roster: [], squad: [], cycle: 0,
+    roster: [], squad: [], cards: null, cycle: 0,
   };
 
   // ---- Hand-added clips -------------------------------------------------
@@ -466,6 +492,17 @@
       state.match = data;
       state.fetched = (data.events || []).slice();
       state.squad = data.squad || [];
+      state.cards = null;
+      fetch("cards/" + id + ".json").then(function (r) { return r.ok ? r.json() : null; })
+        .catch(function () { return null; })
+        .then(function (cat) {
+          if (!state.match || String(state.match.pc_match_id) !== String(id)) return;
+          state.cards = cat;
+          // The figures arrive after the first paint, so repaint once to show them —
+          // but never over live typing (a narrative being edited would be discarded).
+          var focused = document.activeElement;
+          if (!focused || !$("#editor").contains(focused)) renderEditor();
+        });
       state.committed = data.curation || {};
       // Prefer a locally-saved draft (may contain unexported work) over committed.
       var draft = null;
@@ -635,8 +672,10 @@
 
   // Grouped roster select (squad first, then the rest of the club), preselecting
   // `selected`. Unlike the role picker this offers the whole roster and keeps an
-  // off-roster subject (e.g. opposition batsman) visible.
-  function rosterSelect(selected, onChange) {
+  // off-roster subject (e.g. opposition batsman) visible. Names with no entry in
+  // the card catalogue for `typeKey` are greyed — that card would resolve to
+  // nothing and be dropped at render time.
+  function rosterSelect(typeKey, selected, onChange) {
     var sel = el("select", { class: "card-player-sel" });
     sel.appendChild(el("option", { value: "", text: "— choose player —" }));
     if (selected && !state.roster.some(function (p) { return p.name === selected; })) {
@@ -650,7 +689,13 @@
       if (!names.length) return;
       var og = el("optgroup", { label: label });
       names.forEach(function (n) {
-        var o = el("option", { value: n, text: n }); if (n === selected) o.selected = true; og.appendChild(o);
+        // A subject with no catalogue entry would be dropped at render time, so it
+        // is offered greyed rather than silently pickable. The current selection
+        // stays selectable whatever it resolves to — the row's preview says why.
+        var missing = catalogueLive() && !cardEntry(typeKey, n);
+        var o = el("option", { value: n, text: missing ? n + " — no figures" : n });
+        if (n === selected) o.selected = true; else if (missing) o.disabled = true;
+        og.appendChild(o);
       });
       sel.appendChild(og);
     }
@@ -658,6 +703,34 @@
     group("Other club players", others);
     sel.addEventListener("change", function () { onChange(sel.value); });
     return sel;
+  }
+
+  // What the card will actually say, from the pre-resolved catalogue — or why it
+  // won't say anything. The narrator reads these figures aloud, so they have to be
+  // on screen at pick time, not first seen in the finished render.
+  function cardPreview(card) {
+    if (!card.player) return el("div", { class: "card-preview", text: "Pick a player." });
+    if (!catalogueLive()) {
+      return el("div", { class: "card-preview",
+        text: "Figures resolve at build time (this match is too old to preview)." });
+    }
+    var entry = cardEntry(card.type, card.player);
+    if (!entry) {
+      return el("div", { class: "card-preview bad",
+        text: "No figures for " + card.player + " — this card will be dropped." });
+    }
+    var bits = [entry.name];
+    if (entry.headline) bits.push(entry.headline);
+    if (entry.sublabel) bits.push(entry.sublabel);
+    (entry.stats || []).forEach(function (st) { bits.push(st.v + " " + st.l); });
+    var kids = [el("span", { text: bits.join(" · ") })];
+    // (surname, initial) is all the resolvers match on, so a shared key can resolve
+    // to the wrong person — visible here, where the resolved name is shown too.
+    if (cardAmbiguous(card.player)) {
+      kids.push(el("span", { class: "card-warn",
+        text: " ⚠ another player shares this surname + initial — check the name." }));
+    }
+    return el("div", { class: "card-preview" }, kids);
   }
 
   function cardRow(id, card) {
@@ -668,7 +741,10 @@
         el("button", { class: "tag-x", text: "×", title: "Remove card",
           onClick: function () { removeCard(id, card); renderEditor(); syncRow(id); } }),
       ]),
-      rosterSelect(card.player, function (name) { setCardPlayer(id, card, name); }),
+      rosterSelect(card.type, card.player, function (name) {
+        setCardPlayer(id, card, name); renderEditor(); syncRow(id);
+      }),
+      cardPreview(card),
     ]);
   }
 
@@ -682,7 +758,14 @@
       var types = CARD_TYPES.filter(function (t) { return t.at === at; });
       var sel = el("select", { class: "add-sel" });
       sel.appendChild(el("option", { value: "", text: addLabel }));
-      types.forEach(function (t) { sel.appendChild(el("option", { value: t.key, text: t.label })); });
+      types.forEach(function (t) {
+        // The card lands on its default subject, so say up front when that one has
+        // no figures — it's still addable (pick another player), just not blind.
+        var subject = t.player(ev(id));
+        var missing = catalogueLive() && (!subject || !cardEntry(t.key, subject));
+        sel.appendChild(el("option", { value: t.key,
+          text: missing ? t.label + " — no figures for " + (subject || "?") : t.label }));
+      });
       sel.addEventListener("change", function () {
         if (sel.value) { addCard(id, at, sel.value); renderEditor(); syncRow(id); }
       });

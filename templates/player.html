@@ -343,6 +343,7 @@
     <div id="slide-layer"></div>
 </div>
 {% if screen %}<script src="/assets/js/context.js?v={{ asset_version }}"></script>{% endif %}
+{% if not screen %}<script src="/assets/js/deck-store.js?v={{ asset_version }}"></script>{% endif %}
 <script src="/assets/js/video-cache.js?v={{ asset_version }}"></script>
 <script src="/assets/js/preload-gate.js?v={{ asset_version }}"></script>
 <script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
@@ -366,7 +367,12 @@ const LOCATION_ID = {{ location.id | tojson }};
 // slideshow, a match set, or a single slide — and every one of them is data
 // (/slideshow/<slug>/data.json), not a page. A per-deck page bakes its own slug as
 // the default so /slideshow/<slug>/ keeps working unchanged.
+//
+// `?deck=local:<key>` instead plays a deck held in the browser (deck-store.js), which
+// no build has produced: the editor sitting assembles one and previews it here. Same
+// document shape, same player — only the source differs. See docs/narrated-decks.md.
 const DECK = params.get('deck') || {{ (slug or None) | tojson }};
+const LOCAL_DECK = (DECK && DECK.indexOf('local:') === 0) ? DECK.slice(6) : null;
 {%- endif %}
 
 // Live needs BOTH the build flag and a provisioned device. The flag is decided at
@@ -645,11 +651,19 @@ function renderPanel(deckTitle, allSlides, shownCount) {
 }
 
 /* Resolve a named deck: fetched, not baked, so one shell plays every slideshow,
-   match set and single slide. Returns null when there's nothing to play. */
+   match set and single slide. Returns null when there's nothing to play.
+
+   A `local:` deck comes out of the browser's deck store instead of the network —
+   same document, so everything below this line is identical either way. */
 async function resolveDeck(today) {
     if (!DECK) return null;   // bare shell with no ?deck= — nothing to play
     let show;
-    try { show = await fetch(`/slideshow/${DECK}/data.json`).then(r => r.json()); } catch (e) { return null; }
+    if (LOCAL_DECK) {
+        show = window.WccDeckStore ? WccDeckStore.get(LOCAL_DECK) : null;
+        if (!show) { console.warn(`[deck] no stored deck '${LOCAL_DECK}'`); return null; }
+    } else {
+        try { show = await fetch(`/slideshow/${DECK}/data.json`).then(r => r.json()); } catch (e) { return null; }
+    }
 
     const allSlides = (show.slides || []).map(s => {
         const reason = (s.expires && s.expires < today) ? `expired ${s.expires}`
@@ -663,6 +677,10 @@ async function resolveDeck(today) {
         deckSlug: DECK,
         show,
         slides,
+        // A stored deck has no build behind it: no precache manifest to gate on, no
+        // build_version to poll, and reloading would only re-read what the editor
+        // put there. Flagged here so init() skips both.
+        injected: !!LOCAL_DECK,
         // Fixed deck (no context switching), but the shown set drops expired slides
         // at midnight — reload on a date rollover to match.
         alsoReloadIf: () => new Date().toISOString().slice(0, 10) !== today,
@@ -676,7 +694,7 @@ async function init() {
 
     const resolved = await resolveDeck(today);
     if (!resolved) return;
-    const { deckSlug, show, slides, alsoReloadIf, renderPreview } = resolved;
+    const { deckSlug, show, slides, injected, alsoReloadIf, renderPreview } = resolved;
     {%- if not screen %}
     // The deck names the page (a screen keeps its location name, which is fixed).
     if (show.title) document.title = show.title;
@@ -704,6 +722,16 @@ async function init() {
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
         f.dataset.src = `/slide/${s.slug}/${SLIDE_Q}`;
+        // A slide entry may carry its own clip list — the editor sitting curates clips
+        // no build has seen, so the reel page's baked blob is not what should play.
+        // Pushed in on every load (a windowed deck re-loads frames as it moves), and
+        // the slide re-announces its new panel count through the usual bridge
+        // handshake. See docs/narrated-decks.md.
+        if (s.videos) {
+            f.addEventListener('load', () => {
+                try { f.contentWindow.postMessage({ type: 'wcc-cmd', action: 'set-clips', videos: s.videos }, '*'); } catch (e) {}
+            });
+        }
         if (WIN === null || i <= WIN) f.src = f.dataset.src;
         slideLayer.appendChild(f);
         return f;
@@ -739,7 +767,9 @@ async function init() {
     // (build_version). no-store so we always see the current build, not an HTTP-cached
     // copy — the whole point of the version poll.
     let precache = { videos: [], build_version: null };
-    try { precache = await fetch(`/slideshow/${deckSlug}/precache.json`, { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
+    if (!injected) {
+        try { precache = await fetch(`/slideshow/${deckSlug}/precache.json`, { cache: 'no-store' }).then(r => r.json()); } catch (e) {}
+    }
 
     const reloadMs = (show.refresh_interval_seconds || 300) * 1000;
 
@@ -747,7 +777,10 @@ async function init() {
     // mode uses version-aware refresh: poll build_version, prewarm new clips, prune old,
     // and reload when the deck source says what's shown has changed.
     let shouldReloadNow, onReload;
-    if (PREVIEW) {
+    if (injected) {
+        // Nothing to poll and nothing to reload for: the deck lives in this browser.
+        shouldReloadNow = () => false;
+    } else if (PREVIEW) {
         let reloadPending = false;
         setTimeout(() => { reloadPending = true; }, reloadMs);
         shouldReloadNow = () => reloadPending;
@@ -770,7 +803,9 @@ async function init() {
                 duration: s.duration,
                 panel_duration: s.panel_duration,
                 group: s._group || null,   // slide-set membership (drives hats later)
-                video: (s._videos || []).length > 0 || !!s._is_video,  // video slide → auto-plays on forward arrival
+                // video slide → auto-plays on forward arrival. `videos` is the
+                // injected-deck form of the same thing (no build, so no _videos).
+                video: (s._videos || []).length > 0 || !!s._is_video || (s.videos || []).length > 0,
                 frame: frames[s._i],
             })),
             onShow: i => {
@@ -789,8 +824,11 @@ async function init() {
 
     // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
     // the ungated path: prime in the background, start immediately, no gate.
-    if (PREVIEW || !CACHE_OK) {
-        if (CACHE_OK) WccVideoCache.prime(precache.videos || []).catch(() => {});
+    // An injected deck joins them: its clips are whatever the editor is curating —
+    // possibly not in R2 at all yet — so there is nothing to prime and nothing the
+    // gate could wait for.
+    if (PREVIEW || injected || !CACHE_OK) {
+        if (CACHE_OK && !injected) WccVideoCache.prime(precache.videos || []).catch(() => {});
         startPlayer(slides);
         return;
     }

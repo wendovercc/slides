@@ -146,6 +146,11 @@
     .card-type { font-weight: 700; font-size: 13px; }
     .card-player-sel { width: 100%; margin-top: 6px; font: inherit; font-size: 13px; padding: 6px 8px;
       border-radius: 5px; border: 1px solid var(--line); background: var(--panel); color: var(--white); }
+    /* What the card will actually render, from the pre-resolved catalogue. */
+    .card-preview { margin-top: 6px; font-size: 12px; line-height: 1.4; color: var(--ink-soft); }
+    .card-preview.bad { color: #f0a0a0; }
+    .card-warn { color: #f2c96b; }
+    .card-player-sel option:disabled { color: var(--ink-soft); }
     .add-card { display: flex; gap: 6px; }
     .hint { color: var(--ink-soft); font-size: 13px; }
     @media (max-width: 1100px) {

@@ -306,10 +306,18 @@
 
 <script>
 (function () {
+    // ---- Clip list -------------------------------------------------------
+    // What the build resolved for this slide — and NOT a constant. `WccReel.setClips`
+    // swaps it at runtime, because the editor sitting (deck builder / narration
+    // preview) curates clips hours before any build or R2 sync has seen them; the
+    // player pushes them in over the bridge. Everything below the clip *source* is
+    // identical either way: stepping, captions, cards, the done signal and the panel
+    // handshake don't care where the pixels come from. See docs/narrated-decks.md.
     var VIDEOS = {{ slide.videos | tojson }};
-    var videoEls = Array.from(document.querySelectorAll('video[data-idx]'));
-    var count = videoEls.length;
+    var MUTED = {{ (not (slide.audio is defined and slide.audio)) | tojson }};
+    var count = 0;      // playable clips = panels (set by the active source, below)
     var current = 0;
+    var SRC = null;     // the active clip source: mp4Source or ytSource
     // The bridge sets body.paused on an explicit user pause; a clip we navigate to
     // while paused should hold its first frame rather than start playing.
     function isPaused() { return document.body.classList.contains('paused'); }
@@ -347,12 +355,13 @@
     }
 
     // Show/hide the flashcard for the current playhead: a card is on-screen while
-    // currentTime is inside its window. Pre and post windows never overlap, so the
-    // action gap between them retracts the card and the next one drops in fresh.
-    function updateCard(v) {
+    // `t` (seconds into THIS clip, whatever is playing it) is inside its window. Pre
+    // and post windows never overlap, so the action gap between them retracts the
+    // card and the next one drops in fresh.
+    function updateCard(t) {
         if (!cardEl) return;
         var cards = (VIDEOS[current] && VIDEOS[current].cards) || [];
-        var t = v.currentTime, hit = null;
+        var hit = null;
         for (var j = 0; j < cards.length; j++) {
             var w = cards[j].window || [0, 0];
             if (t >= w[0] && t <= w[1]) { hit = cards[j]; break; }
@@ -387,105 +396,281 @@
     var bodyEl = document.getElementById('body-slot');
     {% endif %}
 
-    // Fullbleed reels cross-dissolve between clips; the sidebar frame keeps the
-    // simple display swap (single video box, one clip at a time).
-    var CROSSFADE = {{ (slide.layout is defined and slide.layout == 'fullbleed') | tojson }};
-    var FADE_MS = 500;                 // must match the .clip opacity transition
-    var showToken = 0;
+    // ---- Clip source: trimmed mp4 files ----------------------------------
+    // The wall's reel, and the only source the compositor renders from: one <video>
+    // per clip, each file already trimmed to its played bounds, so currentTime IS
+    // clip-relative time.
+    var mp4Source = (function () {
+        var videoEls = [];
 
-    // Reveal the target clip only once it has actually painted a frame, dissolving
-    // it up over the outgoing clip. Gating on the first frame (requestVideoFrameCallback,
-    // or 'seeked' when paused) means the fade never opens on a blank decode or the
-    // boundary flash, and the overlap softens the cut.
-    function crossfadeTo(v, prev) {
-        var tok = ++showToken, done = false;
-        videoEls.forEach(function (x) { if (x !== v && x !== prev) { x.classList.remove('active'); x.pause(); } });
-        v.currentTime = 0;
-        var reveal = function () {
-            if (done || tok !== showToken) return;
-            done = true;
-            v.classList.add('active');
-            if (prev && prev !== v) {
-                prev.classList.remove('active');
-                setTimeout(function () {
-                    if (tok === showToken && !prev.classList.contains('active')) { prev.pause(); prev.currentTime = 0; }
-                }, FADE_MS);
+        // Fullbleed reels cross-dissolve between clips; the sidebar frame keeps the
+        // simple display swap (single video box, one clip at a time).
+        var CROSSFADE = {{ (slide.layout is defined and slide.layout == 'fullbleed') | tojson }};
+        var FADE_MS = 500;                 // must match the .clip opacity transition
+        var showToken = 0;
+
+        // Reveal the target clip only once it has actually painted a frame, dissolving
+        // it up over the outgoing clip. Gating on the first frame (requestVideoFrameCallback,
+        // or 'seeked' when paused) means the fade never opens on a blank decode or the
+        // boundary flash, and the overlap softens the cut.
+        function crossfadeTo(v, prev) {
+            var tok = ++showToken, done = false;
+            videoEls.forEach(function (x) { if (x !== v && x !== prev) { x.classList.remove('active'); x.pause(); } });
+            v.currentTime = 0;
+            var reveal = function () {
+                if (done || tok !== showToken) return;
+                done = true;
+                v.classList.add('active');
+                if (prev && prev !== v) {
+                    prev.classList.remove('active');
+                    setTimeout(function () {
+                        if (tok === showToken && !prev.classList.contains('active')) { prev.pause(); prev.currentTime = 0; }
+                    }, FADE_MS);
+                }
+            };
+            if (isPaused()) {
+                v.pause();
+                var onSeek = function () { v.removeEventListener('seeked', onSeek); reveal(); };
+                v.addEventListener('seeked', onSeek);
+            } else {
+                var p = v.play();
+                if (p && p.catch) p.catch(function () {});
+                if (v.requestVideoFrameCallback) { v.requestVideoFrameCallback(function () { reveal(); }); }
+                else { var onPlaying = function () { v.removeEventListener('playing', onPlaying); reveal(); }; v.addEventListener('playing', onPlaying); }
+            }
+            setTimeout(reveal, 150);       // safety net if the frame/seek callback never fires
+        }
+
+        // Point an element at locally-stored bytes when its clip is in the video
+        // cache, else leave the network URL on its <source> in place (and re-try on
+        // the next loop, once the player's prime has stored it). We always read the
+        // original network URL from the <source> element — v.src may already be a blob
+        // URL from a previous pass. cb runs synchronously when caching is unsupported.
+        function ensurePlayable(v, cb) {
+            if (v._objUrl) { cb(); return; }   // already on cached bytes, still resident
+            var srcEl = v.querySelector('source');
+            var netUrl = srcEl && srcEl.src;
+            if (!window.WccVideoCache || !WccVideoCache.supported || !netUrl) { cb(); return; }
+            WccVideoCache.getObjectURL(netUrl).then(function (obj) {
+                if (obj) {
+                    v._objUrl = obj;
+                    v.src = obj;   // overrides the <source> network URL
+                    v.load();
+                } else if (v.src && v.src.indexOf('blob:') === 0) {
+                    // Was cached, now a miss (e.g. evicted): drop back to the <source>.
+                    v.removeAttribute('src');
+                    v.load();
+                }
+                cb();
+            });
+        }
+
+        // Cap resident Blobs at the active clip plus the one we're crossfading from;
+        // revoke the rest so a long reel doesn't pin every clip's bytes at once (design
+        // doc: object-URL hygiene). A reaped element re-resolves a fresh URL next show.
+        function reapObjUrls(keepA, keepB) {
+            videoEls.forEach(function (x) {
+                if (x !== keepA && x !== keepB && x._objUrl) {
+                    URL.revokeObjectURL(x._objUrl);
+                    x._objUrl = null;
+                }
+            });
+        }
+
+        function bind(v) {
+            v.addEventListener('timeupdate', function () {
+                if (+v.dataset.idx === current) updateCard(v.currentTime);
+            });
+            v.addEventListener('ended', function () { advanceFrom(+v.dataset.idx); });
+            v.addEventListener('error', function () {
+                var i = +v.dataset.idx;
+                if (i === current && !isPaused()) {
+                    try { console.warn('[video] clip ' + i + ' errored — skipping'); } catch (e) {}
+                    advanceFrom(i);
+                }
+            });
+        }
+
+        return {
+            // Startup: the build already baked one <video> per clip into the page.
+            adopt: function () {
+                videoEls = Array.from(document.querySelectorAll('video[data-idx]'));
+                videoEls.forEach(bind);
+                return videoEls.length;
+            },
+            // Runtime: replace them with elements for `videos`, 1:1 by index (the
+            // caller has already dropped clips with no playable media).
+            mount: function (videos) {
+                videoEls.forEach(function (v) {
+                    v.pause();
+                    if (v._objUrl) { URL.revokeObjectURL(v._objUrl); v._objUrl = null; }
+                    v.remove();
+                });
+                var host = document.querySelector('.video-wrap') || document.body;
+                videos.forEach(function (clip, i) {
+                    var v = document.createElement('video');
+                    v.dataset.idx = i;
+                    if (CROSSFADE) v.className = 'clip'; else if (i) v.style.display = 'none';
+                    v.crossOrigin = 'anonymous';
+                    v.muted = MUTED;
+                    v.playsInline = true;
+                    v.preload = 'none';
+                    var src = document.createElement('source');
+                    src.src = clip._video_src; src.type = 'video/mp4';
+                    v.appendChild(src);
+                    host.appendChild(v);
+                });
+                return this.adopt();
+            },
+            show: function (i, prevIdx, done) {
+                var prev = videoEls[prevIdx];
+                var v = videoEls[i];
+                if (!v) return;
+                // Resolve cached bytes before playing; the rest of the show runs in the
+                // callback. Bail if a newer show superseded us during the async cache read.
+                ensurePlayable(v, function () {
+                    if (current !== i) return;
+                    reapObjUrls(v, prev);
+                    if (CROSSFADE) {
+                        crossfadeTo(v, prev);
+                    } else {
+                        videoEls.forEach(function (x) { x.style.display = 'none'; x.pause(); });
+                        v.style.display = 'block';
+                        v.currentTime = 0;
+                        if (isPaused()) v.pause(); else v.play();
+                    }
+                    done();
+                });
+            },
+            pause: function () { if (videoEls[current]) videoEls[current].pause(); },
+            resume: function () { if (videoEls[current]) videoEls[current].play(); },
+            pauseAll: function () { videoEls.forEach(function (x) { x.pause(); }); },
+            teardown: function () { this.mount([]); },
+            time: function () { return videoEls[current] ? videoEls[current].currentTime : NaN; }
+        };
+    })();
+
+    // ---- Clip source: YouTube segments (preview only) --------------------
+    // The editor sitting curates clips from the Frogbox stream hours before anything
+    // is trimmed and synced to R2, so an injected deck's clips are (url, start, end)
+    // segments of the stream recording rather than files. One iframe player seeks each
+    // segment in turn; YouTube's own `endSeconds` ends the clip, and the poll below
+    // reports time relative to the segment start, so card windows read exactly as they
+    // do over an mp4 and nothing above this line changes.
+    //
+    // Preview only, deliberately: the wall must play offline, and the compositor
+    // records black from an embed (see the compositor section of docs/narrated-decks.md),
+    // so this source never reaches either.
+    var ytSource = (function () {
+        var player = null, ready = false, queued = null, poll = null;
+
+        function videoId(url) {
+            var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '')
+                 || /\/(?:live|embed)\/([\w-]{6,})/.exec(url || '');
+            return m ? m[1] : null;
+        }
+
+        // The IFrame API is loaded on demand, and only ever by this source — a wall
+        // slide must not depend on a third-party script it can't reach offline.
+        function loadApi(cb) {
+            if (window.YT && YT.Player) { cb(); return; }
+            var prev = window.onYouTubeIframeAPIReady;
+            window.onYouTubeIframeAPIReady = function () {
+                if (prev) { try { prev(); } catch (e) {} }
+                cb();
+            };
+            if (!document.getElementById('yt-api')) {
+                var s = document.createElement('script');
+                s.id = 'yt-api'; s.src = 'https://www.youtube.com/iframe_api';
+                document.head.appendChild(s);
+            }
+        }
+
+        function startPoll() {
+            if (poll) return;
+            poll = setInterval(function () {
+                if (!ready) return;
+                var clip = VIDEOS[current] || {};
+                var t = player.getCurrentTime() - (clip.start || 0);
+                if (isFinite(t)) updateCard(t);
+            }, 200);
+        }
+
+        return {
+            mount: function (videos) {
+                // Sized and layered from here rather than from the stylesheet: this
+                // source exists only in an editor preview, and the wall's CSS should
+                // not carry rules for something it never renders.
+                var wrap = document.getElementById('yt-wrap');
+                if (!wrap) {
+                    wrap = document.createElement('div');
+                    wrap.id = 'yt-wrap';
+                    wrap.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;';
+                    var target = document.createElement('div');
+                    target.id = 'yt-host';
+                    wrap.appendChild(target);
+                    document.body.appendChild(wrap);
+                    loadApi(function () {
+                        player = new YT.Player('yt-host', {
+                            width: '100%', height: '100%',
+                            playerVars: { controls: 0, disablekb: 1, modestbranding: 1,
+                                          rel: 0, playsinline: 1, fs: 0, iv_load_policy: 3 },
+                            events: {
+                                onReady: function () {
+                                    ready = true;
+                                    if (MUTED) player.mute();
+                                    player.getIframe().style.cssText = 'width:100%;height:100%;border:0;';
+                                    startPoll();
+                                    if (queued !== null) { var q = queued; queued = null; showVideo(q); }
+                                },
+                                onStateChange: function (e) {
+                                    if (e.data === YT.PlayerState.ENDED) advanceFrom(current);
+                                }
+                            }
+                        });
+                    });
+                }
+                return videos.length;
+            },
+            show: function (i, prevIdx, done) {
+                var clip = VIDEOS[i] || {};
+                var id = videoId(clip.url);
+                if (!id) { done(); return; }
+                // Still booting: remember where we should be and let onReady get there.
+                if (!ready) { queued = i; done(); return; }
+                player.loadVideoById({ videoId: id, startSeconds: clip.start || 0, endSeconds: clip.end });
+                if (isPaused()) player.pauseVideo();
+                done();
+            },
+            pause: function () { if (ready) player.pauseVideo(); },
+            resume: function () { if (ready) player.playVideo(); },
+            pauseAll: function () { if (ready) player.pauseVideo(); },
+            teardown: function () {
+                if (poll) { clearInterval(poll); poll = null; }
+                if (player && player.destroy) player.destroy();
+                player = null; ready = false; queued = null;
+                var wrap = document.getElementById('yt-wrap');
+                if (wrap) wrap.remove();
+            },
+            // NaN until the player is up, which the stall watchdog reads as "not
+            // playing yet" rather than as no progress.
+            time: function () {
+                if (!ready) return NaN;
+                return player.getCurrentTime() - ((VIDEOS[current] || {}).start || 0);
             }
         };
-        if (isPaused()) {
-            v.pause();
-            var onSeek = function () { v.removeEventListener('seeked', onSeek); reveal(); };
-            v.addEventListener('seeked', onSeek);
-        } else {
-            var p = v.play();
-            if (p && p.catch) p.catch(function () {});
-            if (v.requestVideoFrameCallback) { v.requestVideoFrameCallback(function () { reveal(); }); }
-            else { var onPlaying = function () { v.removeEventListener('playing', onPlaying); reveal(); }; v.addEventListener('playing', onPlaying); }
-        }
-        setTimeout(reveal, 150);       // safety net if the frame/seek callback never fires
-    }
-
-    // Point an element at locally-stored bytes when its clip is in the video
-    // cache, else leave the network URL on its <source> in place (and re-try on
-    // the next loop, once the player's prime has stored it). We always read the
-    // original network URL from the <source> element — v.src may already be a blob
-    // URL from a previous pass. cb runs synchronously when caching is unsupported.
-    function ensurePlayable(v, cb) {
-        if (v._objUrl) { cb(); return; }   // already on cached bytes, still resident
-        var srcEl = v.querySelector('source');
-        var netUrl = srcEl && srcEl.src;
-        if (!window.WccVideoCache || !WccVideoCache.supported || !netUrl) { cb(); return; }
-        WccVideoCache.getObjectURL(netUrl).then(function (obj) {
-            if (obj) {
-                v._objUrl = obj;
-                v.src = obj;   // overrides the <source> network URL
-                v.load();
-            } else if (v.src && v.src.indexOf('blob:') === 0) {
-                // Was cached, now a miss (e.g. evicted): drop back to the <source>.
-                v.removeAttribute('src');
-                v.load();
-            }
-            cb();
-        });
-    }
-
-    // Cap resident Blobs at the active clip plus the one we're crossfading from;
-    // revoke the rest so a long reel doesn't pin every clip's bytes at once (design
-    // doc: object-URL hygiene). A reaped element re-resolves a fresh URL next show.
-    function reapObjUrls(keepA, keepB) {
-        videoEls.forEach(function (x) {
-            if (x !== keepA && x !== keepB && x._objUrl) {
-                URL.revokeObjectURL(x._objUrl);
-                x._objUrl = null;
-            }
-        });
-    }
+    })();
 
     function showVideo(i) {
-        var prev = videoEls[current];
+        if (!SRC || !VIDEOS[i]) return;
+        var prev = current;
         current = i;
-        var v = videoEls[i];
-        if (!v) return;
-        // Resolve cached bytes before playing; the rest of the show runs in the
-        // callback. Bail if a newer show superseded us during the async cache read.
-        ensurePlayable(v, function () {
-            if (current !== i) return;
-            reapObjUrls(v, prev);
-            showVideoNow(i, prev);
-        });
+        SRC.show(i, prev, function () { showVideoNow(i); });
     }
 
-    function showVideoNow(i, prev) {
-        var v = videoEls[i];
-        if (!v) return;
-        if (CROSSFADE) {
-            crossfadeTo(v, prev);
-        } else {
-            videoEls.forEach(function (x) { x.style.display = 'none'; x.pause(); });
-            v.style.display = 'block';
-            v.currentTime = 0;
-            if (isPaused()) v.pause(); else v.play();
-        }
+    // Everything that is true of a beat regardless of what is playing it: the
+    // watchdog, the caption, the card at t=0, the overlay fade and the panel report.
+    function showVideoNow(i) {
         armStall(i);   // resilience: skip this clip if it errors or stalls (below)
         var body = VIDEOS[i] && VIDEOS[i].body;
         setBallCaption();
@@ -494,7 +679,7 @@
         // as the clip opens (and stays shown if paused on the first frame) — this
         // also swaps in the pre-card's spoiler-free caption over the ball caption set
         // just above.
-        if (cardEl) { activeCardKey = null; cardEl.classList.remove('show'); updateCard(v); }
+        if (cardEl) { activeCardKey = null; cardEl.classList.remove('show'); updateCard(0); }
         {% if slide.layout is defined and slide.layout == 'fullbleed' %}
         if (overlayEl) {
             overlayEl.classList.remove('faded');
@@ -513,7 +698,16 @@
         {% endif %}
         // Report the clip's duration so the player's countdown tracks the current
         // clip rather than sweeping the whole reel.
-        if (window.WccSlide) WccSlide.notifyPanel(i, { dur: (VIDEOS[i] && VIDEOS[i]._video_duration) || 0 });
+        if (window.WccSlide) WccSlide.notifyPanel(i, { dur: clipDuration(i) });
+    }
+
+    // A built clip carries its measured file duration; a runtime one is a stream
+    // segment, so its trim is the duration.
+    function clipDuration(i) {
+        var v = VIDEOS[i] || {};
+        if (v._video_duration) return v._video_duration;
+        if (v.start != null && v.end != null) return Math.max(0, v.end - v.start);
+        return 0;
     }
 
     // Advance out of clip i: to the next clip, or end the whole slide if it was the
@@ -540,9 +734,9 @@
         stallTimer = setInterval(function () {
             if (i !== current) { clearStall(); return; }   // moved on / taken over
             if (isPaused()) { stallSince = Date.now(); return; }   // a hold is not a stall
-            var v = videoEls[i];
-            if (!v) { clearStall(); return; }
-            if (v.currentTime > stallLastT + 0.05) { stallLastT = v.currentTime; stallSince = Date.now(); return; }
+            var t = SRC ? SRC.time() : NaN;
+            if (!isFinite(t)) { stallSince = Date.now(); return; } // source still coming up
+            if (t > stallLastT + 0.05) { stallLastT = t; stallSince = Date.now(); return; }
             if (Date.now() - stallSince >= STALL_MS) {
                 try { console.warn('[video] clip ' + i + ' stalled — skipping'); } catch (e) {}
                 advanceFrom(i);
@@ -550,29 +744,37 @@
         }, 1000);
     }
 
-    videoEls.forEach(function (v) {
-        v.addEventListener('timeupdate', function () {
-            if (+v.dataset.idx === current) updateCard(v);
-        });
-        v.addEventListener('ended', function () { advanceFrom(+v.dataset.idx); });
-        v.addEventListener('error', function () {
-            var i = +v.dataset.idx;
-            if (i === current && !isPaused()) {
-                try { console.warn('[video] clip ' + i + ' errored — skipping'); } catch (e) {}
-                advanceFrom(i);
-            }
-        });
-    });
-
-    if (window.WccSlide) {
-        WccSlide.register({
-            count: count || 1,
-            show: function (i) { showVideo(i); },
-            startAuto: function () {},
-            pauseAuto: function () { clearStall(); if (videoEls[current]) videoEls[current].pause(); },
-            restartCurrent: function () { if (videoEls[current]) { videoEls[current].play(); armStall(current); } }
-        });
+    // Adopt a clip list: pick the source that can play it, mount it, and re-announce
+    // the panel count (one clip = one panel = one atom). Called once at startup for
+    // the baked list, and again by the player for an injected deck.
+    function useClips(videos, baked) {
+        clearStall();
+        // A clip with neither a built file nor a stream URL can't be played, and
+        // keeping it would put VIDEOS out of step with the panel indices.
+        VIDEOS = (videos || []).filter(function (v) { return v._video_src || v.url; });
+        // Which source: files if the build produced them, the stream otherwise. Taken
+        // from the first clip — a reel is one or the other, never a mix (v1).
+        // The baked list is by definition built, so startup never reaches the stream.
+        var next = (!baked && VIDEOS.length > 0 && !VIDEOS[0]._video_src) ? ytSource : mp4Source;
+        if (SRC && SRC !== next) SRC.teardown();
+        SRC = next;
+        current = 0;
+        activeCardKey = null;
+        count = baked ? SRC.adopt() : SRC.mount(VIDEOS);
+        if (window.WccSlide) {
+            WccSlide.register({
+                count: count || 1,
+                show: function (i) { showVideo(i); },
+                startAuto: function () {},
+                pauseAuto: function () { clearStall(); SRC.pause(); },
+                restartCurrent: function () { SRC.resume(); armStall(current); }
+            });
+        }
+        if (window.WccReel) WccReel.clipCount = count;
     }
+
+    useClips(VIDEOS, true);
+
     // Only auto-start when opened standalone. Embedded in a player, we wait for it to
     // activate this slide (restart-auto in kiosk / reset in interactive, both → show(0)):
     // otherwise every hidden iframe would play clip 0 over its network <source> the
@@ -587,6 +789,11 @@
     // See docs/narrated-decks.md.
     window.WccReel = {
         clipCount: count,
+        // Swap the clip list at runtime. The slide keeps its identity — its tag,
+        // its cards, its layout — and only the footage under it changes, which is
+        // what an editor previewing an unbuilt curation needs. Routed here by
+        // slide-bridge.js from the player's `set-clips` command.
+        setClips: function (videos) { useClips(videos, false); },
         // Dress the page as it looks at one beat: clip `panel`, optionally with its
         // "pre"/"post" card open. Nothing plays — the caller wants a still. Returns
         // false on a non-reel video slide, which has no overlay layer to shoot.
@@ -594,7 +801,7 @@
             if (!cardEl) return false;
             // Standalone pages auto-start clip 0; a running video would fire
             // timeupdate and updateCard() would undo what we set up here.
-            videoEls.forEach(function (x) { x.pause(); });
+            if (SRC) SRC.pauseAll();
             current = Math.max(0, Math.min(count - 1, panel || 0));
             activeCardKey = null;
             setBallCaption();

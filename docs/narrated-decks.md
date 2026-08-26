@@ -318,14 +318,12 @@ between. Narrating requires a deck reflecting curation that hasn't been built ye
 
 **Resolution: pre-resolve everything the build knows, keep the sitting client-side.**
 
-### Pre-resolved card catalogue
+### Pre-resolved card catalogue — **built (phase 3)**
 
 The only genuinely build-dependent content is **card figures**, and the subject space is
-bounded and knowable on Night 1: two card types × the players in the two XIs, ~44
-combinations. So the overnight build runs the existing `resolve_cards`
-(`scripts/ball_events.py`) across the cross-product and emits
-`site/curate/cards/{pc_id}.json`, keyed by `(type, player)`. The editor looks up rather than
-resolving.
+bounded and knowable on Night 1: two card types × the players in the two XIs. So the
+overnight build walks the cross-product and emits `site/curate/cards/{pc_id}.json`; the
+editor looks up rather than resolving.
 
 This is not polish — narration makes it load-bearing, because the narrator speaks what is on
 screen:
@@ -346,13 +344,104 @@ resolvers in Python. There is already one hand-mirrored duplication
 (`_resolve_new_batsman` ↔ `team_preview_performers`) carrying a keep-in-sync comment; a
 JS port would be a second.
 
-### Session deck
+**Shape and keying.** `ball_events.resolve_card(type, player, …)` is the subject-addressed
+entry point next to the clip-addressed `resolve_cards`, which now goes through it — so the
+picker and the reel cannot resolve differently. `_card_catalogue` (`build.py`) walks it
+across every card type × every name the picker can offer (the club roster, plus any
+off-roster name the scorecard carries — an opposition batter is a legitimate dismissal
+subject) and writes the exact content the reel will render:
+
+```jsonc
+{ "pc_match_id": "7298980", "team": "1st-xi", "available": true,
+  "cards": { "new_batsman":       { "pandit|a": { "name": "Anshuman Pandit", … } },
+             "dismissal_summary": { "godden|h": { "name": "Harry Godden", "headline": "8", … } } },
+  "ambiguous": ["dwight|a", "kapoor|p", …] }
+```
+
+Three decisions worth recording:
+
+- **Keyed by `(surname, first initial)`, not the picked name** (`catalogue_key`, mirrored by
+  `catalogueKey` in `curate.js`). It is the key the resolvers already match on, so one entry
+  serves a card picked as "S Methari" and one picked as "Solomon Methari".
+- **`ambiguous` names the wrong-person risk directly.** The resolvers take the *first* row
+  whose key matches, so two players sharing a key resolve to whichever comes first. Computed
+  **within** a candidate source and never across them — the roster's "Solomon Methari" and
+  the scorecard's "S Methari" share a key precisely because they are the same person. The
+  club roster really does carry six such collisions (Alexander/Ava Dwight,
+  Paavni/Parv/Puneet Kapoor, …), so this is not a theoretical guard.
+- **`available` distinguishes "unresolvable" from "unknown".** A match that has rolled out
+  of `fixtures.json` has no scorecard and no team, so *nothing* resolves; the picker must
+  fall back to offering everything rather than greying out the whole roster.
+
+The picker (`curate.js`) then greys a subject with no entry, prints the resolved line under
+each card row — name, headline, sublabel and every stat, i.e. the figures the narrator has to
+say aloud — and flags an ambiguous key next to the name it resolved to.
+
+### Session deck — **built (phase 4)**
 
 With the catalogue in place, the sitting needs only: built deck data (Night 1), clip list
 and trims (in the browser), card content (pre-resolved), clip playback (YouTube embed). So
 the player gains the ability to accept an **injected** deck object alongside `?deck=<slug>`,
 and `video.html` the ability to take its clip list at runtime rather than only from the
-baked-in blob. Both are also exactly what the deck builder needs.
+baked-in blob. Both are also exactly what the deck builder needs. No UI: this is the seam
+phases 6 and 7 hang their tooling on.
+
+**`?deck=local:<key>` plays a deck out of the browser.** `assets/js/deck-store.js` is the
+handover — `WccDeckStore.put/get/remove/list` over `localStorage["wcc-deck:<key>"]`. Chosen
+over a postMessage handshake because the player is a separate document (a tab or an iframe)
+and cannot be handed a JS object; because a stored deck survives the reloads a preview
+session is made of; and because `/curate` already persists drafts this way, so the origin
+keeps one storage convention rather than two.
+
+`resolveDeck` reads the store instead of fetching, and everything after that line is
+identical — same document shape, same player, same windowing and nav. An injected deck is
+flagged `injected`, which turns off the three things that only make sense with a build
+behind them: the `precache.json` fetch, the version-poll refresh, and the loading gate (its
+clips may not be in R2 at all yet, so there is nothing to prime and nothing to wait for).
+
+**A slide entry may carry `videos`.** The player posts it into that slide's iframe as a
+`set-clips` command on every frame load (a windowed deck re-loads frames as it moves);
+`slide-bridge.js` routes it to `WccReel.setClips`, so slides keep exactly one message
+surface. The slide keeps its identity — tag, cards, layout — and only the footage under it
+changes. `setClips` re-registers with the bridge, so the new panel count reaches the player
+through the handshake that already exists rather than a second path.
+
+### Two clip sources, one reel
+
+The sitting curates clips hours before anything is trimmed and synced to R2, so an injected
+deck's clips are `(url, start, end)` segments of the Frogbox stream, not files. `video.html`
+therefore resolves a clip **source** — chosen from the first clip, since a reel is one or
+the other and never a mix:
+
+| Source | Clip is | Time is | Used by |
+|---|---|---|---|
+| `mp4Source` | one `<video>` per clip, file already trimmed | `currentTime` | the wall, and the compositor |
+| `ytSource` | one IFrame-API player seeking each segment | `getCurrentTime() − clip.start` | editor preview only |
+
+Both expose the same handful of methods (`mount`/`show`/`pause`/`resume`/`time`/`teardown`),
+so everything above them — stepping, captions, card windows, the stall watchdog, the
+`wcc-done` signal, the panel report — is written once and never branches. Card windows are
+clip-relative in both, which is why the YouTube source subtracts the segment start.
+
+`ytSource` is preview-only by design, and the design depends on it: the wall must play
+offline, and the compositor records **black** from an embed (see the compositor section).
+It loads the IFrame API on demand and styles itself from JS, so a wall slide carries no
+third-party script and the stylesheet no rules for something it never renders.
+
+The mp4 path was moved into its source verbatim — `crossfadeTo`, `ensurePlayable`,
+`reapObjUrls` are character-identical — because it is what the screens run.
+
+**Exercising it** (there is no UI until phase 7). In the browser console on the site:
+
+```js
+WccDeckStore.put('draft', { title: 'Draft', slides: [
+  { slug: 'last-match-1st-xi-intro', duration: 20, panel_duration: 20 },
+  { slug: 'last-match-1st-xi-innings-2-reel', duration: 60, panel_duration: 60,
+    videos: [ { url: 'https://www.youtube.com/watch?v=…', start: 3120, end: 3132,
+                body: 'Godden takes the catch', cards: [] } ] },
+]});
+location = '/slideshow/?deck=local:draft&interactive&ctx=archive';
+```
 
 **On preview/render divergence:** the narrator previews clips via the YouTube embed; the
 compositor renders from R2. This does not accumulate drift, because each clip beat's
@@ -570,8 +659,8 @@ clip before committing to `keep`.
 |---|---|---|
 | **1** ✅ | Build-time atom list (`slide_atoms`); derived timeline generator (`scripts/timeline.py`). | Pure build work, no UI. |
 | **2** ✅ | Silent compositor (`scripts/compose.py`): stills, clip segments, overlay layer, `loudnorm`, `xfade`. | **An MP4 of any existing deck, with no editor tooling at all.** |
-| **3** | Pre-resolved card catalogue. | Real figures in the `/curate` picker; unresolvable cards greyed out. |
-| **4** | Runtime deck injection; `video.html` runtime clip list. | The editor-tooling keystone — serves narration preview and the deck builder. |
+| **3** ✅ | Pre-resolved card catalogue (`_card_catalogue`, `resolve_card`). | Real figures in the `/curate` picker; unresolvable cards greyed out. |
+| **4** ✅ | Runtime deck injection (`deck-store.js`, `?deck=local:<key>`); `video.html` runtime clip list + YouTube clip source. | The editor-tooling keystone — serves narration preview and the deck builder. |
 | **5** | Card hold points in interactive mode. | Consistent nav; prerequisite for narrating cards. |
 | **6** | Record mode: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
 | **7** | Deck builder UI. | Editor-authored decks, frozen at build time. |
