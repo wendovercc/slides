@@ -2,7 +2,7 @@
    Three heading levels: Title (set label) + Subtitle (team) are constant across
    the set; the sequence strip is the per-phase third level. The right-hand meta
    mirrors the left side of the team slide's Schedule tile (date + venue pill,
-   opposition, ground badge), right-aligned. A member without `_set_steps` omits
+   opposition, ground badge), right-aligned. A member without `_set_phases` omits
    the strip (e.g. the terminal result, also shown standalone). #}
 
 {% macro set_meta(slide) %}
@@ -33,10 +33,10 @@
         </div>
         {{ set_meta(slide) }}
     </div>
-    {% if slide._set_steps is defined and slide._set_steps %}
+    {% if slide._set_phases is defined and slide._set_phases %}
     <nav class="panel-nav set-nav">
-        {% for step in slide._set_steps %}
-        <span class="panel-tab{% if loop.index0 == slide._set_step %} active{% endif %}">{{ step }}</span>
+        {% for step in slide._set_phases %}
+        <span class="panel-tab{% if loop.index0 == slide._set_phase %} active{% endif %}">{{ step }}</span>
         {% endfor %}
     </nav>
     <script>window.WCC_SET_NAV = { duration: {{ slide.duration }} };</script>

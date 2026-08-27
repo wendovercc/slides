@@ -1,0 +1,18 @@
+{# Shared tab strip for carousel slides — the second of the two `.panel-tab` strips
+   in this codebase. This one is a slide's *own* panels; `_set_header.html` renders
+   the other, a set's phases, which spans several slides.
+
+   The labels come from `slide._panel_labels` (build.py: FIXED_PANEL_LABELS /
+   TEAM_PANEL_LABELS), not from literals here, so a panel's name exists as data.
+   That is what lets `_atoms[].label` name what the editor is addressing — see
+   docs/narrated-decks.md. Rendering it from the same list the atoms are named from
+   is what stops the wall and the tooling disagreeing about what a panel is called.
+
+   `style` carries the per-template nav tuning (team varies --nav-gap by count). #}
+{% macro panel_nav(slide, style="") %}
+    <nav class="panel-nav"{% if style %} style="{{ style }}"{% endif %}>
+        {% for label in slide._panel_labels or [] %}
+        <span class="panel-tab{% if loop.first %} active{% endif %}">{{ label }}</span>
+        {% endfor %}
+    </nav>
+{% endmacro %}

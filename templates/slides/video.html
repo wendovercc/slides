@@ -438,12 +438,45 @@
     var bodyEl = document.getElementById('body-slot');
     {% endif %}
 
+    /* Diagnostics, logged where they can actually be READ.
+       A slide is two frames deep in the deck builder (/deck → player → slide) and one
+       deep on the wall, and neither Firefox nor Chrome shows an inner frame's console
+       output without re-targeting the whole toolbox at that frame. So log locally AND
+       to the top document, which is same-origin in every case we ship (the try/catch
+       covers a cross-origin embed, where `top.console` throws on access). */
+    function warn(msg) {
+        try { console.warn(msg); } catch (e) {}
+        try {
+            if (window.top !== window && window.top.console) window.top.console.warn(msg);
+        } catch (e) { /* cross-origin top — the local log is all we get */ }
+    }
+
     // ---- Clip source: trimmed mp4 files ----------------------------------
     // The wall's reel, and the only source the compositor renders from: one <video>
     // per clip, each file already trimmed to its played bounds, so currentTime IS
     // clip-relative time.
     var mp4Source = (function () {
         var videoEls = [];
+
+        /* The readyState below which a <video> cannot paint: HAVE_CURRENT_DATA (2) is
+           "has a frame for the current position", so 0 (HAVE_NOTHING) and 1
+           (HAVE_METADATA) are both blank.
+           
+           Every rescue in this file used to test `readyState === 0`, which is a
+           narrower thing — no data AT ALL — and the gap between the two is a real
+           state a clip sits in. With the HTTP cache warm, a `preload='none'` element
+           can reach HAVE_METADATA off cached bytes with no network round trip. It is
+           then not `=== 0`, so nothing raised `preload` and nothing fetched further;
+           it was paused, so no decode was forced; and `v.currentTime = 0` on an
+           element already at 0 is a no-op seek that fires no `seeked`. The 150ms
+           safety net still revealed it, so the clip went `.active` with no frame
+           decoded — transparent, showing the slide background, with the overlay and
+           controls working perfectly around an empty video box.
+           
+           Cache-disabled always worked because the element really was at HAVE_NOTHING
+           and every rescue fired. That is the whole shape of the bug: the guards
+           tested "has nothing" when they meant "has no frame". */
+        var HAVE_FRAME = 2;
 
         // Fullbleed reels cross-dissolve between clips; the sidebar frame keeps the
         // simple display swap (single video box, one clip at a time).
@@ -475,17 +508,17 @@
                 var onSeek = function () { v.removeEventListener('seeked', onSeek); reveal(); };
                 v.addEventListener('seeked', onSeek);
                 // Elements are created `preload='none'`, so an untouched clip holds no
-                // media data at all — and a seek on `readyState === 0` never completes,
-                // because nothing is loading to complete it. The `seeked` above would
-                // then never fire, the clip would never be revealed, and 15s later the
-                // stall watchdog would skip a perfectly good clip.
+                // frame to show — and a seek on an element with no data never
+                // completes, because nothing is loading to complete it. The `seeked`
+                // above would then never fire, and the clip would never be revealed by
+                // it. (A no-op seek — `currentTime = 0` on an element already at 0 —
+                // fires no `seeked` either, so the reveal here rests on the 150ms net
+                // and the DECODE is what has to be forced.)
                 //
-                // It only bites where BOTH halves are true: arriving paused (interactive
-                // and record mode start paused; kiosk does not) and a cache miss (the
-                // cached path sets `v.src` and calls `load()` itself, which is why the
-                // wall — gated on a full prime — never sees this).
+                // It bites when arriving paused (interactive and record mode start
+                // paused; kiosk does not) on an element below HAVE_CURRENT_DATA.
                 // `preload` first: see ensurePlayable — load() alone buffers nothing.
-                if (v.readyState === 0 && v.networkState !== 2) { v.preload = 'auto'; v.load(); }
+                if (v.readyState < HAVE_FRAME && v.networkState !== 2) { v.preload = 'auto'; v.load(); }
             } else {
                 var p = v.play();
                 if (p && p.catch) p.catch(function () {});
@@ -514,10 +547,10 @@
                     // Was cached, now a miss (e.g. evicted): drop back to the <source>.
                     v.removeAttribute('src');
                     v.load();
-                } else if (v.readyState === 0 && v.networkState !== 2 /* NETWORK_LOADING */) {
-                    // A genuine miss on an element that has never loaded anything.
-                    // Elements are created `preload='none'`, so the FIRST clip of a reel
-                    // reaches its show with no media data at all and no fetch running —
+                } else if (v.readyState < HAVE_FRAME && v.networkState !== 2 /* NETWORK_LOADING */) {
+                    // A genuine miss on an element with no frame to show and nothing
+                    // fetching one. Elements are created `preload='none'`, so the FIRST
+                    // clip of a reel reaches its show with no media data and no fetch —
                     // and the show then depends on data arriving (a `seeked` when
                     // paused, a painted frame when playing). Nothing was starting that
                     // fetch, so clip 0 sat until the stall watchdog skipped it while
@@ -575,7 +608,7 @@
             v.addEventListener('error', function () {
                 var i = +v.dataset.idx;
                 if (i === current && !isPaused()) {
-                    try { console.warn('[video] clip ' + i + ' errored — skipping'); } catch (e) {}
+                    warn('[video] clip ' + i + ' errored — skipping');
                     advanceFrom(i);
                 }
             });
@@ -615,11 +648,33 @@
             show: function (i, prevIdx, done) {
                 var prev = videoEls[prevIdx];
                 var v = videoEls[i];
-                if (!v) return;
-                // Resolve cached bytes before playing; the rest of the show runs in the
-                // callback. Bail if a newer show superseded us during the async cache read.
+                if (!v) {
+                    warn('[video] show(' + i + '): no element to show');
+                    return;
+                }
+                /* Resolve cached bytes before playing; the rest of the show runs in the
+                   callback. Bail if a newer show superseded us during the async cache
+                   read — on EITHER count:
+
+                     - a different clip is now current, or
+                     - `mount()` rebuilt the elements underneath us, so `v` — captured
+                       before the await — is detached and no longer the element at this
+                       index.
+
+                   The second test is the one that was missing, and it is the one that
+                   bites. `current` is still this clip, so the index check passes, and a
+                   callback holding a DEAD element goes on to `crossfadeTo` it: that
+                   bumps `showToken`, makes the good reveal stale, and puts `.active` on
+                   an element that is not in the document. The result is a blank video
+                   box with a perfect overlay and working controls, intermittently,
+                   depending on which callback loses the race — which cache warmth
+                   decides, so it never reproduced with the cache disabled. */
                 ensurePlayable(v, function () {
-                    if (current !== i) return;
+                    if (current !== i || videoEls[i] !== v) {
+                        warn('[video] show(' + i + '): superseded (current=' + current
+                             + ' stale=' + (videoEls[i] !== v) + ')');
+                        return;
+                    }
                     reapObjUrls(v, prev);
                     if (CROSSFADE) {
                         crossfadeTo(v, prev);
@@ -627,7 +682,7 @@
                         videoEls.forEach(function (x) { x.style.display = 'none'; x.pause(); });
                         v.style.display = 'block';
                         v.currentTime = 0;
-                        if (isPaused()) { v.pause(); if (v.readyState === 0 && v.networkState !== 2) { v.preload = 'auto'; v.load(); } }
+                        if (isPaused()) { v.pause(); if (v.readyState < HAVE_FRAME && v.networkState !== 2) { v.preload = 'auto'; v.load(); } }
                         else { var pl = v.play(); if (pl && pl.catch) pl.catch(function () {}); }
                     }
                     done();
@@ -648,7 +703,67 @@
             seek: function (t) { var v = videoEls[current]; if (v) { try { v.currentTime = t; } catch (e) {} } },
             pauseAll: function () { videoEls.forEach(function (x) { x.pause(); }); },
             teardown: function () { this.mount([]); },
-            time: function () { return videoEls[current] ? videoEls[current].currentTime : NaN; }
+            time: function () { return videoEls[current] ? videoEls[current].currentTime : NaN; },
+
+            // Why a clip is not advancing, for the stall watchdog's warning. Reading
+            // the element's own state is the only way to tell the failure modes apart
+            // after the fact: nothing fetching (`net=1`, `ready=0`) is a load that was
+            // never started, `net=2` with `ready=0` is bytes that never arrived, a
+            // `blob:` source points at the cache rather than the network, and `err`
+            // is a decode or network error the element swallowed.
+            // Can the current clip paint? Distinguishes a clip the editor deliberately
+            // paused — which has a frame on screen — from one showing nothing. Tests
+            // HAVE_CURRENT_DATA, not "has any data": an element stuck at HAVE_METADATA
+            // has loaded something and can still show nothing at all.
+            dataless: function () {
+                var v = videoEls[current];
+                return !v || v.readyState < HAVE_FRAME;
+            },
+            state: function () {
+                var v = videoEls[current];
+                if (!v) return 'no element';
+                var cs = null;
+                try { cs = window.getComputedStyle(v); } catch (e) {}
+                return 'ready=' + v.readyState + ' net=' + v.networkState
+                     + ' preload=' + v.preload
+                     + ' src=' + (String(v.currentSrc || v.src).slice(0, 5) || 'none')
+                     + ' buffered=' + (v.buffered ? v.buffered.length : '?')
+                     + ' t=' + (v.currentTime || 0).toFixed(2)
+                     + ' paused=' + v.paused
+                     + ' err=' + (v.error ? v.error.code : 'none')
+                     // Whether it is on screen at all. `.active` is what crossfadeTo
+                     // adds when it reveals a clip; opacity/display are what the CSS
+                     // actually resolved. A clip with a frame and no `.active` is a
+                     // reveal that never happened, which no other reading here shows.
+                     + ' | active=' + v.classList.contains('active')
+                     + ' opacity=' + (cs ? cs.opacity : '?')
+                     + ' display=' + (cs ? cs.display : '?')
+                     + ' size=' + v.videoWidth + 'x' + v.videoHeight;
+            },
+
+            /* One-shot recovery, tried before the watchdog gives up on a clip.
+               Covers every way a clip can arrive with no data and nothing fetching,
+               without needing to know which one happened: drop a cached blob that may
+               be truncated or evicted so the network <source> takes over, raise
+               `preload` (elements are created `preload='none'`, and load() alone
+               buffers nothing), reload, and play again.
+
+               Worth doing because the alternative is skipping a clip that is very
+               probably fine — the reel plays on either way, so a failed kick costs one
+               more stall interval and a silent skip costs the clip. */
+            kick: function () {
+                var v = videoEls[current];
+                if (!v) return false;
+                if (v._objUrl) {
+                    URL.revokeObjectURL(v._objUrl);
+                    v._objUrl = null;
+                    v.removeAttribute('src');   // fall back to the <source> network URL
+                }
+                v.preload = 'auto';
+                try { v.load(); } catch (e) { return false; }
+                if (!isPaused()) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+                return true;
+            }
         };
     })();
 
@@ -776,7 +891,7 @@
                                 // for the 15s the stall watchdog takes: treat it exactly
                                 // like a finished one, as the watchdog itself does.
                                 onError: function () {
-                                    try { console.warn('[video] YouTube error on clip ' + current); } catch (e) {}
+                                    warn('[video] YouTube error on clip ' + current);
                                     advanceFrom(current);
                                 },
                                 onStateChange: function (e) {
@@ -814,6 +929,13 @@
             time: function () {
                 if (!ready) return NaN;
                 return player.getCurrentTime() - ((VIDEOS[current] || {}).start || 0);
+            },
+            // For the stall warning. No `kick` twin: recovering an embed means
+            // reloading the segment, which is the one thing this source is bad at
+            // (every clip is a slice of the same broadcast, so a step is a seek), and
+            // it is preview-only anyway.
+            state: function () {
+                return 'yt ready=' + ready + ' loaded=' + loadedId + ' segEnded=' + segEnded;
             }
         };
     })();
@@ -833,6 +955,18 @@
         // outgoing clip must not test the new clip's playhead against the old atom.
         phase = preHoldAt(i) != null ? 'pre' : 'action';
         holding = false;
+        // Arm the watchdog HERE, not only in showVideoNow.
+        //
+        // `SRC.show` can return without ever calling back — there is no element for
+        // this index yet, or a newer show superseded this one during the async cache
+        // read. Both are real and both used to end the same way: showVideoNow never
+        // ran, so the watchdog was never armed, so a clip that never came up was
+        // never watched and never reported. The watchdog existed precisely for that
+        // case and was installed only on the path where it wasn't needed.
+        //
+        // Arming early makes it unconditional. showVideoNow re-arms on success, which
+        // is harmless (armStall clears first) and refreshes the kick budget.
+        armStall(i);
         SRC.show(i, prev, function () { showVideoNow(i); });
     }
 
@@ -973,21 +1107,63 @@
     // bites while we're actually trying to play (never when paused/off-screen) and only
     // after a grace window, so a clip that's merely slow to buffer isn't dropped.
     var STALL_MS = 15000;
-    var stallTimer = null, stallLastT = -1, stallSince = 0;
+    // A paused clip is not being timed, so it needs no grace for playback to get
+    // going — only enough for a load already under way to reach `loadedmetadata`.
+    // Short, because the editor is sitting looking at it.
+    var DATALESS_MS = 4000;
+    // `stallKicked`: the one-shot recovery has been spent on THIS clip's show. Reset
+    // by armStall, so every clip gets one attempt and no clip gets a reload loop.
+    var stallTimer = null, stallLastT = -1, stallSince = 0, stallKicked = false;
     function clearStall() { if (stallTimer) { clearInterval(stallTimer); stallTimer = null; } }
     function armStall(i) {
         clearStall();
-        stallLastT = -1; stallSince = Date.now();
+        stallLastT = -1; stallSince = Date.now(); stallKicked = false;
         stallTimer = setInterval(function () {
             if (i !== current) { clearStall(); return; }   // moved on / taken over
-            if (isPaused() || holding) { stallSince = Date.now(); return; }   // a deliberate freeze is not a stall
-            var t = SRC ? SRC.time() : NaN;
-            if (!isFinite(t)) { stallSince = Date.now(); return; } // source still coming up
-            if (t > stallLastT + 0.05) { stallLastT = t; stallSince = Date.now(); return; }
-            if (Date.now() - stallSince >= STALL_MS) {
-                try { console.warn('[video] clip ' + i + ' stalled — skipping'); } catch (e) {}
-                advanceFrom(i);
+            if (isPaused() || holding) {
+                /* A deliberate freeze is not a stall — but a clip that has never
+                   produced a single byte is not frozen, it is missing, and PAUSED IS
+                   HOW THE EDITOR'S PREVIEW ARRIVES (`&interactive` starts paused).
+                   Muting the watchdog on `isPaused()` alone therefore muted it for
+                   exactly the case being debugged: black clip, no data, no report,
+                   for as long as the slide is up.
+
+                   So: give it the same one reload, warn either way, and NEVER skip.
+                   The deck is stopped on purpose; moving it on would be wrong. */
+                if (!(SRC && SRC.dataless && SRC.dataless())) { stallSince = Date.now(); return; }
+                if (Date.now() - stallSince < DATALESS_MS || stallKicked) return;
+                stallKicked = true;
+                var pst = (SRC && SRC.state) ? SRC.state() : 'unknown';
+                var kicked = SRC.kick && SRC.kick();
+                warn('[video] clip ' + i + ' paused with no media data ('
+                     + pst + ')' + (kicked ? ' — reloading' : ''));
+                return;
             }
+            var t = SRC ? SRC.time() : NaN;
+            if (isFinite(t) && t > stallLastT + 0.05) { stallLastT = t; stallSince = Date.now(); return; }
+            // No progress — and that now INCLUDES a source that has never produced a
+            // time at all. A non-finite time used to reset the clock ("source still
+            // coming up"), which forgave it forever: an empty `videoEls`, or a YouTube
+            // player that never becomes ready, left the watchdog ticking silently for
+            // as long as the slide was up. Coming up is a few hundred ms and STALL_MS
+            // is fifteen seconds, so waiting on the same clock costs a booting source
+            // nothing and stops a dead one from being invisible.
+            if (Date.now() - stallSince < STALL_MS) return;
+
+            var how = (SRC && SRC.state) ? SRC.state() : 'unknown';
+            // Try to rescue it once before writing it off. A reel's FIRST clip is the
+            // one that arrives with no media data and, depending on which of several
+            // paths raised `preload`, sometimes with nothing fetching either — so the
+            // common stall is a clip that is perfectly good and was never asked to
+            // load. Skipping it is the expensive answer; one reload is the cheap one.
+            if (!stallKicked && SRC && SRC.kick && SRC.kick()) {
+                stallKicked = true;
+                stallSince = Date.now();
+                warn('[video] clip ' + i + ' stalled (' + how + ') — reloading');
+                return;
+            }
+            warn('[video] clip ' + i + ' stalled (' + how + ') — skipping');
+            advanceFrom(i);
         }, 1000);
     }
 

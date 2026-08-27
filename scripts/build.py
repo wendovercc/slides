@@ -36,14 +36,34 @@ HONOURS_TEMPLATES = {"honours"}
 # Empty fallback for the fantasy-league panels when a feed is missing this build.
 FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fetched_at": None}
 
-# Carousel templates whose panel count is fixed (panels are hard-coded in the
-# template). The `team` template's panel count is data-driven instead — it
-# publishes a `slide["_panels"]` list, which takes precedence over this map.
-# Used to derive each slide's total duration = panel_duration × panel count.
-FIXED_PANEL_COUNTS = {
-    "honours": 4,
-    "leaderboard": 4,
-    "fantasy-league": 4,
+# Carousel templates with a fixed panel set: the tab strip these templates render,
+# in order. The `team` template is data-driven instead — it publishes a
+# `slide["_panels"]` list of panel *keys*, named by TEAM_PANEL_LABELS below.
+#
+# These labels used to be hard-coded `<span class="panel-tab">` literals in each
+# template, which meant nothing outside the rendered page knew a panel's name: the
+# tooling could say a slide had four atoms but not that the third was "Top
+# Managers". They are declared here and rendered from data (see the `panel_nav`
+# macro) for the same reason `_heading`/`_subheading` are — one literal, one place,
+# and the editor tools can name what they are addressing.
+#
+# Doubles as the panel *count* for these templates, so the two can never disagree:
+# a slide's duration is panel_duration × panel count.
+FIXED_PANEL_LABELS = {
+    "honours": ["Top Scores", "Recent 100s", "Best Figures", "Recent 6+ Wickets"],
+    "leaderboard": ["Most Runs", "Batting Average", "Most Wickets", "Bowling Average"],
+    "fantasy-league": ["Team of the Week", "Top Players", "Top Managers", "Teams"],
+}
+
+# Panel key → tab label for the `team` template, whose panels are whichever ones
+# had data this build (see build_team's `slide["_panels"]`).
+TEAM_PANEL_LABELS = {
+    "league": "League",
+    "results": "Form",
+    "schedule": "Schedule",
+    "top_batting": "Batting",
+    "top_bowling": "Bowling",
+    "highlights": "Records",
 }
 
 # Senior teams that get a published-XI card on the fantasy slide's "Teams"
@@ -664,7 +684,21 @@ def build_video_slide(slide):
     slide["_override_duration"] = True
 
 
-def slide_atoms(slide, panel_count, panel_duration):
+def _named_atom(atom, phase, label):
+    """Attach an atom's `phase`/`label`, omitting either when there is nothing to say.
+
+    Absent rather than null so the published `_atoms` stay as small as they were —
+    a 30-clip reel writes this 30 times — and so a consumer's `atom.get("phase")`
+    reads the same either way.
+    """
+    if phase:
+        atom["phase"] = phase
+    if label and label != phase:
+        atom["label"] = label
+    return atom
+
+
+def slide_atoms(slide, slug, panel_count, panel_duration):
     """The slide's atom list: every point a narrator or the compositor can stop on.
 
     An atom is `(slide, panel)` plus an optional card qualifier — see
@@ -686,9 +720,35 @@ def slide_atoms(slide, panel_count, panel_duration):
     overlays — which is what the wall plays, so a silent render of a reel is
     frame-for-frame what the screens show. That equals the card type's configured
     `dwell` unless the curation overlay overrode the pad for this clip.
+
+    **Every atom is named**, because the editor tools address atoms and an atom the
+    editor cannot name is one they cannot manage — "retake Fantasy League · Top
+    Managers" has to be sayable. Two fields, both optional:
+
+      * `phase` — the tab strip entry this atom sits under. One phase can span
+        several atoms (Highlights, Batting and Bowling are all "1st Innings"), and
+        a slide with no strip has none.
+      * `label` — what this atom is *within* the phase, and the one the editor
+        leads with. A carousel panel's own tab label; a set member's leaf level; a
+        clip's ball narrative.
+
+    Both come from `slide_title_parts` wherever the slide already has a header
+    hierarchy, so an atom's name and the wall's header cannot drift apart.
     """
+    parts = slide_title_parts(slide, slug)
+    phase = parts[2] if len(parts) > 2 else None
+    leaf = parts[3] if len(parts) > 3 else None
+
     if slide.get("template") != "video":
-        return [{"panel": i, "duration": panel_duration} for i in range(panel_count)]
+        # A carousel names its atoms from its own tab strip; anything else has one
+        # atom, named by the finest header level it has (a set member's "Batting",
+        # else its phase, else the slide's own title).
+        labels = slide_panel_labels(slide)
+        if not labels:
+            labels = [leaf or phase or (parts[-1] if parts else slug)] * panel_count
+        return [_named_atom({"panel": i, "duration": panel_duration},
+                            phase, labels[i] if i < len(labels) else None)
+                for i in range(panel_count)]
 
     atoms = []
     for i, v in enumerate(slide.get("videos") or []):
@@ -711,29 +771,53 @@ def slide_atoms(slide, panel_count, panel_duration):
         if not segments:
             segments = [(None, 0.0, dur)]
 
+        # A clip's own name is its ball narrative ("Eashan Patel b Smith"), which is
+        # what an editor scanning a reel's atoms recognises; the ordinal is the
+        # fallback, and rides along regardless so two similar balls stay distinct.
+        body = (v.get("body") or "").strip()
+        clip_label = f"{i + 1}. {body}" if body else f"Clip {i + 1}"
         for card, a, b in segments:
             atom = {"panel": i, "duration": round(b - a, 3)}
             if card:
                 atom["card"] = card
             if src:
                 atom["media"] = {"src": src, "in": round(a, 3), "out": round(b, 3)}
-            atoms.append(atom)
+            atoms.append(_named_atom(atom, phase or leaf, clip_label))
     return atoms
 
 
-def slide_title(slide, slug):
-    """A human label for the slide: **its own header hierarchy, dot-joined**.
+def slide_panel_labels(slide):
+    """This slide's tab strip, as a list of panel labels — or None if it has no tabs.
 
-        Last Match · 1st XI · 1st Innings · Batting
-        Team Focus · U13 Spitfires
-        Leaderboards · 1st XI League · 2026
+    One panel per label, in render order, so the list *is* the panel count for every
+    carousel template. `team` names its data-driven `_panels` keys through
+    TEAM_PANEL_LABELS; the fixed carousels read straight off FIXED_PANEL_LABELS.
 
-    The deck builder shows this instead of a template name, so it has to *identify*
-    a slide, not merely describe it — and a bare ``title`` does not: the club runs
-    five per-team slides (team, schedule, next-match, league-table, latest result)
-    that are all titled e.g. "U13 Spitfires", and thirteen slides titled
-    "Leaderboards". Reading the same two heading levels the slide itself renders
-    separates them, because that is exactly what the headings are there to do.
+    Returns None for the two kinds of slide that have no such strip:
+      * plain single-panel slides, and set members (whose strip is the *set's*
+        phase list, rendered by `_set_header.html` and named by `_set_phases`);
+      * video reels, whose atoms are clips rather than panels.
+    """
+    if slide.get("template") == "team":
+        return [TEAM_PANEL_LABELS.get(k, k) for k in slide.get("_panels") or []]
+    return FIXED_PANEL_LABELS.get(slide.get("template"))
+
+
+def slide_title_parts(slide, slug):
+    """The slide's header hierarchy, **as a list of levels**.
+
+        ["Last Match", "1st XI", "1st Innings", "Batting"]
+        ["Team Focus", "U13 Spitfires"]
+
+    `slide_title` joins these with " · " for display. They are returned separately
+    because levels 3 and 4 are the **phase** and the **leaf**, which is what the
+    editor tools name atoms from — see `slide_atoms` and docs/narrated-decks.md.
+    Deriving the wall's header, the deck row and the atom labels from this one
+    function is what stops the three wordings drifting apart.
+
+    Short lists are normal: a slide with no phase returns two levels. Reading the
+    slide's own heading levels is what separates slides a bare ``title`` cannot,
+    because that is exactly what those headings are there to do.
 
     Four levels, each skipped when the slide has no such thing:
 
@@ -743,8 +827,9 @@ def slide_title(slide, slug):
        carry ``_heading``/``_subheading`` (set alongside the template that renders
        them, so the literal lives in one place); the rest use ``title`` plus
        whichever subtitle field their template shows.
-    3. **Phase** — the sequence strip's own step name (``_set_steps[_set_step]``),
-       or a reel's innings label, which is the step it sits in.
+    3. **Phase** — the sequence strip's own entry (``_set_phases[_set_phase]``),
+       or a reel's innings label, which is the phase it sits in. One phase can span
+       several slides: Highlights, Batting and Bowling are all "1st Innings".
     4. **Leaf** — what this slide is *within* the phase: a scorecard's ``_mode``, or
        a reel's Highlights. Without it a batting and a bowling card read identically.
     """
@@ -771,10 +856,10 @@ def slide_title(slide, slug):
             sub = None
         parts.append(sub)
 
-    steps = slide.get("_set_steps")
-    idx = slide.get("_set_step")
-    if steps and idx is not None and 0 <= idx < len(steps):
-        parts.append(steps[idx])
+    phases = slide.get("_set_phases")
+    idx = slide.get("_set_phase")
+    if phases and idx is not None and 0 <= idx < len(phases):
+        parts.append(phases[idx])
     elif slide.get("_innings_label"):
         parts.append(slide["_innings_label"])
 
@@ -785,8 +870,21 @@ def slide_title(slide, slug):
     elif slide.get("reel"):
         parts.append("Highlights")
 
-    parts = [str(p).strip() for p in parts if p and str(p).strip()]
-    return " · ".join(parts) if parts else slug
+    return [str(p).strip() for p in parts if p and str(p).strip()]
+
+
+def slide_title(slide, slug):
+    """The slide's header hierarchy, dot-joined — its label everywhere off-wall.
+
+        Last Match · 1st XI · 1st Innings · Batting
+        Leaderboards · 1st XI League · 2026
+
+    The deck builder shows this instead of a template name, so it has to *identify*
+    a slide, not merely describe it — and a bare ``title`` does not: the club runs
+    five per-team slides (team, schedule, next-match, league-table, latest result)
+    all titled e.g. "U13 Spitfires", and thirteen titled "Leaderboards".
+    """
+    return " · ".join(slide_title_parts(slide, slug)) or slug
 
 
 def _curation_scorecards():
@@ -3574,7 +3672,7 @@ def build_slides(env):
         elif slide.get("_override_duration"):
             panel_count = 1  # duration already computed by build_video_slide
         else:
-            panel_count = FIXED_PANEL_COUNTS.get(slide.get("template"), 1)
+            panel_count = len(FIXED_PANEL_LABELS.get(slide.get("template")) or [None])
         if panel_count == 0:
             slide_meta[slug] = {"_skip": True}
             print(f"  slide/{slug} — skipped (no panels)")
@@ -3584,6 +3682,13 @@ def build_slides(env):
             panel_duration = slide.get("panel_duration", default_panel_duration)
             slide["panel_duration"] = panel_duration
             slide["duration"] = panel_duration * panel_count
+
+        # The tab strip, for the template to render from (see the `panel_nav` macro).
+        # Same list the atoms are named from, so what the wall shows and what the
+        # editor tools call a panel are the same string by construction.
+        panel_labels = slide_panel_labels(slide)
+        if panel_labels:
+            slide["_panel_labels"] = panel_labels
 
         slide_meta[slug] = {
             "slide_active": slide.get("active", True),
@@ -3597,7 +3702,7 @@ def build_slides(env):
             "_template": slide.get("template"),
             "duration": slide["duration"],
             "panel_duration": slide["panel_duration"],
-            "_atoms": slide_atoms(slide, panel_count, slide["panel_duration"]),
+            "_atoms": slide_atoms(slide, slug, panel_count, slide["panel_duration"]),
             "_videos": slide_video_srcs(slide),
             # Built, but with no data behind it this build. Decks opt out per entry
             # with skip_when_empty rather than the slide vanishing everywhere.
@@ -3824,7 +3929,7 @@ def build_match_packages(env, slide_meta):
             "_template": Path(template.name).stem,
             "duration": default_panel_duration,
             "panel_duration": default_panel_duration,
-            "_atoms": slide_atoms(slide, 1, default_panel_duration),
+            "_atoms": slide_atoms(slide, slug, 1, default_panel_duration),
             # The match this slide reports on, ISO. A run of consecutive
             # recency-bearing slides in a deck plays newest first — see
             # build_slideshows.
@@ -3936,14 +4041,15 @@ def build_match_packages(env, slide_meta):
         # The three heading levels: Title (set label) + Subtitle (team · date) are
         # constant across the set — kept data-driven so a later renderer (e.g. the
         # MP4 export) can override them. The sequence strip is the third level: one
-        # step per *phase* (a phase can span a reel + its scorecard later). The
-        # result is the terminal payoff and doubles as the standalone latest-result
-        # slide, so it carries the shared header but no strip.
-        # League table is the final step for league teams (safe post-result).
+        # entry per *phase*, and a phase can span several slides — Highlights,
+        # Batting and Bowling are all "1st Innings". The result is the terminal
+        # payoff and doubles as the standalone latest-result slide, so it carries
+        # the shared header but no strip. League table is the final phase for
+        # league teams (safe post-result).
         league_panel = build_league_panel(team)
-        steps = (["Pre-match"] + innings_present
-                 + (["Result"] if has_result else [])
-                 + (["League"] if league_panel else []))
+        phases = (["Pre-match"] + innings_present
+                  + (["Result"] if has_result else [])
+                  + (["League"] if league_panel else []))
         iso = _iso_from_dmy(m.get("match_date", ""))
         if iso:
             _dt = datetime.strptime(iso, "%Y-%m-%d")
@@ -3965,8 +4071,8 @@ def build_match_packages(env, slide_meta):
         set_common = {"_set_title": set_title, "_set_title_archive": archive_title,
                       "_set_subtitle": title, **set_meta_fields}
 
-        def with_strip(step_label):
-            return {**set_common, "_set_steps": steps, "_set_step": steps.index(step_label)}
+        def with_strip(phase):
+            return {**set_common, "_set_phases": phases, "_set_phase": phases.index(phase)}
 
         # Per-innings highlight reel: the curated match clips for one innings, in
         # chronological order, as a single fullbleed video slide slotted before that
@@ -4053,7 +4159,7 @@ def build_match_packages(env, slide_meta):
                 "slide_active": True, "slide_expires": None,
                 "_title": slide_title(slide, slug), "_template": "video",
                 "duration": slide["duration"], "panel_duration": slide["panel_duration"],
-                "_atoms": slide_atoms(slide, len(slide["videos"]), slide["panel_duration"]),
+                "_atoms": slide_atoms(slide, slug, len(slide["videos"]), slide["panel_duration"]),
                 "_videos": slide_video_srcs(slide),
                 # Which curation this reel is made of. The editor sitting needs it to
                 # get from a reel row back to /curate (and, later, to resolve the reel's
@@ -4284,6 +4390,58 @@ def _recency_ordered(merged):
     return out
 
 
+def _apply_panel_subset(entry, label=""):
+    """Narrow a resolved deck entry to some of its slide's panels.
+
+    A deck entry may carry `panels: [0, 2]` — the editor added the whole slide and
+    then turned atoms off (the subtractive UI in docs/narrated-decks.md). The slide
+    itself is untouched: it is the same page in every deck, so the subset travels
+    with the entry and the player pushes it in as `set-panels`.
+
+    Two things change here, and both matter downstream:
+
+      * `_atoms` is filtered **and renumbered to ordinals**, because `slide-bridge.js`
+        presents an ordinal space to the outside world. `compose.py` addresses a
+        still by `atom["panel"]` via the player's own `goto-panel`, so renumbering is
+        what keeps the render path working with no change to it. The original panel
+        numbers stay recoverable from the entry's own `panels` list.
+      * `duration` is resummed from the kept atoms, so a deck's total is right and
+        the derived timeline agrees with it.
+
+    Refused on reels for the same reason `set-panels` is: their atoms are finer than
+    their panels, and a clip subset is `set-clips`.
+    """
+    panels = entry.get("panels")
+    if not panels:
+        return entry
+    if entry.get("_template") == "video":
+        print(f"  {label}: '{entry.get('slug')}' is a reel — panel subset ignored "
+              f"(curate the clips instead)")
+        entry.pop("panels", None)
+        return entry
+
+    atoms = entry.get("_atoms")
+    if atoms is None:
+        # A live-match slide: its panels are whatever the feed produced by render
+        # time, so there is nothing here to take a subset of.
+        print(f"  {label}: '{entry.get('slug')}' has no atom list — panel subset ignored")
+        entry.pop("panels", None)
+        return entry
+
+    keep = sorted({p for p in panels if isinstance(p, int) and 0 <= p < len(atoms)})
+    if not keep or len(keep) == len(atoms):
+        # Every panel, or none of them that exist — either way the whole slide is
+        # what this entry means, and carrying a redundant list would only invite
+        # the two to disagree later.
+        entry.pop("panels", None)
+        return entry
+
+    entry["panels"] = keep
+    entry["_atoms"] = [{**atoms[p], "panel": i} for i, p in enumerate(keep)]
+    entry["duration"] = round(sum(a.get("duration") or 0 for a in entry["_atoms"]), 3)
+    return entry
+
+
 def _resolve_deck(entries, slide_meta, sets, default_panel_duration, today_iso,
                   label="", deck_rules=True):
     """Resolve authored deck entries into the ordered slide list a player runs.
@@ -4334,7 +4492,9 @@ def _resolve_deck(entries, slide_meta, sets, default_panel_duration, today_iso,
             if entry.get("skip_when_empty") and s.get("empty"):
                 print(f"  {label}: '{entry_slug}' has no content — skipped")
                 continue
-            inherited = {k: v for k, v in entry.items() if k != "slug"}
+            # `panels` names panels of *one* slide, so it cannot be inherited by
+            # every member the way show_when and friends are.
+            inherited = {k: v for k, v in entry.items() if k not in ("slug", "panels")}
             for member_slug in s["members"]:
                 meta = slide_meta.get(member_slug)
                 if not meta or meta.get("_skip"):
@@ -4365,7 +4525,7 @@ def _resolve_deck(entries, slide_meta, sets, default_panel_duration, today_iso,
             continue
         merged_entry = {**entry, **meta}
         merged_entry.setdefault("duration", default_panel_duration)
-        merged.append(merged_entry)
+        merged.append(_apply_panel_subset(merged_entry, label))
 
     return _recency_ordered(merged)
 
@@ -4504,8 +4664,12 @@ def build_slideshows(env, slide_meta, sets=None):
                 built_at=built_at, qr_data_url=qr_data_url))
         n_clips = _write_deck_data(out_dir, show, build_version)
         print(f"  slideshow/{slug}  ({n_clips} clip(s) to precache)")
+        # Members, not just a count: the deck builder adds a slideshow's slides only
+        # where they are not already in the draft (a slug appears at most once in a
+        # deck), so it has to know which slugs a show contains before fetching it.
         authored_decks.append({"slug": slug, "title": show["title"],
-                               "slides": len(merged)})
+                               "slides": len(merged),
+                               "members": [m["slug"] for m in merged]})
 
         # A deck can legitimately build with nothing in it — the archive decks empty
         # out between seasons, and in any fixture gap longer than

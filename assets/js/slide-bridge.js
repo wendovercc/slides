@@ -16,8 +16,58 @@
  */
 (function () {
   var ctrl = null;     // optional carousel controller
-  var count = 1;       // panel count (1 for plain slides)
-  var current = 0;     // active panel index
+  var count = 1;       // panel count the CONTROLLER has (1 for plain slides)
+  var current = 0;     // active panel index, as the controller numbers them
+  var sel = null;      // panel subset: kept controller indices, ascending; null = all
+
+  /* Panel subsets.
+   *
+   * A deck entry may carry only some of its slide's panels (`set-panels`, sent by
+   * the player from the entry's `panels` list). The controller still has all of
+   * them — it is the same document either way — so this file is the one place that
+   * knows the difference, and it presents an ORDINAL space to everything outside:
+   * `panels` is the reduced count, the reported `panel` is an ordinal, and a
+   * `goto-panel` index is an ordinal. `show()` maps ordinal → controller index on
+   * the way in, `toOrd()` maps back on the way out, and `edge()` falls out correct
+   * because it is written in terms of both.
+   *
+   * Doing it here rather than in player-core.js keeps the authority phase 5 handed
+   * to the slide: the player asks for "the next atom" and the slide answers what
+   * that is. One implementation covers every carousel template.
+   */
+  function nPanels() { return sel ? sel.length : count; }
+
+  function toRaw(i) {
+    if (!sel) return i;
+    return sel[i] === undefined ? sel[sel.length - 1] : sel[i];
+  }
+
+  function toOrd(raw) {
+    if (!sel) return raw;
+    var i = sel.indexOf(raw);
+    if (i >= 0) return i;
+    // The controller landed on a panel this entry dropped — its own auto-rotate,
+    // or a step it owns. Report the nearest kept panel at or before it, so the
+    // ordinal is always in range and `edge()` never reads `last` off a panel the
+    // deck does not contain.
+    for (var k = sel.length - 1; k >= 0; k--) if (sel[k] < raw) return k;
+    return 0;
+  }
+
+  // Drop anything out of range or duplicated, and sort: the subset is authored in
+  // a browser and arrives before the controller registers, so it can name panels
+  // this slide turned out not to have (a team slide's panels depend on the data).
+  // An empty result means "no usable subset", which is a whole slide, not a blank.
+  function clampSel() {
+    if (!sel) return;
+    var keep = [];
+    for (var i = 0; i < sel.length; i++) {
+      var v = sel[i];
+      if (typeof v === 'number' && v >= 0 && v < count && keep.indexOf(v) < 0) keep.push(v);
+    }
+    keep.sort(function (a, b) { return a - b; });
+    sel = keep.length ? keep : null;
+  }
 
   /* Where this slide's own navigation sits within itself, for the player's
    * next()/prev(). Panels are the default atom, but a reel's atoms are finer than
@@ -26,13 +76,14 @@
    * `last` true means it must cross to the next slide. */
   function edge() {
     if (ctrl && ctrl.edge) { try { return ctrl.edge(); } catch (e) { /* fall through */ } }
-    return { first: current === 0, last: current === count - 1 };
+    var o = toOrd(current);
+    return { first: o === 0, last: o === nPanels() - 1 };
   }
 
   function post(type, extra) {
     try {
       parent.postMessage(Object.assign(
-        { type: type, panel: current, panels: count }, edge(), extra || {}), '*');
+        { type: type, panel: toOrd(current), panels: nPanels() }, edge(), extra || {}), '*');
     } catch (e) { /* not embedded — ignore */ }
   }
 
@@ -49,6 +100,10 @@
       ctrl = c;
       count = c.count || 1;
       current = 0;
+      // A subset can arrive before the controller does (the player posts it on
+      // frame load), and only now is the real panel count known.
+      clampSel();
+      if (sel && sel[0] !== 0) ctrl.show(sel[0]);
       post('wcc-slide');
     },
     // Called by the controller after it changes panel. `extra` (optional) rides
@@ -64,10 +119,12 @@
     document.body.classList.toggle('paused', p);
   }
 
+  // `i` is an ordinal within this entry's panels, not a controller index — see
+  // "Panel subsets" above. With no subset the two are the same number.
   function show(i) {
     if (!ctrl) return;
-    i = Math.max(0, Math.min(count - 1, i));
-    ctrl.show(i); // controller updates `current` via notifyPanel
+    i = Math.max(0, Math.min(nPanels() - 1, i));
+    ctrl.show(toRaw(i)); // controller updates `current` via notifyPanel
   }
 
   // One step of the player's nav. A controller with finer atoms than panels handles
@@ -75,7 +132,7 @@
   // else steps a panel.
   function step(d) {
     if (ctrl && ctrl.step) { ctrl.step(d); return; }
-    show(current + d);
+    show(toOrd(current) + d);
   }
 
   window.addEventListener('message', function (e) {
@@ -94,7 +151,15 @@
         if (ctrl) ctrl.restartCurrent();
         break;
       case 'restart-auto':                    // kiosk: slide just became visible —
-        if (ctrl) { setPaused(false); ctrl.show(0); ctrl.startAuto(); } // rotate afresh from panel 0
+        if (ctrl) {
+          setPaused(false);
+          show(0);                            // rotate afresh from the first kept panel
+          // A subset implies player-owned timing. The template's own rotation walks
+          // every panel it *has*, with no notion of the entry's selection, so
+          // starting it would show panels this deck removed. The slide holds its
+          // first kept panel instead and the player's timer moves the deck on.
+          if (!sel) ctrl.startAuto();
+        }
         break;
       case 'next-panel': step(1); break;
       case 'prev-panel': step(-1); break;
@@ -108,6 +173,26 @@
       // one message surface. See docs/narrated-decks.md.
       case 'set-clips':
         if (window.WccReel && WccReel.setClips) WccReel.setClips(d.videos || []);
+        break;
+      // Panel subset for this deck entry: the editor kept only some of the slide's
+      // panels. Routed here beside `set-clips` for the same reason — one message
+      // surface per slide — and applied generically, so every carousel template
+      // gets it without knowing it exists.
+      case 'set-panels':
+        // Reels are excluded by design: their atoms are finer than their panels (a
+        // card hold is a stop *inside* a clip), so a clip subset is `set-clips`,
+        // which already exists and carries the trims with it. Applying both would
+        // give two disagreeing notions of what clip 3 is.
+        if (window.WccReel) break;
+        sel = Array.isArray(d.panels) ? d.panels.slice() : null;
+        clampSel();
+        if (ctrl) {
+          // The subset changed under the slide; land on a panel that still exists.
+          // pauseAuto for the same reason restart-auto refuses to start it.
+          ctrl.pauseAuto();
+          show(0);
+        }
+        post('wcc-slide');
         break;
     }
   });

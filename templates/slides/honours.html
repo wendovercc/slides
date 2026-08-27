@@ -1,4 +1,5 @@
 {% extends 'slides/_base-sidebar.html' %}
+{% from 'slides/_panel_nav.html' import panel_nav %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
     .header { margin-bottom: 1.2vh; }
@@ -105,12 +106,7 @@
         <div class="title">{{ slide.title }}</div>
         {% if slide._subtitle is defined %}<div class="subtitle">{{ slide._subtitle }}</div>{% endif %}
     </div>
-    <nav class="panel-nav">
-        <span class="panel-tab active">Top Scores</span>
-        <span class="panel-tab">Recent 100s</span>
-        <span class="panel-tab">Best Figures</span>
-        <span class="panel-tab">Recent 6+ Wickets</span>
-    </nav>
+    {{ panel_nav(slide) }}
     <div class="halves">
 
         <div class="half panel-active">

@@ -99,11 +99,47 @@
     .seg button.on { background: var(--gold); color: var(--navy-2); }
 
     /* ---- rows ------------------------------------------------------------- */
+    /* A group row: a match package or a multi-panel slide, which are the same
+       creature to an editor. `.twist` is the expander; it is an empty cell on a
+       group with nothing under it, so every row keeps the same column grid. */
     .row {
-      display: grid; grid-template-columns: 5px 13px 1fr auto auto auto;
+      display: grid; grid-template-columns: 5px 13px 11px 1fr auto auto auto;
       align-items: center; gap: 8px; padding: 7px 10px 7px 0;
       border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer;
     }
+    .row .twist { color: var(--ink-soft); font-size: 9px; line-height: 1; text-align: center;
+      user-select: none; }
+    .row.has-kids:hover .twist { color: var(--gold); }
+    /* Child rows: one step of the group. Indented under the group's stripe, and
+       measured on the same columns from the title across, so the numbers line up. */
+    .crow {
+      display: grid; grid-template-columns: 29px 1fr auto auto auto;
+      align-items: center; gap: 8px; padding: 5px 10px 5px 0;
+      border-bottom: 1px solid var(--line); font-size: 12.5px; cursor: pointer;
+      background: rgba(0,0,0,.16);
+    }
+    .crow:hover { background: rgba(180,200,228,.06); }
+    .crow.pv { background: rgba(212,175,55,.14); }
+    .crow .kid-rule { justify-self: end; width: 9px; height: 9px;
+      border-left: 1px solid var(--line); border-bottom: 1px solid var(--line);
+      border-bottom-left-radius: 3px; margin-bottom: 4px; }
+    .crow .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      min-width: 0; font-weight: 500; }
+    .crow .meta { color: var(--ink-soft); font-size: 11px; font-variant-numeric: tabular-nums;
+      white-space: nowrap; }
+    .crow .meta.curating { color: var(--gold); }
+    /* A step switched off is still listed — the UI is subtractive, so putting it
+       back has to be as easy as taking it out. */
+    .crow.off .ttl { color: var(--ink-soft); text-decoration: line-through; }
+    .crow.off .meta { font-style: italic; }
+    .crow .dur { width: 5.5ch; font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px;
+      border: 1px solid var(--line); background: var(--panel); color: var(--white);
+      font-variant-numeric: tabular-nums; text-align: right; }
+    .crow .dur:disabled { opacity: .4; border-color: transparent; background: transparent; }
+    .crow .rowbtns { display: flex; gap: 1px; }
+    /* Holds the dwell box's column on rows that have no dwell of their own — a
+       package's group row, and a panel child. */
+    .dur-gap { width: 5.5ch; }
     .row:hover { background: rgba(180,200,228,.06); }
     .row.pv { background: rgba(212,175,55,.14); }
     .row.dragging { opacity: .4; }
@@ -143,6 +179,11 @@
     .res:hover { background: rgba(180,200,228,.07); }
     .res.pv { background: rgba(212,175,55,.14); }
     .res.in-deck .ttl { color: var(--ink-soft); }
+    /* Partly in the deck: steps have been taken out, and `+` is what puts them
+       back. Distinguished from "whole" so the live button reads as an action. */
+    .res.part .meta { color: var(--gold); }
+    .res .add:disabled { opacity: .3; cursor: default; }
+    .res .add:disabled:hover { background: transparent; color: var(--gold); }
     .res .add { border: 1px solid var(--line); background: transparent; color: var(--gold);
       cursor: pointer; border-radius: 5px; font: inherit; font-weight: 700; font-size: 14px;
       line-height: 1; padding: 3px 0; width: 26px; }
@@ -232,11 +273,10 @@
       </div>
       <div id="find-pane">
         <div class="pane-head">
-          <input id="find-search" type="text" autocomplete="off" placeholder="Search slides, packages and slideshows…" aria-label="Search">
+          <input id="find-search" type="text" autocomplete="off" placeholder="Search by name or kind" aria-label="Search">
           <span class="seg" id="find-seg">
             <button data-kind="" class="on">All</button>
             <button data-kind="deck">Shows</button>
-            <button data-kind="set">Packages</button>
             <button data-kind="slide">Slides</button>
           </span>
         </div>

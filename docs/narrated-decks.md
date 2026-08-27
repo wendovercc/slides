@@ -75,6 +75,67 @@ side per clip, so `pre`/`post` is a sufficient identity.
 *Deferred:* panel-subset deck entries (a deck containing a single panel of a slide). It's
 expressible — `{slug, panels:[2]}` with the player restricting `counts[]` — but not v1.
 
+### Naming the levels — **built**
+
+The editor tools address atoms, so an atom the editor cannot *name* is one they cannot
+manage: "retake Fantasy League · Top Managers" has to be sayable. Four levels, of which
+only two had names in the data before this:
+
+| Level | Is | Example |
+|---|---|---|
+| **Deck** | the show | — |
+| **Group** | the collapsible unit an editor manages | `Last Match · 1st XI`, `Fantasy League` |
+| **Phase** | one entry on a tab strip | `1st Innings`, `Team of the Week` |
+| **Atom** | `(slide, panel)` — the narratable leaf | `Batting`, `Top Managers`, one clip |
+
+**A group is a match package *or* a multi-panel slide**, and the distinction is invisible
+to an editor: both render a `.panel-tab` strip on the wall, one via `_set_header.html` and
+one via `_panel_nav.html`. Under the hood they stay different — a slide is a document, with
+its own data payload, precache entry, expiry and `_recency` — and that split is right: see
+"Panel subsets" for why neither collapsing nor exploding it is affordable.
+
+**A phase is not one-to-one with an atom.** `Highlights`, `Batting` and `Bowling` are three
+atoms under the single phase `1st Innings` — `with_strip` is called three times with that
+label. For a multi-panel slide the two coincide, because its tabs *are* its atoms. That is
+one model in which two levels sometimes collapse, not two models.
+
+**`step` is retired as a concept.** `_set_steps`/`_set_step` were a second name for the
+phase list and an index into it; they are now `_set_phases`/`_set_phase`. `step` survives
+only as a verb (`step(delta)` in `slide-bridge.js`), where it means a movement.
+
+**Every atom carries `phase` and `label`, both optional**, attached by `_named_atom` and
+omitted when there is nothing to say (a 30-clip reel would otherwise write two nulls
+thirty times). `label` is what the editor leads with; `phase` groups. Both are read off
+`slide_title_parts`, which is `slide_title` split into its levels — so an atom's name and
+the wall's own header are the same strings by construction and cannot drift.
+
+**Panel labels are data, not literals.** They were hard-coded `<span class="panel-tab">`
+text in `fantasy-league`, `leaderboard`, `honours` and a `tab_labels` map in `team`, which
+is why nothing outside the rendered page knew a panel's name. They now live in
+`FIXED_PANEL_LABELS` / `TEAM_PANEL_LABELS` (`build.py`), reach the template through the
+shared `panel_nav` macro, and reach the tooling through `_atoms[].label` — one list, both
+consumers. `FIXED_PANEL_LABELS` doubles as the panel *count*, so the two can no longer
+disagree.
+
+A reel's clip atoms are named from the ball narrative the curation already carries
+(`1. OUT! G Jackson gets M Moss`), ordinal-prefixed so two similar balls stay distinct.
+
+**The catalogue stays grouped; only the deck expands.** `/deck`'s discover pane lists one
+row per group and never opens it — "what do I put here" is answered by the group, and a
+search result offering to add a single panel of a slide is the additive UI that "Panel
+subsets" already rejected. Expansion belongs in the deck pane, where the editor is
+managing something they have already chosen.
+
+This is also what keeps `slides.json` thin. A collapsed row needs a title and a count,
+both already published; it never needs atom *names*, so the catalogue does not have to
+carry a second copy of them and the "one definition per slide entry" rule in
+`write_slide_catalogue` survives intact. The names travel the way they already do — in the
+slide's own auto-deck `data.json`, fetched when the editor actually inserts it.
+
+*Verified across the whole build:* 1069 atoms, none unnamed; every tab strip renders the
+same labels it did as literals; `timeline.py` on `last-match-1st-xi` still gives 37 beats /
+460s, unchanged.
+
 ---
 
 ## Hold points — **built (phase 5)**
@@ -640,9 +701,240 @@ inserted slide's 4 panels × 20s), and dropping its dwell to 10s in the builder 
 500s. **That is the silent custom-deck video working**, with no narrator and no record
 mode.
 
-### Panel subsets — deferred, but the shape is known
+### Panel subsets — **built**
 
-*Researched 2026-08-27, not built.* A slide with several panels (Fantasy League has four)
+*Researched and built 2026-08-27.* The research below stands; what follows is what
+landed and where it differed.
+
+- **`set-panels` in `slide-bridge.js`, routed exactly as `set-clips`.** The bridge now
+  presents an **ordinal space** to everything outside it: `panels` is the reduced count,
+  the reported `panel` is an ordinal, and a `goto-panel` index is an ordinal. `show()`
+  maps ordinal → controller index on the way in, `toOrd()` maps back on the way out, and
+  `edge()` falls out correct because it is written in terms of both. One implementation,
+  every carousel template, no template changes at all.
+- **The research said "filtered but keep their original panel numbers". That was wrong**
+  — it would have left the bridge and the compositor in different numbering. `_atoms` are
+  filtered **and renumbered to ordinals** (`_apply_panel_subset` in `build.py`), which is
+  what makes the claim underneath it true: `compose.py` and `timeline.py` needed no change,
+  verified end to end. The original panel numbers stay recoverable from the entry's own
+  `panels` list.
+- **A subset implies player-owned timing.** The wrinkle the research missed: a template's
+  own auto-rotate walks every panel it *has*, with no notion of the entry's selection, so
+  `restart-auto` would show panels the deck removed. `set-panels` calls `pauseAuto`, and
+  `restart-auto` refuses to start it while a subset is set — the slide holds its first
+  kept panel and the player's timer moves the deck on. Subset decks are narrated or
+  composited, both already `take-over`, so nothing loses behaviour it had.
+- **Reels refuse it**, as designed: their atoms are finer than their panels, and a clip
+  subset is `set-clips`. The build refuses too, rather than only the browser.
+- **A subset that is empty, out of range, or the whole slide drops the `panels` key** —
+  the entry means "this slide", and a redundant list is one more thing to disagree later.
+  It is also clamped in the bridge, because a subset arrives before the controller
+  registers and a `team` slide's panel count depends on that build's data.
+- **Set members cannot inherit `panels`** from a set-level entry: it names panels of one
+  slide.
+
+*Verified:* the bridge driven under stubs through subset-after-register,
+subset-before-register, out-of-range, cleared, kiosk `restart-auto` (both branches) and
+the reel refusal; `_apply_panel_subset` over all six cases; and a subset deck end to end
+through `timeline.py` — Fantasy League 4 atoms / 80s → 2 atoms / 40s, beats addressing
+panels 0 and 1. `last-match-1st-xi` still derives 37 beats / 460s.
+
+### Grouping in `/deck` — **built**
+
+A **group** is one row. A package and a multi-panel slide render through one code path,
+because they are one creature to an editor:
+
+```
+▾ Last Match · 1st XI          9 steps · 7:40
+      Pre-match
+      1st Innings · Highlights
+      1st Innings · Batting
+      …
+▾ Fantasy League               2 of 4 steps · 0:40
+    ✗ Team of the Week
+      Top Players
+    ✗ Top Managers
+      Teams
+```
+
+- **Groups are derived on every render, never stored** (`groups()` — a maximal
+  contiguous run sharing a set, or a lone entry). The deck document stays the flat slide
+  list the player consumes, so a deck arriving from anywhere — an authored slideshow, an
+  older draft, an export — groups itself with no migration.
+- **Child names are the title minus the group's**, which is a prefix of it by
+  construction because `slide_title_parts` builds both from the same levels. No second
+  naming scheme.
+- **A reel is one child**, however many clips it holds: it is one entry on the wall's
+  strip, and its clips belong to `/curate`.
+- **Turning a step off is one operation to the editor and two underneath** — dropping a
+  deck entry for a package member, `panels` for a carousel panel. Hiding that is what the
+  grouping is for. `_atoms_all` keeps the full list on a subsetted entry so the toggle is
+  reversible; turning everything back on drops both keys, matching the build.
+- **Steps are the one unit both kinds are measured in**, in the deck and in the
+  catalogue: a package counts members, a carousel counts panels, a reel counts as one.
+  `Last Match · 1st XI — 9 steps · 7:40` and `Fantasy League — 4 steps · 1:20`.
+- **The catalogue no longer lists package members separately** — the package row stands
+  for them, and its step count says how much `+` adds. 273 rows became 161.
+- **Badges no longer separate a package from a slide.** Only a whole slideshow keeps one.
+
+#### `+` means "make this whole"
+
+A slug appears **at most once** in a deck, so `+` never inserts a second copy. What it
+does instead depends on what the draft already holds:
+
+| State | `+` |
+|---|---|
+| Not in the deck | inserts at the caret |
+| Package with members deleted | puts them back, in the set's own order, **where the group already is** |
+| Slide with panels switched off | clears the subset |
+| Slideshow, partly present | inserts only the slugs the draft does not hold, at the caret |
+| Whole | disabled |
+
+This replaced a per-instance group id, which was the first answer to "what happens when
+you add the same package twice". Not allowing it twice is simpler and removes three bugs
+at once: two adjacent packages merging into one 18-child group, two rows of the same slide
+sharing a `groupKey` (so expanding one expanded both), and a false "split" warning on two
+separated but intact packages.
+
+- **Restoring never relocates the group.** "Put Result back" must not move the whole
+  package to the caret.
+- **Existing entries are reused, not refetched**, so an edited dwell survives a restore —
+  only the missing members arrive fresh. A member the set no longer lists is kept at the
+  end of the run rather than dropped: it is still the editor's content.
+- **Restore is total.** It brings back every missing member *and* clears panel subsets
+  inside them. `+` is the coarse "I cut too much"; the per-step toggles are the fine
+  control.
+- **Only a package counts subsets against wholeness.** A slideshow's `+` adds slides and
+  nothing else, so a member's switched-off panel must not mark it incomplete — that would
+  leave a live button with nothing to do.
+- **The catalogue row says which state it is in**: `in deck` when whole, `7 of 9 steps ·
+  in deck` when partial (gold, with a live `+`), its normal meta when absent.
+- `slides.json` decks now publish `members`, because a slideshow row has to know its own
+  slugs to tell whether the draft already holds them.
+
+*A consequence, for the record:* a deck can no longer show the same slide twice — a title
+card at the start and the end is no longer expressible from this page. The "appears more
+than once" deck check stays, since a deck loaded from elsewhere can still have them.
+
+#### Consistency pass
+
+Four places the two creatures still read differently, all closed:
+
+- **The deck summary counts steps**, not slides — the same unit as the group rows and
+  the catalogue, so the total adds up to what is written down the list. A package of 9
+  and a carousel of 4 make "13 steps", and switching two panels off makes it 11.
+- **Packages and slides share one catalogue heading and one filter chip.** `kind` stays
+  split underneath — it is what `entriesFor` and `restoreSet` dispatch on — but nothing
+  above it does (`kindOf` collapses the pair). Rows sort by title, so a package sits
+  beside the slides it reads like. Chips are All / Shows / Slides.
+- **Every step previews**, panels included. A panel has no page of its own — `/slide/<slug>/`
+  always opens at panel 0 and `&start=` was never built — but the preview pane injects a
+  deck, so a **one-panel deck is the preview**. `set-panels` does the rest: the mechanism
+  built for subsetting a deck entry turns out to be exactly the mechanism for previewing
+  one step of it, with no new player capability. Verified: a one-panel preview deck
+  derives 1 beat / 20s through `timeline.py`.
+
+  *One bug this shook out, and a second one the fix for it caused.* The preview frame
+  only reloads when its `src` string changes, and `previewUrl` keyed the cache-buster
+  on the **slug** — enough while a slide had one previewable thing in it, so two steps
+  of the same slide produced an identical URL and the frame sat on the first one.
+  Bumping the nonce on every `inject()` fixed that and re-navigated the frame on every
+  click, including re-previewing what was already showing. **The nonce now bumps only
+  when the injected document actually differs**, compared as JSON (which `put`
+  serialises anyway): distinct steps reload, re-clicking the same thing does not. A
+  cache-buster has to track the *content* — both failures were it tracking something
+  else, first the name, then the click.
+
+### The blank first clip — a reveal race in `video.html`
+
+Intermittent, cache-sensitive, and it long predates the grouping work; the deck builder
+only made it easy to hit. Worth writing down because almost every plausible reading of
+it is wrong.
+
+**Symptom.** The reel's overlay renders, the controls work, the clip counter is right —
+and the video area shows the slide background. Always fine with the browser cache
+disabled.
+
+**Cause.** `mp4Source.show` captures its element *before* an `await`:
+
+```js
+var v = videoEls[i];
+ensurePlayable(v, function () {      // async: cache read
+    if (current !== i) return;       // checks the clip INDEX only
+    crossfadeTo(v, prev);            // ...and `v` may now be detached
+```
+
+If `useClips()` runs `mount()` during that read, the elements are rebuilt. The re-show
+reveals the *new* element correctly — and then the stale callback fires, passes the
+index guard (`current` is still this clip), bumps `showToken` so the good reveal goes
+stale, and puts `.active` on an element that is no longer in the document. Which
+callback lands last depends on cache warmth, so it never reproduced with the cache off.
+
+**Fix.** Guard on identity, not just index: `if (current !== i || videoEls[i] !== v)`.
+
+**How it was found, because the route matters.** Six hypotheses were instrumented one at
+a time — a dropped `reset`, three separate silence paths, the missing loading gate for
+injected decks in `player-core`'s `send()` (a real latent gap, but not this; reverted),
+and `readyState === 0` guards that should read `< HAVE_CURRENT_DATA` (a real fix, kept,
+also not this). All of them assumed *loading*, because "blank video" reads as "media
+didn't load".
+
+An unconditional probe reported `ready=4 size=1920x1080 err=none` on the **failing** run.
+The media was always fine; the bug was lifecycle, not loading. That one line was
+available before any of the six.
+
+Even then, counters were identical across a working and a failing run
+(`show=2 xfade=2 reveal=4 revealed=1 stale=3`). What settled it was giving every
+`<video>` a uid: `revealUid=1` against `uid=11` said the reveal had succeeded on a
+first-generation element while a second generation was on screen. **When counting says
+two runs are identical, the difference is in the objects, not the sequence — reach for
+identity next, not another counter.**
+
+**Kept from the hunt** (resilience, not scaffolding): `SRC.state()` in stall warnings;
+`SRC.kick()`, one reload before the watchdog gives up; `armStall` moved into
+`showVideo`, so a show that never completes is still watched — it had been installed
+only on the path where the clip came up fine; a bounded non-finite-time check, so a
+source that never produces a time is no longer forgiven forever; `dataless()`; and the
+`HAVE_FRAME` constant behind the four `readyState` guards. The probe, the counters and
+the uid tagging are removed.
+
+- **The template is searchable but not badged.** It names a *category* for the repeated
+  generic slides (`cta` 4, `announcement` 3, `schedule` 28) and the slide's own identity
+  for the one-offs (`fantasy-league`, `sponsors`, `today`, `image` — one each), so it is
+  worth searching and not worth showing; a badge meaningful on some rows and redundant on
+  others is worse than none. Decisively, **a package has no template** — Last Match spans
+  five — so badging by it would reintroduce the split at the visual level immediately
+  after removing it. A package matches on any member's template, which is the only way it
+  could. `"cta"` → 4 rows, `"scorecard"` → the 15 packages that contain one.
+
+**Rejected: zero duration as a second way to remove a step.** It conflates "how long"
+with "whether", it is lossy (the dwell is gone, so restoring means retyping, which is
+exactly what the `✗`/`＋` toggle was built to avoid), and a zero-length beat is a
+degenerate render and a flash on the wall. `setDur` clamps at 1s and should keep doing so.
+
+**Deferred: per-step duration on a carousel.** `_atoms[].duration` is already per-atom and
+`timeline.py` already reads it, so the *render* would honour it today — but
+`player-core.js:510` arms its advance timer from `items[current].panel_duration`, one
+number reused for every panel of a slide. Making per-panel dwell real means arming from
+the current atom's duration instead, which is a simplification worth doing on its own
+(`_atoms` is meant to be the single source of pacing truth, and the player reads a
+different field). Not built.
+
+**One behaviour changed: insertion points sit between groups, not between slides.** That
+follows from the group being the unit an editor moves. The "package is split" warning
+therefore becomes a state this page cannot produce — it still fires for a deck that
+arrives split from elsewhere, which is the case it was written for.
+
+*Verified* by driving the module's own `groups`/`childrenOf`/`setPanels`/`moveGroup`/
+`candidates` against the real catalogue and real built decks under a stub DOM: 47-slide
+deck → 28 groups; package + carousel grouping and child naming as above; subset toggles
+reversible and idempotent; group move keeps a package contiguous; `removeGroup` takes all
+9 members; 0 package members in the catalogue; and a subsetted deck exported from the
+builder derives 3 beats / 60s through `timeline.py`.
+
+#### The original research
+
+A slide with several panels (Fantasy League has four)
 goes into a deck whole. Being able to take only some of it is the deferred
 "panel-subset deck entry" from The atom, and the assessment came out lopsided: three of
 the four pieces are small or free, and the fourth is a job worth doing on its own merits.

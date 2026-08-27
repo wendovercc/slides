@@ -75,7 +75,7 @@
     {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_name, "result": slide._opp_result, "label": slide._opp_result_label, "points": slide._opp_points, "score": slide._opp_score, "overs": slide._opp_overs, "performers": slide._opp_performers} %}
     {% set columns = [our_col, opp_col] if slide._our_left else [opp_col, our_col] %}
 
-    <div class="result-columns{% if slide._set_steps is not defined or not slide._set_steps %} no-strip{% endif %}">
+    <div class="result-columns{% if slide._set_phases is not defined or not slide._set_phases %} no-strip{% endif %}">
         {% for c in columns %}
         <div class="team-col">
             <div class="crest">

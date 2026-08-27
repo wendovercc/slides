@@ -1,4 +1,5 @@
 {% extends 'slides/_base-sidebar.html' %}
+{% from 'slides/_panel_nav.html' import panel_nav %}
 {% block title %}{{ slide.title }}{% endblock %}
 {% block styles %}
     .header { margin-bottom: 1.2vh; }
@@ -599,23 +600,11 @@
         </svg>
         {%- endif -%}
     {%- endmacro %}
-    {% set tab_labels = {
-        'league': 'League',
-        'results': 'Form',
-        'schedule': 'Schedule',
-        'top_batting': 'Batting',
-        'top_bowling': 'Bowling',
-        'highlights': 'Records',
-    } %}
     <div class="header">
         <div class="title">{{ slide._heading }}</div>
         <div class="subtitle">{{ slide._subheading }}</div>
     </div>
-    <nav class="panel-nav" style="--nav-gap: {% if slide._panels|length > 5 %}2vw{% else %}3vw{% endif %}">
-        {% for tab in slide._panels %}
-        <span class="panel-tab{% if loop.first %} active{% endif %}">{{ tab_labels[tab] }}</span>
-        {% endfor %}
-    </nav>
+    {{ panel_nav(slide, "--nav-gap: " ~ ("2vw" if slide._panels|length > 5 else "3vw")) }}
     <div class="panels">
 
         {% for tab in slide._panels %}

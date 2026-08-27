@@ -774,9 +774,17 @@ async function init() {
         // Pushed in on every load (a windowed deck re-loads frames as it moves), and
         // the slide re-announces its new panel count through the usual bridge
         // handshake. See docs/narrated-decks.md.
-        if (s.videos) {
+        // A slide entry may also carry a panel subset — the editor kept only some of
+        // the slide's tabs. Same delivery as the clip list above and for the same
+        // reason: the slide page is shared by every deck, so what differs per entry
+        // has to be pushed in rather than baked. The bridge maps the reduced set to
+        // ordinals and re-announces the count.
+        if (s.videos || s.panels) {
             f.addEventListener('load', () => {
-                try { f.contentWindow.postMessage({ type: 'wcc-cmd', action: 'set-clips', videos: s.videos }, '*'); } catch (e) {}
+                try {
+                    if (s.videos) f.contentWindow.postMessage({ type: 'wcc-cmd', action: 'set-clips', videos: s.videos }, '*');
+                    if (s.panels) f.contentWindow.postMessage({ type: 'wcc-cmd', action: 'set-panels', panels: s.panels }, '*');
+                } catch (e) {}
             });
         }
         if (WIN === null || i <= WIN) f.src = f.dataset.src;
