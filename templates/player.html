@@ -672,6 +672,24 @@ function renderPanel(deckTitle, allSlides, shownCount) {
         `<div class="dbg-slides"><div class="dbg-head">Slides (${shownCount} of ${allSlides.length})</div><div id="dbg-slides">${rows}</div></div>`;
 }
 
+/* The R2 clips an injected deck could usefully cache.
+
+   `videos` on an entry is the editor's live clip list and is authoritative when
+   present: an amended reel carries stream segments with no `_video_src`, while the
+   entry's `_videos` still lists what the last BUILD resolved. Priming those would
+   download a reel the preview is not going to play, so the explicit list wins and
+   `_videos` is only consulted when there is no explicit one. */
+function injectedClipSrcs(slides) {
+    const out = [], seen = new Set();
+    for (const s of (slides || [])) {
+        const srcs = s.videos
+            ? s.videos.map(v => v && v._video_src).filter(Boolean)
+            : (s._videos || []);
+        for (const u of srcs) if (u && !seen.has(u)) { seen.add(u); out.push(u); }
+    }
+    return out;
+}
+
 /* Resolve a named deck: fetched, not baked, so one shell plays every slideshow,
    match set and single slide. Returns null when there's nothing to play.
 
@@ -743,6 +761,13 @@ async function init() {
     const stage = document.getElementById('stage');
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
+        // Permissions Policy is delegated ONE HOP AT A TIME. On the wall this player is
+        // top-level, so a slide frame inherits autoplay from the default self-allowlist
+        // and nothing is needed. Inside the deck builder's preview the chain is
+        // /deck → player → slide, and without this the innermost frame — the one that
+        // actually holds the <video> and the YouTube embed — gets no autoplay at all.
+        // The symptom is media that "runs reliably in its own tab" and not embedded.
+        f.allow = 'autoplay; fullscreen; encrypted-media; picture-in-picture';
         f.dataset.src = `/slide/${s.slug}/${FRAME_Q}`;
         // A slide entry may carry its own clip list — the editor sitting curates clips
         // no build has seen, so the reel page's baked blob is not what should play.
@@ -846,11 +871,18 @@ async function init() {
 
     // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
     // the ungated path: prime in the background, start immediately, no gate.
-    // An injected deck joins them: its clips are whatever the editor is curating —
-    // possibly not in R2 at all yet — so there is nothing to prime and nothing the
-    // gate could wait for.
+    //
+    // An injected deck joins them, but it still primes what it CAN. It has no
+    // precache.json, and the gate has nothing to wait on — a sitting's clips may not
+    // be in R2 at all yet. But the ones that are should not be fetched cold, one at a
+    // time, as the narrator reaches them: caching is what removes that lag, and lag
+    // during a take is the thing worth designing out. Priming, never gating: a clip
+    // that fails to prime still plays from the network.
     if (PREVIEW || injected || !CACHE_OK) {
-        if (CACHE_OK && !injected) WccVideoCache.prime(precache.videos || []).catch(() => {});
+        if (CACHE_OK) {
+            const srcs = injected ? injectedClipSrcs(slides) : (precache.videos || []);
+            if (srcs.length) WccVideoCache.prime(srcs).catch(() => {});
+        }
         startPlayer(slides);
         return;
     }

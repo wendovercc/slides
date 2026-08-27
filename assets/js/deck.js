@@ -134,9 +134,10 @@
              .replace(/^-|-$/g, "") || "deck";
   }
 
-  function newDeck(title, entries) {
-    state.deck = { title: title || "Untitled deck", slides: entries || [], source: "builder",
-                   build_version: state.cat && state.cat.build_version };
+  function newDeck(title, entries, extra) {
+    state.deck = Object.assign(
+      { title: title || "Untitled deck", slides: entries || [], source: "builder",
+        build_version: state.cat && state.cat.build_version }, extra || {});
     state.key = newKey();
     state.caret = state.deck.slides.length;
     state.pv = null;
@@ -157,6 +158,61 @@
     render();
     status("");
     return true;
+  }
+
+  // ---- live reel clips --------------------------------------------------
+  /* A reel row does not own a copy of its clips — it resolves them from whatever
+     curation the editor is working on right now, every render. Flip to /curate, add
+     a ball, flip back: it is already there, with nothing to attach or re-attach.
+     See docs/narrated-decks.md, "Clips reach a deck by reference, not by copy" —
+     including why the *export* carries none of this. */
+  var REEL_PREFIX = "wcc-reel:";
+  var NEAR = 0.001;   // float slack: /curate computes these bounds in JS
+
+  function reelDraft(e) {
+    if (!e || !e._pc_id || e._innings == null) return null;   // not a reel
+    try {
+      var raw = localStorage.getItem(REEL_PREFIX + e._pc_id + ":" + e._innings);
+      var clips = raw ? JSON.parse(raw) : null;
+      return (clips && clips.length) ? clips : null;
+    } catch (x) { return null; }
+  }
+
+  /* The curated clips with an R2 file attached wherever one exists for exactly
+     these bounds — `(url, start, end)` is the clip's identity, and what
+     clip_ids.fingerprint hashes to name the object.
+
+     If ANY clip has no exact match, the whole reel drops back to the stream. One
+     source per reel is an invariant video.html rests on (it picks from clip 0, and
+     mp4Source builds a <video> per clip from `_video_src`), so a mixed list would
+     not play at all. The cost is that a sitting streams clips it already had — a
+     preview concern, and only a comfort problem for narration. */
+  function resolveReel(e) {
+    var clips = reelDraft(e);
+    if (!clips) return null;                      // nothing curated → the built reel
+    var built = e._clips || [];
+    var out = clips.map(function (c) {
+      var hit = null;
+      for (var i = 0; i < built.length; i++) {
+        var b = built[i];
+        if (b.url === c.url && Math.abs(b.start - c.start) < NEAR
+                            && Math.abs(b.end - c.end) < NEAR) { hit = b; break; }
+      }
+      return hit ? Object.assign({}, c, { _video_src: hit.src }) : Object.assign({}, c);
+    });
+    if (out.some(function (c) { return !c._video_src; })) {
+      out.forEach(function (c) { delete c._video_src; });
+    }
+    return out;
+  }
+
+  /* The entry as it should be PLAYED — a copy, never the stored entry. The deck
+     document keeps naming the slide and nothing else, so an export cannot pick up
+     a sitting's YouTube segments (which carry no `_atoms` and would silently drop
+     the whole reel from a render). */
+  function playable(e) {
+    var clips = resolveReel(e);
+    return clips ? Object.assign({}, e, { videos: clips }) : e;
   }
 
   // ---- fetching entries -------------------------------------------------
@@ -251,6 +307,12 @@
       if (e._live || c.live) {
         out.push({ row: i, bad: true, text: name + " is a live-match slide: its panels are "
           + "whatever the feed has produced, so it can be neither narrated nor rendered." });
+      } else if (resolveReel(e)) {
+        var lv = resolveReel(e);
+        out.push({ row: i, text: name + " is showing your live curation ("
+          + lv.length + " clips" + (lv.some(function (x) { return !x._video_src; })
+            ? ", streaming from YouTube — some are not in R2 yet" : "") + "). "
+          + "The export names the slide only; the publisher's rebuild supplies the clips." });
       } else if (isVideo(e) && !(e.videos || e._videos || []).length) {
         // Checked BEFORE the atom test: an unfilled reel has an empty atom list, and
         // "no clips yet" is the useful half of that. It is the expected state during
@@ -334,14 +396,27 @@
       var set = e._group || state.setOf[e.slug];
       var atoms = entryAtoms(e);
       var pv = state.pv && state.pv.where === "deck" && state.pv.id === i;
+      // A reel running on the editor's live curation reports *that*, not what the
+      // build produced — otherwise adding a ball leaves the row saying 10.
+      var live = resolveReel(e);
+      var meta = live
+        ? live.length + " clip" + (live.length === 1 ? "" : "s") + " · "
+          + fmtDur(live.reduce(function (a, x) { return a + (x.end - x.start); }, 0))
+        : (atoms ? atoms.length + "a" : "—") + " · " + fmtDur(e.duration);
 
       var stripe = el("div", { class: "stripe" });
       if (set) stripe.style.background = "hsl(" + setHue(set) + ",55%,55%)";
 
+      // Blank on a reel, deliberately. The box means "seconds per panel", and a reel's
+      // panels are clips with individual durations — there is no single number. Its
+      // `panel_duration` is `total + 30`, the backstop build_video_slide sets so the
+      // player can never cut a reel short, and showing that reads as a duration and
+      // is not one. The row's meta column already carries the real total.
       var dur = el("input", { class: "dur", type: "text", inputmode: "numeric",
-                              value: e.panel_duration != null ? Math.round(e.panel_duration) : "",
+                              value: canSetDur(e) && e.panel_duration != null
+                                     ? Math.round(e.panel_duration) : "",
                               title: canSetDur(e) ? "Seconds per panel"
-                                : "Timing comes from the clip trims" });
+                                : "Per-clip, from the trims — see the total alongside" });
       if (!canSetDur(e)) dur.disabled = true;
       dur.addEventListener("click", function (ev) { ev.stopPropagation(); });
       dur.addEventListener("change", function () { setDur(i, dur.value); });
@@ -360,7 +435,7 @@
         el("span", { class: "grip", text: "⠿" }),
         el("span", { class: "ttl" + (e._live || c.live ? " is-live" : ""),
                      text: e._title || c.title || e.slug }),
-        el("span", { class: "meta", text: (atoms ? atoms.length + "a" : "—") + " · " + fmtDur(e.duration) }),
+        el("span", { class: "meta" + (live ? " curating" : ""), text: meta }),
         dur,
         el("span", { class: "rowbtns" }, [up, down, del])
       ]);
@@ -488,24 +563,39 @@
   }
 
   function showPreview(where, id, title, tag, entries) {
+    entries = entries.map(playable);
     if (window.WccDeckStore) WccDeckStore.put(PREVIEW_KEY, { title: title, slides: entries });
     state.pv = { where: where, id: id, title: title, slug: tag,
-                 url: previewUrl(tag), n: entries.length };
+                 url: previewUrl(tag), n: entries.length,
+                 // Kept for the pane's actions: only a single slide has a curation
+                 // behind it, so a package or slideshow preview offers none.
+                 entry: entries.length === 1 ? entries[0] : null };
     render();
+  }
+
+  /* The curation behind a previewed reel, if it is one. `_pc_id` is stamped on a
+     reel's slide_meta by emit_reel; a slide that isn't a reel has none, which is
+     exactly the test for whether curating it means anything. */
+  function curateUrl() {
+    var e = state.pv && state.pv.entry;
+    return e && e._pc_id ? "/curate/?match=" + encodeURIComponent(e._pc_id) : null;
   }
 
   function renderPreview() {
     var frame = $("#preview"), none = $("#preview-none");
     $("#preview-open").hidden = !state.pv;   // nothing to open
+    $("#curate-btn").hidden = !curateUrl();  // not a reel
     if (!state.pv) {
       frame.hidden = true; frame.removeAttribute("src");
       none.hidden = false;
       $("#preview-title").textContent = "Nothing selected";
       return;
     }
-    if (frame.getAttribute("src") !== state.pv.url) frame.setAttribute("src", state.pv.url);
+    // Reveal BEFORE navigating: the player measures its stage on boot, and a
+    // display:none frame would have it lay out against 0x0.
     frame.hidden = false;
     none.hidden = true;
+    if (frame.getAttribute("src") !== state.pv.url) frame.setAttribute("src", state.pv.url);
     $("#preview-title").innerHTML = state.pv.title + " <i>· " + state.pv.slug
       + (state.pv.n > 1 ? " · " + state.pv.n + " slides" : "") + "</i>";
   }
@@ -513,6 +603,14 @@
   function playDeck() {
     if (!slides().length) return;
     persist();
+    // Play a resolved copy, so reels carry the sitting's clips without the draft
+    // itself ever holding them.
+    if (window.WccDeckStore) {
+      WccDeckStore.put(PREVIEW_KEY, { title: state.deck.title, slides: slides().map(playable) });
+      window.open("/slideshow/?deck=local:" + PREVIEW_KEY
+                  + "&interactive&ctx=" + state.ctx, "_blank");
+      return;
+    }
     window.open("/slideshow/?deck=local:" + encodeURIComponent(state.key)
                 + "&interactive&ctx=" + state.ctx, "_blank");
   }
@@ -527,6 +625,10 @@
       build_version: state.deck.build_version || (state.cat && state.cat.build_version),
       source: "builder"
     };
+    // Provenance the publisher can check the landed curation against. Also the reason
+    // the export is assembled field-by-field rather than copied: `source_match` is the
+    // builder's own bookkeeping and everything else here is deliberate.
+    if (state.deck.source_match) doc.source_match = state.deck.source_match;
     var blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
     var a = el("a", { href: URL.createObjectURL(blob),
                       download: fileSlug(state.deck.title) + ".deck.json" });
@@ -611,6 +713,10 @@
     $("#preview-open").addEventListener("click", function () {
       if (state.pv) window.open(state.pv.url, "_blank");
     });
+    $("#curate-btn").addEventListener("click", function () {
+      var u = curateUrl();
+      if (u) window.open(u, "_blank");
+    });
     $("#ctx-seg").addEventListener("click", function (ev) {
       var b = ev.target.closest("button[data-ctx]");
       if (!b) return;
@@ -640,6 +746,35 @@
     });
   }
 
+  /* `?match=<pc_id>` — the hand-off from /curate. Opens that match's package as a
+     deck, and is **idempotent**: a deck built this way is stamped `source_match`, and
+     a second visit re-opens the same one rather than minting a duplicate. That
+     matters because the sitting is a loop, so the editor will press it repeatedly.
+
+     Returns a promise resolving true when it took the deck, so boot only falls back
+     to the last-used draft otherwise. */
+  function openForMatch(pc) {
+    var existing = draftKeys().filter(function (k) {
+      var d = WccDeckStore.get(k);
+      return d && String(d.source_match) === String(pc);
+    })[0];
+    if (existing) { openDraft(existing); return Promise.resolve(true); }
+
+    var set = (state.cat.sets || []).filter(function (s) {
+      return String(s.pc_id) === String(pc);
+    })[0];
+    if (!set) {
+      // The package has rolled out of fixtures.json, or this match never had one.
+      status("no match package for " + pc + " — it may have rolled out of the window");
+      return Promise.resolve(false);
+    }
+    return entriesFor("set", set.slug).then(function (entries) {
+      if (!entries.length) return false;
+      newDeck(set.title, entries, { source_match: String(pc) });
+      return true;
+    });
+  }
+
   fetch(CAT_URL).then(function (r) { return r.json(); }).then(function (cat) {
     state.cat = cat;
     (cat.slides || []).forEach(function (s) {
@@ -649,13 +784,22 @@
     (cat.sets || []).forEach(function (s) { state.setTitle[s.slug] = s.title; });
     wire();
 
-    var last = null;
-    try { last = localStorage.getItem(LAST_KEY); } catch (e) {}
-    var keys = draftKeys();
-    if (!(last && keys.indexOf(last) >= 0 && openDraft(last))) {
-      if (keys.length) openDraft(keys[0]);
-      else newDeck("Untitled deck", []);
-    }
+    var want = new URLSearchParams(location.search).get("match");
+    Promise.resolve(want ? openForMatch(want) : false).then(function (took) {
+      // Consume the parameter: the deck is now the one in the picker, and a later
+      // reload should not drag the editor back off whatever they switched to.
+      if (want) {
+        try { history.replaceState(null, "", location.pathname); } catch (e) {}
+      }
+      if (took) return;
+      var last = null;
+      try { last = localStorage.getItem(LAST_KEY); } catch (e) {}
+      var keys = draftKeys();
+      if (!(last && keys.indexOf(last) >= 0 && openDraft(last))) {
+        if (keys.length) openDraft(keys[0]);
+        else newDeck("Untitled deck", []);
+      }
+    });
   }).catch(function () {
     status("could not load /slides.json — has the site been built?");
   });

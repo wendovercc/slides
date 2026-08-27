@@ -39,7 +39,7 @@ def load_deck(slug=None, data_path=None):
 def derive_timeline(deck, slug=None, clip_audio=DEFAULT_CLIP_AUDIO, warn=None):
     """Walk a deck's slides, flatten their atoms, and return a timeline document.
 
-    Slides are expected to publish `_atoms` (see `slide_atoms` in build.py). Two
+    Slides are expected to publish `_atoms` (see `slide_atoms` in build.py). Three
     kinds don't, and they're handled rather than crashed on:
 
     - a live-match slide, whose panels only exist once a feed has produced them.
@@ -47,6 +47,9 @@ def derive_timeline(deck, slug=None, clip_audio=DEFAULT_CLIP_AUDIO, warn=None):
     - anything else missing a list, e.g. a deck built before this existed. It
       falls back to a single beat of the slide's whole duration, which is at
       least renderable.
+    - a slide whose list is *empty* — enumerated, and the answer was nothing. An
+      unfilled reel is the real case. Dropped, but loudly: it is the difference
+      between a video and a video with an innings missing.
     """
     warn = warn or (lambda msg: print(f"  ! {msg}", file=sys.stderr))
     beats = []
@@ -59,6 +62,15 @@ def derive_timeline(deck, slug=None, clip_audio=DEFAULT_CLIP_AUDIO, warn=None):
         if atoms is None:
             warn(f"{slug_}: no atom list — falling back to one beat of the whole slide")
             atoms = [{"panel": 0, "duration": slide.get("duration", 0)}]
+        if not atoms:
+            # An EMPTY list is not the same as a missing one: the slide was built and
+            # enumerated, and the answer was "nothing". Today that means an unfilled
+            # reel (see emit_reel) — a slide the editor is about to curate into, not a
+            # slide with nothing to show. Silently contributing no beats renders a
+            # highlights video with an innings missing and nobody the wiser, so say so.
+            warn(f"{slug_}: empty atom list — nothing to render from this slide "
+                 f"(an unfilled reel? the publisher's rebuild fills it)")
+            continue
         for atom in atoms:
             key = {"slide": slug_, "panel": atom.get("panel", 0)}
             if atom.get("card"):

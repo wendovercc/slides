@@ -4055,6 +4055,19 @@ def build_match_packages(env, slide_meta):
                 "duration": slide["duration"], "panel_duration": slide["panel_duration"],
                 "_atoms": slide_atoms(slide, len(slide["videos"]), slide["panel_duration"]),
                 "_videos": slide_video_srcs(slide),
+                # Which curation this reel is made of. The editor sitting needs it to
+                # get from a reel row back to /curate (and, later, to resolve the reel's
+                # clips live from the curation draft) — see docs/narrated-decks.md,
+                # "Clips reach a deck by reference, not by copy".
+                "_pc_id": str(m.get("match_id") or ""),
+                "_innings": innings_ids_chrono[innings_idx],
+                # What is in R2, and for exactly which bounds. An editor amending
+                # curation mid-sitting produces clips this build never fetched; the
+                # only way to know which ones are already files is to compare against
+                # what was built, and (url, start, end) IS the identity — it is what
+                # clip_ids.fingerprint hashes to name the R2 object.
+                "_clips": [{"url": v["url"], "start": v["start"], "end": v["end"],
+                            "src": v["_video_src"]} for v in slide["videos"]],
                 # No clips yet — curated but unsynced, or not curated at all. The slide
                 # exists for the editor sitting; nothing plays it until it is filled.
                 "_empty": not slide["videos"],
@@ -4214,6 +4227,11 @@ def build_match_packages(env, slide_meta):
             "members": members,
             "group": slug_prefix,
             "active": True,
+            # Which Play-Cricket match this package reports on. /curate sends the
+            # editor to /deck with a match id, and this is what lets /deck find the
+            # package for it — including a pinned set, whose slug says nothing about
+            # the team.
+            "pc_id": str(m.get("match_id") or ""),
             # Names the set's own deck page (/slideshow/<set slug>/) — the set
             # header's two constant heading levels, which is how the package reads
             # on screen: "Match Highlights · Wendover CC 1st XI".
@@ -4435,7 +4453,7 @@ def write_slide_catalogue(slide_meta, sets, decks, build_version):
         # naming them is also what lets the builder warn that an insertion has split
         # one — see the warnings panel in docs/narrated-decks.md.
         "sets": [{"slug": set_slug, "title": s.get("title") or set_slug,
-                  "members": s.get("members", [])}
+                  "members": s.get("members", []), "pc_id": s.get("pc_id") or None}
                  for set_slug, s in sorted((sets or {}).items())],
     }
     (SITE / "slides.json").write_text(json.dumps(catalogue, indent=2))

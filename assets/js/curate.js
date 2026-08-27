@@ -246,7 +246,65 @@
       if (Object.keys(state.edits).length) localStorage.setItem(key, JSON.stringify(state.edits));
       else localStorage.removeItem(key);
     } catch (e) { /* storage full or disabled — nothing we can do */ }
+    publishReels();
     updateDirty();
+  }
+
+  // ---- Reel hand-off to /deck ------------------------------------------
+  /* The draft above is a *diff* keyed by clip id — no use to anything that wants to
+     play a reel. So alongside it we publish the assembled clip list, per innings, in
+     the exact shape a video slide's `videos` takes. /deck reads it and injects it, so
+     an editor bouncing between the two tools sees curation changes immediately and
+     nothing has to be attached or re-attached by hand. See docs/narrated-decks.md,
+     "Clips reach a deck by reference, not by copy".
+
+     Derivation lives here because every input already does — the alternative is a JS
+     re-implementation of emit_reel in /deck. This mirrors ball_events.select() +
+     emit_reel's card windows, the same way effPre/effPost already mirror merge(). */
+  var REEL_PREFIX = "wcc-reel:";
+  var r3 = function (x) { return Math.round(x * 1000) / 1000; };
+
+  function reelClips(inningsId) {
+    return chronoEvents()
+      .filter(function (e) { return e.innings === inningsId && ctxIncluded(e.id, "match"); })
+      .map(function (e) {
+        var id = e.id, s = shownStart(id), en = shownEnd(id);
+        // Card windows are clip-relative, measured off the *played* start: a pre card
+        // covers the lead-in pad, a post card the lead-out. Identical to emit_reel.
+        var cards = clipCards(id).map(function (c) {
+          var entry = cardEntry(c.type, c.player);
+          if (!entry) return null;   // unresolvable — the build would drop it too
+          // The catalogue keys entries BY type, so an entry carries no `type` of its
+          // own; emit_reel's cards do, and video.html keys the active card off it.
+          var w = c.at === "pre"
+            ? [0, r3(effPre(id))]
+            : [r3(effTrim(id, "end") - s), r3(en - s)];
+          return Object.assign({}, entry, { at: c.at, type: c.type, window: w });
+        }).filter(Boolean);
+        return { url: e.youtube_url, start: r3(s), end: r3(en),
+                 body: baseNarrative(id), type: e.type, cards: cards };
+      });
+  }
+
+  /* Signpost to the next step of the sitting. /deck finds the match package for this
+     id and re-opens the same draft every time (see `?match=` there), so this is safe
+     to press repeatedly — it never mints a second deck for the same match. */
+  function openDeckBuilder() {
+    var pc = state.match && state.match.pc_match_id;
+    if (pc) window.open("/deck/?match=" + encodeURIComponent(pc), "_blank");
+  }
+
+  function publishReels() {
+    var pc = state.match && state.match.pc_match_id;
+    if (!pc) return;
+    inningsOptions().forEach(function (o) {
+      var key = REEL_PREFIX + pc + ":" + o.id;
+      var clips = reelClips(o.id);
+      try {
+        if (clips.length) localStorage.setItem(key, JSON.stringify(clips));
+        else localStorage.removeItem(key);
+      } catch (e) { /* storage full or disabled */ }
+    });
   }
   function updateDirty() {
     var dirty = JSON.stringify(state.edits) !== JSON.stringify(state.committed);
@@ -482,6 +540,13 @@
         }));
       });
       sel.addEventListener("change", function () { if (sel.value) loadMatch(sel.value); });
+      // `?match=<pc_id>` opens straight on a match, so /deck can send the editor here
+      // for the reel they are looking at. An unknown id falls through to the first,
+      // which is what the picker would have shown anyway.
+      var want = new URLSearchParams(location.search).get("match");
+      if (want && matches.some(function (m) { return String(m.pc_match_id) === want; })) {
+        sel.value = want;
+      }
       loadMatch(sel.value || String(matches[0].pc_match_id));
     });
   }
@@ -498,6 +563,12 @@
         .then(function (cat) {
           if (!state.match || String(state.match.pc_match_id) !== String(id)) return;
           state.cards = cat;
+          // …and re-publish the reels. `publishReels` runs synchronously further down
+          // loadMatch, i.e. BEFORE this fetch resolves, so that first pass resolves no
+          // card content at all and strips every card from the list /deck plays. The
+          // symptom is precise and easy to misread: tag and captions fine, cards
+          // missing, and only until the next edit re-publishes.
+          publishReels();
           // The figures arrive after the first paint, so repaint once to show them —
           // but never over live typing (a narrative being edited would be discarded).
           var focused = document.activeElement;
@@ -511,6 +582,9 @@
       state.selected = null;
       materialiseManual();
       buildPlayer(data.video_id);
+      // On load too, not just on edit: a match whose curation is already committed
+      // has no draft to save, and /deck should still see its reels.
+      publishReels();
       renderList(); renderEditor(); updateDirty();
     });
   }
@@ -1111,6 +1185,7 @@
     $("#import-input").addEventListener("change", function (e) {
       if (e.target.files[0]) importOverlay(e.target.files[0]); e.target.value = "";
     });
+    $("#deck-btn").addEventListener("click", openDeckBuilder);
     loadMatchList().catch(function (err) { $("#save-status").textContent = "Failed to load: " + err.message; });
   });
 })();

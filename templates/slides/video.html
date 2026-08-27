@@ -474,6 +474,18 @@
                 v.pause();
                 var onSeek = function () { v.removeEventListener('seeked', onSeek); reveal(); };
                 v.addEventListener('seeked', onSeek);
+                // Elements are created `preload='none'`, so an untouched clip holds no
+                // media data at all — and a seek on `readyState === 0` never completes,
+                // because nothing is loading to complete it. The `seeked` above would
+                // then never fire, the clip would never be revealed, and 15s later the
+                // stall watchdog would skip a perfectly good clip.
+                //
+                // It only bites where BOTH halves are true: arriving paused (interactive
+                // and record mode start paused; kiosk does not) and a cache miss (the
+                // cached path sets `v.src` and calls `load()` itself, which is why the
+                // wall — gated on a full prime — never sees this).
+                // `preload` first: see ensurePlayable — load() alone buffers nothing.
+                if (v.readyState === 0 && v.networkState !== 2) { v.preload = 'auto'; v.load(); }
             } else {
                 var p = v.play();
                 if (p && p.catch) p.catch(function () {});
@@ -502,7 +514,41 @@
                     // Was cached, now a miss (e.g. evicted): drop back to the <source>.
                     v.removeAttribute('src');
                     v.load();
+                } else if (v.readyState === 0 && v.networkState !== 2 /* NETWORK_LOADING */) {
+                    // A genuine miss on an element that has never loaded anything.
+                    // Elements are created `preload='none'`, so the FIRST clip of a reel
+                    // reaches its show with no media data at all and no fetch running —
+                    // and the show then depends on data arriving (a `seeked` when
+                    // paused, a painted frame when playing). Nothing was starting that
+                    // fetch, so clip 0 sat until the stall watchdog skipped it while
+                    // every later clip, primed or already loaded, was fine. The mp4
+                    // twin of constructing the YouTube player on its first clip.
+                    //
+                    // Only on a miss: when the cache has the bytes we point at those
+                    // instead, so the wall never spends network on this.
+                    //
+                    // `preload` must be raised FIRST. Elements are created
+                    // `preload='none'`, and load() only runs resource *selection* —
+                    // buffering is still governed by preload, so load() alone fetches
+                    // nothing and the clip waits exactly as before. Raised on the one
+                    // element being shown, never on the whole reel.
+                    // …and only when nothing is already in flight. Calling load() on an
+                    // element that is mid-fetch ABORTS that fetch and starts another —
+                    // so a clip shown twice in quick succession can keep cancelling its
+                    // own download and never accumulate enough data to start playing.
+                    // A cancelled media request carrying `Cache-Control: no-cache` is
+                    // the fingerprint of exactly that.
+                    v.preload = 'auto';
+                    v.load();
                 }
+                cb();
+            }).catch(function () {
+                // The cache read/fetch failed — most often an AbortError, because the
+                // frame was re-navigated or the request superseded while bytes were in
+                // flight. Without this the promise rejects unhandled and `cb` is NEVER
+                // called, so `show()` never completes and the clip silently never
+                // appears until the stall watchdog reaps it. The network <source> is
+                // still there and still plays, so falling through is the right answer.
                 cb();
             });
         }
@@ -581,13 +627,21 @@
                         videoEls.forEach(function (x) { x.style.display = 'none'; x.pause(); });
                         v.style.display = 'block';
                         v.currentTime = 0;
-                        if (isPaused()) v.pause(); else v.play();
+                        if (isPaused()) { v.pause(); if (v.readyState === 0 && v.networkState !== 2) { v.preload = 'auto'; v.load(); } }
+                        else { var pl = v.play(); if (pl && pl.catch) pl.catch(function () {}); }
                     }
                     done();
                 });
             },
             pause: function () { if (videoEls[current]) videoEls[current].pause(); },
-            resume: function () { if (videoEls[current]) videoEls[current].play(); },
+            resume: function () {
+                var v = videoEls[current];
+                if (!v) return;
+                // Interrupting a play() — by a src swap, a load(), or the frame going
+                // away — rejects its promise. Routine, and not something to report.
+                var p = v.play();
+                if (p && p.catch) p.catch(function () {});
+            },
             // Land exactly on a hold frame: timeupdate only fires a few times a
             // second, so without this the freeze would sit an arbitrary fraction of
             // a second into the action it is meant to stop short of.
@@ -611,6 +665,11 @@
     // so this source never reaches either.
     var ytSource = (function () {
         var player = null, ready = false, queued = null, poll = null;
+        // Which video the player currently holds, and whether we've already fired the
+        // end of the segment being played. Every clip in a reel is a slice of the SAME
+        // broadcast, so after the first load a step is a seek, not a reload — which is
+        // both far faster and far more reliable (see mount).
+        var loadedId = null, segEnded = false;
 
         function videoId(url) {
             var m = /[?&]v=([\w-]{6,})/.exec(url || '') || /youtu\.be\/([\w-]{6,})/.exec(url || '')
@@ -640,8 +699,36 @@
                 if (!ready) return;
                 var clip = VIDEOS[current] || {};
                 var t = player.getCurrentTime() - (clip.start || 0);
-                if (isFinite(t) && !checkHold(t)) updateCard(t);
+                if (!isFinite(t)) return;
+                // Segment end. `endSeconds` would do this for us, but it only applies
+                // to a load, and we deliberately seek instead of reloading — so the
+                // clip's own bounds are enforced here. `segEnded` keeps a tick after
+                // the boundary from firing it twice (endOfClip is idempotent per index,
+                // but the last clip's `wcc-done` would repeat every 200ms without it).
+                var span = (clip.end || 0) - (clip.start || 0);
+                if (!segEnded && span > 0 && t >= span) {
+                    segEnded = true;
+                    endOfClip(current);
+                    return;
+                }
+                if (!checkHold(t)) updateCard(t);
             }, 200);
+        }
+
+        // Point the player at clip `i`: a seek when it is the same broadcast (always,
+        // within a reel), a load only when it genuinely changes.
+        function playSegment(i) {
+            var clip = VIDEOS[i] || {};
+            var id = videoId(clip.url);
+            if (!id || !ready) return;
+            segEnded = false;
+            if (id === loadedId) {
+                player.seekTo(clip.start || 0, true);
+            } else {
+                loadedId = id;
+                player.loadVideoById({ videoId: id, startSeconds: clip.start || 0 });
+            }
+            if (isPaused()) player.pauseVideo(); else player.playVideo();
         }
 
         return {
@@ -658,18 +745,39 @@
                     target.id = 'yt-host';
                     wrap.appendChild(target);
                     document.body.appendChild(wrap);
+                    // Construct the player ON the first clip, rather than empty and
+                    // then loadVideoById inside onReady. That sequence is what produced
+                    // YouTube's "An error has occurred. Please try again later." on the
+                    // first clip of every reel while every later clip played fine —
+                    // loading into a player that has only just come up is unreliable.
+                    // Handing the video to the constructor means there is nothing to
+                    // load at ready time, only a seek.
+                    var first = videos[0] || {};
+                    var firstId = videoId(first.url);
+                    loadedId = firstId;
                     loadApi(function () {
                         player = new YT.Player('yt-host', {
                             width: '100%', height: '100%',
+                            videoId: firstId || undefined,
                             playerVars: { controls: 0, disablekb: 1, modestbranding: 1,
-                                          rel: 0, playsinline: 1, fs: 0, iv_load_policy: 3 },
+                                          rel: 0, playsinline: 1, fs: 0, iv_load_policy: 3,
+                                          start: Math.floor(first.start || 0) },
                             events: {
                                 onReady: function () {
                                     ready = true;
                                     if (MUTED) player.mute();
                                     player.getIframe().style.cssText = 'width:100%;height:100%;border:0;';
                                     startPoll();
-                                    if (queued !== null) { var q = queued; queued = null; showVideo(q); }
+                                    var q = queued !== null ? queued : current;
+                                    queued = null;
+                                    playSegment(q);
+                                },
+                                // A clip YouTube refuses to play must not wedge the reel
+                                // for the 15s the stall watchdog takes: treat it exactly
+                                // like a finished one, as the watchdog itself does.
+                                onError: function () {
+                                    try { console.warn('[video] YouTube error on clip ' + current); } catch (e) {}
+                                    advanceFrom(current);
                                 },
                                 onStateChange: function (e) {
                                     if (e.data === YT.PlayerState.ENDED) endOfClip(current);
@@ -682,12 +790,10 @@
             },
             show: function (i, prevIdx, done) {
                 var clip = VIDEOS[i] || {};
-                var id = videoId(clip.url);
-                if (!id) { done(); return; }
+                if (!videoId(clip.url)) { done(); return; }
                 // Still booting: remember where we should be and let onReady get there.
                 if (!ready) { queued = i; done(); return; }
-                player.loadVideoById({ videoId: id, startSeconds: clip.start || 0, endSeconds: clip.end });
-                if (isPaused()) player.pauseVideo();
+                playSegment(i);
                 done();
             },
             pause: function () { if (ready) player.pauseVideo(); },
@@ -712,8 +818,15 @@
         };
     })();
 
+    // Has the player (or a standalone open) ever actually shown this reel? A runtime
+    // clip swap needs to know, because it must re-show what was showing — but must NOT
+    // start playback in a frame the player has never activated (a windowed deck posts
+    // `set-clips` into every frame it loads, including off-screen ones).
+    var activated = false;
+
     function showVideo(i) {
         if (!SRC || !VIDEOS[i]) return;
+        activated = true;
         var prev = current;
         current = i;
         // Synchronously, before the source's async show: a stray timeupdate from the
@@ -911,6 +1024,18 @@
             });
         }
         if (window.WccReel) WccReel.clipCount = count;
+
+        // Re-show after a runtime swap. `mount()` has just removed the elements the
+        // player was already showing — which aborts any load in flight, and is exactly
+        // the NS_BINDING_ABORTED seen on a reel's first clip. Without this the reel is
+        // left with fresh elements and nothing shown: `SRC.time()` never advances, and
+        // 15s later the stall watchdog skips a perfectly good clip.
+        //
+        // It is a race, so it was intermittent in the way races are: `set-clips` and
+        // the player's opening `reset` arrive in whichever order the network allows,
+        // and a warm cache flips it. Guarded on `activated` so an off-screen frame in
+        // a windowed deck still stays idle.
+        if (!baked && activated) showVideo(current);
     }
 
     useClips(VIDEOS, true);

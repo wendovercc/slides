@@ -440,7 +440,9 @@ while you choose what to put in it means not seeing where the thing will land.
 
 **Right: preview above, deck check below.** The preview takes the remaining width (`1fr`
 against a `340–420px` left column), with a **wall / archive toggle** on `?ctx` — archive
-wording is what the video will say, and what the narrator will read. The check panel moves
+wording is what the video will say, and what the narrator will read. Its actions sit in the
+same row: `Open ↗` for anything, and `Curate ↗` when the previewed slide is a reel, which
+is the flip side of the curate/assemble loop. The check panel moves
 here because a 16:9 box in a wide column leaves usable space beneath it, and the left
 column needs its height for two panes.
 
@@ -554,17 +556,9 @@ problems only — a failed write, an unreadable import, a missing `slides.json`.
 
 Two hand-offs join the sitting:
 
-- **From `/curate`** — *designed, not built.* A reel row offers "use my curated clips",
-  attaching them as that slide entry's `videos`; that is the phase-4 `set-clips` path
-  driven from UI instead of the console. The remaining work is smaller than it looks,
-  because `curate.js` already computes every input — `ctxIncluded`, `chronoEvents`,
-  `shownStart`/`shownEnd` (the pad-widened bounds), `clipCards`, and `cardEntry` for the
-  resolved content. What it must not become is a JS re-implementation of `emit_reel`'s
-  ordering and card-window rules.
-  **So `/curate` should publish the assembled per-innings clip list** in the `videos`
-  shape, and `/deck` should merely attach it: the derivation stays where its inputs live,
-  and the draft in `wcc-curate:<pc_id>` stays what it is — a diff keyed by clip id, not a
-  clip list.
+- **From `/curate`** — *designed, not built.* A reel row resolves its clips from the
+  curation the editor is working on, live. See "Clips reach a deck by reference, not by
+  copy" below: it needs no attach action and takes no snapshot.
 - **To record mode** — "Narrate →" opens `/slideshow/?deck=local:<key>&record&ctx=archive`.
   This settles where narration starts: **the front door is `/deck`**, so record mode never
   needs a deck picker of its own.
@@ -862,6 +856,98 @@ Two details worth knowing:
   "no atom list — it cannot be rendered". During the sitting this is the expected state,
   not a fault.
 
+### Clips reach a deck by reference, not by copy
+
+The obvious hand-off is: `/curate` hands `/deck` a clip list, `/deck` stores it on the
+reel entry. **That is wrong twice over**, and the second reason is the serious one.
+
+**It doesn't match how the sitting actually goes.** `/curate` has no preview of the clips
+*as a reel*, so `/deck` is the bench where an editor finds out the assembly doesn't work —
+and what they do then is flip back, add a card, lengthen a clip to leave room to talk over
+it, flip forward. That is a loop, not a hand-off, and a copy makes every turn of it a
+manual re-attach.
+
+**And an exported copy silently loses an innings.** Measured, not reasoned: a deck whose
+reel carries the sitting's clips (YouTube `url`/`start`/`end`, and `_atoms: []` because the
+unfilled reel had none yet) derives **27 beats / 20 media** where the built deck gives
+37 / 30. The whole first-innings reel vanishes, with no error, because a clip list is not
+an atom list — only `build_video_slide` and `slide_atoms` turn one into the other, and they
+run in the build.
+
+The line was already drawn in "Freezing, in three layers": a deck freezes **composition**,
+not **content**. A reel's clips are content. So:
+
+- **During the sitting, a reel row resolves its clips live** from the curation draft on
+  each render. Flip back, change something, flip forward — it is already there. No attach
+  action, no snapshot, no staleness, and no UI to build.
+- **The export carries no clip list at all.** `deck.json` names the reel slide; the
+  publisher's rebuild — which lands the curation overlay, syncs R2 and runs
+  `build_video_slide` — is the authority on what is in it. The `pc_match_id` and innings
+  ride along as provenance so the publisher can check they landed the matching curation.
+
+#### How it works — **built**
+
+Three pieces, each staying where its inputs already are:
+
+- **`/curate` publishes the assembled clip list**, per innings, to
+  `localStorage["wcc-reel:<pc_id>:<innings>"]` — the exact shape a video slide's
+  `videos` takes. Written from `persistDraft` (which already fires on every edit) and
+  on match load, so the two tabs need no ordering between them and no button. The
+  derivation mirrors `ball_events.select()` plus `emit_reel`'s card windows, alongside
+  the `effPre`/`effPost` mirror of `merge()` that was already there.
+- **`_clips` on the reel entry** — `{url, start, end, src}` for everything actually in
+  R2. `(url, start, end)` *is* a clip's identity: it is what `clip_ids.fingerprint`
+  hashes to name the object.
+- **`/deck` resolves on every render.** A reel row takes the published list and attaches
+  `src` per clip wherever `_clips` has an exact match (within 0.001s — `/curate` computes
+  these bounds in JS floats). The row then reports *those* clips, so adding a ball makes
+  it read 11, and the deck check says the reel is on live curation.
+
+**If any clip has no exact match, the whole reel falls back to the stream.** One source
+per reel is an invariant `video.html` rests on — it picks from clip 0, and `mp4Source`
+builds a `<video>` per clip from `_video_src` — so a mixed list would not play at all.
+Per-clip mixing is the refinement if preview latency ever justifies the surgery.
+
+Verified against the real 1st XI match: `select()` and `_clips` agree on **10/10** and
+**18/18** clips for the two innings, so an unamended reel resolves entirely to R2 and only
+an actual edit triggers the stream. The symptom of the two derivations drifting apart would
+be the opposite — every clip streaming despite being in R2 — which is worth knowing because
+it degrades quietly rather than breaking.
+
+**`_pc_id` and `_innings` are on the reel's `slide_meta` — built.** `emit_reel` stamps
+which curation and which innings a reel is made of, which is what lets `/deck` get from a
+reel row back to its curation at all. It is also the join live resolution will use.
+
+**The loop is signposted in both directions.** `/curate` carries a `Deck builder ↗`
+button opening `/deck/?match=<pc_id>`, and `/deck` finds that match's package via the
+`pc_id` now published on each set in `slides.json` (which works for a pinned set too,
+whose slug says nothing about the team).
+
+**`?match=` is idempotent, which is the requirement that shapes it.** The sitting is a
+loop, so the button gets pressed repeatedly and must not mint a deck each time. A deck
+opened this way is stamped `source_match`, and a later visit re-opens the same draft
+rather than duplicating it. The parameter is then consumed with `replaceState`, so a
+reload does not drag the editor back off whatever they since switched to. `source_match`
+survives into the export as provenance the publisher can check the landed curation
+against.
+
+**And back the other way — `Curate ↗`.** A previewed reel shows a
+`Curate ↗` action next to `Open ↗`, opening `/curate/?match=<pc_id>` in a tab. `/curate`
+takes that parameter and opens straight on the match instead of the first in the list (an
+unknown id falls through to the default, which is what the picker would have shown anyway).
+The button is present exactly when `_pc_id` is — which is the same thing as "this slide is
+a reel", so it needs no separate test and appears on nothing else.
+
+**The loop is free before narration and costly after it.** A recorded timeline enumerates
+the atoms it was recorded against, so re-curating after a take moves the panels underneath
+it. The sitting's order is therefore **curate → assemble → narrate → export**, and
+`/narrate` (phase 7) should detect a curation change since recording and say so.
+
+**Fixed alongside this:** `derive_timeline` treated an empty `_atoms` as nothing to say. An
+empty list is not a missing one — the slide *was* enumerated and the answer was "nothing" —
+so it now warns and drops the slide explicitly. That silent drop was the only thing standing
+between a wrong export and a wrong video.
+
 ### Two clip sources, one reel
 
 The sitting curates clips hours before anything is trimmed and synced to R2, so an injected
@@ -881,6 +967,99 @@ clip-relative in both, which is why the YouTube source subtracts the segment sta
 
 `ytSource` is preview-only by design, and the design depends on it: the wall must play
 offline, and the compositor records **black** from an embed (see the compositor section).
+
+**Three bugs this shook out, all worth keeping in mind.** **Permissions Policy is
+delegated one hop at a time**, and the preview is two hops: `/deck` → player → slide. The
+`allow` attribute is needed on *both* the preview iframe and every slide iframe the player
+creates (`f.allow`), or the innermost frame — the one actually holding the `<video>` and
+the YouTube embed — gets no autoplay. On the wall the player is top-level and inherits it,
+so this is invisible there; the symptom is media that runs perfectly in its own tab and
+unreliably when embedded, which reads as flakiness rather than as a permission. And
+`ensurePlayable` awaited `WccVideoCache.getObjectURL` with **no rejection handler**: an
+aborted cache read (a re-navigated frame, a superseded request) left its callback
+uncalled, so `show()` never completed and the clip silently never appeared until the stall
+watchdog reaped it. That one is not preview-specific — it could strand a clip on the wall.
+
+**And the one that was actually causing it — twice, once per source.** Clip 0 of a reel
+would sit for 15s and then be skipped by the stall watchdog, while every later clip played
+fine. Both sources had the same bug in different clothes: *the first clip is asked to show
+before anything has prepared it.*
+
+- **`ytSource`** constructed its player with no `videoId` and then called `loadVideoById`
+  inside `onReady`. Loading into a player that has only just come up reliably produces
+  YouTube's "An error has occurred. Please try again later." Fixed by constructing the
+  player **on** its first clip, leaving nothing to load at ready time.
+- **`mp4Source`** creates elements `preload='none'`, so an untouched clip holds no media
+  data and no fetch is running — and the show then waits for data nothing asked for
+  (a painted frame when playing, a `seeked` when paused; `currentTime = 0` on
+  `readyState === 0` never completes either). Fixed by **raising `preload` and then**
+  calling `load()` on a genuine cache miss.
+
+**That order is the whole fix on the mp4 side, and it is easy to get wrong** — the first
+attempt called `load()` alone and changed nothing. `load()` runs resource *selection*;
+buffering is still governed by `preload`, so `load()` on a `preload='none'` element fetches
+nothing. It is raised on the one element being shown, and only on a miss, so the wall —
+which plays cached bytes — still spends no network on this path.
+
+Both need a **cache miss** to bite, which the wall never has, being gated on a full prime.
+That is why neither ever appeared until decks started playing clips the build had not
+primed — which is to say, until the sitting arrived.
+
+**And beneath both of those, the actual race.** A slide embedded in a player deliberately
+does not auto-start: it waits to be activated (`if (window.parent === window) showVideo(0)`).
+So the boot order is the player's opening `reset` → `show(0)` → the element starts loading;
+then the frame's `load` event fires → `set-clips` → `useClips(injected, false)` → `mount()`
+**removes every element**, aborting that load — `NS_BINDING_ABORTED` — and then nothing
+re-shows, because `showVideo` only runs standalone. The reel sits with fresh elements and
+nothing shown, `SRC.time()` never advances, and 15s later the watchdog skips clip 0 and
+plays clip 1 perfectly.
+
+It presented as flakiness because it is a race: `set-clips` and the opening `reset` arrive
+in whichever order the network allows, and a warm cache flips it — hence "fails, fails,
+then succeeds on the third open". `useClips` now re-shows the current clip after a runtime
+swap, guarded on whether the slide was ever activated, so an off-screen frame in a windowed
+deck still stays idle.
+
+Third, the preview frame must be revealed *before* it is navigated, or the player boots
+against a `display:none` 0×0 stage and lays itself out to nothing.
+
+**Seek latency, and why it is a phase-7 problem only.** Stepping clips through the embed is
+slower than playing files. It does not matter in the `/deck` preview; it matters when a
+narrator is rehearsing or recording against it. Four things to know, in the order they are
+worth reaching for:
+
+- **R2-backed clips ARE pre-cached, even in a sitting — built.** The player used to skip
+  priming entirely for an injected deck, on the grounds that its clips might not be in R2
+  at all. True of the gate, wrong about the cache: the clips that *are* files should not be
+  fetched cold, one at a time, as the narrator reaches them. `injectedClipSrcs` collects
+  the resolved `_video_src`s and primes them in the background — never gating, so a clip
+  that fails to prime still plays from the network. An entry's explicit `videos` list wins
+  over its `_videos`, because an amended reel's `_videos` still names what the last *build*
+  resolved, and priming that would download a reel the preview will not play.
+  The wall is untouched: prime everything, hard gate, and drop any slide whose clips did
+  not store rather than open on a clip that cannot play.
+- **The YouTube-sourced ones cannot be.** `video-cache.js` works because R2 clips are our
+  own MP4s fetched over HTTP into the Cache API. A YouTube embed is a third-party document
+  streaming inside its own origin: there is nothing to intercept or store.
+- **Stepping is a seek, not a reload — built.** Every clip in a reel is a segment of the
+  **same** broadcast, so `ytSource` now loads once and seeks thereafter. Segment end moved
+  from YouTube's `endSeconds` (which only applies to a load) to the existing poll.
+  This also fixed a *correctness* bug, not just latency: the player was constructed with
+  **no `videoId`**, and `loadVideoById` was then called inside `onReady` — which reliably
+  produced YouTube's "An error has occurred. Please try again later." on the **first clip
+  of every reel** while every later clip played fine. The player is now constructed on the
+  first clip, so there is nothing to load at ready time, only a seek. An `onError` handler
+  treats a refused clip exactly as the stall watchdog does — like a finished one — rather
+  than letting it wedge the reel for 15s.
+- **Then warm ahead** — an A/B pair of players, cueing the next clip while the current
+  plays — if seeking alone is not enough.
+- **The workflow beats all of it.** If the narrator is also the publisher, syncing R2
+  before narrating removes the embed from the loop entirely; and per-clip source mixing
+  would mean only genuinely new clips ever stream.
+
+**None of this can corrupt the artefact**, which is why it stays a comfort problem: cues are
+timestamps against the take, and a clip beat's duration comes from its trim in both
+preview and render.
 It loads the IFrame API on demand and styles itself from JS, so a wall slide carries no
 third-party script and the stylesheet no rules for something it never renders.
 
