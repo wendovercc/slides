@@ -912,13 +912,40 @@ with "whether", it is lossy (the dwell is gone, so restoring means retyping, whi
 exactly what the `✗`/`＋` toggle was built to avoid), and a zero-length beat is a
 degenerate render and a flash on the wall. `setDur` clamps at 1s and should keep doing so.
 
-**Deferred: per-step duration on a carousel.** `_atoms[].duration` is already per-atom and
-`timeline.py` already reads it, so the *render* would honour it today — but
-`player-core.js:510` arms its advance timer from `items[current].panel_duration`, one
-number reused for every panel of a slide. Making per-panel dwell real means arming from
-the current atom's duration instead, which is a simplification worth doing on its own
-(`_atoms` is meant to be the single source of pacing truth, and the player reads a
-different field). Not built.
+### Per-step duration on a carousel — **NEXT, not built**
+
+*Agreed to land before phase 7: record mode addresses atoms, so the pacing model should
+be settled first — the same reason the naming and the grouping went first.*
+
+A package's members each carry their own `panel_duration`, so per-step dwell already
+works there. A carousel has one number for all its panels, so the dwell box sits on the
+group row rather than the child rows. That is the last inconsistency between the two
+creatures in `/deck`.
+
+**The render half already works.** `_atoms[].duration` is per-atom and `timeline.py`
+reads pacing from there, so a deck with per-panel dwells composites correctly today.
+
+**The player half is the work, and it is a simplification.** `panelTimer()` and
+`resumeVideoProgress()` (`assets/js/player-core.js`, both around the `armAdvanceTimer`
+calls) arm from `items[current].panel_duration` — one number reused for every panel of a
+slide. `_atoms` is meant to be the single source of pacing truth and the player reads a
+different field. Arm from the current atom's duration instead: the player already tracks
+`panelIndex`, and every entry already carries `_atoms`.
+
+Points to settle when building it:
+
+- **Reels must keep the existing behaviour.** A reel's `panel_duration` is the
+  `total + 30` backstop and its clips are driven by `wcc-panel`, so the atom-duration
+  path must not take over its timing. `items[current].video` already distinguishes it.
+- **Live slides have no `_atoms`** (feed-driven panels), so `panel_duration` stays the
+  fallback wherever the atom list is absent.
+- **`setDur` in `deck.js` writes a uniform dwell across `_atoms`.** Per-step editing means
+  it stops being uniform, so the duration editor's shape (`duration == panel_duration ×
+  atoms`) no longer holds — the deck check verifies that today and would need to follow.
+- **Where the box goes.** Once per-atom dwell is real, the dwell box belongs on child
+  rows for both kinds, and the group row shows the total. That removes the asymmetry
+  noted under "Grouping in `/deck`".
+- **Zero is not a removal** — see the rejection above; keep the `Math.max(1, …)` clamp.
 
 **One behaviour changed: insertion points sit between groups, not between slides.** That
 follows from the group being the unit an editor moves. The "package is split" warning
