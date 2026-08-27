@@ -902,6 +902,19 @@ Three pieces, each staying where its inputs already are:
   `src` per clip wherever `_clips` has an exact match (within 0.001s — `/curate` computes
   these bounds in JS floats). The row then reports *those* clips, so adding a ball makes
   it read 11, and the deck check says the reel is on live curation.
+- **Coming back to the tab is the redraw.** `focus` + `visibilitychange` re-render, which
+  is when flipping forward shows the edit without touching anything. The rows come free
+  with the render; the **preview frame does not** — it booted once off an injected deck
+  and its URL says nothing about the clips inside, so it is re-injected and reloaded
+  (via a nonce in the URL) *only when the resolved clips actually changed*. An
+  unconditional reload would restart the reel under an editor who just came back to
+  watch it.
+
+  This is also what makes **discarding** a draft visible. A discard is not an edit: it
+  reverts `/curate` to the committed curation and republishes the reels from that (in
+  `discardDraft`, which bypasses the `cleanup → persistDraft` path everything else uses
+  and so had to be wired up separately). Without it, the deck went on playing clips from
+  a draft that no longer existed.
 
 **If any clip has no exact match, the whole reel falls back to the stream.** One source
 per reel is an invariant `video.html` rests on — it picks from clip 0, and `mp4Source`

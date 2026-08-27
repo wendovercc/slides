@@ -557,20 +557,59 @@
      `?interactive` so it starts paused and steps by hand; `?ctx=archive` because
      archive wording is what the render will say, and what a narrator would read. */
 
+  /* The frame boots ONCE off the injected deck, and its URL says nothing about the
+     clips inside it — so re-injecting alone would leave a stale reel on screen and
+     renderPreview's src check would agree. This nonce is what makes a reload
+     expressible. It only moves when the injected clips actually changed, so
+     re-selecting the same row still doesn't restart playback. */
+  var pvNonce = 0;
+
   function previewUrl(tag) {
     return "/slideshow/?deck=local:" + PREVIEW_KEY + "&interactive&ctx=" + state.ctx
-         + "&s=" + encodeURIComponent(tag);
+         + "&s=" + encodeURIComponent(tag) + (pvNonce ? "&r=" + pvNonce : "");
+  }
+
+  // What is injected right now, as far as live curation goes: the clips, and nothing
+  // else. The entries themselves only change when the editor changes them, and that
+  // path already re-previews.
+  function reelSig(resolved) {
+    return JSON.stringify(resolved.map(function (e) { return e.videos || 0; }));
+  }
+
+  function inject(title, resolved) {
+    if (window.WccDeckStore) WccDeckStore.put(PREVIEW_KEY, { title: title, slides: resolved });
   }
 
   function showPreview(where, id, title, tag, entries) {
-    entries = entries.map(playable);
-    if (window.WccDeckStore) WccDeckStore.put(PREVIEW_KEY, { title: title, slides: entries });
+    var resolved = entries.map(playable);
+    inject(title, resolved);
     state.pv = { where: where, id: id, title: title, slug: tag,
-                 url: previewUrl(tag), n: entries.length,
+                 url: previewUrl(tag), n: resolved.length,
+                 // The unresolved entries, so a refresh can re-run `playable` against
+                 // whatever /curate has published since.
+                 entries: entries,
+                 sig: reelSig(resolved),
                  // Kept for the pane's actions: only a single slide has a curation
                  // behind it, so a package or slideshow preview offers none.
-                 entry: entries.length === 1 ? entries[0] : null };
+                 entry: resolved.length === 1 ? resolved[0] : null };
     render();
+  }
+
+  /* Re-resolve what the pane is showing. Returns true only if the clips moved — the
+     caller reloads the frame on that, and a reload restarts the reel under the
+     editor's hands, so it must not fire on a preview that is already correct. */
+  function refreshPreview() {
+    var pv = state.pv;
+    if (!pv || !pv.entries) return false;
+    var resolved = pv.entries.map(playable);
+    var sig = reelSig(resolved);
+    if (sig === pv.sig) return false;
+    pv.sig = sig;
+    pv.entry = resolved.length === 1 ? resolved[0] : null;
+    inject(pv.title, resolved);
+    pvNonce++;
+    pv.url = previewUrl(pv.slug);
+    return true;
   }
 
   /* The curation behind a previewed reel, if it is one. `_pc_id` is stamped on a
@@ -744,6 +783,19 @@
       state.search = this.value.trim();
       renderResults();
     });
+
+    /* Returning to this tab is the moment a sitting's curation lands. /curate
+       publishes its reels to storage as the editor works, and everything here
+       resolves them at render time — the rows for free, the preview frame only when
+       its clips actually moved. It closes the loop in both directions: adding a ball
+       shows up, and so does discarding the draft that added it. */
+    function onReturn() {
+      if (document.hidden) return;
+      refreshPreview();
+      render();
+    }
+    window.addEventListener("focus", onReturn);
+    document.addEventListener("visibilitychange", onReturn);
   }
 
   /* `?match=<pc_id>` — the hand-off from /curate. Opens that match's package as a
