@@ -68,7 +68,8 @@
 
   // ---- deck document ----------------------------------------------------
   // A slide entry is whatever the build wrote; the builder never invents fields.
-  // The only entry it *edits* is panel_duration (static slides only, see setDur).
+  // The only things it *edits* are the dwells — `_atoms[].duration` per step and the
+  // `panel_duration`/`duration` derived from them (static slides only, see setDur).
 
   function slides() { return (state.deck && state.deck.slides) || []; }
   function entryAtoms(e) { return e._atoms || null; }
@@ -167,7 +168,7 @@
     e._atoms = allAtoms(e);
     delete e._atoms_all;
     delete e.panels;
-    e.duration = e._atoms.reduce(function (a, x) { return a + (x.duration || 0); }, 0);
+    syncDur(e);
     return true;
   }
 
@@ -190,7 +191,7 @@
         return a;
       });
     }
-    e.duration = e._atoms.reduce(function (a, x) { return a + (x.duration || 0); }, 0);
+    syncDur(e);
     if (state.pv && state.pv.where === "deck") state.pv = null;
     persist();
     render();
@@ -211,18 +212,54 @@
      `total + 30` safety net build_video_slide sets. */
   function canSetDur(e) { return !isVideo(e) && !e._live && !!entryAtoms(e); }
 
+  /* `_atoms[].duration` is the pacing truth — timeline.py reads it, and the player
+     now arms its advance timer from it — so the two numbers alongside are derived
+     from it here, in one place, after every dwell edit.
+
+     `duration` is the slide's total: what kiosk paces a whole slide over and what
+     every "· 1:20" on this page adds up.
+
+     `panel_duration` is a single number for every panel, which stops being true the
+     moment one step is given its own dwell. It goes rather than lies: absent means
+     "pace from the atoms" to both the player and the compositor, whereas a stale
+     number would quietly out-vote them on any slide whose atoms went missing. */
+  function syncDur(e) {
+    var kept = e._atoms || [];
+    e.duration = kept.reduce(function (a, x) { return a + (x.duration || 0); }, 0);
+    var uniform = kept.length && kept.every(function (x) { return x.duration === kept[0].duration; });
+    if (uniform) e.panel_duration = kept[0].duration; else delete e.panel_duration;
+  }
+
+  // Every panel of one slide, at one dwell. Still the common case — and the only
+  // thing on offer for a package member, whose own panels are a level deeper than
+  // this page goes. `_atoms_all` too, or a panel switched back on would return at
+  // the old dwell.
   function setDur(i, secs) {
     var e = slides()[i];
     if (!e || !canSetDur(e)) return;
     var v = Math.max(1, Math.round(Number(secs) || 0));
-    e.panel_duration = v;
-    // Mirror what slide_atoms computed: a static slide is one atom per panel, each
-    // holding panel_duration. Keeping _atoms in step is what makes the exported
-    // deck renderable — timeline.py reads durations from there, not from here.
-    // `_atoms_all` too, or a panel switched back on would return at the old dwell.
     (e._atoms || []).forEach(function (a) { a.duration = v; });
     (e._atoms_all || []).forEach(function (a) { a.duration = v; });
-    e.duration = v * ((e._atoms || []).length || 1);
+    syncDur(e);
+    persist();
+    render();
+  }
+
+  /* One step of a carousel, at its own dwell. `panel` is the slide's OWN panel
+     number (an index into allAtoms), so a switched-off step can be timed too and
+     keeps that dwell when it comes back — the same reason `_atoms_all` exists.
+     The kept list is a renumbered copy, so the edit has to reach both. */
+  function setAtomDur(i, panel, secs) {
+    var e = slides()[i];
+    if (!e || !canSetDur(e)) return;
+    var all = allAtoms(e), a = all[panel];
+    if (!a) return;
+    a.duration = Math.max(1, Math.round(Number(secs) || 0));
+    if (e._atoms_all) {
+      var at = keptPanels(e).indexOf(panel);
+      if (at >= 0) e._atoms[at].duration = a.duration;
+    }
+    syncDur(e);
     persist();
     render();
   }
@@ -702,13 +739,29 @@
     list.appendChild(caretEl(arr.length, gs.length));
   }
 
-  // The reel-clip meta a row shows, resolved against the editor's live curation
-  // rather than the build — otherwise adding a ball leaves the row saying 10.
-  function clipMeta(e) {
+  /* What a reel row says, resolved against the editor's live curation rather than
+     the build — otherwise adding a ball leaves the row saying 10. Split in two,
+     because the two halves belong in different columns: the COUNT describes what is
+     inside the step (meta), the TOTAL is how long the step runs (the dwell column,
+     read-only). `curating` is what colours both gold. */
+  function reelMeta(e) {
     var live = resolveReel(e);
-    if (!live) return null;
-    return live.length + " clip" + (live.length === 1 ? "" : "s") + " · "
-      + fmtDur(live.reduce(function (a, x) { return a + (x.end - x.start); }, 0));
+    var clips = live || e._clips || (isVideo(e) ? [] : null);
+    if (!clips) return null;
+    var dur = live ? live.reduce(function (a, x) { return a + (x.end - x.start); }, 0)
+                   : e.duration;
+    return { count: clips.length + " clip" + (clips.length === 1 ? "" : "s"),
+             secs: dur, dur: fmtDur(dur), curating: !!live };
+  }
+
+  /* How long one entry runs, and whether that number is the editor's draft rather
+     than the build's. A curating reel is longer or shorter than it was built, and a
+     group row adds its members up — so without this a collapsed package would keep
+     quoting the built total while the reel row beneath it said something else. */
+  function entryDur(e) {
+    var reel = reelMeta(e);
+    return reel && reel.curating ? { secs: reel.secs, curating: true }
+                                 : { secs: e.duration || 0, curating: false };
   }
 
   function groupRow(g, gi, warnRows) {
@@ -716,15 +769,18 @@
     var lead = arr[g.from];
     var solo = g.children.length <= 1;    // an ordinary slide: no expander, no children
     var open = !!state.open[groupKey(g)];
-    var dur = g.idx.reduce(function (a, i) { return a + (arr[i].duration || 0); }, 0);
-    var live = solo ? clipMeta(lead) : null;
+    var reel = solo ? reelMeta(lead) : null;
+    var tot = g.idx.reduce(function (a, i) {
+      var d = entryDur(arr[i]);
+      return { secs: a.secs + d.secs, curating: a.curating || d.curating };
+    }, { secs: 0, curating: false });
     // Steps, not atoms: what the wall's tab strip moves through. A package counts
     // its members, a carousel its panels, and a reel counts as the one strip entry
     // it is — so "9 steps" and "4 steps" mean the same thing on both kinds of row.
     var kept = g.children.filter(function (c) { return c.panel === null || c.on; }).length;
-    var meta = live || (solo ? fmtDur(dur)
+    var meta = solo ? (reel ? reel.count : "")
       : kept + (kept === g.children.length ? "" : " of " + g.children.length)
-        + " step" + (kept === 1 ? "" : "s") + " · " + fmtDur(dur));
+        + " step" + (kept === 1 ? "" : "s");
 
     var stripe = el("div", { class: "stripe" });
     if (g.set) stripe.style.background = "hsl(" + setHue(g.set) + ",55%,55%)";
@@ -746,10 +802,10 @@
     down.addEventListener("click", function (ev) { ev.stopPropagation(); moveGroup(gi, 1); });
     del.addEventListener("click", function (ev) { ev.stopPropagation(); removeGroup(gi); });
 
-    // The dwell box sits wherever a single `panel_duration` is the honest answer:
-    // on the group row when the group IS one slide, and on the child rows of a
-    // package, whose members each have their own. A package's group row therefore
-    // has none — there is no one number to put in it.
+    // The dwell box sits on the row that owns ONE dwell: the group row when the
+    // group is a single one-step slide, and the child rows otherwise — a package
+    // member has its own, and now so does each panel of a carousel. A group of
+    // several steps therefore has no box, only the total in its meta column.
     // Only a solo group can be the preview target: a package's row expands rather
     // than previews, so highlighting it when its first member is previewed would
     // light two rows for one thing.
@@ -763,8 +819,12 @@
       el("span", { class: "grip", text: "⠿" }),
       twist,
       el("span", { class: "ttl" + (lead._live ? " is-live" : ""), text: g.title }),
-      el("span", { class: "meta" + (live ? " curating" : ""), text: meta }),
-      solo ? durBox(g.from) : el("span", { class: "dur-gap" }),
+      el("span", { class: "meta" + (tot.curating ? " curating" : ""), text: meta }),
+      // A collapsed group is the whole deck's scan view, so its total belongs in the
+      // duration column with everything else — read-only, being the sum of the rows
+      // underneath rather than a number anyone types.
+      solo ? durCell(g.from, null, reel) : durStatic(fmtDur(tot.secs), tot.curating,
+                                                     "Total of the steps in this group"),
       el("span", { class: "rowbtns" }, [up, down, del])
     ]);
     row.addEventListener("click", function () {
@@ -791,8 +851,15 @@
   function childRow(g, c) {
     var isPanel = c.panel !== null;
     var off = isPanel && !c.on;
-    var live = isPanel ? null : clipMeta(c.e);
-    var meta = live || (isPanel ? fmtDur(c.atom.duration) : fmtDur(c.e.duration));
+    var reel = isPanel ? null : reelMeta(c.e);
+    /* The meta column says what the dwell column does not: what is INSIDE this step.
+       A panel is its own dwell, and so is a one-panel package member — seven of Last
+       Match's nine — so both would only read "20s" beside a box holding 20, and both
+       are blank. A reel says its clip count, and a member with panels of its own says
+       how many, since there the dwell is per panel and the total is a second number. */
+    var steps = isPanel ? 0 : allAtoms(c.e).length;
+    var meta = reel ? reel.count
+      : (steps > 1 ? steps + " steps · " + fmtDur(c.e.duration) : "");
     var pv = state.pv && state.pv.where === "deck" && state.pv.id === childPv(c);
 
     var del = el("button", {
@@ -810,8 +877,9 @@
     var row = el("div", { class: "crow" + (off ? " off" : "") + (pv ? " pv" : "") }, [
       el("span", { class: "kid-rule" }),
       el("span", { class: "ttl", text: c.label }),
-      el("span", { class: "meta" + (live ? " curating" : ""), text: off ? "off" : meta }),
-      isPanel ? el("span", { class: "dur-gap" }) : durBox(c.i),
+      el("span", { class: "meta" + (reel && reel.curating ? " curating" : ""),
+                   text: off ? "off" : meta }),
+      durCell(c.i, isPanel ? c.panel : null, reel),
       el("span", { class: "rowbtns" }, [del])
     ]);
     /* Every step previews, whichever kind it is — which is the point of the
@@ -836,20 +904,54 @@
     return row;
   }
 
-  // Seconds-per-panel for one entry. Blank and disabled on a reel, deliberately:
-  // its panels are clips with individual durations, so there is no single number,
-  // and its `panel_duration` is the `total + 30` backstop build_video_slide sets —
-  // which reads as a duration and is not one. The meta column carries the total.
-  function durBox(i) {
+  /* ONE column, meaning "how long this step runs" — editable where the editor owns
+     the number, read-only where it is derived. A reel's is derived: its clips have
+     individual durations from the trims, so there is no dwell to type, and its
+     `panel_duration` is the `total + 30` backstop `build_video_slide` sets, which
+     reads as a duration and is not one. Putting its total here rather than in the
+     meta column is what lets every duration in the deck line up under each other.
+
+     Gold while curating, matching the count beside it: both are the editor's live
+     draft rather than the build's. */
+  function durStatic(text, curating, title) {
+    return el("span", { class: "dur-static" + (curating ? " curating" : ""),
+                        text: text, title: title });
+  }
+
+  function durCell(i, panel, reel) {
+    var e = slides()[i];
+    if (reel) return durStatic(reel.dur, reel.curating, "From the clip trims");
+    // Nothing to type, but still something to say: a live slide's panels come from
+    // the feed, so it has a duration and no dwell. Showing it here rather than
+    // leaving the column blank keeps the rule "this column is how long the step
+    // runs" true on every row that has an answer.
+    if (panel == null && !canSetDur(e)) {
+      return durStatic(fmtDur(e.duration), false,
+                       "Not set here — this slide has no dwell of its own");
+    }
+    return durBox(i, panel);
+  }
+
+  /* Seconds for one step, or — with no `panel` — for every panel of one entry at
+     once. Blank and disabled where there is no dwell to set at all (a live slide, or
+     a reel with no clips yet, which has nothing to derive a total from either).
+
+     A whole-entry box can be blank on a slide that HAS dwells: syncDur drops
+     `panel_duration` once the steps disagree, and blank is the honest reading of
+     "there is no one number". Typing one back in makes them agree again. */
+  function durBox(i, panel) {
     var e = slides()[i];
     var ok = canSetDur(e);
+    var v = panel == null ? e.panel_duration : (allAtoms(e)[panel] || {}).duration;
     var box = el("input", { class: "dur", type: "text", inputmode: "numeric",
-                            value: ok && e.panel_duration != null ? Math.round(e.panel_duration) : "",
-                            title: ok ? "Seconds per panel"
-                              : "Per-clip, from the trims — see the total alongside" });
+                            value: ok && v != null ? Math.round(v) : "",
+                            title: !ok ? "No dwell to set on this slide"
+                              : panel == null ? "Seconds per panel" : "Seconds on this step" });
     if (!ok) box.disabled = true;
     box.addEventListener("click", function (ev) { ev.stopPropagation(); });
-    box.addEventListener("change", function () { setDur(i, box.value); });
+    box.addEventListener("change", function () {
+      if (panel == null) setDur(i, box.value); else setAtomDur(i, panel, box.value);
+    });
     return box;
   }
 

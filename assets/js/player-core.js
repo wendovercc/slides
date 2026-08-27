@@ -18,7 +18,7 @@
  *
  * Usage:
  *   WccPlayer.start({
- *     items: [{ slug, duration, panel_duration, frame }],  // ordered, frame = iframe el
+ *     items: [{ slug, duration, panel_duration, atoms, frame }], // ordered, frame = iframe el
  *     onShow: function(index) {}                            // optional (preview hook)
  *   });
  */
@@ -499,15 +499,36 @@
       timer = setTimeout(function () {
         var count = counts[current] || 1;
         if (panelIndex < count - 1) {
-          send(current, 'next-panel'); // echo updates panelIndex
-          panelTimer();                // re-arm for the next panel (restarts the fill)
+          send(current, 'next-panel');   // echo updates panelIndex
+          panelTimer(panelIndex + 1);    // re-arm for the next panel (restarts the fill)
         } else {
           fwdSlide();
         }
       }, ms);
     }
-    function panelTimer() {
-      var ms = (items[current].panel_duration || 20) * 1000;
+    // How long the current slide holds ONE step. `atoms` is the per-atom pacing list
+    // the compositor renders from, so reading it here is what keeps the wall and the
+    // video saying the same thing when a deck carries a per-step dwell (the deck
+    // builder can now set one panel of a carousel to a different number).
+    //
+    // `panel_duration` stays the fallback for the two cases that have no per-atom
+    // answer: a live-match slide publishes no atoms (its panels are whatever the feed
+    // produced), and a video reel's atoms are its clips while its panel_duration is
+    // the whole-reel + 30s backstop — clip timing comes from wcc-panel, not from here.
+    //
+    // Takes the panel explicitly because panelIndex only catches up on the slide's
+    // echo, and every caller that has just sent next-panel/prev-panel is re-arming
+    // for the panel it asked for, not the one still showing.
+    function atomMs(panel) {
+      var e = items[current] || {};
+      if (!e.video && e.atoms) {
+        var a = e.atoms[panel == null ? panelIndex : panel];
+        if (a && a.duration > 0) return a.duration * 1000;
+      }
+      return (e.panel_duration || 20) * 1000;
+    }
+    function panelTimer(panel) {
+      var ms = atomMs(panel);
       // A video reel drives its own clips; its panel_duration is a long backstop
       // (whole reel + 30s), so filling the bar over that would creep across the
       // entire reel. Leave the bar to the per-clip driver (the wcc-panel handler)
@@ -520,7 +541,7 @@
     // and a merely-resumed clip emits no fresh wcc-panel to re-arm it — so the bar
     // would vanish. Non-video slides keep panelTimer's fresh-full-panel behaviour.
     function resumeVideoProgress() {
-      armAdvanceTimer((items[current].panel_duration || 20) * 1000);
+      armAdvanceTimer(atomMs());
       if (!progressFill) return;
       if (pausedAt) { panelStart += (Date.now() - pausedAt); pausedAt = 0; }
       var remaining = panelMs - (Date.now() - panelStart);
@@ -612,7 +633,7 @@
       clearTimer();
       if (!atLastAtom()) {
         send(current, 'next-panel');
-        if (playing) panelTimer(); else progressReset();
+        if (playing) panelTimer(panelIndex + 1); else progressReset();
       } else {
         fwdSlide();
       }
@@ -621,7 +642,7 @@
       clearTimer();
       if (!atFirstAtom()) {
         send(current, 'prev-panel');
-        if (playing) panelTimer(); else progressReset();
+        if (playing) panelTimer(panelIndex - 1); else progressReset();
       } else {
         backSlide();
       }
@@ -863,7 +884,7 @@
         slideHold = !!d.hold;
         if (d.hold) { clearTimer(); progressFreeze(); return; }
         if (!playing) return;
-        if (d.hold === false) armAdvanceTimer((items[current].panel_duration || 20) * 1000);
+        if (d.hold === false) armAdvanceTimer(atomMs());
         // Restart the countdown for the clip now playing, so the bar tracks the
         // current clip rather than the whole reel. Only while playing — a paused reel
         // leaves the bar reset until it resumes.

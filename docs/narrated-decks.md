@@ -1,6 +1,6 @@
 # Narrated Decks — Deck Builder, Narration & Video Export
 
-> Status: **phases 1–6 built; 7 (record mode) designed, not built.**
+> Status: **phases 1–6 built (including the 6c consistency pass); 7 (record mode) designed, not built.**
 > Planning source of truth for the deck builder, the narration recorder and the compositor — including **silent** decks, which
 > render to video with no editor sitting at all. Supersedes the "Feature 2 — Highlights
 > video" half of `docs/match-highlights.md`. Read `assets/js/player-core.js`,
@@ -477,8 +477,9 @@ header names it, and one line per row is what keeps a 30-slide deck scannable.
   one block and a split is visible before the deck check explains it.
 - **Duration is editable on static slides only.** For a silent render, dwell is the *only*
   pacing control the editor has, so it belongs here; a reel's duration comes from its
-  trims and is read-only. Overriding a static slide rewrites its `_atoms` durations
-  uniformly — which is exactly how `slide_atoms` computed them.
+  trims and is read-only. The box writes `_atoms[].duration` — the group row's writes
+  every atom of the slide (how `slide_atoms` computed them), a child row's writes one.
+  See "Per-step duration on a carousel".
 
 **Left bottom: discover.** One search box and one flat result list over **all three**
 sources in `slides.json` — slideshows, match packages, single slides — because "what do I
@@ -912,52 +913,130 @@ with "whether", it is lossy (the dwell is gone, so restoring means retyping, whi
 exactly what the `✗`/`＋` toggle was built to avoid), and a zero-length beat is a
 degenerate render and a flash on the wall. `setDur` clamps at 1s and should keep doing so.
 
-### Per-step duration on a carousel — **NEXT, not built**
+### Per-step duration on a carousel — **built**
 
-*Agreed to land before phase 7: record mode addresses atoms, so the pacing model should
-be settled first — the same reason the naming and the grouping went first.*
+*Landed before phase 7: record mode addresses atoms, so the pacing model had to be
+settled first — the same reason the naming and the grouping went first.*
 
-A package's members each carry their own `panel_duration`, so per-step dwell already
-works there. A carousel has one number for all its panels, so the dwell box sits on the
-group row rather than the child rows. That is the last inconsistency between the two
-creatures in `/deck`.
+A package's members each carried their own `panel_duration`, so per-step dwell already
+worked there; a carousel had one number for all four panels — and, because the box only
+ever appeared on a *solo* group row, a carousel had no box at all. That was the last
+inconsistency between the two creatures in `/deck`, and closing it is mostly deletion.
 
-**The render half already works.** `_atoms[].duration` is per-atom and `timeline.py`
-reads pacing from there, so a deck with per-panel dwells composites correctly today.
+**The render half needed nothing.** `_atoms[].duration` was already per-atom and
+`timeline.py` already read pacing from there, so a deck with per-panel dwells composited
+correctly before any of this. Confirmed again on a hand-mixed Fantasy League: 5 / 45 / 20
+/ 9 in, four beats of 5 / 45 / 20 / 9 out.
 
-**The player half is the work, and it is a simplification.** `panelTimer()` and
-`resumeVideoProgress()` (`assets/js/player-core.js`, both around the `armAdvanceTimer`
-calls) arm from `items[current].panel_duration` — one number reused for every panel of a
-slide. `_atoms` is meant to be the single source of pacing truth and the player reads a
-different field. Arm from the current atom's duration instead: the player already tracks
-`panelIndex`, and every entry already carries `_atoms`.
+**The player half was the work, and it is a simplification.** `panelTimer()` and
+`resumeVideoProgress()` armed from `items[current].panel_duration` — one number reused for
+every panel of a slide — while `_atoms` was supposed to be the single source of pacing
+truth. There is now one `atomMs(panel)` behind every `armAdvanceTimer` call, reading the
+atom list `player.html` hands the player as `items[].atoms`.
 
-Points to settle when building it:
+- **The panel has to be passed in, not read off `panelIndex`.** `panelIndex` only catches
+  up when the slide echoes `wcc-panel`, and every caller that has just sent
+  `next-panel`/`prev-panel` is re-arming for the panel it *asked for* — so `panelTimer`
+  takes the panel and the three stepping call sites pass `panelIndex ± 1`. Arming from
+  the panel still on screen would have paced every step one behind.
+- **Reels and live slides keep `panel_duration`**, which is why the fallback stays rather
+  than becoming a migration. A reel's clip timing comes from `wcc-panel` and its
+  `panel_duration` is the whole-reel + 30s backstop; a live slide publishes no atoms at
+  all, its panels being whatever the feed produced.
+- **Kiosk is untouched.** It paces whole slides off `duration` and lets the slide rotate
+  its own panels, so per-step dwell is an interactive/render property. Built decks are
+  uniform anyway, and narrated decks never play on the wall.
 
-- **Reels must keep the existing behaviour.** A reel's `panel_duration` is the
-  `total + 30` backstop and its clips are driven by `wcc-panel`, so the atom-duration
-  path must not take over its timing. `items[current].video` already distinguishes it.
-- **Live slides have no `_atoms`** (feed-driven panels), so `panel_duration` stays the
-  fallback wherever the atom list is absent.
-- **`setDur` in `deck.js` writes a uniform dwell across `_atoms`.** Per-step editing means
-  it stops being uniform, so the duration editor's shape (`duration == panel_duration ×
-  atoms`) no longer holds — the deck check verifies that today and would need to follow.
-- **Where the box goes.** Once per-atom dwell is real, the dwell box belongs on child
-  rows for both kinds, and the group row shows the total. That removes the asymmetry
-  noted under "Grouping in `/deck`".
-- **Zero is not a removal** — see the rejection above; keep the `Math.max(1, …)` clamp.
+**`panel_duration` is dropped when the steps disagree** (`syncDur`, the one place both
+derived numbers are recomputed after any dwell edit). Absent means "pace from the atoms"
+to the player and the compositor alike, whereas a stale number would quietly out-vote them
+on any slide whose atoms went missing. The duration editor's old shape —
+`duration == panel_duration × atoms` — therefore no longer holds, and the box reads blank
+on a mixed slide, which is the honest answer to "seconds per panel"; typing one in makes
+them agree again. `duration` stays the sum, so the deck summary and the group rows keep
+adding up.
 
-**One behaviour changed: insertion points sit between groups, not between slides.** That
-follows from the group being the unit an editor moves. The "package is split" warning
-therefore becomes a state this page cannot produce — it still fires for a deck that
-arrives split from elsewhere, which is the case it was written for.
+**Both lists take the edit.** A subsetted entry holds `_atoms` (kept, renumbered) and
+`_atoms_all` (the slide's own numbering), and the kept one is a *copy* — so `setAtomDur`
+addresses by the slide's own panel number and writes through to both. A switched-off step
+is editable too, and keeps that dwell when it comes back, for the same reason
+`_atoms_all` exists at all.
 
-*Verified* by driving the module's own `groups`/`childrenOf`/`setPanels`/`moveGroup`/
-`candidates` against the real catalogue and real built decks under a stub DOM: 47-slide
-deck → 28 groups; package + carousel grouping and child naming as above; subset toggles
-reversible and idempotent; group move keeps a package contiguous; `removeGroup` takes all
-9 members; 0 package members in the catalogue; and a subsetted deck exported from the
-builder derives 3 beats / 60s through `timeline.py`.
+**Where the box went.** Onto the child rows for both kinds; a group of several steps has
+none, only its total in the meta column. A solo group keeps its box, because it is its own
+single step.
+
+**One column means one thing: how long this step runs.** It was two — an editable box, and
+a duration in the meta column beside it — which is why a one-panel package member read
+`20s` next to a box holding `20`, seven times down Last Match. The column is now editable
+where the editor owns the number and read-only where it is derived, so every duration in
+the deck lines up under every other:
+
+```
+▸ Last Match · 1st XI             9 steps         7:40   ← collapsed: still a duration
+▾ Fantasy League                  2 of 4 steps      40
+      Team of the Week            off                20
+      Top Players                                    20
+      Top Managers                off                20
+      Teams                                          20
+▾ Last Match · 1st XI             9 steps         6:34
+      Pre-match                                      20
+      1st Innings · Highlights    4 clips          1:14   ← curating: both gold
+      1st Innings · Batting                          20
+      2nd Innings · Highlights    18 clips         3:00
+      Result                                         20
+```
+
+- **The meta column says what is *inside*** — `9 steps`, `10 clips` — which is the half of
+  the old reel meta the duration column can't carry. It is blank on a step that is nothing
+  but its dwell, and says `off` on a step switched out.
+- **A group's total is in the column too**, read-only. The first shape had it left in the
+  meta on the grounds that "a group is not a step" — but with every group collapsed, which
+  is how the list is read, that leaves the column empty on every visible row. A group does
+  have a duration; it just isn't typed.
+- **Read-only is not disabled.** Group totals, reel totals and a live slide's duration
+  render as `.dur-static`, not a greyed-out input: the number is real, it just isn't set
+  here. `.dur-gap` is gone — every row now has an answer.
+- **The column is only a column if it lines up.** Group and child rows are separate
+  grids, and their meta/duration/button tracks were `auto` — which aligns only while the
+  text either side happens to be the same width, so a group's `9 steps` against a child's
+  blank meta pushed the durations apart. The three right-hand tracks are now fixed
+  (`--meta-w`/`--dur-w`/`--btns-w`) and shared by both; `1fr` on the title absorbs the
+  differing indents, which anchors all three to the same right edge. The meta is
+  right-aligned to pair with the duration, both are 11.5px on either row kind, and a
+  child's single `✕` is pushed right to sit under the group's.
+- **A collapsed group adds up its members' *live* durations** (`entryDur`), not the
+  build's. Putting the number in a column of its own is what made the old behaviour
+  untenable: a package holding a reel the editor is curating would have gone on quoting
+  `7:40` while the row beneath it said `1:14`. Gold propagates with it.
+- **The one place two durations still coexist** is a child with panels of its own, where
+  the box is seconds-per-panel and the total is a second number, so that row keeps
+  `4 steps · 1:20` in the meta. Every set member in the current build is either one panel
+  or a reel, so it is a shape the content does not currently produce.
+
+**Zero is still not a removal** — see the rejection above; the `Math.max(1, …)` clamp
+holds on both paths.
+
+*Verified* by driving `setDur`/`setAtomDur`/`setPanels`/`durBox` against the real
+`fantasy-league` deck under a stub DOM: a per-step edit updates one atom and drops
+`panel_duration`; subsetting to two panels carries the edited dwells across the
+renumbering; editing a kept panel by its own number reaches both lists; editing a
+switched-off one survives the restore (`99 / 45 / 20 / 7` back, no `_atoms_all`, no
+`panels`); a uniform `setDur` brings `panel_duration` back; `0` clamps to 1. `atomMs`
+was exercised directly over carousel / reel / live / atom-less entries — 5000 / 45000 /
+20000 / 9000 ms per panel, and `panel_duration` for the other three.
+
+**One behaviour changed earlier, recorded here: insertion points sit between groups, not
+between slides.** That follows from the group being the unit an editor moves. The "package
+is split" warning therefore becomes a state this page cannot produce — it still fires for
+a deck that arrives split from elsewhere, which is the case it was written for.
+
+*The grouping work was verified* by driving the module's own `groups`/`childrenOf`/
+`setPanels`/`moveGroup`/`candidates` against the real catalogue and real built decks under
+a stub DOM: 47-slide deck → 28 groups; package + carousel grouping and child naming as
+above; subset toggles reversible and idempotent; group move keeps a package contiguous;
+`removeGroup` takes all 9 members; 0 package members in the catalogue; and a subsetted
+deck exported from the builder derives 3 beats / 60s through `timeline.py`.
 
 #### The original research
 
@@ -1788,6 +1867,7 @@ clip before committing to `keep`.
 | **5** ✅ | Card hold points in interactive mode (`edge`/`step`/`hold` over the bridge, `?holds`). | Consistent nav; prerequisite for narrating cards. |
 | **6a** ✅ | Slide catalogue: `site/slides.json` over `slide_meta` (`write_slide_catalogue`, `slide_title`). | The index the builder browses. |
 | **6b** ✅ | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
+| **6c** ✅ | Deck-builder consistency: naming, grouping, panel subsets, per-step duration. | The two creatures — package and carousel — edit alike; pacing is per atom, wall and render. |
 | **7** | Record mode + `/narrate`: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
 | **8** | Narrated composite + publisher `publish` flow. | The commentated MP4. |
 

@@ -857,6 +857,11 @@ async function init() {
                 slug: s.slug,
                 duration: s.duration,
                 panel_duration: s.panel_duration,
+                // Per-step pacing. `_atoms` is the single source of duration truth the
+                // compositor renders from, so the player reads the same list rather
+                // than one number per slide (a deck builder dwell can now differ panel
+                // to panel). Absent on live slides — panel_duration stays the fallback.
+                atoms: s._atoms || null,
                 group: s._group || null,   // slide-set membership (drives hats later)
                 // video slide → auto-plays on forward arrival. `videos` is the
                 // injected-deck form of the same thing (no build, so no _videos).

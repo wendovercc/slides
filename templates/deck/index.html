@@ -13,6 +13,8 @@
       --navy-1: #0f2346; --navy-2: #0a1c3a; --gold: #d4af37; --ink-soft: #b4c8e4;
       --panel: #12294f; --line: rgba(180,200,228,.18); --white: #fff;
       --warn: #f2c96b; --bad: #f0a0a0;
+      /* The three fixed right-hand deck-row columns — see "rows" below. */
+      --meta-w: 88px; --dur-w: 46px; --btns-w: 72px;
     }
     * { box-sizing: border-box; }
     body {
@@ -101,9 +103,17 @@
     /* ---- rows ------------------------------------------------------------- */
     /* A group row: a match package or a multi-panel slide, which are the same
        creature to an editor. `.twist` is the expander; it is an empty cell on a
-       group with nothing under it, so every row keeps the same column grid. */
+       group with nothing under it, so every row keeps the same column grid.
+
+       The three right-hand columns are FIXED and shared with the child rows, so they
+       line up down the whole list. The leading columns differ — a stripe and a grip
+       against an indent rule — but `1fr` on the title absorbs that, which anchors
+       meta/duration/buttons to the same right edge on both. They used to be `auto`,
+       which lines up only while the text either side happens to be the same width:
+       a group's `9 steps` against a child's blank meta pushed the durations apart. */
     .row {
-      display: grid; grid-template-columns: 5px 13px 11px 1fr auto auto auto;
+      display: grid;
+      grid-template-columns: 5px 13px 11px 1fr var(--meta-w) var(--dur-w) var(--btns-w);
       align-items: center; gap: 8px; padding: 7px 10px 7px 0;
       border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer;
     }
@@ -113,7 +123,8 @@
     /* Child rows: one step of the group. Indented under the group's stripe, and
        measured on the same columns from the title across, so the numbers line up. */
     .crow {
-      display: grid; grid-template-columns: 29px 1fr auto auto auto;
+      display: grid;
+      grid-template-columns: 29px 1fr var(--meta-w) var(--dur-w) var(--btns-w);
       align-items: center; gap: 8px; padding: 5px 10px 5px 0;
       border-bottom: 1px solid var(--line); font-size: 12.5px; cursor: pointer;
       background: rgba(0,0,0,.16);
@@ -125,21 +136,31 @@
       border-bottom-left-radius: 3px; margin-bottom: 4px; }
     .crow .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       min-width: 0; font-weight: 500; }
-    .crow .meta { color: var(--ink-soft); font-size: 11px; font-variant-numeric: tabular-nums;
-      white-space: nowrap; }
     .crow .meta.curating { color: var(--gold); }
     /* A step switched off is still listed — the UI is subtractive, so putting it
        back has to be as easy as taking it out. */
     .crow.off .ttl { color: var(--ink-soft); text-decoration: line-through; }
     .crow.off .meta { font-style: italic; }
-    .crow .dur { width: 5.5ch; font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px;
-      border: 1px solid var(--line); background: var(--panel); color: var(--white);
-      font-variant-numeric: tabular-nums; text-align: right; }
-    .crow .dur:disabled { opacity: .4; border-color: transparent; background: transparent; }
-    .crow .rowbtns { display: flex; gap: 1px; }
-    /* Holds the dwell box's column on rows that have no dwell of their own — a
-       package's group row, and a panel child. */
-    .dur-gap { width: 5.5ch; }
+    /* The numeric columns read as one, whichever row they are on: same size, same
+       right edge. Meta is right-aligned so it pairs with the duration beside it
+       (`9 steps  7:40`) instead of drifting away from it under a long title. */
+    .row .meta, .crow .meta { font-size: 11.5px; text-align: right; overflow: hidden;
+      text-overflow: ellipsis; }
+    .row .dur, .crow .dur { width: 100%; font: inherit; font-size: 11.5px; padding: 2px 4px;
+      border-radius: 4px; border: 1px solid var(--line); background: var(--panel);
+      color: var(--white); font-variant-numeric: tabular-nums; text-align: right; }
+    .row .dur:disabled, .crow .dur:disabled { opacity: .4; border-color: transparent;
+      background: transparent; }
+    /* The duration column, read-only: a group's total is the sum of its steps and a
+       reel's comes from the clip trims, so both are shown rather than typed. Same
+       width and right edge as the box — the point of the one column is that every
+       duration in the deck lines up, collapsed or expanded. */
+    .dur-static { width: 100%; color: var(--ink-soft); font-size: 11.5px;
+      font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .dur-static.curating { color: var(--gold); }
+    /* One button on a child row against three on a group row, so the child's ✕ is
+       pushed to the right to sit under the group's. */
+    .row .rowbtns, .crow .rowbtns { display: flex; gap: 1px; justify-content: flex-end; }
     .row:hover { background: rgba(180,200,228,.06); }
     .row.pv { background: rgba(212,175,55,.14); }
     .row.dragging { opacity: .4; }
@@ -157,15 +178,10 @@
     .row .ttl, .res .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; font-weight: 700; }
     /* Live is a warning, not a category: it cannot be narrated or rendered. */
     .ttl.is-live::before { content: '● '; color: #7cd07c; }
-    .row .meta, .res .meta { color: var(--ink-soft); font-size: 11.5px; font-variant-numeric: tabular-nums;
-      white-space: nowrap; }
+    .row .meta, .crow .meta, .res .meta { color: var(--ink-soft); font-size: 11.5px;
+      font-variant-numeric: tabular-nums; white-space: nowrap; }
     /* Live from the editor's curation rather than from the build. */
     .row .meta.curating { color: var(--gold); }
-    .row .dur { width: 5.5ch; font: inherit; font-size: 11.5px; padding: 3px 4px; border-radius: 4px;
-      border: 1px solid var(--line); background: var(--panel); color: var(--white);
-      font-variant-numeric: tabular-nums; text-align: right; }
-    .row .dur:disabled { opacity: .4; border-color: transparent; background: transparent; }
-    .row .rowbtns { display: flex; gap: 1px; }
     .iconbtn { border: 0; background: transparent; color: var(--ink-soft); cursor: pointer;
       font-size: 13px; line-height: 1; padding: 3px 5px; border-radius: 4px; }
     .iconbtn:hover { color: var(--white); background: rgba(180,200,228,.14); }
