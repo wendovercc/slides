@@ -1,7 +1,6 @@
 # Narrated Decks — Deck Builder, Narration & Video Export
 
-> Status: **phases 1–5 and 6a built; 6b (deck builder UI) and 7 (record mode) designed,
-> not built.**
+> Status: **phases 1–6 built; 7 (record mode) designed, not built.**
 > Planning source of truth for the deck builder, the narration recorder and the compositor — including **silent** decks, which
 > render to video with no editor sitting at all. Supersedes the "Feature 2 — Highlights
 > video" half of `docs/match-highlights.md`. Read `assets/js/player-core.js`,
@@ -317,7 +316,7 @@ derived duration.
 
 ---
 
-## The deck builder — `/deck`
+## The deck builder — `/deck`, **built (phase 6b)**
 
 An editor-facing tool that produces a **frozen, literal deck** — the same
 `{title, slides:[…]}` shape the player already consumes, so its output is directly
@@ -344,11 +343,13 @@ Three things that turn out to exist already, which is most of the reason this is
   deck's `data.json`, presents a literal list of slides, and lets the editor delete,
   reorder and add. Output carries no set references, no `show_when`, no expiry rules —
   nothing left to re-resolve.
-- **Every slide already has its own auto-deck.** `build_slideshows` writes
+- **Every slide already has its own auto-deck *document*.** `build_slideshows` writes
   `/slideshow/<slide-slug>/data.json` for every non-authored slide (and every set). So
   "add a slide this deck doesn't contain" is a fetch of that slide's own deck, and it
   arrives with `_atoms`, `duration` and `panel_duration` already computed. The builder
   never re-derives a slide entry, and no second copy of `slide_atoms` appears in JS.
+  Note *document*, not page: only authored decks and sets get an `index.html`, and a
+  single-slide auto-deck is addressed as `/slideshow/?deck=<slug>` on the bare shell.
 - **`timeline.py` already takes a deck *document*, not a slug** (`--data`). An exported
   deck therefore renders through the existing pipeline unchanged.
 
@@ -384,41 +385,139 @@ Three decisions worth recording:
 
 ### The screen
 
-Two columns, in the `/curate` idiom — same editor, same machine, same dense navy chrome.
-
-**Left: the deck.** One row per slide.
+Two columns in the `/curate` idiom — same editor, same machine, same dense navy chrome —
+but split **deck + discover down the left, a wide preview down the right**.
 
 ```
-⠿  [REEL]  Innings 1 — highlights   last-match-1st-xi-innings-1-reel   31 atoms · 2:14  ▲▼ ×
-⠿  [TEAM]  Pre-match                last-match-1st-xi-intro             4 atoms · 1:20  ▲▼ ×
+┌──────────────────────────┬────────────────────────────────────┐
+│ DECK        12 slides·6:40│  Innings 1 — highlights  · slug    │
+│ ⠿ [video] Innings 1  10a  │ ┌────────────────────────────────┐ │
+│ ⠿ [team ] Pre-match   4a  │ │                                │ │
+│ ───────── caret ───────── │ │        preview (16:9)          │ │
+│ ⠿ [honours] Leaderboards  │ └────────────────────────────────┘ │
+├──────────────────────────┤  DECK CHECK                        │
+│ [search…] All Shows Sets  │  Last Match · 1st XI is split — …  │
+│  SLIDESHOWS               │                                    │
+│  [show] Match Highlights +│                                    │
+│  MATCH PACKAGES           │                                    │
+│  [set ] Last Match · 1st +│                                    │
+└──────────────────────────┴────────────────────────────────────┘
 ```
+
+**Left top: the deck.** One row per slide — name, atom count and duration, an editable
+dwell, and the row buttons. The **slug is deliberately not on the row**: the preview
+header names it, and one line per row is what keeps a 30-slide deck scannable.
 
 - **Drag to reorder**, with ▲▼ on every row as the reliable fallback — dense tool, cheap
   buttons, and no keyboard trap.
-- **An insertion caret sits between rows** and is the target of "add": click a gap to move
-  it, then click a catalogue entry. Precise and keyboard-reachable, where drag-from-
-  catalogue is neither.
+- **An insertion caret sits between rows** and is the target of every add. Click a gap to
+  move it, then hit `+` on a result.
 - **Set members carry a coloured stripe** down the left edge, so a contiguous run reads as
-  one block and a split is visible before the warning explains it.
+  one block and a split is visible before the deck check explains it.
 - **Duration is editable on static slides only.** For a silent render, dwell is the *only*
   pacing control the editor has, so it belongs here; a reel's duration comes from its
   trims and is read-only. Overriding a static slide rewrites its `_atoms` durations
   uniformly — which is exactly how `slide_atoms` computed them.
 
-**Right: preview above, catalogue below.**
+**Left bottom: discover.** One search box and one flat result list over **all three**
+sources in `slides.json` — slideshows, match packages, single slides — because "what do I
+put here" is one question, not three. A kind filter (All / Shows / Packages / Slides)
+narrows it; results already in the deck say so.
 
-- The **preview** is an iframe of the selected slide's own auto-deck
-  (`/slideshow/<slug>/?interactive`), with a **wall / archive toggle** on `?ctx` — archive
-  wording is what the video will say, and it is what the narrator will read.
-- The **catalogue** is a filterable list from `site/slides.json`, grouped by kind, marking
-  slides the deck already contains.
+- **Click a result to preview it. `+` adds it.** Previewing before committing is the point
+  of the pane, and it costs nothing: the preview is assembled from fetched entries and the
+  draft is never touched.
+- **Adding a slideshow inserts its slides**, which is why there is no separate "load"
+  step at all — see below.
+
+**Each pane owns its own action, top-right, and both hide when they would do nothing.**
+`Play ↗` on the deck pane opens the whole draft in a tab; `Open ↗` on the preview pane
+opens whatever is being previewed. Same shape, same `↗`, same rule — a button that does
+nothing is worse than no button, which is also why there is no "Narrate →" yet.
+
+**Stacked, not tabbed.** The caret lives in the deck list, and hiding it behind a tab
+while you choose what to put in it means not seeing where the thing will land.
+
+**Right: preview above, deck check below.** The preview takes the remaining width (`1fr`
+against a `340–420px` left column), with a **wall / archive toggle** on `?ctx` — archive
+wording is what the video will say, and what the narrator will read. The check panel moves
+here because a 16:9 box in a wide column leaves usable space beneath it, and the left
+column needs its height for two panes.
 
 **No thumbnail grid.** Both ways of getting one are worse than one big preview pane:
 build-time stills mean a headless-Chrome pass over every slide every night, and live
 mini-iframes mean dozens of simultaneous slide documents — the exact allocation that
 produced the iOS WebContent OOM.
 
-### The warnings panel
+### Naming: a slide's own header hierarchy
+
+**A slide is named by the headings it renders, dot-joined** — `slide_title` in
+`build.py`:
+
+```
+Last Match · 1st XI · 1st Innings · Batting
+Team Focus · U13 Spitfires
+Leaderboards · 1st XI League · 2026
+```
+
+This replaced a template badge (`scorecard`, `video`, `team`) sitting next to a bare
+`title`, and the badge turned out to be load-bearing in a way that made the whole scheme
+wrong: **only 127 of 242 slides had a distinct title.** Thirteen are called
+"Leaderboards"; every team name appears five times over (team, schedule, next-match,
+league table, latest result); and inside a match package, the batting and bowling cards of
+an innings were *identical* — "1st XI — 1st Innings" twice. The badge was carrying the
+identity, which is not a badge's job, and it exposed an implementation word to an editor
+who has no reason to know what a Jinja template is.
+
+Four levels, each skipped when absent:
+
+1–2. **Heading and subheading**, whatever the slide puts in its header. Set members,
+next-match, the standalone result and the live slide already carry an explicit
+`_set_title` / `_set_subtitle` pair; `team` and `schedule` gained `_heading` /
+`_subheading`; the rest use `title` plus whichever subtitle field their template shows
+(for `league-table` that is the division, which is the half that separates the 1st and
+2nd XI tables — both are titled with the league).
+3. **Phase** — the sequence strip's own step name (`_set_steps[_set_step]`), or a reel's
+innings label, which is the step it sits in.
+4. **Leaf** — what the slide is *within* that phase: a scorecard's `_mode`, or a reel's
+Highlights. This is the level that separates batting from bowling.
+
+**All 242 slides are now distinct.** Three decisions behind it:
+
+- **The two hard-coded headings moved into the slide data**, and `team.html` /
+  `schedule.html` / `next-match.html` now render `_heading` / `_subheading` /
+  `_set_title`. Reading a literal out of a template into a parallel Python table would
+  have been a third hand-mirrored duplication of exactly the kind this design keeps
+  complaining about. Rendered output is byte-identical.
+- **`_mode` is scoped to the scorecard.** `build_schedule` uses the same key for a
+  display mode, so an unscoped read named a schedule slide
+  "U13 Spitfires · Fixtures & Training · **Team**".
+- **A prose subtitle is dropped** (over 48 chars, or containing a full stop). A few
+  authored slides carry a sentence there — "Interested in joining the club? We have
+  options for everyone." — which fills the row without identifying anything. Those are
+  hand-written one-offs whose title already separates them.
+
+Badges are now **structural, not technical**: a search result is badged `slide`, `set` or
+`show`, which is what tells you how much a `+` will add — something a name cannot say.
+Deck rows carry no badge, because everything in a deck is a slide and it would be one word
+repeated down the column. A live slide keeps a coloured dot, that being a warning (it can
+be neither narrated nor rendered) rather than a category.
+
+### One mechanism for adding and starting-from
+
+A slideshow is just another search result, so **"start from Match Highlights and
+customise" is "insert it into an empty deck"**. There is no load step, no separate
+starting-point picker, and one code path instead of two.
+
+That is what frees the header dropdown to mean **drafts and nothing else**: it lists the
+decks in this browser and switching it switches deck. Deck *identity* — new, rename,
+duplicate, delete — sits behind one `⋯` menu next to it, while **Import / Export keep
+`/curate`'s header-right placement**: they are the hand-off to the publisher rather than
+housekeeping, and the two tools should not put the same job in two different places.
+A draft *is* a deck (`deck-store.js`), so the list is `WccDeckStore.list()` with the `__`
+tooling keys filtered out, and no separate draft concept exists.
+
+### The deck check
 
 Non-blocking and stated rather than enforced, because each of these is sometimes what the
 editor meant:
@@ -434,11 +533,24 @@ editor meant:
 ### Drafts, storage and the hand-offs
 
 **A draft *is* a deck, so `deck-store.js` is the draft store.** `WccDeckStore.list()` is
-the deck library the picker shows, preview plays the draft key directly instead of copying
-it, and `?deck=local:<key>` needs no second concept — one storage convention on this
-origin, as phase 4 intended. `put()` already returns false on quota (a 29-clip reel plus
+the deck library the picker shows, `Play deck ▸` plays the draft key directly instead of
+copying it anywhere, and `?deck=local:<key>` needs no second concept — one storage
+convention on this origin, as phase 4 intended. The preview pane borrows the same store
+under a reserved `__preview` key, filtered out of the picker.
+
+**A deck's storage key is an opaque system ID, never shown.** It was minted from the title
+at first save, which goes stale the instant the editor renames the deck — and re-keying on
+rename means a write, a delete and a re-point of `wcc-deck-last` for a string nobody should
+be looking at. The title is the name; the key is only ever compared, never parsed, so
+existing title-derived keys keep working. The status line and the export filename both come
+from the title instead. `put()` already returns false on quota (a 29-clip reel plus
 atoms is not small), and the builder must surface that as a real error rather than a
 silent non-save.
+
+**There is no save indicator, deliberately.** Every mutation writes synchronously, so a
+"Saved" badge would be permanently lit and would therefore say nothing; the deck list
+redrawing is the feedback that an edit landed. The one status slot in the header carries
+problems only — a failed write, an unreadable import, a missing `slides.json`.
 
 Two hand-offs join the sitting:
 
@@ -453,8 +565,99 @@ Two hand-offs join the sitting:
 Publisher chain is `timeline.py --data deck.json` → `compose --timeline`; a
 `compose --deck-file` shortcut is a one-liner if that gets tedious.
 
-One small player addition the preview wants: **a start index** (`&start=<n>`), so "play
-from here" does not mean watching from the top every time.
+### What shipped, and what it cost
+
+`templates/deck/index.html` + `assets/js/deck.js`, published by `build_deck_builder`.
+**The build step is one template render**: the page reads `/slides.json` for the catalogue
+and `/slideshow/<slug>/data.json` for each entry it inserts, so nothing is baked in and a
+slide entry keeps exactly one definition.
+
+The design above is what got built, with three adjustments:
+
+- **`slides.json` gained a `decks` list** — the authored slideshows, collected in the loop
+  that writes them. "Start from an existing slideshow and customise" is the common case,
+  and the catalogue indexed slides and sets but not the decks an editor actually starts
+  from. Auto-decks stay out: they are one slide or one set, both already listed.
+- **No "Narrate →" button yet.** Record mode is phase 7, and a dead button is worse than
+  no button. `Preview deck ▸` opens `?deck=local:<key>&interactive&ctx=…` in a tab, which
+  is the same hand-off with a different destination.
+- **The layout was reworked once it was in front of a person**: deck and discover stacked
+  down the left, preview widened to `1fr` down the right, the slug off every row, and the
+  three source lists (slideshows / packages / slides) collapsed into one search. The load
+  step went with it — see "One mechanism" above.
+- **Preview plays an injected deck**, which was not the original plan and is
+  the more interesting of the two. Pointing the pane at `/slideshow/<slug>/` fails twice
+  over: 242 of the 273 deck directories have no `index.html` at all (only authored decks
+  and sets get a page), and a *built* deck runs the hard loading gate — previewing a
+  29-clip reel would prime the whole reel into the cache before showing a frame. An
+  injected deck skips the gate, the precache fetch, the version poll and the live feed,
+  which is exactly what an editor preview wants. It reuses the phase-4 seam rather than
+  adding a preview path — and it is what makes previewing a search result *before* adding
+  it free, since the preview deck is assembled from fetched entries without touching the
+  draft.
+- **The start index (`&start=<n>`) was not built.** Preview opens at the top of the deck;
+  per-slide preview covers the "look at this one" case, which is what the pane is for.
+  Deferred rather than dropped.
+
+**Verified end to end, not just built.** Across the whole current build: all 243 catalogued
+slides resolve to an auto-deck entry carrying `_atoms`, all 19 sets match their members
+exactly, and every static slide holds the uniform-dwell shape the duration editor rewrites
+(`duration == panel_duration × atoms`). The split detector raises nothing on any of the 31
+built decks and does fire on the motivating case — a slide inserted between the pre-match
+slide and innings 1. And the export renders: that same customised deck through
+`timeline.py --data` gives 41 beats / 540s against the unmodified deck's 37 / 460s (the
+inserted slide's 4 panels × 20s), and dropping its dwell to 10s in the builder takes it to
+500s. **That is the silent custom-deck video working**, with no narrator and no record
+mode.
+
+### Panel subsets — deferred, but the shape is known
+
+*Researched 2026-08-27, not built.* A slide with several panels (Fantasy League has four)
+goes into a deck whole. Being able to take only some of it is the deferred
+"panel-subset deck entry" from The atom, and the assessment came out lopsided: three of
+the four pieces are small or free, and the fourth is a job worth doing on its own merits.
+
+**The UI is subtractive, not additive.** The editor adds the *whole slide*, then turns off
+the atoms they don't want, rather than picking atoms out of a catalogue. That keeps a deck
+entry always "a slide" rather than a fragment someone had to assemble, makes the default
+correct with no decision taken, and moots the ordering question below — you can only
+remove, so a subset can never become a permutation.
+
+| Piece | Cost |
+|---|---|
+| `compose.py` / `timeline.py` | **None.** Verified. |
+| `set-panels` in `slide-bridge.js` + pass-through in `player-core.js` | one focused change |
+| Build: filter `_atoms`, record `panels: []` on the entry | small |
+| **Panel labels into `_atoms`** | the bulk of it |
+| `/deck`: atom toggles on an expanded deck row | moderate |
+
+- **The render path is already free.** `compose.py` addresses a still by `atom["panel"]`,
+  posting the player's own `goto-panel`, and `timeline.py` walks `_atoms`. So an entry
+  whose `_atoms` are *filtered but keep their original panel numbers* renders correctly
+  with no change to either file.
+- **The player change belongs in the bridge, not the player.** `slide-bridge.js` has one
+  choke point — `register(c)` sets `ctrl`/`count`, `show()` clamps to `count`, `edge()`
+  compares against `count - 1`. A `set-panels` command routed exactly as `set-clips`
+  already is can wrap any registered controller generically: reduced count, ordinal→panel
+  mapping inside `show`, and `edge()` falls out correct. One implementation covers every
+  carousel template.
+  Doing it in `player-core.js` instead would mean the player overriding `first`/`last` on
+  every echo — re-asserting the authority phase 5 deliberately handed to the slide.
+  Reels need none of this: their atoms are finer than panels and a clip subset is
+  `set-clips`, which exists. `set-panels` should refuse to apply to them.
+- **The real cost is that atoms have no names.** `_atoms` is `{panel, duration}`, and the
+  labels are hard-coded `<span class="panel-tab">Top Players</span>` literals in
+  `fantasy-league`, `leaderboard` and `honours`, plus a `tab_labels` map keyed off
+  `slide._panels` in `team.html`. Publishing them means the same excavation
+  `_heading`/`_subheading` needed: declare in `build.py`, render from data, emit as
+  `_atoms[].label`.
+
+**Do the labels first, and separately.** They pay for themselves without any of the rest:
+a panel label is exactly the fourth level of the header hierarchy — the slot that gives a
+scorecard its `· Batting`. Today every Fantasy League panel is nameless in the tooling.
+With labels, `Fantasy League · Top Managers` becomes expressible in the deck builder, in a
+compositor beat label, and in record mode's next-up prompt. It is also the only part that
+touches wall-facing templates, so landing it alone derisks the rest.
 
 ### Freezing, in three layers
 
@@ -568,6 +771,19 @@ identical — same document shape, same player, same windowing and nav. An injec
 flagged `injected`, which turns off the three things that only make sense with a build
 behind them: the `precache.json` fetch, the version-poll refresh, and the loading gate (its
 clips may not be in R2 at all yet, so there is nothing to prime and nothing to wait for).
+
+**And the live feed, added in 6b (`LIVE_FEED_ON`).** The live *feature* is gated on
+`LIVE_ON` — build flag plus a provisioned device — but the live *feed* is a property of
+the wall, not of a deck document. A browser-held deck is an editor artefact: a preview
+pane, or a narration sitting. Left alone it started a worker poller per preview iframe and
+wrapped the ticker / strip / flash chrome around the very slide the editor was trying to
+look at; and a render is of a fixed deck, so day-bound chrome has no business in it.
+
+`LIVE_FEED_ON` is deliberately narrower than `LIVE_ON`: a live-aware slide the editor
+deliberately put in a deck is still **shown**, rendering the static pre-match content it
+carries before any feed arrives. Suppressing the feed is not the same as dropping slides.
+The walls are untouched — the screen player has no `local:` decks, so its `LIVE_FEED_ON`
+is `LIVE_ON` verbatim.
 
 **A slide entry may carry `videos`.** The player posts it into that slide's iframe as a
 `set-clips` command on every frame load (a windowed deck re-loads frames as it moves);
@@ -990,7 +1206,7 @@ clip before committing to `keep`.
 | **4** ✅ | Runtime deck injection (`deck-store.js`, `?deck=local:<key>`); `video.html` runtime clip list + YouTube clip source. | The editor-tooling keystone — serves narration preview and the deck builder. |
 | **5** ✅ | Card hold points in interactive mode (`edge`/`step`/`hold` over the bridge, `?holds`). | Consistent nav; prerequisite for narrating cards. |
 | **6a** ✅ | Slide catalogue: `site/slides.json` over `slide_meta` (`write_slide_catalogue`, `slide_title`). | The index the builder browses. |
-| **6b** | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
+| **6b** ✅ | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
 | **7** | Record mode + `/narrate`: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
 | **8** | Narrated composite + publisher `publish` flow. | The commentated MP4. |
 
@@ -1021,7 +1237,11 @@ risky beats bolted-on and forked.
 
 ## Deferred
 
-- Panel-subset deck entries.
+- Panel-subset deck entries — researched, shape known, UI is subtractive. See "Panel
+  subsets" under the deck builder.
+- Panel labels in `_atoms` (a prerequisite of the above, but independently useful).
+- A start index for the player (`&start=<n>`), so the deck builder's preview can open
+  part-way through a deck.
 - Scrubbing backwards mid-clip (replaying a moment) during narration.
 - YouTube upload automation — manual via YouTube Studio for now.
 - Frame-accurate clip rendering (a seek-per-frame renderer), if quality ever demands it.

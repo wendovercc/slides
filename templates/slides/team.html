@@ -608,8 +608,8 @@
         'highlights': 'Records',
     } %}
     <div class="header">
-        <div class="title">Team Focus</div>
-        <div class="subtitle">{{ slide.title }}</div>
+        <div class="title">{{ slide._heading }}</div>
+        <div class="subtitle">{{ slide._subheading }}</div>
     </div>
     <nav class="panel-nav" style="--nav-gap: {% if slide._panels|length > 5 %}2vw{% else %}3vw{% endif %}">
         {% for tab in slide._panels %}

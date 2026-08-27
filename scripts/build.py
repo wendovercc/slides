@@ -722,21 +722,71 @@ def slide_atoms(slide, panel_count, panel_duration):
 
 
 def slide_title(slide, slug):
-    """A human label for the slide, for the catalogue and the deck builder.
+    """A human label for the slide: **its own header hierarchy, dot-joined**.
 
-    Authored slides carry their own ``title``. Match-package members don't — they
-    are generated, and what identifies one is the set plus which step of it it is,
-    which is exactly what the set strip already says (``_set_steps`` /
-    ``_set_step``). The set slug carries the rest of the context in the catalogue,
-    so "1st XI — Innings 1" is the whole label a row needs.
+        Last Match · 1st XI · 1st Innings · Batting
+        Team Focus · U13 Spitfires
+        Leaderboards · 1st XI League · 2026
 
-    Falls back to the slug, which every slide has.
+    The deck builder shows this instead of a template name, so it has to *identify*
+    a slide, not merely describe it — and a bare ``title`` does not: the club runs
+    five per-team slides (team, schedule, next-match, league-table, latest result)
+    that are all titled e.g. "U13 Spitfires", and thirteen slides titled
+    "Leaderboards". Reading the same two heading levels the slide itself renders
+    separates them, because that is exactly what the headings are there to do.
+
+    Four levels, each skipped when the slide has no such thing:
+
+    1. **Heading** and 2. **subheading** — whatever the slide puts in its header.
+       Set members, next-match, the standalone result and the live slide all carry
+       an explicit ``_set_title``/``_set_subtitle`` pair; ``team`` and ``schedule``
+       carry ``_heading``/``_subheading`` (set alongside the template that renders
+       them, so the literal lives in one place); the rest use ``title`` plus
+       whichever subtitle field their template shows.
+    3. **Phase** — the sequence strip's own step name (``_set_steps[_set_step]``),
+       or a reel's innings label, which is the step it sits in.
+    4. **Leaf** — what this slide is *within* the phase: a scorecard's ``_mode``, or
+       a reel's Highlights. Without it a batting and a bowling card read identically.
     """
+    parts = []
+
+    if slide.get("_set_title"):
+        parts += [slide["_set_title"], slide.get("_set_subtitle")]
+    elif slide.get("_heading"):
+        parts += [slide["_heading"], slide.get("_subheading")]
+    else:
+        parts.append(slide.get("title") or slug)
+        # Whichever field this template renders under the title. league-table shows
+        # the division, which is the half that separates the 1st and 2nd XI tables
+        # (both titled with the league).
+        sub = slide.get("subtitle") or slide.get("_subtitle")
+        if not sub and slide.get("template") == "league-table":
+            tables = (slide.get("_data") or {}).get("league_table") or []
+            sub = tables[0].get("name") if tables else None
+        # Some authored subtitles are prose, not a heading level ("Interested in
+        # joining the club? We have options for everyone."). A label identifies;
+        # a sentence just fills the row. The title alone already separates these,
+        # since they are hand-written one-offs.
+        if sub and (len(sub) > 48 or "." in sub):
+            sub = None
+        parts.append(sub)
+
     steps = slide.get("_set_steps")
     idx = slide.get("_set_step")
     if steps and idx is not None and 0 <= idx < len(steps):
-        return f"{slide.get('_set_subtitle') or slug} — {steps[idx]}"
-    return slide.get("title") or slug
+        parts.append(steps[idx])
+    elif slide.get("_innings_label"):
+        parts.append(slide["_innings_label"])
+
+    # `_mode` is scorecard-only here: build_schedule uses the same key for a
+    # display mode ("team" / "location"), which is not a heading level.
+    if slide.get("template") == "scorecard" and slide.get("_mode"):
+        parts.append(slide["_mode"].capitalize())
+    elif slide.get("reel"):
+        parts.append("Highlights")
+
+    parts = [str(p).strip() for p in parts if p and str(p).strip()]
+    return " · ".join(parts) if parts else slug
 
 
 def _curation_scorecards():
@@ -864,6 +914,21 @@ def _ambiguous_keys(sources):
                 by_key.setdefault(key, set()).add(name)
         out |= {k for k, v in by_key.items() if len(v) > 1}
     return sorted(out)
+
+
+def build_deck_builder(env):
+    """Publish the deck builder at /deck/ (unlisted, noindex).
+
+    Phase 6b of docs/narrated-decks.md. Nothing is baked in: the page reads
+    ``/slides.json`` for the catalogue and ``/slideshow/<slug>/data.json`` for the
+    slide entries it inserts, so this step is one template render. That is the
+    point of the catalogue — a slide entry keeps exactly one definition, written by
+    the build and never reconstructed in JS.
+    """
+    out_dir = SITE / "deck"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "index.html").write_text(env.get_template("deck/index.html").render())
+    print("  deck builder → /deck/")
 
 
 def build_curation(env):
@@ -1063,6 +1128,11 @@ def fmt_match_date(date_str):
 
 
 def build_schedule(slide, teams_by_id, training_sessions, all_fixtures, location_lookup, location_names):
+    # The slide's two header levels, as data. The template used to hard-code the
+    # subtitle; it lives here so slide_title can name the slide the way the slide
+    # names itself, with no second copy of the string (see slide_title).
+    slide["_heading"] = slide.get("title")
+    slide["_subheading"] = "Fixtures & Training"
     today_iso = _today().isoformat()
 
     def fmt_date(iso_date):
@@ -1207,6 +1277,12 @@ def build_next_match(slide, teams_by_id, fixtures_data, stats_data):
     team_id = slide.get("team")
     team = teams_by_id.get(team_id, {})
     fixture = (fixtures_data or {}).get("fixtures", {}).get(team_id)
+
+    # Header levels first, so they survive the no-fixture early return: that branch
+    # renders its own header (there is no tape to hang the shared one off), and the
+    # slide still needs naming in the catalogue.
+    slide["_set_title"] = "Next Match"
+    slide["_set_subtitle"] = slide.get("title", "")
 
     if not fixture:
         slide["_no_fixture"] = True
@@ -2155,6 +2231,11 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
     Panels (any with no data are omitted from slide._panels):
       league · results · schedule · top_batting · top_bowling
     """
+    # Header levels as data — see build_schedule and slide_title. The team slide
+    # inverts the usual order: the fixed word is the title and the team is the
+    # subtitle, which is why this can't be derived from `title` alone.
+    slide["_heading"] = "Team Focus"
+    slide["_subheading"] = slide.get("title")
     team_id = slide.get("team")
     team = teams_by_id.get(team_id, {})
     fixtures_data = fixtures_data or {}
@@ -4286,7 +4367,7 @@ def _write_deck_data(out_dir, show, build_version):
     return len(precache_videos)
 
 
-def write_slide_catalogue(slide_meta, sets, build_version):
+def write_slide_catalogue(slide_meta, sets, decks, build_version):
     """Publish ``site/slides.json`` — the index of every slide this build produced.
 
     Phase 6a of docs/narrated-decks.md. The deck builder needs to *browse* slides,
@@ -4329,6 +4410,11 @@ def write_slide_catalogue(slide_meta, sets, build_version):
     catalogue = {
         "build_version": build_version,
         "slides": slides,
+        # The authored slideshows, which are what an editor *starts from*: the
+        # builder's first move is "load this deck and customise it", and without a
+        # list there is nothing to offer. Auto-decks are deliberately absent — they
+        # are one slide or one set, both already covered above.
+        "decks": decks,
         # Sets are insertable as a unit ("add the whole Last Match package"), and
         # naming them is also what lets the builder warn that an insertion has split
         # one — see the warnings panel in docs/narrated-decks.md.
@@ -4366,6 +4452,7 @@ def build_slideshows(env, slide_meta, sets=None):
     authored = {p.stem for p in (CONTENT / "slideshows").glob("*.json")}
 
     homepage_shows = []
+    authored_decks = []
     for show_path in sorted((CONTENT / "slideshows").glob("*.json")):
         show = json.loads(show_path.read_text())
         slug = show_path.stem
@@ -4383,6 +4470,8 @@ def build_slideshows(env, slide_meta, sets=None):
                 built_at=built_at, qr_data_url=qr_data_url))
         n_clips = _write_deck_data(out_dir, show, build_version)
         print(f"  slideshow/{slug}  ({n_clips} clip(s) to precache)")
+        authored_decks.append({"slug": slug, "title": show["title"],
+                               "slides": len(merged)})
 
         # A deck can legitimately build with nothing in it — the archive decks empty
         # out between seasons, and in any fixture gap longer than
@@ -4450,7 +4539,7 @@ def build_slideshows(env, slide_meta, sets=None):
             screen=False, title="Slideshow", slug=None, preview=preview_cfg,
             built_at=built_at, qr_data_url=qr_data_url))
 
-    write_slide_catalogue(slide_meta, sets, build_version)
+    write_slide_catalogue(slide_meta, sets, authored_decks, build_version)
 
     return sorted(homepage_shows, key=lambda x: x["rank"])
 
@@ -4579,6 +4668,7 @@ if __name__ == "__main__":
 
     print("Building curation tool...")
     build_curation(env)
+    build_deck_builder(env)
 
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")

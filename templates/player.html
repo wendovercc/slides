@@ -393,6 +393,18 @@ const LOCAL_DECK = (DECK && DECK.indexOf('local:') === 0) ? DECK.slice(6) : null
 const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
     && !!(window.WccLiveKey && window.WccLiveKey.get());
 
+// ...but the live *feed* is a property of the wall, not of the deck document. A
+// browser-held deck (`?deck=local:`) is an editor artefact: the deck builder's preview
+// pane, or a narration sitting. It must not poll the worker or grow the ticker / strip
+// / flash chrome — a preview pane would otherwise start a poller per iframe and wrap
+// the L-frame around the very slide the editor is trying to look at, and a render is
+// of a fixed deck, so day-bound chrome has no business in it.
+//
+// Deliberately narrower than LIVE_ON: a live-aware slide the editor deliberately put
+// in the deck is still *shown*, rendering the static pre-match content it carries
+// before any feed arrives. Suppressing the feed is not the same as dropping slides.
+const LIVE_FEED_ON = LIVE_ON{% if not screen %} && !LOCAL_DECK{% endif %};
+
 let _currentSlug = null;
 function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/${SLIDE_Q}`, '_blank'); }
 
@@ -749,7 +761,7 @@ async function init() {
     const bootFrames = WIN === null ? frames : frames.slice(0, WIN + 1);
 
     {% if live_enabled %}
-    if (LIVE_ON) {
+    if (LIVE_FEED_ON) {
     // Live chrome, in the L the retracting slide layer uncovers: ticker along the
     // bottom band, standings strip up the right. Both sit on the stage (not the slide
     // layer) so they don't scale with it. An unprovisioned device never loads them.
@@ -828,7 +840,7 @@ async function init() {
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
-        {% if live_enabled %}if (LIVE_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
+        {% if live_enabled %}if (LIVE_FEED_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
     }
 

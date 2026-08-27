@@ -115,8 +115,8 @@
 {% endblock %}
 {% block content %}
     <div class="header">
-        <div class="title">{{ slide.title }}</div>
-        <div class="subtitle">Fixtures &amp; Training</div>
+        <div class="title">{{ slide._heading }}</div>
+        <div class="subtitle">{{ slide._subheading }}</div>
     </div>
 
     {% if not slide._events %}
