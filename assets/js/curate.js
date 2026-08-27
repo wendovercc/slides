@@ -318,6 +318,10 @@
     state.edits = JSON.parse(JSON.stringify(state.committed));
     state.selected = null;
     materialiseManual();
+    // The published reels are derived from the draft we just threw away, and /deck
+    // reads them straight out of storage — without this, a discard reverts /curate
+    // and leaves the deck playing the abandoned edit.
+    publishReels();
     renderList(); renderEditor(); updateDirty();
   }
   function setTrim(id, key, value) {
