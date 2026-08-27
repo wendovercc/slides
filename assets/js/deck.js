@@ -251,11 +251,14 @@
       if (e._live || c.live) {
         out.push({ row: i, bad: true, text: name + " is a live-match slide: its panels are "
           + "whatever the feed has produced, so it can be neither narrated nor rendered." });
+      } else if (isVideo(e) && !(e.videos || e._videos || []).length) {
+        // Checked BEFORE the atom test: an unfilled reel has an empty atom list, and
+        // "no clips yet" is the useful half of that. It is the expected state during
+        // the sitting, not a fault.
+        out.push({ row: i, text: name + " has no clips yet — attach a curated reel, or "
+          + "it renders after the publisher's rebuild syncs them to R2." });
       } else if (!entryAtoms(e)) {
         out.push({ row: i, bad: true, text: name + " has no atom list — it cannot be rendered." });
-      } else if (isVideo(e) && !(e.videos || e._videos || []).length) {
-        out.push({ row: i, text: name + " has no resolved clips yet — it renders after the "
-          + "publisher's rebuild syncs them to R2." });
       }
       if (e._empty || c.empty) out.push({ row: i, text: name + " had no data this build." });
       if (c.active === false) out.push({ row: i, text: name + " is marked inactive." });

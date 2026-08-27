@@ -3971,15 +3971,26 @@ def build_match_packages(env, slide_meta):
         # Per-innings highlight reel: the curated match clips for one innings, in
         # chronological order, as a single fullbleed video slide slotted before that
         # innings' scorecards (same phase step). Only clips already synced to R2 (i.e.
-        # resolved in the video manifest) are kept — an innings with none is skipped,
-        # so a build with an empty manifest degrades to the scorecards-only set.
+        # resolved in the video manifest) are kept.
+        #
+        # An innings with no playable clips still BUILDS the slide — page, slide_meta,
+        # auto-deck — flagged `_empty`, and is simply not added to the set. It used to
+        # return None and not exist at all, which broke the one-sitting constraint
+        # (docs/narrated-decks.md): on Night 1 there is no committed curation overlay,
+        # so `select` returns nothing, so the reel slide the editor is about to curate
+        # and narrate over does not exist — no row in /deck to attach clips to, no page
+        # for the preview iframe, and nothing for compose.py to shoot the overlay layer
+        # from. Building it empty costs one unreferenced page and gives the sitting a
+        # real slide to inject `set-clips` into; the publisher's rebuild then fills the
+        # same slug with R2 clips and the set picks it up.
+        #
+        # Returns the slug only when there is something to play, so the wall's set is
+        # unchanged either way.
         def emit_reel(innings_idx, label):
             if innings_idx >= len(innings_ids_chrono):
                 return None
             clips = list(reversed(ball_events.select(
                 merged, "match", innings=innings_ids_chrono[innings_idx])))
-            if not clips:
-                return None
             slug = f"{slug_prefix}-innings-{innings_idx + 1}-reel"
             # A solid top-left tag conceals the Frogbox HIGHLIGHTS/QR bug and shows
             # the innings + the batting team's crest (WCC's for our innings, the
@@ -4034,8 +4045,6 @@ def build_match_packages(env, slide_meta):
             }
             build_video_slide(slide)
             slide["videos"] = [v for v in slide["videos"] if v.get("_video_src")]
-            if not slide["videos"]:
-                return None
             build_video_slide(slide)  # recompute duration for the resolved-only set
             out_dir = SITE / "slide" / slug
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -4046,7 +4055,14 @@ def build_match_packages(env, slide_meta):
                 "duration": slide["duration"], "panel_duration": slide["panel_duration"],
                 "_atoms": slide_atoms(slide, len(slide["videos"]), slide["panel_duration"]),
                 "_videos": slide_video_srcs(slide),
+                # No clips yet — curated but unsynced, or not curated at all. The slide
+                # exists for the editor sitting; nothing plays it until it is filled.
+                "_empty": not slide["videos"],
             }
+            if not slide["videos"]:
+                print(f"  slide/{slug} — reel (empty: no clips yet; built for /deck, "
+                      f"not in the set)")
+                return None
             print(f"  slide/{slug} — reel ({len(slide['videos'])} clips, {slide['duration']:.0f}s)")
             return slug
 

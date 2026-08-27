@@ -554,9 +554,17 @@ problems only — a failed write, an unreadable import, a missing `slides.json`.
 
 Two hand-offs join the sitting:
 
-- **From `/curate`** — a reel row offers "use my curated clips", reading the curation
-  draft out of localStorage and attaching it as that slide entry's `videos`. That is the
-  phase-4 `set-clips` path, driven from UI instead of the console.
+- **From `/curate`** — *designed, not built.* A reel row offers "use my curated clips",
+  attaching them as that slide entry's `videos`; that is the phase-4 `set-clips` path
+  driven from UI instead of the console. The remaining work is smaller than it looks,
+  because `curate.js` already computes every input — `ctxIncluded`, `chronoEvents`,
+  `shownStart`/`shownEnd` (the pad-widened bounds), `clipCards`, and `cardEntry` for the
+  resolved content. What it must not become is a JS re-implementation of `emit_reel`'s
+  ordering and card-window rules.
+  **So `/curate` should publish the assembled per-innings clip list** in the `videos`
+  shape, and `/deck` should merely attach it: the derivation stays where its inputs live,
+  and the draft in `wcc-curate:<pc_id>` stays what it is — a diff keyed by clip id, not a
+  clip list.
 - **To record mode** — "Narrate →" opens `/slideshow/?deck=local:<key>&record&ctx=archive`.
   This settles where narration starts: **the front door is `/deck`**, so record mode never
   needs a deck picker of its own.
@@ -819,6 +827,40 @@ is `LIVE_ON` verbatim.
 surface. The slide keeps its identity — tag, cards, layout — and only the footage under it
 changes. `setClips` re-registers with the bridge, so the new panel count reaches the player
 through the handshake that already exists rather than a second path.
+
+### The reel has to exist before it has clips — **built**
+
+The sitting assumed the reel slide is there to curate into. It wasn't.
+
+`ball_events.select()` filters on `contexts["match"]["include"]`, which comes from the
+**committed** curation overlay. On Night 1 there is no overlay, so no clips are selected,
+so `emit_reel` returned `None` — and `last-match-<team>-innings-N-reel` did not exist at
+all. No page, no `slide_meta`, no auto-deck. Which means, on the one day the whole
+one-sitting design is *for*: no row in `/deck` to attach clips to, nothing for the preview
+iframe to load, and nothing for `compose.py` to shoot the overlay layer from.
+
+**An innings with no playable clips now builds the slide anyway** — page, `slide_meta`,
+auto-deck — flagged `_empty`, and `emit_reel` returns the slug only when there is
+something to play, so it is **not added to the set**. The wall is unchanged in both
+directions: an empty reel is never a set member, and a filled one is a member exactly as
+before.
+
+This costs one unreferenced page per innings and buys the sitting a real slide to inject
+`set-clips` into. The publisher's Day-2 rebuild then fills the *same slug* with R2 clips,
+and because a narrated timeline addresses `(slide, panel)`, the recording made over the
+empty-but-injected reel composites against the rebuilt one with no re-addressing.
+
+Two details worth knowing:
+
+- **`innings_idx >= len(innings_ids_chrono)` still returns early.** A match with no
+  Frogbox ball-event metadata at all has no stream behind it, so there is nothing to
+  curate and no reel to offer — that is a different condition from "not curated yet", and
+  it stays a hard no.
+- **An empty reel's atom list is `[]`, not absent**, which is the honest answer (no atoms
+  yet, as opposed to the live slide's unknowable ones). The deck check tests for clips
+  *before* it tests for atoms, so the row reads "has no clips yet" rather than the alarming
+  "no atom list — it cannot be rendered". During the sitting this is the expected state,
+  not a fault.
 
 ### Two clip sources, one reel
 
