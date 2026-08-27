@@ -562,8 +562,36 @@ Two hand-offs join the sitting:
   needs a deck picker of its own.
 
 **Export** is `deck.json`: the literal deck plus `build_version` and `source: "builder"`.
-Publisher chain is `timeline.py --data deck.json` → `compose --timeline`; a
-`compose --deck-file` shortcut is a one-liner if that gets tedious.
+
+### The publisher's half — **built**
+
+There is **no import step**: the publisher never opens `/deck`, and the file is the whole
+hand-off. `compose.py --deck-file` renders it in one command, because `timeline.py` takes
+a deck *document* and an exported deck is one — same call, no second code path.
+
+```
+Editor     /deck → Export deck.json → sends the file
+Publisher  python scripts/build.py                                # a current site/
+           python scripts/compose.py --deck-file 1st-xi.deck.json -o 1st-xi.mp4
+           upload to YouTube by hand
+```
+
+`compose.py` serves `site/` itself on an ephemeral localhost port and drives headless
+Chrome against it, so there is no server to start. The output name comes from the file
+stem (`<name>.deck.json` → `<name>`), because a deck is titled by a person and
+"1st XI highlights (custom).mp4" is not a filename.
+
+`warn_build_drift` prints a line when the deck's `build_version` differs from the one in
+`site/slides.json` — the same guard the deck check gives the editor, now where the render
+actually happens. It warns rather than refuses: the site rebuilds nightly and league
+panels are *meant* to be fresh at publication, so a mismatch is normal. What it is really
+watching for is the dangerous case — **the team has played again, and the rolling match
+slugs now name a different match.**
+
+Two constraints the workflow inherits rather than introduces: the render must happen
+inside the match's window (see "Wall context vs render context"), and a reel only has
+footage once the publisher's rebuild has synced its clips to R2, since CI deliberately
+does not run `sync_videos.py`.
 
 ### What shipped, and what it cost
 

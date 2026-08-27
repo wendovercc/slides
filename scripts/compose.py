@@ -9,9 +9,14 @@ it as a transparent PNG.
 
     python scripts/compose.py match-denham-cc                  # → build/compose/match-denham-cc.mp4
     python scripts/compose.py match-denham-cc --limit 6        # first six beats, for a quick look
+    python scripts/compose.py --deck-file 1st-xi.deck.json     # an editor's exported deck
     python scripts/compose.py --timeline tl.json -o out.mp4    # a timeline made earlier
 
-With no timeline given, one is derived from the built deck (scripts/timeline.py),
+`--deck-file` is the publisher's half of the silent-video workflow: the editor
+builds a deck at /deck and exports `deck.json`, and this renders it in one command.
+Nothing is imported anywhere — the file is the hand-off.
+
+With no timeline given, one is derived from the deck (scripts/timeline.py),
 which is the silent render: no narrator, no microphone, and every duration already
 known at build time. A recorded timeline (phase 6) drops into the same pipeline —
 `duration` longer than the media it names holds the last frame, shorter truncates
@@ -459,10 +464,46 @@ def compose(tl, out_path, work, fade=0.5, limit=None, ctx=DEFAULT_CTX):
     return out_path
 
 
+def safe_name(s):
+    """A filesystem-safe stem. A deck built at /deck is titled by a person, so the
+    fallback name can be anything — "1st XI highlights (custom)" included."""
+    keep = "".join(c if (c.isalnum() or c in "-_") else "-" for c in (s or "deck"))
+    return "-".join(filter(None, keep.split("-"))) or "deck"
+
+
+def warn_build_drift(tl):
+    """Warn when the deck predates the site it is about to be rendered against.
+
+    A match deck names *rolling* slugs (`last-match-1st-xi-*`), so a build that has
+    rolled on to the next fixture renders a different match under the same slugs —
+    silently, and the render is the only freeze there is (see docs/narrated-decks.md,
+    "Wall context vs render context"). The deck builder warns the editor about this;
+    this is the same guard on the publisher's side, where the render actually happens.
+
+    A stamp mismatch is normal and usually harmless — the site rebuilds nightly, and
+    league or leaderboard panels are *meant* to be fresh at publication. It is worth a
+    line, not a refusal.
+    """
+    stamped = tl.get("build_version")
+    catalogue = SITE / "slides.json"
+    if not stamped or not catalogue.exists():
+        return
+    try:
+        live = json.loads(catalogue.read_text()).get("build_version")
+    except (OSError, ValueError):
+        return
+    if live and live != stamped:
+        print(f"  ! deck assembled from build {stamped}, site/ is now {live}")
+        print(f"    Fine if the site has only rebuilt; NOT fine if the team has played "
+              f"since — match slugs roll.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("deck", nargs="?", help="deck slug under site/slideshow/")
+    ap.add_argument("--deck-file", help="a deck document (deck.json exported from /deck), "
+                                       "instead of a deck slug under site/")
     ap.add_argument("--timeline", help="a timeline JSON, instead of deriving one")
     ap.add_argument("-o", "--out", help="output MP4 (default: build/compose/<deck>.mp4)")
     ap.add_argument("--work", help="scratch dir (default: build/compose/<deck>/); "
@@ -479,19 +520,30 @@ def main():
     ap.add_argument("--fresh", action="store_true",
                     help="discard cached stills/overlays/segments first")
     args = ap.parse_args()
-    if not args.deck and not args.timeline:
-        ap.error("give a deck slug or --timeline")
+    if not (args.deck or args.timeline or args.deck_file):
+        ap.error("give a deck slug, --deck-file or --timeline")
     if not shutil.which("ffmpeg"):
         raise SystemExit("ffmpeg not found on PATH")
 
     if args.timeline:
         tl = json.loads(Path(args.timeline).read_text())
     else:
-        tl = timeline_mod.derive_timeline(timeline_mod.load_deck(args.deck), slug=args.deck)
+        # Same call either way — timeline.py takes a deck *document*, and an exported
+        # deck is one. Its slides carry the `_atoms` the build computed, so there is
+        # nothing to re-derive and no second code path.
+        deck = timeline_mod.load_deck(args.deck, data_path=args.deck_file)
+        tl = timeline_mod.derive_timeline(deck, slug=args.deck)
     if args.clip_audio:
         tl["clip_audio"] = args.clip_audio
+    warn_build_drift(tl)
 
-    name = args.deck or (tl.get("deck") or "deck")
+    if args.deck:
+        name = args.deck
+    elif args.deck_file:
+        # `<name>.deck.json` → `<name>`, which is what /deck exports.
+        name = safe_name(Path(args.deck_file).name.split(".")[0])
+    else:
+        name = safe_name(tl.get("deck"))
     work = Path(args.work) if args.work else ROOT / "build" / "compose" / name
     out = Path(args.out) if args.out else ROOT / "build" / "compose" / f"{name}.mp4"
     if args.fresh and work.exists():
