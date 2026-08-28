@@ -498,6 +498,44 @@ def warn_build_drift(tl):
               f"since — match slugs roll.")
 
 
+def check_reels_filled(deck, allow_empty):
+    """Stop before rendering a video with an innings missing.
+
+    The one failure this whole workflow invites: the editor curated clips, sent
+    the deck, and forgot to send `<pc_id>.curation.json` — or it was never landed
+    and built. Everything then succeeds and the MP4 is quietly short of a reel.
+    `derive_timeline` warns, but a warning scrolls past in a run that prints a
+    line per beat and then takes minutes.
+
+    Same idiom as sync_videos.py's missing-fetch guard: abort before the
+    expensive part, name the fix, and offer an explicit override for the case
+    where an empty reel is genuinely intended.
+    """
+    empty = [s for s in deck.get("slides", [])
+             if s.get("_template") == "video" and not (s.get("_atoms") or [])]
+    if not empty:
+        return
+    print("\n  ⚠ Video slide(s) with no clips in this build:", file=sys.stderr)
+    for s in empty:
+        pc = s.get("_pc_id")
+        print(f"      {s['slug']}" + (f"  (match {pc}, innings {s.get('_innings')})"
+                                      if pc else ""), file=sys.stderr)
+    pcs = sorted({s["_pc_id"] for s in empty if s.get("_pc_id")})
+    if pcs:
+        print("\n    Land the editor's curation and rebuild, then re-run:",
+              file=sys.stderr)
+        for pc in pcs:
+            print(f"      cp <from-editor>/{pc}.curation.json content/data/matches/",
+                  file=sys.stderr)
+        print("      python3 scripts/sync_videos.py && python3 scripts/build.py",
+              file=sys.stderr)
+    if allow_empty:
+        print("\n    --allow-empty-reels given: rendering without them.\n", file=sys.stderr)
+        return
+    raise SystemExit("\n  Aborting: this would render a video with an innings missing.\n"
+                     "  Pass --allow-empty-reels if that is what you want.\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -519,6 +557,9 @@ def main():
     ap.add_argument("--limit", type=int, help="render only the first N beats")
     ap.add_argument("--fresh", action="store_true",
                     help="discard cached stills/overlays/segments first")
+    ap.add_argument("--allow-empty-reels", action="store_true",
+                    help="render even if a video slide has no clips in this build "
+                         "(default: abort — a missing curation is the likely cause)")
     args = ap.parse_args()
     if not (args.deck or args.timeline or args.deck_file):
         ap.error("give a deck slug, --deck-file or --timeline")
@@ -529,9 +570,17 @@ def main():
         tl = json.loads(Path(args.timeline).read_text())
     else:
         # Same call either way — timeline.py takes a deck *document*, and an exported
-        # deck is one. Its slides carry the `_atoms` the build computed, so there is
-        # nothing to re-derive and no second code path.
+        # deck is one. There is no second code path, only a refresh step for the
+        # slides whose content the build owns (see below).
         deck = timeline_mod.load_deck(args.deck, data_path=args.deck_file)
+        # An exported deck freezes the composition, not a reel's contents: the
+        # editor assembles it while their curation is still a draft in the
+        # browser, and this run has just landed and built that curation. Refresh
+        # the video slides from the site we are about to shoot against, or we
+        # render the empty reel they exported. No-op for a deck given by slug.
+        if args.deck_file:
+            timeline_mod.refresh_video_slides(deck)
+        check_reels_filled(deck, args.allow_empty_reels)
         tl = timeline_mod.derive_timeline(deck, slug=args.deck)
     if args.clip_audio:
         tl["clip_audio"] = args.clip_audio

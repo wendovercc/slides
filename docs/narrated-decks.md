@@ -634,11 +634,18 @@ hand-off. `compose.py --deck-file` renders it in one command, because `timeline.
 a deck *document* and an exported deck is one — same call, no second code path.
 
 ```
-Editor     /deck → Export deck.json → sends the file
-Publisher  python scripts/build.py                                # a current site/
-           python scripts/compose.py --deck-file 1st-xi.deck.json -o 1st-xi.mp4
+Editor     /deck → Export deck.json  (+ curation.json from /curate, if they curated)
+Publisher  python3 scripts/fetch_all.py                           # every fetch, in CI's order
+           python3 scripts/sync_videos.py                         # clips → R2 + manifest
+           python3 scripts/build.py                               # a current site/
+           python3 scripts/compose.py --deck-file 1st-xi.deck.json -o 1st-xi.mp4
            upload to YouTube by hand
 ```
+
+**The operational half is `docs/publisher-runbook.md`** — the order above is a dependency
+chain (the curation must be landed before the sync, which must precede the build, which
+the render is shot against), and the runbook says why each link holds and what aborts when
+it doesn't.
 
 `compose.py` serves `site/` itself on an ephemeral localhost port and drives headless
 Chrome against it, so there is no server to start. The output name comes from the file
@@ -656,6 +663,89 @@ Two constraints the workflow inherits rather than introduces: the render must ha
 inside the match's window (see "Wall context vs render context"), and a reel only has
 footage once the publisher's rebuild has synced its clips to R2, since CI deliberately
 does not run `sync_videos.py`.
+
+**`refresh_video_slides` is what makes the second of those true**, and it was missing until
+the workflow was walked end to end. "The export carries no clip list; the rebuild is the
+authority on what is in the reel" was the design — but nothing went back to the rebuilt
+slide, and `timeline.py` walked the atom list *in the exported file*. On the day the editor
+assembles a deck that list is **empty**, because the reel has never been built with clips;
+measured, a day-1 export renders 7 beats / 0 media where the built deck gives 37 / 30, with
+only a warning. So a deck loaded from a path now has its video slides re-read from the
+built site before the timeline is derived.
+
+Scoped to video slides, which is what makes it safe: a reel's timing is the one thing
+`/deck` deliberately will not let an editor edit — read-only duration cell, and
+`set-panels` refuses to subset a reel — so there is no editor decision to lose. Static
+slides keep their edited dwells and subsets exactly as exported. Verified: a day-1 export
+refreshes 0 → 10 and 0 → 20 atoms and derives the full 37 beats / 30 media, while an edited
+static slide keeps its 7s dwell and its one-panel subset through the same call.
+
+**And `check_reels_filled` refuses to render an innings-less video.** The forgotten
+`curation.json` is the failure this workflow invites, and its symptom is a complete,
+plausible MP4 that is quietly short of a reel. Same idiom as `sync_videos.py`'s
+missing-fetch guard: abort before the expensive part, print the `cp`/sync/build commands
+that fix it, and offer `--allow-empty-reels` for the case where it is intended.
+
+### Publish assets — **built for match decks; custom decks are phase 8**
+
+`scripts/publish_meta.py <deck-slug>` writes `build/publish/<deck>/` — `title.txt`,
+`description.txt`, `thumbnail.png` (1280x720) and a machine-readable `publish.json`. It
+exists and predates all of this; it was simply never written down anywhere but its own
+docstring, which is how it came to be forgotten. It is now step 6 of
+`docs/publisher-runbook.md`.
+
+Upload is deliberately manual: `YOUTUBE_API_KEY` is an API key and only authenticates read
+calls, and an unaudited API project's uploads are locked to private, so automating it would
+produce a video nobody can watch. `publish.json` is shaped so the API call can be added
+later without redoing any of it.
+
+**It is slug-only, and a custom deck has no slug.** Three dependencies:
+`team_id_from_deck` regexes `^last-match-(.+)$`; `load_deck(slug)` reads
+`site/slideshow/<slug>/data.json`; and `chapter_label` matches the match package's own
+tails (`intro`, `innings-N-(reel|batting|bowling)`, `result`, `league`), returning `None`
+for anything else — so even if the first two were fixed, an assembled deck would chapter
+almost nothing.
+
+#### What belongs in `deck.json`, and what must not
+
+The question is really "which half of the metadata does the editor own", and the answer is
+the same split that `refresh_video_slides` had to learn:
+
+| | Where it comes from | Why |
+|---|---|---|
+| **Chapters** | derived, at publish time | They are timestamps *of the render*. Freezing them in the export is the reel-atoms bug in new clothing: the file would confidently describe a video that no longer matches. They must come from the same refreshed timeline `compose.py` used. |
+| **Result, performers, thumbnail** | derived, from the build | Match facts the build already owns and re-derives correctly. |
+| **Title, description blurb, playlist** | **authored, in `deck.json`** | Nobody but the editor knows what a custom deck is *for*. "2026 season in six minutes" is not derivable from anything in the repo. |
+
+So the deck gains a `publish: {title?, description?, playlist?}` block, read as
+**overrides** on the derived values rather than as content — an absent field means "derive
+it", which keeps a match deck's behaviour exactly as it is today.
+
+`source_match` is already the bridge for the derived half: it rides along in the export
+whenever the deck was opened from a match, so match facts stay available without a slug. A
+genuinely random deck has none, and then the authored title is all there is — which is the
+correct answer, not a degraded one.
+
+#### The phase-8 shape
+
+```
+publish_meta.py --deck-file 1st-xi.deck.json
+    chapters                   ← derived from the refreshed deck (the call compose makes)
+    match facts                ← source_match, or --team, or none
+    title / description / playlist ← deck.publish overrides whatever was derived
+```
+
+Three pieces of work, none of them large:
+
+- **`--deck-file`**, mirroring `compose.py`'s: refresh the video slides, derive the
+  timeline, and take the match from `source_match` instead of the slug.
+- **A generic `chapter_label` fallback.** Every slide now has a distinct name from
+  `slide_title_parts` (242 of 242), so an unrecognised slide can chapter as its own title
+  instead of `None`. The match-package labels stay — they say "Wendover innings —
+  highlights", which a slide title cannot.
+- **A Publish section in `/deck`** (⋯ menu) for the three authored fields, written into the
+  deck document like any other edit. Worth remembering YouTube's limits at the point of
+  typing: 100 characters for a title, and **three chapters minimum or none are shown**.
 
 ### What shipped, and what it cost
 
@@ -1869,7 +1959,7 @@ clip before committing to `keep`.
 | **6b** ✅ | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
 | **6c** ✅ | Deck-builder consistency: naming, grouping, panel subsets, per-step duration. | The two creatures — package and carousel — edit alike; pacing is per atom, wall and render. |
 | **7** | Record mode + `/narrate`: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
-| **8** | Narrated composite + publisher `publish` flow. | The commentated MP4. |
+| **8** | Narrated composite; `publish_meta --deck-file` + authored `publish` block in `/deck`. | The commentated MP4, and a custom deck that can be uploaded. |
 
 2 needs 1; 6 needs 4; 7 needs 4, 5 and 6, and wants 3 to be worth doing; 8 needs 2 and 7.
 

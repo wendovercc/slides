@@ -11,6 +11,10 @@ computed at build time and published in each slide's `_atoms` list.
     python scripts/timeline.py last-match-1st-xi -o timeline.json
     python scripts/timeline.py --data site/slideshow/last-match-1st-xi/data.json
 
+A deck given by `--data` may be an editor's exported `deck.json`, in which case
+its video slides are refreshed from the built site first — see
+`refresh_video_slides` and docs/publisher-runbook.md.
+
 `source: "derived"` timelines have exact durations, so the audio-is-master rule
 that governs recorded ones (truncate/hold to fit the take) never engages here.
 """
@@ -34,6 +38,52 @@ def load_deck(slug=None, data_path=None):
     if not path.exists():
         raise SystemExit(f"no built deck at {path} — run scripts/build.py first")
     return json.loads(path.read_text())
+
+
+def refresh_video_slides(deck, warn=None):
+    """Re-read every video slide's atoms from the built site, in place.
+
+    An exported `deck.json` freezes the *composition* — which slides, in what
+    order, at what dwell. It must not freeze a reel's *content*: clips reach a
+    deck by reference (docs/narrated-decks.md, "Clips reach a deck by reference,
+    not by copy"), and on the day the editor assembles the deck the reel usually
+    has no clips at all — the curation is still a draft in their browser. The
+    publisher then lands the curation, syncs R2 and rebuilds, which fills the
+    reel; without this, the render would still be walking the empty atom list the
+    editor exported and would drop a whole innings with only a warning.
+
+    Scoped to video slides because a reel's timing is the one thing `/deck`
+    deliberately will not let an editor edit — its dwell is read-only there and
+    `set-panels` refuses to subset it — so there is no editor decision to lose.
+    Static slides keep their edited dwells and panel subsets exactly as exported.
+
+    A no-op on a deck loaded by slug: it *is* the built document.
+    """
+    warn = warn or (lambda msg: print(f"  ! {msg}", file=sys.stderr))
+    for slide in deck.get("slides", []):
+        if slide.get("_template") != "video":
+            continue
+        slug = slide.get("slug")
+        path = SITE / "slideshow" / slug / "data.json"
+        if not path.exists():
+            warn(f"{slug}: no such slide in this build — keeping the exported copy "
+                 f"(has the team played again?)")
+            continue
+        built = next((s for s in json.loads(path.read_text()).get("slides", [])
+                      if s.get("slug") == slug), None)
+        if built is None:
+            warn(f"{slug}: not in its own deck document — keeping the exported copy")
+            continue
+        before = len(slide.get("_atoms") or [])
+        after = len(built.get("_atoms") or [])
+        for key in ("_atoms", "_clips", "_videos", "duration", "panel_duration"):
+            slide.pop(key, None)
+            if key in built:
+                slide[key] = built[key]
+        if before != after:
+            print(f"  refreshed {slug} from the build: {before} → {after} atom(s)",
+                  file=sys.stderr)
+    return deck
 
 
 def derive_timeline(deck, slug=None, clip_audio=DEFAULT_CLIP_AUDIO, warn=None):
@@ -103,6 +153,10 @@ def main():
         ap.error("give a deck slug or --data")
 
     deck = load_deck(args.deck, args.data)
+    # A deck given by path may be an editor's export, whose reels are as stale as
+    # the build they were added from. By slug it is the built document already.
+    if args.data:
+        refresh_video_slides(deck)
     timeline = derive_timeline(deck, slug=args.deck, clip_audio=args.clip_audio)
 
     total = sum(b["duration"] for b in timeline["beats"])
