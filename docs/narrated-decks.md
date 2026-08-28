@@ -1922,6 +1922,139 @@ rather than at zero.
   first beat is not stamped before the recorder was listening.
 - Frame quantisation (`frame_align`, ±17 ms) is comfortably inside this.
 
+### Seek lag becomes a freeze — **open, revisit at render testing**
+
+A sitting narrates over **YouTube**, always: `resolveReel` only attaches R2 files where
+the curation matches what the last build synced, and on the day the editor curates there
+is nothing synced, so the reel plays as `(url, start, end)` segments of the Frogbox
+stream. That is the design working — but it has a consequence for the *render* that has
+not been seen yet, because nobody has composed a recorded timeline.
+
+**A clip beat's cue is stamped when the panel echo arrives**, which is when the seek is
+*requested*. `ytSource` seeks within one already-loaded broadcast (no reload per clip),
+but a seek across minutes of stream still costs a few hundred milliseconds before a
+frame appears. That time sits inside the beat, so **every clip beat is recorded a
+fraction longer than its own footage**.
+
+Audio-is-master then does exactly what it is supposed to: the beat gets its recorded
+duration, the media is a touch shorter, and `tpad=stop_mode=clone` holds the last frame
+for the difference. The predicted symptom is therefore **a short freeze at the end of
+every clip in the finished video** — and it does not go quiet, because with
+`clip_audio: keep` the crowd bed carries on over the frozen frame, which reads worse
+than silence would. Whether that is visible at all depends on how big the lag is: it may
+sit under the ±17 ms frame grid `frame_align` quantises to, in which case there is
+nothing there.
+
+**Do not "fix" it by trimming the beat to its media length.** The take is continuous, so
+a beat's audio is `take[cue, next_cue]` whatever the video does; shortening the video
+without shortening the audio starts the next clip early against a take that has not
+moved, and the error accumulates down a 29-clip reel. That is the same class of bug as
+the AAC priming loss, and it is worse than the freeze.
+
+**Stamping the cue on first frame moves the freeze; it does not remove it.** This is
+worth being precise about, because it is the obvious fix and it is only half a fix. The
+take is continuous and beats partition it at the cues, so the audio recorded between the
+seek request and the first frame has to belong to *some* beat. Today that is the beat
+being entered; cueing on first frame makes it the beat being left:
+
+| | beat N−1 | beat N |
+|---|---|---|
+| **Cue at request** (today) | its own span | span + lag → holds **clip N**'s last frame |
+| **Cue at first frame** | span + lag → holds **clip N−1**'s last frame | span exactly |
+
+Same total, same artefact, one clip earlier. What it genuinely buys is **placement**:
+during the take the lag *is* a freeze at the end of clip N−1 — that is what the narrator
+watched and talked over — so first-frame cueing makes the render reproduce what they saw,
+with the commentary over the picture it was spoken against. Today that half-second of
+speech plays at the end of clip N instead, displaced from its action by the lag. A sync
+fix, not a freeze fix, and worth having as one.
+
+Two things make it better than a wash: **lag entering a reel is free**, because clip 1's
+seek lands in the preceding static beat and a still held a few hundred ms longer is
+invisible; and the hold falls on **lead-out pad footage** — the reaction frames after the
+action — which is the most forgiving place in a clip to freeze. Both are true of today's
+behaviour too, the second one anyway.
+
+YouTube announces the first frame (`onStateChange` → PLAYING, or the poll seeing time
+advance), so the reel could report it and `recSync` stamp on it: perhaps twenty lines, in
+the place the lag actually is.
+
+**Gating the recorder is the only way to keep the audio honest, and it should be
+conditional.** Pausing `MediaRecorder` while a clip loads — with a WAIT indicator, so the
+narrator stops rather than being cut off — excises the lag from the take entirely: no
+inflated beat, no pad, nothing to place. `MediaRecorder.pause()`/`resume()` produce a
+continuous master with the gap simply absent, and `takeTime()` would have to subtract the
+paused intervals so cue stamps stay in take time rather than wall time.
+
+But it must not fire on every clip. A stop-and-wait at each of 29 boundaries would read as
+a stilted performance and would be far worse than a 200 ms freeze nobody can see. **Gate
+on a threshold** — no first frame within, say, 600 ms — so small lag is absorbed as it is
+today and only a pathological load interrupts the narrator. That bounds the damage in both
+directions.
+
+**Removing the lag is better than managing it, and there may be a much shorter path than
+either of the obvious ones.** The obvious ones are: prebuffer the next segment (a second
+IFrame player in `video.html`, real complexity for a preview-only source), or narrate
+against R2 files, which means the publisher syncs before the sitting and reshapes the
+one-sitting workflow.
+
+**Rejected: the per-clip frogbox route.** It was probed and it works, and it is still
+the wrong answer, because it can only address clips that came from the *feed*. Curation
+deliberately outgrew that: an editor can author a **custom event** for a ball the scorer
+missed or mis-typed, and for things that are not balls at all — a pitch invasion has no
+`match_event_type_id`. Those clips are `(start, end)` against the broadcast and nothing
+else; there is no frogbox highlight asset behind them to fetch. The current curations
+already carry two (`m1`, `m2` in match 7298980), neither of which appears in the fetched
+feed at all. A clip source that cannot play everything the editor can curate is a source
+that constrains curation, and curation is the part of this pipeline that has been got
+right — the reel must follow it, not the other way round.
+
+The findings are kept below because they are cheap facts about the data rather than a
+plan, and the ±5s window measurement is worth having on record either way.
+
+The route was that **every curated ball already carries its own clip stream**.
+`fetch_ball_events.py` stores `frogbox_url` alongside `youtube_url` on every event — 386
+of 386 in the current fetch — and it is a per-ball HLS playlist, not a broadcast to seek
+in. Probed against a six-week-old match:
+
+```
+GET …/0d177b73….m3u8?dt=…&start=5&end=35   →  200, access-control-allow-origin: *
+#EXT-X-PLAYLIST-TYPE:VOD                       5 × 8s segments ≈ 40s, BunnyCDN
+segment fetch  480 KB   cold ttfb 240ms / 350ms total   ·   warm 60ms / 160ms
+```
+
+So a whole clip is ~2.4 MB and about 1.5s cold — trivially prefetched during the
+preceding clip, which runs 6–20s. It is CORS-open, it is VOD rather than live, and the
+URLs still resolved weeks after the match. **We already ship the machinery**: `hls.js`
+plus `assets/js/hls-cache.js`, written for exactly this — cached HLS clips with a
+prefetch gate — for the live reel. `video.html`'s source abstraction
+(`mount`/`show`/`pause`/`resume`/`time`/`seek`/`teardown`) is where a third source would
+slot in beside `mp4Source` and `ytSource`.
+
+**The catch, measured rather than assumed: the window is fixed at about the ball ±5s, and
+real curations sometimes leave it.** Across the three committed curations, editors
+hand-trimmed 27–45 clips each and **1–2 per match** fall outside their ball's own frogbox
+window — one pulled back 140s to take in a longer passage, another extended 31s. Under
+the current all-or-nothing source rule (one source per reel, which `video.html` rests on)
+that single clip would drop the whole reel back to YouTube, and the lag with it. So this
+route **depends on per-clip source mixing** — already noted as deferred under "Two clip
+sources, one reel": *"per-clip mixing is the refinement if preview latency ever justifies
+the surgery."* It now might.
+
+**So the decision is to look at it first.** Measure the real lag on a first take —
+`/narrate`'s beat table against the sidebar's `Footage` line gives it for nothing — and
+watch what the freezes actually look like in a composed render, on lead-out pad footage,
+at whatever size they turn out to be. Tens of milliseconds and there is nothing here.
+Hundreds and the live options are the conditional recorder gate above, or a second
+IFrame player prebuffering the next segment of the same broadcast — which keeps YouTube
+as the one source that can play anything the editor curates.
+
+**It is diagnosable with what already exists.** `/narrate`'s beat table shows each
+beat's recorded duration and its sidebar shows the atom's `Footage` length: a systematic
+few-hundred-ms excess on *every* clip beat is this, and a large one on a single beat is
+the narrator, which the "runs Xs past its footage" flag already catches. Measure it on
+the first real take before writing any code.
+
 ### Review & re-record
 
 A table over a waveform of the take, one row per beat:
@@ -2168,6 +2301,12 @@ Segments, stills and overlays are cached in the work directory and reused, which
 re-render after a tweak cheap.
 
 ### Two ways a render drifts out of sync
+
+*(A third is suspected and unmeasured, and it only applies to narrated renders: see
+"Seek lag becomes a freeze" under record mode. It is not drift — the streams stay
+together — but it is the same kind of small per-beat error accumulating down a long
+reel, and this is the section to read alongside it when the first narrated composite is
+tested.)*
 
 Both were live bugs, both found by measuring the first full render against its timeline, and
 both accumulate silently across a long reel — the 2nd-innings reel is 29 clips, so anything
