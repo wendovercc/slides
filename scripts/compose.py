@@ -568,6 +568,16 @@ def main():
 
     if args.timeline:
         tl = json.loads(Path(args.timeline).read_text())
+        # A recorded timeline (from /narrate) addresses atoms and carries cue times,
+        # but no media ranges and no audio: joining it to the rebuilt deck and mixing
+        # the take under the clips is phase 8. Refuse rather than render, because what
+        # this would otherwise produce is the dangerous kind of wrong — a complete,
+        # plausible MP4 with every clip replaced by a still and no commentary at all.
+        if tl.get("source") == "recorded":
+            raise SystemExit(
+                "this is a recorded timeline (narration): composing one is phase 8 of "
+                "docs/narrated-decks.md and is not built yet. For a silent render of the "
+                "same deck, use --deck-file with the narration zip's deck.json.")
     else:
         # Same call either way — timeline.py takes a deck *document*, and an exported
         # deck is one. There is no second code path, only a refresh step for the

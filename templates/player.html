@@ -91,13 +91,19 @@
         /* Retract toward the TOP-RIGHT: scale about the top-left as always, then push
            the shrunken layer right by the band, so the uncovered L is left + bottom.
            The offset is in stage px — the design box is 1920 wide, scaled by --fit —
-           because a transform's translate resolves before its scale. */
-        body.live-chrome #slide-layer {
+           because a transform's translate resolves before its scale.
+
+           `record-chrome` is the same retraction for a narration take (?record): the
+           HUD sits in the L beside the deck rather than over it, which is what a
+           performance surface wants. One rule for both, so the two chromes cannot
+           drift into two different geometries — see docs/narrated-decks.md. */
+        body.live-chrome #slide-layer,
+        body.record-chrome #slide-layer {
             transform: translateX(calc(1920px * var(--fit, 1) * var(--live-band)))
                        scale(calc(var(--fit, 1) * (1 - var(--live-band))));
         }
-        /* Refitting (load, resize, rotate) must snap; only the live-chrome
-           grow/shrink animates. */
+        /* Refitting (load, resize, rotate) must snap; only the chrome grow/shrink
+           animates. */
         body.no-fit-anim #slide-layer { transition: none; }
 
         /* visibility, not just opacity — this is a MEMORY control, not a cosmetic one.
@@ -343,7 +349,8 @@
     <div id="slide-layer"></div>
 </div>
 {% if screen %}<script src="/assets/js/context.js?v={{ asset_version }}"></script>{% endif %}
-{% if not screen %}<script src="/assets/js/deck-store.js?v={{ asset_version }}"></script>{% endif %}
+{% if not screen %}<script src="/assets/js/deck-store.js?v={{ asset_version }}"></script>
+<script src="/assets/js/take-store.js?v={{ asset_version }}"></script>{% endif %}
 <script src="/assets/js/video-cache.js?v={{ asset_version }}"></script>
 <script src="/assets/js/preload-gate.js?v={{ asset_version }}"></script>
 <script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
@@ -367,7 +374,9 @@ const SLIDE_Q = CTX ? `?ctx=${encodeURIComponent(CTX)}` : '';
 // on SLIDE_Q. Carried as a URL flag rather than over the bridge because a windowed
 // deck re-loads its frames as it moves and a URL survives that with no handshake, the
 // same reason ?ctx is passed this way. See docs/narrated-decks.md.
-const FRAME_Q = params.has('interactive')
+// Record mode is interactive mode with a recorder attached, so it gets holds too —
+// the two must never disagree about what a tap does.
+const FRAME_Q = (params.has('interactive') || params.has('record'))
     ? (SLIDE_Q ? `${SLIDE_Q}&holds=1` : '?holds=1')
     : SLIDE_Q;
 {%- if screen %}
@@ -863,6 +872,10 @@ async function init() {
                 // to panel). Absent on live slides — panel_duration stays the fallback.
                 atoms: s._atoms || null,
                 group: s._group || null,   // slide-set membership (drives hats later)
+                // The slide's own header hierarchy, dot-joined (slide_title). Record
+                // mode names the deck spine's tiles from its last two levels — the
+                // same strings the wall's header shows, so they cannot drift.
+                title: s._title || null,
                 // video slide → auto-plays on forward arrival. `videos` is the
                 // injected-deck form of the same thing (no build, so no _videos).
                 video: (s._videos || []).length > 0 || !!s._is_video || (s.videos || []).length > 0,
@@ -872,6 +885,13 @@ async function init() {
                 _currentSlug = finalSlides[i].slug;
                 if (PREVIEW) markCurrentSlide(_currentSlug);
             },
+            // Record mode stores the deck as played beside its take: the render is
+            // shot against exactly what the narrator saw. `deckKey` is provenance —
+            // which draft this take came out of. Both are inert outside ?record.
+            deck: { title: show.title, slides: finalSlides,
+                    build_version: show.build_version || null,
+                    source_match: show.source_match || null },
+            {% if not screen %}deckKey: LOCAL_DECK,{% endif %}
             shouldReloadNow,
             onReload,
             flash: { frame: document.getElementById('flash-frame') },

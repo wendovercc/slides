@@ -30,6 +30,10 @@
   // Reserved deck-store key holding whatever the preview pane is showing. Prefixed
   // so the drafts picker can tell tooling keys from the editor's own decks.
   var PREVIEW_KEY = "__preview";
+  // The deck record mode plays. Reserved like __preview and for the same reason: it
+  // holds a RESOLVED copy (reels carrying the sitting's clips), which the draft
+  // itself must never own — see "Clips reach a deck by reference, not by copy".
+  var NARRATE_KEY = "__narrate";
 
   var state = {
     cat: null,          // /slides.json
@@ -711,6 +715,7 @@
     var arr = slides();
     var gs = groups();
     $("#play-btn").hidden = !arr.length;   // nothing to play
+    $("#narrate-btn").hidden = !arr.length;
     // Steps, not slides: the same unit the group rows and the catalogue are
     // measured in, so the summary adds up to what is written down the list.
     var nSteps = gs.reduce(function (a, g) {
@@ -1225,6 +1230,26 @@
       + (state.pv.n > 1 ? " · " + state.pv.n + " slides" : "") + "</i>";
   }
 
+  /* Hand off to record mode. The front door to narration is here, which is what
+     keeps record mode from needing a deck picker of its own: it is handed a deck
+     that already exists. `?record` is interactive mode plus a recorder, and
+     `ctx=archive` because the narrator should read the wording the video will
+     carry, not the wall's. See docs/narrated-decks.md, phase 7. */
+  function narrateDeck() {
+    if (!slides().length) return;
+    persist();
+    if (window.WccDeckStore
+        && !WccDeckStore.put(NARRATE_KEY, { title: state.deck.title,
+                                            build_version: state.deck.build_version
+                                              || (state.cat && state.cat.build_version),
+                                            source_match: state.deck.source_match || null,
+                                            slides: slides().map(playable) })) {
+      status("deck too large to hand to the recorder");
+      return;
+    }
+    window.open("/slideshow/?deck=local:" + NARRATE_KEY + "&record&ctx=archive", "_blank");
+  }
+
   function playDeck() {
     if (!slides().length) return;
     persist();
@@ -1325,6 +1350,7 @@
     });
     $("#export-btn").addEventListener("click", exportDeck);
     $("#play-btn").addEventListener("click", playDeck);
+    $("#narrate-btn").addEventListener("click", narrateDeck);
     $("#import-input").addEventListener("change", function (ev) {
       if (ev.target.files && ev.target.files[0]) importDeck(ev.target.files[0]);
       ev.target.value = "";

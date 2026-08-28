@@ -87,6 +87,17 @@
     } catch (e) { /* not embedded — ignore */ }
   }
 
+  /* A controller that can enumerate its own atoms answers with them on the
+   * handshake. Only a reel does, and only because the build cannot: during the
+   * editor's sitting its clips are a live curation nothing has built, so the
+   * published `_atoms` are stale or empty and the slide is the sole authority.
+   * Everything else is enumerated at build time and needs no runtime answer.
+   * Same principle as `edge()` — the slide answers for itself. */
+  function ownAtoms() {
+    if (!ctrl || !ctrl.atoms) return null;
+    try { return ctrl.atoms(); } catch (e) { return null; }
+  }
+
   window.WccSlide = {
     // Capability flag: this bridge understands atom-level navigation (`edge`/`step`
     // on a controller, first/last on every message). A slide template may deploy
@@ -104,7 +115,7 @@
       // frame load), and only now is the real panel count known.
       clampSel();
       if (sel && sel[0] !== 0) ctrl.show(sel[0]);
-      post('wcc-slide');
+      post('wcc-slide', { atoms: ownAtoms() });
     },
     // Called by the controller after it changes panel. `extra` (optional) rides
     // along on the wcc-panel message — video reels pass the current clip's duration
@@ -165,7 +176,28 @@
       case 'prev-panel': step(-1); break;
       case 'goto-panel': show(typeof d.index === 'number' ? d.index : current); break;
       case 'reset':      show(0); break;
-      case 'ping':       post('wcc-slide'); break; // parent (re)requests count
+      case 'ping':       post('wcc-slide', { atoms: ownAtoms() }); break; // parent (re)requests count
+      // The playhead, on request. A narration freeze is stamped with media time
+      // within the clip, and only the slide knows it. Answered as its own message
+      // rather than on the panel echo: `wcc-panel` re-arms the player's clocks, and
+      // a probe must not.
+      case 'ping-time':
+        if (ctrl && ctrl.time) {
+          try { parent.postMessage({ type: 'wcc-time', panel: toOrd(current), t: ctrl.time() }, '*'); }
+          catch (e) {}
+        }
+        break;
+      // Park on one atom: a panel, and for a reel which segment of the clip. The
+      // slide answers because a clip's segments are its own business — the player
+      // knows panels. Anything else treats it as a plain panel move.
+      case 'goto-atom':
+        if (window.WccReel && WccReel.gotoAtom) WccReel.gotoAtom(d.panel, d.card || null);
+        else show(typeof d.panel === 'number' ? d.panel : current);
+        break;
+      // Clip audio on or off, for record mode. A slide with no media ignores it.
+      case 'set-mute':
+        if (window.WccReel && WccReel.setMute) WccReel.setMute(!!d.muted);
+        break;
       // Runtime clip list for a reel: an injected deck carries clips the build has
       // never seen, so the player pushes them in on load and the slide rebuilds
       // around them (re-registering, which re-announces the panel count above).

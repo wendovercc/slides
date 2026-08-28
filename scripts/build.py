@@ -1029,6 +1029,23 @@ def build_deck_builder(env):
     print("  deck builder → /deck/")
 
 
+def build_narrate(env):
+    """Publish the narration review workbench at /narrate/ (unlisted, noindex).
+
+    Phase 7 of docs/narrated-decks.md. Like the deck builder, nothing is baked in:
+    the page reads the take out of the browser (``take-store.js``) and the deck it
+    was recorded over out of the deck store, so this step is one template render.
+
+    Narration is two surfaces and conflating them is the trap the design warns
+    about: *recording* is the deck with a HUD over it and lives in the player
+    (``?record``); *review* is a table over a waveform and lives here.
+    """
+    out_dir = SITE / "narrate"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "index.html").write_text(env.get_template("narrate/index.html").render())
+    print("  narration review → /narrate/")
+
+
 def build_curation(env):
     """Publish the ball-events curation tool at /curate/ (unlisted, noindex).
 
@@ -4867,6 +4884,7 @@ if __name__ == "__main__":
     print("Building curation tool...")
     build_curation(env)
     build_deck_builder(env)
+    build_narrate(env)
 
     (SITE / ".nojekyll").write_text("")
     print("\nDone. To preview locally:")

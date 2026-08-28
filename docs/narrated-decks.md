@@ -1,11 +1,15 @@
 # Narrated Decks — Deck Builder, Narration & Video Export
 
-> Status: **phases 1–6 built (including the 6c consistency pass); 7 (record mode) designed, not built.**
+> Status: **phases 1–7 built.** Record mode's chrome has been through a design pass and
+> is settled; **`/narrate` is built but unrefined and has not been driven in a browser** —
+> its logic is covered by the stub-DOM suite, its UI is not. 8 (narrated composite +
+> publish assets for custom decks) is next.
 > Planning source of truth for the deck builder, the narration recorder and the compositor — including **silent** decks, which
 > render to video with no editor sitting at all. Supersedes the "Feature 2 — Highlights
 > video" half of `docs/match-highlights.md`. Read `assets/js/player-core.js`,
-> `assets/js/slide-bridge.js` and `scripts/build.py` (`_resolve_deck`, `_write_deck_data`,
-> `build_video_slide`) alongside this.
+> `assets/js/slide-bridge.js`, `assets/js/deck.js`, `assets/js/narrate.js` and
+> `scripts/build.py` (`_resolve_deck`, `_write_deck_data`, `build_video_slide`,
+> `slide_atoms`) alongside this.
 
 ## Reframe
 
@@ -493,9 +497,10 @@ narrows it; results already in the deck say so.
   step at all — see below.
 
 **Each pane owns its own action, top-right, and both hide when they would do nothing.**
-`Play ↗` on the deck pane opens the whole draft in a tab; `Open ↗` on the preview pane
-opens whatever is being previewed. Same shape, same `↗`, same rule — a button that does
-nothing is worse than no button, which is also why there is no "Narrate →" yet.
+`Play ↗` on the deck pane opens the whole draft in a tab; `Narrate ↗` beside it opens the
+same draft in record mode; `Open ↗` on the preview pane opens whatever is being previewed.
+Same shape, same `↗`, same rule — a button that does nothing is worse than no button, which
+is why `Narrate ↗` arrived with phase 7 rather than before it.
 
 **Stacked, not tabbed.** The caret lives in the deck list, and hiding it behind a tab
 while you choose what to put in it means not seeing where the thing will land.
@@ -621,9 +626,12 @@ Two hand-offs join the sitting:
 - **From `/curate`** — *designed, not built.* A reel row resolves its clips from the
   curation the editor is working on, live. See "Clips reach a deck by reference, not by
   copy" below: it needs no attach action and takes no snapshot.
-- **To record mode** — "Narrate →" opens `/slideshow/?deck=local:<key>&record&ctx=archive`.
-  This settles where narration starts: **the front door is `/deck`**, so record mode never
-  needs a deck picker of its own.
+- **To record mode — built.** `Narrate ↗` writes a *resolved* copy of the draft to the
+  reserved `__narrate` key (reels carrying the sitting's clips, exactly as `Play ↗` does
+  with `__preview` — the draft itself must never own them) and opens
+  `/slideshow/?deck=local:__narrate&record&ctx=archive`. This settles where narration
+  starts: **the front door is `/deck`**, so record mode never needs a deck picker of its
+  own.
 
 **Export** is `deck.json`: the literal deck plus `build_version` and `source: "builder"`.
 
@@ -760,9 +768,10 @@ The design above is what got built, with three adjustments:
   that writes them. "Start from an existing slideshow and customise" is the common case,
   and the catalogue indexed slides and sets but not the decks an editor actually starts
   from. Auto-decks stay out: they are one slide or one set, both already listed.
-- **No "Narrate →" button yet.** Record mode is phase 7, and a dead button is worse than
-  no button. `Preview deck ▸` opens `?deck=local:<key>&interactive&ctx=…` in a tab, which
-  is the same hand-off with a different destination.
+- **No "Narrate →" button yet.** *(Landed in phase 7.)* Record mode did not exist, and a
+  dead button is worse than no button. `Preview deck ▸` opens
+  `?deck=local:<key>&interactive&ctx=…` in a tab, which is the same hand-off with a
+  different destination.
 - **The layout was reworked once it was in front of a person**: deck and discover stacked
   down the left, preview widened to `1fr` down the right, the slug off every row, and the
   three source lists (slideshows / packages / slides) collapsed into one search. The load
@@ -779,7 +788,9 @@ The design above is what got built, with three adjustments:
   draft.
 - **The start index (`&start=<n>`) was not built.** Preview opens at the top of the deck;
   per-slide preview covers the "look at this one" case, which is what the pane is for.
-  Deferred rather than dropped.
+  Deferred rather than dropped — and phase 7 answered the underlying need a different
+  way, by driving the hosted player's own nav (`?hosted` + `goto-atom`) instead of
+  addressing a deck position in the URL.
 
 **Verified end to end, not just built.** Across the whole current build: all 243 catalogued
 slides resolve to an auto-deck entry carrying `_atoms`, all 19 sets match their members
@@ -1442,7 +1453,10 @@ a reel", so it needs no separate test and appears on nothing else.
 **The loop is free before narration and costly after it.** A recorded timeline enumerates
 the atoms it was recorded against, so re-curating after a take moves the panels underneath
 it. The sitting's order is therefore **curate → assemble → narrate → export**, and
-`/narrate` (phase 7) should detect a curation change since recording and say so.
+`/narrate` **does** detect it: the take's deck copy holds the clips as recorded, so
+comparing them against `wcc-reel:<pc_id>:<innings>` on load is enough, and the page says
+so at the top rather than letting a re-curated reel render against beats that no longer
+line up.
 
 **Fixed alongside this:** `derive_timeline` treated an empty `_atoms` as nothing to say. An
 empty list is not a missing one — the slide *was* enumerated and the answer was "nothing" —
@@ -1594,14 +1608,21 @@ reconcile step behind a web button.
 
 ---
 
-## Record mode & `/narrate` — **proposed**
+## Record mode & `/narrate` — **built (phase 7)**
 
 Narration is **two surfaces**, and conflating them is the main trap:
 
 | Surface | Is | Where |
 |---|---|---|
-| **Record** | the deck, near-fullscreen, minimal HUD | `player-core.js` mode #3: `/slideshow/?deck=local:<key>&record` |
+| **Record** | the deck, near-fullscreen, minimal HUD | `player-core.js` mode #3: `/slideshow/?deck=local:__narrate&record&ctx=archive` |
 | **Review** | beat table, waveform, boundary nudge, re-record, export | `/narrate`, a `/curate`-idiom page that *hosts* the player in an iframe |
+
+**The two surfaces are at different stages.** Record mode has had the design pass the
+table below records — the L-frame chrome, the state vocabulary, the spine — and is
+settled. `/narrate` is built to the same spec and verified the same way (its beat maths,
+nudge, re-record reflow and export are pinned by the stub-DOM suite), but it has not yet
+been sat in front of anyone: the layout, the waveform's legibility and the re-record flow
+are all unrefined, and the first real take is what should drive them.
 
 Record mode goes *into* the player, as a mode alongside kiosk and interactive, sharing
 `next`/`prev`/`arrive`/`applyState` — so a tap does exactly what it does on the bar iPad
@@ -1624,26 +1645,217 @@ mode with the HUD up and the mic off.
 **Arm** is mic permission, a level check and a 3-2-1. The take starts before the first
 atom does, so there is lead-in silence to trim against.
 
-### The HUD
+### The HUD — **the live chrome's L, borrowed**
 
-The deck must dominate, so this is a strip in the letterbox band `placeBar` already
-measures — not a panel.
+The deck must dominate, so the chrome sits **beside** it, not over it: the slide layer
+retracts exactly as it does on a match day and the instruments go in the band it
+uncovers — a footer along the bottom, a strip up the left.
 
-- **REC dot + take clock.** The take is the artefact; its clock is the one true time.
-- **Beat position** — `beat 14/61 · innings 1 reel · clip 3 · pre-card`. From `_atoms`, so
-  it is known up front and does not wait on the runtime `wcc-slide` handshake.
-- **A "next up" prompt** — the highest-value element on the screen. For a clip, its
-  curated narrative; for a card, **the resolved figures from the catalogue**, because the
-  narrator has to say them aloud (that is what makes phase 3 load-bearing); for a static
-  slide, its title.
-- **What the current atom is doing** — for a clip, a thin remaining-time bar, so the
-  narrator can see the auto-cue coming; for a hold, a `HOLD — → to advance` state. The
-  existing `#wcc-bar-progress` fill is the first, and `hold: true` already freezes it.
-- **A live level meter**, with a clip warning. A take that turns out silent or clipped
-  after twenty minutes is the worst outcome the feature has.
+```
+┌──────┬────────────────────────────────┐  strip  the deck's spine — one tile per
+│ 1st  │                                │         slide, filling gold as it plays
+│ Inns │        the deck, 92%           │
+│ High │                                │  flag   ● REC / REHEARSE + take clock
+│ 10cl │                                │
+├──────┴────────────────────────────────┤  foot   beat 14/61 · 1st Innings · clip 3
+│ flag │ foot                           │         NEXT ▸ 4. OUT! G Jackson gets M Moss
+└──────┴────────────────────────────────┘         [level] ▸ ▸| · Clip audio · Stop ■
+```
 
-Everything else — prev, home, fullscreen — comes off the bar while recording. It is a
-performance surface.
+**The take's state is the gold tile in the bottom-left corner** — the live ticker's
+flag, in the corner the live chrome already uses as the header for the whole L. It is
+pinned to the band width from the measured stage, so the strip stands squarely on it and
+the footer's gold rule runs off its left edge; the REC dot rides *inline* at the head of
+the label (as the ticker's live dot does, so it can never strand itself beside a block),
+and the take clock is its subtitle, where the ticker puts the division. The strip
+therefore carries no header of its own — meter and beat count only.
+
+A **hold** is the one state the narrator has to act on, so it reads as an instruction at
+the head of the footer's beat line (`HOLD — → to advance`) rather than as a label
+somewhere in the furniture.
+
+#### The strip is the deck's spine
+
+The countdown along the footer's top edge says how far through *this beat* you are. The
+strip is the same statement turned through ninety degrees for the whole deck: **one tile
+per slide, top to bottom, each filling with gold as its atoms are played**, the current
+one outlined. A set boundary is a wider gap rather than a second colour — gold is this
+design's only accent and progress has already claimed it.
+
+**A reel is one tile however many clips it holds**, and that is what makes the spine
+readable rather than a wall of ticks: 29 clips are one thing you narrate. The tile says
+how many are stacked in it — *clips*, not beats, because a clip carrying both cards is
+three beats but one ball, and the count the editor curated is the count the narrator
+recognises. It also says **how many holds** are in there, because that is the number of
+times the narrator has to do something inside a tile they are about to spend three
+minutes in; it is silent at zero, which most reels are. Measured on the real 1st XI
+last-match deck: **37 beats → 9 tiles**, the 1st-innings reel reading `10 clips` and the
+2nd `18 clips · 2 holds`.
+
+Tiles are named from `slide_title`'s last two levels (`1st Innings` / `Highlights`), so
+the spine, the wall's header and the deck builder's rows are the same strings by
+construction. **Both lines are set identically** — same size, same weight, white,
+centred — because that is one name in two levels rather than a label above a heading;
+only the gold clip count reads as a different kind of thing. The gap between tiles is
+also the strip's inset and the tiles' own padding, so the column reads as an even stack
+rather than a boxed list. Past a dozen tiles the words have nowhere to go and the spine drops to
+bars only, which still answers the question it exists to answer.
+
+**Thumbnails were the first idea and are not buildable in the browser.** Every still this
+project has comes from Playwright — `compose.py`'s `Shooter`, `publish_meta.py`'s
+`render_thumbnail` — at render time, in Python. The two browser-side routes are the ones
+the deck builder already turned down: a nightly headless pass over 243 slides for images
+almost nobody looks at, and live mini-iframes, which is precisely the many-live-documents
+allocation the iOS WebContent OOM came from and windowing exists to prevent. During the
+sitting a reel's clips are YouTube segments besides, so there is no poster frame to take
+either. If real stills are ever wanted here, the seam is a per-deck shoot at *export*
+time — the compositor already screenshots exactly these atoms — rather than anything in
+the player.
+
+**This is one rule, shared with the live chrome** (`body.record-chrome` beside
+`body.live-chrome` in `player.html`), because the retraction was already a property of
+the stage: a uniform scale of `1 − band` about the top-left, pushed right by the band,
+which tiles the frame with no black bars. Two chromes with one geometry cannot drift
+apart, and a take now looks like a match day rather than like a dialog over one.
+
+Three things it forced, all of them improvements:
+
+- **The floating control bar is not built in record mode at all.** It is a surface over
+  the slide, which is the thing this layout removes; the footer carries the transport
+  and the clip countdown instead. Everything downstream already guarded on `bar` being
+  absent, because `placeBar` has always been able to run before it exists.
+- **The chrome is positioned, not parented.** Appending it to `#stage` beside the ticker
+  and strip is the obvious move and does not work: `#stage` is `transform`ed to centre
+  it, which makes it a stacking context, and `#wcc-tap` — the full-screen gesture layer
+  — then paints above everything inside. The chrome has buttons. So it is fixed and
+  measured off the stage's rect, re-measured on resize like `placeBar`.
+- **It is sized in `--fit` units**, the scale the slide layer itself is drawn at, so
+  `26` in the CSS is 26 wall pixels and the chrome is the same design as the deck at any
+  size.
+
+What is in it:
+
+- **REC dot + take clock.** The take is the artefact; its clock is the one true time —
+  and *only* while there is a take. It appears with the first recorded chunk, which is
+  the moment it starts being true; before that the flag is the state alone, because a
+  `0:00` sitting under REHEARSE is a number that means nothing. (The deck's own runtime
+  was the alternative for that slot and was rejected: the derived total is the *silent*
+  length, a floor a narrated take always beats, so it would read as a budget the
+  narrator was overrunning.) The freed line goes to the label instead, which becomes
+  **REHEARSE TAKE** — two lines in the tile, the same shape the ticker's flag takes for a
+  two-line team name, and *take* is the word the rest of this design uses for the thing
+  being rehearsed for. `REC` stays one word: it has the clock under it, and a state
+  you are already in needs less naming than one you are about to leave.
+- **Beat position** — the spine, not a number. A `beat 14/61` fraction was there first
+  and came out once the tiles existed: it asked the narrator to hold a total in their
+  head to mean anything, which is precisely what a picture of the deck does for free.
+  The footer keeps the atom's *name* (`1st Innings · 3. OUT! …`), which the fraction
+  never gave.
+- **A "next up" prompt** — the highest-value element on the screen, and the one given
+  the size. For a clip, its curated narrative; for a card, **the resolved figures from
+  the catalogue**, because the narrator has to say them aloud (that is what makes phase 3
+  load-bearing); for a static slide, its title.
+
+  **NEXT is the only caption in the footer**, which is the opposite of where the layout
+  started. The current atom is on screen at 92% of the frame — the reel prints the
+  ball's narrative as its caption, a card shows its own figures at wall scale — so a
+  footer repeating it is furniture; it went from hero, to a muted line, to nothing. The
+  next atom is invisible, and preparing for it is the one thing the narrator cannot do
+  by looking at the deck. The figures follow the same logic: they ride on NEXT, as a
+  beat's warning that numbers are coming and these are the ones.
+
+  **The prompt drops a clip's ordinal.** Clip labels are ordinal-prefixed (`4. Four
+  through cover`) so two similar balls stay apart in a *list* — the deck builder's rows,
+  `/narrate`'s beat table. A prompt is not a list: it shows one thing at a time and the
+  narrator is about to read it aloud, where a leading number is something to trip over.
+  Dropped in the display, kept in the data.
+
+  **A card beat is prompted as `Flashcard`, plus its figures** — `/curate`'s own word
+  for it — rather than by the ball it sits against. The ball's narrative is the *next*
+  beat's prompt anyway, so carrying it here says it twice; and `pre` versus `post` is a
+  fact about the timeline, not about the performance. What the narrator needs off this
+  line is "a card is coming, and these are the numbers", which is what is left once both
+  are removed:
+
+  ```
+  NEXT ▸ Flashcard      A Pandit · 41 (32) · SR 128
+  NEXT ▸ Four through cover
+  ```
+
+  **A slide is prompted in the same two parts as its tile** — `2nd Innings · Bowling`,
+  not `Bowling` — because a leaf on its own is not a name: thirteen slides in this build
+  are called "Leaderboards" and every innings has a Bowling. Where the atom is finer
+  than the slide (a carousel panel) the slide becomes the heading and the panel the
+  leaf: `Fantasy League · Top Managers`. Both halves come from the same `tileName` the
+  strip uses, so the spine and the prompt cannot drift into two names for one thing. A
+  clip is the exception and stands alone — the tile above it already says which
+  innings' reel this is, and a wicket does not need a heading. Over the real 1st XI
+  deck:
+
+  ```
+  1st XI · Pre-match   ·   OUT! G Jackson gets M Moss   ·   1st Innings · Batting
+  1st Innings · Bowling   ·   2nd Innings · Batting   ·   1st XI · Result
+  ```
+- **What ends this beat**, which is the same question as "what is my next input for".
+  One rule: **an atom that waits for you says so; one that ends itself says nothing.**
+  A clip rolling to its own end needs no words — the countdown along the footer's top
+  edge is already saying it — while everything that will sit there until it is touched
+  gets a line, because the deck looks identical either way:
+
+  | State | Reads |
+  |---|---|
+  | Card hold | `HOLD · → to advance` |
+  | Clip rolling | `ROLLING · Space to freeze` |
+  | Frozen inside a clip | `FROZEN · Space to roll on` |
+  | Static beat, narrator cueing | `MANUAL · → to advance · Space runs the deck` |
+  | Static beat, deck cueing itself | `AUTO · Space to take over` |
+
+  **Not everything a key does is worth advertising.** `→` also works on a rolling clip —
+  it cuts to the next one — and the line deliberately does not say so. It is a rare
+  thing to want, and during a take it is the one input with no way back: `prev` is
+  disabled, so a clip skipped is a clip that has to be re-recorded from `/narrate`.
+  Offering it beside "Space to freeze" would make two very different consequences look
+  like a pair of equals.
+
+  **Two vocabularies, because two different things stop.** A clip is footage and what
+  stops is the *picture* — ROLLING / FROZEN — and the stop is recorded, as a `freezes[]`
+  entry on the beat. A static beat has no picture to stop; what stops is the *clock* —
+  AUTO / MANUAL — and nothing is recorded either way. Keeping them apart is what stops
+  one word having to mean both.
+
+  **"Freeze", not "pause".** The take never stops, so *pause* names the wrong thing —
+  and *freeze* is already the model's own word, so the wording the narrator reads and
+  the field the timeline carries are the same idea. *Roll on* is its opposite in the
+  only vocabulary that fits footage.
+
+  **Every state advertises its own key, so rehearsal needs no separate key map.** An
+  earlier cut printed one while a clip rolled and suppressed it during the take; naming
+  the state made it redundant, which is the better outcome — the deck teaches itself as
+  you play it, in the take exactly as before it.
+
+  **AUTO is a hand-over, and it survives a slide boundary.** "A short introduction, then
+  let it play on the deck's own durations" is the case, and interactive mode deliberately
+  stops on arrival at a static slide (on the bar iPad, that is where you take control
+  back), which would make the gesture last one slide. Record mode keeps running while —
+  and only while — `autoRun` is set, which happens when the narrator hands the deck over
+  on a static beat and is cleared by any freeze. That distinction is load-bearing: a reel
+  reaching its own end is also "playing", and it must **not** quietly start auto-cueing
+  the static slides behind it. This is the second and last deliberate divergence from
+  interactive mode, after `prev`.
+
+  **The instruction is the whole of that line**, in gold. There is no caption for the
+  current atom, because there is no question about it: it is on screen filling the
+  frame, with its own caption and its own card, and the spine says where in the deck it
+  sits. What the deck cannot say is what your next input does. (The line keeps its
+  height when there is no instruction, so the prompt beneath it does not move at every
+  clip boundary.)
+- **A live level meter**, with a clip warning, beside the transport. A take that turns
+  out silent or clipped after twenty minutes is the worst outcome this feature has, so
+  it is small but never off screen.
+
+Everything else — prev, home, fullscreen — is gone while recording. It is a performance
+surface. (`f` still toggles fullscreen from the keyboard, which with the chrome inside
+the stage is now the best way to run a sitting.)
 
 ### Input map — interactive's, unchanged
 
@@ -1687,7 +1899,8 @@ the UX rather than just the plumbing:
 - `MediaRecorder` with a ~1s **timeslice**, each chunk appended to **IndexedDB** as it
   arrives.
 - Every cue and freeze timestamp written to localStorage as it happens.
-- `/narrate` offers **"recover unfinished take"** on load.
+- `/narrate` shows an **unfinished take** as a notice with everything up to the crash in
+  it, and one button to accept it (the take's length becomes the audio's own).
 
 The point is that a crash lands the editor in Review with everything up to the crash,
 rather than at zero.
@@ -1698,10 +1911,15 @@ rather than at zero.
   the render mixes the R2 audio itself under `loudnorm`/`duck`, so hearing it live buys
   only timing feel. The toggle is there for anyone wearing headphones.
 - **Take-to-video alignment.** `MediaRecorder.start()` does not begin capturing when it
-  returns, so cues stamped off `performance.now()` sit tens of ms out. Derive t=0 from an
-  `AudioContext` timestamp taken at first-chunk arrival — and, belt and braces, put a
-  **global offset nudge in Review** (one slider, ±500 ms, applied to every cue). Cheap,
-  and it covers whatever the browser actually does.
+  returns, so cues stamped off `performance.now()` sit tens of ms out. Built as: t=0 is
+  the **first chunk's arrival minus one timeslice** (that chunk covers roughly one),
+  clamped so it can never precede `start()` — the closest the API will answer, since a
+  chunk carries no capture timestamp. The **global offset nudge in Review** (one slider,
+  ±500 ms, applied to every cue) is what actually covers whatever the browser did, and it
+  is why guessing precisely here is not worth more code.
+- **The deck starts when the audio does**, not when `start()` returns: the first chunk is
+  what triggers the opening cue, so there is real lead-in silence to trim against and the
+  first beat is not stamped before the recorder was listening.
 - Frame quantisation (`frame_align`, ±17 ms) is comfortably inside this.
 
 ### Review & re-record
@@ -1721,22 +1939,123 @@ A table over a waveform of the take, one row per beat:
 - **Flags raised without being asked**: a beat with no audio at all, a beat where the take
   still has energy at the cue boundary (mid-word), a clip beat whose commentary overruns
   badly.
-- **"Play from beat N"** drives the hosted player with the take laid over it — the closest
-  thing to a render without spending minutes on `compose.py`.
+- **"Play from beat N"** (the row's `▸`) drives the hosted player with the take laid over
+  it — the closest thing to a render without spending minutes on `compose.py`. Clicking
+  the take's own waveform seeks it and selects the beat you landed in.
 
 ### Export
 
 ```
 narration.zip
-  deck.json          the frozen deck, as played
-  timeline.json      source:"recorded" — durations, cues, freezes, audio refs
-  take.webm          the continuous master
+  deck.json          the frozen deck, as played (no clip lists — see below)
+  timeline.json      source:"recorded" — durations, cues, freezes, segment refs
+  take.webm          the continuous master (take.mp4 from Safari; the timeline names it)
   segments/b14.webm  re-records only
 ```
 
-Publisher side is phase 8: `compose.py --timeline timeline.json`. `/narrate` warns at
-export time if the site's `build_version` has moved past the deck's — the drift guard,
-surfaced where the editor can still act on it.
+Three things that fell out of building it:
+
+- **`deck.json` carries no clip list**, for the same reason the deck builder's export
+  doesn't: a reel's clips reach the render through the publisher's rebuild. The beats
+  address `(slide, panel, card)`, and those the rebuild reproduces.
+- **`timeline.json` carries no `media` either** — only cues and durations. Joining it to
+  the rebuilt deck's atoms is the first half of phase 8, which is why `compose.py`
+  refuses a recorded timeline outright rather than rendering stills where the clips
+  should be.
+- **`audio` appears only on re-recorded beats.** Everything else reads out of the take at
+  its `cue`: the compositor needs the master plus the timestamps, not per-beat files.
+
+The global offset is *applied* at export rather than carried, so nothing downstream has to
+know it existed.
+
+Publisher side is phase 8: `compose.py --timeline timeline.json`. `/narrate` warns on load
+if the site's `build_version` has moved past the deck's — the drift guard, surfaced where
+the editor can still act on it — and again if the curation has moved under the take.
+
+### What shipped, and what it cost
+
+Five files, and the shape held: record mode is 300 lines inside `player-core.js`
+sharing `next`/`prev`/`arrive`/`applyState` with the wall, and nothing about the
+existing nav moved.
+
+| File | Is |
+|---|---|
+| `assets/js/take-store.js` | where a take lives while it is being made |
+| `assets/js/narrate.js` + `templates/narrate/` | the review workbench |
+| `assets/js/zip.js` | a store-only ZIP writer, ~90 lines |
+| `player-core.js` (record block) | HUD, cue/freeze capture, `MediaRecorder` |
+| `video.html` / `slide-bridge.js` | four small answers the slide alone can give |
+
+**The plan is the build's atom list, refined by the reel itself.** The HUD says
+"beat 14 of 61" before a single beat has been played, which needs the whole list up
+front — and `_atoms` provides it for every slide except the one that matters most.
+During the sitting a reel's clips are the editor's live curation, so its published
+atoms are stale or empty. Rather than port `slide_atoms` into JS for a third time,
+**the reel answers with its own list on the bridge handshake** (`ctrl.atoms()` →
+`wcc-slide`), and `refineAtoms` swaps it in. That is the same authority phase 5
+handed the slide with `edge()`, applied to a second question. *Verified:* the
+runtime list and the build's `_atoms` are identical — 14/14 atoms, panel, duration,
+card and label — on a built reel. The count is shown as `~61` until every reel has
+answered, which on a windowed deck is before the narrator reaches it.
+
+**One place decides the deck has moved on.** `recSync()` computes the atom on screen
+and stamps a cue when it changes, so a manual cue, a clip auto-cueing at its end and
+a card hold releasing all record identically — there is no per-route capture to keep
+in step. The subtlety it resolves: **a pre-card atom starts when the pad starts, not
+when the freeze does.** The player only learns a card exists when the slide holds on
+it, which would put four seconds of pad in the previous beat; the plan already knows,
+so `applyState` enters the card atom on arrival and the hold merely ends it. Cards
+are the one place the build's enumeration and the runtime have to agree, and this is
+what makes them.
+
+**A freeze needed a probe, not a field on the echo.** `freezes[].at` is media time
+within the clip, which only the slide knows — but `wcc-panel` re-arms the player's
+clocks, so smuggling a playhead onto it would restart the countdown on every pause.
+`ping-time` → `wcc-time` is a separate round trip that changes nothing.
+
+**Review drives the player rather than addressing it.** `/narrate` hosts the deck
+with `?hosted` and sends `goto-atom` / `play` / `pause`; the player answers with
+`wcc-player-atom` on every boundary. So a beat is reached the way the narrator
+reached it, and the deferred `&start=<n>` never had to exist. A *card* atom is
+reached through the slide (`goto-atom` on the bridge → `WccReel.gotoAtom`), because
+which second of a clip a card's pad starts at is the slide's business.
+
+**Three stores, one per kind of thing.** The cue log is localStorage, written
+synchronously on every cue — an IndexedDB write in flight when the tab dies is a lost
+cue, and the log is what makes the audio addressable at all. The audio is IndexedDB,
+a chunk at a time. The deck is a deck, so it goes in the **deck store** under a
+reserved `__take:<id>` key, which `WccDeckStore.list()` already filters out of the
+drafts picker. No new storage convention.
+
+**The waveform is an envelope, and the AudioBuffer is dropped.** Twenty minutes of
+float samples is a quarter of a gigabyte; everything the page does — drawing, the
+per-row slices, the silent-beat and mid-word flags — is answered by a 10 ms envelope
+of peak and RMS. A browser that cannot decode the take (Safari on WebM/Opus) loses
+the waveform and the flags and keeps everything else, which is why the flags are
+advisory rather than a gate.
+
+**The recorder's container is whatever the browser gives.** Chrome records
+WebM/Opus, Safari MP4/AAC; the take carries its own extension into the zip and the
+timeline names the file, so nothing downstream assumes one.
+
+**`compose.py` refuses a recorded timeline.** Composing one is phase 8 — the beats
+carry cue times and no media, because a reel's clips reach the render through the
+publisher's rebuild, not through the export. Rendering it anyway would produce the
+dangerous kind of wrong: a complete, plausible MP4 with every clip replaced by a
+still and no commentary on it. Same idiom as `check_reels_filled`.
+
+*Verified* by driving both halves under a stub DOM. Record mode: a two-slide deck
+with a stale one-atom reel refines to four atoms on the handshake; the session and
+its deck copy are minted at arm; the opening cue lands on arrival; the reel's pre
+card is entered with its pad and the hold adds no second cue; releasing it cues the
+action; the next clip cues with no tap; a mid-clip pause adds a freeze — with media
+time from the slide, against the right beat — and no cue; `prev` is refused; clip
+audio is muted on every slide. `/narrate`: one row per cue, durations from the cue
+diffs, the last beat running to the end of the take, a nudge moving exactly the two
+adjacent beats and clamping at both neighbours, a re-recorded beat taking its
+segment length, and an export whose timeline carries the offset, drops the card
+qualifier where there is none, names segments only for re-records, and whose
+`deck.json` carries no clip list. The zip writer was checked against `unzip -t`.
 
 ### Settled, and what would reopen it
 
@@ -1958,7 +2277,7 @@ clip before committing to `keep`.
 | **6a** ✅ | Slide catalogue: `site/slides.json` over `slide_meta` (`write_slide_catalogue`, `slide_title`). | The index the builder browses. |
 | **6b** ✅ | Deck builder UI (`/deck`): assemble, reorder, insert, preview, export `deck.json`. | **A silent MP4 of a *customised* deck** — no narrator involved. |
 | **6c** ✅ | Deck-builder consistency: naming, grouping, panel subsets, per-step duration. | The two creatures — package and carousel — edit alike; pacing is per atom, wall and render. |
-| **7** | Record mode + `/narrate`: continuous take, cues, freezes, slicing, re-record, export. | A narrated deck. |
+| **7** ✅ | Record mode (`?record`) + `/narrate`: continuous take, cues, freezes, nudge, re-record, export `narration.zip`. | A narrated deck. |
 | **8** | Narrated composite; `publish_meta --deck-file` + authored `publish` block in `/deck`. | The commentated MP4, and a custom deck that can be uploaded. |
 
 2 needs 1; 6 needs 4; 7 needs 4, 5 and 6, and wants 3 to be worth doing; 8 needs 2 and 7.
@@ -1992,7 +2311,7 @@ risky beats bolted-on and forked.
   subsets" under the deck builder.
 - Panel labels in `_atoms` (a prerequisite of the above, but independently useful).
 - A start index for the player (`&start=<n>`), so the deck builder's preview can open
-  part-way through a deck.
+  part-way through a deck. (Review does not need it — see `?hosted` in phase 7.)
 - Scrubbing backwards mid-clip (replaying a moment) during narration.
 - YouTube upload automation — manual via YouTube Studio for now.
 - Frame-accurate clip rendering (a seek-per-frame renderer), if quality ever demands it.

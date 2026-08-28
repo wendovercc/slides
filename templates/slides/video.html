@@ -702,6 +702,7 @@
             // a second into the action it is meant to stop short of.
             seek: function (t) { var v = videoEls[current]; if (v) { try { v.currentTime = t; } catch (e) {} } },
             pauseAll: function () { videoEls.forEach(function (x) { x.pause(); }); },
+            mute: function (m) { videoEls.forEach(function (x) { x.muted = m; }); },
             teardown: function () { this.mount([]); },
             time: function () { return videoEls[current] ? videoEls[current].currentTime : NaN; },
 
@@ -914,6 +915,7 @@
             pause: function () { if (ready) player.pauseVideo(); },
             resume: function () { if (ready) player.playVideo(); },
             pauseAll: function () { if (ready) player.pauseVideo(); },
+            mute: function (m) { if (ready) { if (m) player.mute(); else player.unMute(); } },
             // Clip-relative, like every other time in here (the segment start is the
             // clip's zero).
             seek: function (t) { if (ready) player.seekTo(((VIDEOS[current] || {}).start || 0) + t, true); },
@@ -1047,7 +1049,9 @@
         }
         updateCard(Math.max(0, at - 0.01));
         holding = true;
-        report({ hold: true });
+        // Which card is up, so the player can name the atom it is now on. Only the
+        // slide knows: a card is a qualifier on a clip, not a panel of its own.
+        report({ hold: true, card: kind });
     }
 
     function releaseHold() {
@@ -1056,6 +1060,47 @@
         if (!isPaused()) { SRC.resume(); armStall(current); }
         var t = SRC ? SRC.time() : NaN;
         report({ hold: false, dur: Math.max(0, clipDuration(current) - (isFinite(t) ? t : 0)) });
+    }
+
+    /* This reel's atoms — every point a narrator or the compositor can stop on.
+       The build publishes the same list (`slide_atoms`), and for a built reel the two
+       agree exactly. It exists here for the case the build cannot answer: during the
+       editor's sitting the clips are a live curation no build has seen, so the
+       slide's own list is the only true one. Handed up on the bridge handshake.
+
+       The split is the same one `slide_atoms` makes — a card's pad is an atom of its
+       own, so `next()` has somewhere to stop — and it is made here rather than in the
+       player because the card windows are here. Card content rides along as `info`,
+       which is what record mode's prompt reads: the narrator has to say the figures
+       aloud, so they belong on the beat. */
+    function atoms() {
+        var out = [];
+        for (var i = 0; i < VIDEOS.length; i++) {
+            var v = VIDEOS[i] || {}, dur = clipDuration(i);
+            var clamp = function (x) { return Math.min(Math.max(x, 0), dur); };
+            var pre = cardWindow(i, 'pre'), post = cardWindow(i, 'post');
+            var preEnd = pre ? clamp(pre[1]) : 0;
+            var postStart = post ? Math.max(clamp(post[0]), preEnd) : dur;
+            var body = (v.body || '').trim();
+            var label = (i + 1) + '. ' + (body || 'Clip ' + (i + 1));
+            var segs = [['pre', 0, preEnd], [null, preEnd, postStart], ['post', postStart, dur]]
+                .filter(function (sg) { return sg[2] - sg[1] > 0.001; });
+            // A clip whose pads swallow it whole still contributes exactly one atom,
+            // or the panel count and the atom list disagree.
+            if (!segs.length) segs = [[null, 0, dur]];
+            segs.forEach(function (sg) {
+                var a = { panel: i, duration: Math.round((sg[2] - sg[1]) * 1000) / 1000, label: label };
+                if (sg[0]) {
+                    a.card = sg[0];
+                    var cards = v.cards || [];
+                    for (var j = 0; j < cards.length; j++) {
+                        if (cards[j].at === sg[0]) { a.info = cards[j]; break; }
+                    }
+                }
+                out.push(a);
+            });
+        }
+        return out;
     }
 
     // One step of the player's nav (slide-bridge routes next-panel/prev-panel here).
@@ -1196,7 +1241,11 @@
                 // outlives the user's pause and is released only by a forward step.
                 restartCurrent: function () { if (holding) return; SRC.resume(); armStall(current); },
                 edge: edge,
-                step: step
+                step: step,
+                atoms: atoms,
+                // The playhead, for a narration freeze: `at` on a freeze is media
+                // time within the clip, which nothing outside this document knows.
+                time: function () { return SRC ? SRC.time() : null; }
             });
         }
         if (window.WccReel) WccReel.clipCount = count;
@@ -1235,6 +1284,27 @@
         // what an editor previewing an unbuilt curation needs. Routed here by
         // slide-bridge.js from the player's `set-clips` command.
         setClips: function (videos) { useClips(videos, false); },
+        // Clip audio on/off at runtime. Record mode mutes by default — speakers bleed
+        // into the mic, and the render mixes the R2 audio itself — with a toggle for
+        // anyone wearing headphones. Routed here by slide-bridge.js's `set-mute`.
+        setMute: function (m) { MUTED = !!m; if (SRC && SRC.mute) SRC.mute(MUTED); },
+        // Park on one atom of one clip, paused. A clip is up to three atoms and only
+        // this document knows where they start, so review ("play beat 14 again",
+        // "re-record it") addresses them here rather than seeking from outside.
+        gotoAtom: function (panel, card) {
+            var i = Math.max(0, Math.min(count - 1, panel || 0));
+            if (i !== current) showVideo(i);
+            var pre = cardWindow(i, 'pre'), post = cardWindow(i, 'post');
+            var t = card === 'post' ? (post ? post[0] : 0)
+                  : card === 'pre' ? 0
+                  : (pre ? pre[1] : 0);
+            if (SRC) { SRC.pause(); if (SRC.seek) SRC.seek(t); }
+            phase = card || 'action';
+            holding = false;
+            activeCardKey = null;
+            updateCard(t + 0.01);
+            report();
+        },
         // Dress the page as it looks at one beat: clip `panel`, optionally with its
         // "pre"/"post" card open. Nothing plays — the caller wants a still. Returns
         // false on a non-reel video slide, which has no overlay layer to shoot.

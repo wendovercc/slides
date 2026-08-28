@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Narrate — Wendover CC</title>
+  <style>
+    @font-face { font-family: 'Lato'; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Lato'; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+    @font-face { font-family: 'Lato'; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+    :root {
+      --navy-1: #0f2346; --navy-2: #0a1c3a; --gold: #d4af37; --ink-soft: #b4c8e4;
+      --panel: #12294f; --line: rgba(180,200,228,.18); --white: #fff;
+      --warn: #f2c96b; --bad: #f0a0a0; --good: #7fd39b;
+      /* The beat table's fixed columns. One grid for every row, so the durations,
+         the slices and the buttons line up down the whole take — the same rule the
+         deck builder's rows follow. */
+      --n-w: 30px; --dur-w: 58px; --wave-w: 150px; --btns-w: 150px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--white);
+      background: linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+      height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    header {
+      padding: 9px 18px; border-bottom: 2px solid var(--gold);
+      display: flex; flex-wrap: nowrap; gap: 12px; align-items: center; flex-shrink: 0;
+      background: var(--navy-2); z-index: 20;
+    }
+    header h1 { font-size: 17px; font-weight: 900; margin: 0; letter-spacing: .01em; white-space: nowrap; }
+    header h1 span { color: var(--gold); }
+    .spacer { flex: 1; }
+    .status { color: var(--bad); font-size: 12px; white-space: nowrap; }
+    .btn { font: inherit; font-weight: 700; padding: 7px 14px; border-radius: 6px; cursor: pointer;
+      border: 1px solid var(--gold); background: var(--gold); color: var(--navy-2); }
+    .btn.ghost { background: transparent; color: var(--gold); }
+    .btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn.sm { padding: 4px 9px; font-size: 12px; }
+    select { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line);
+      background: var(--panel); color: var(--white); max-width: 34ch; font-weight: 700; }
+
+    /* ---- notices: build drift, curation drift, an unfinished take -------- */
+    #notices { flex: 0 0 auto; }
+    .notice { padding: 8px 18px; font-size: 13px; border-bottom: 1px solid var(--line);
+      display: flex; align-items: center; gap: 12px; background: rgba(242,201,107,.10); color: var(--warn); }
+    .notice.bad { background: rgba(240,160,160,.10); color: var(--bad); }
+    .notice .btn { flex: 0 0 auto; }
+
+    /* ---- the take: one waveform, the whole sitting ------------------------ */
+    #take-wrap { flex: 0 0 auto; padding: 8px 18px 10px; border-bottom: 1px solid var(--line);
+      background: rgba(10,28,58,.5); }
+    #wave { width: 100%; height: 74px; display: block; cursor: pointer;
+      background: rgba(255,255,255,.04); border-radius: 6px; }
+    .take-meta { display: flex; align-items: center; gap: 14px; margin-top: 6px;
+      font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+    .take-meta .t { color: var(--white); font-weight: 700; }
+    /* Whatever the browser actually did between MediaRecorder.start() and the first
+       chunk, in one control. Cheap, and it covers what cannot be measured. */
+    .offset { display: flex; align-items: center; gap: 7px; }
+    .offset input { width: 160px; }
+
+    main { display: grid; grid-template-columns: 1fr minmax(360px, 460px); gap: 0;
+      flex: 1 1 auto; min-height: 0; overflow: hidden; }
+    #beats { overflow-y: auto; border-right: 1px solid var(--line); }
+    aside { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+    .pane-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: 0 0 auto;
+      border-bottom: 1px solid var(--line); background: var(--navy-2); }
+    .pane-head .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--gold); white-space: nowrap; }
+    .pane-head .count { font-size: 11.5px; color: var(--ink-soft); }
+    .preview-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000;
+      flex: 0 0 auto; border-bottom: 1px solid var(--line); }
+    #preview { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+    .preview-none { position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; color: var(--ink-soft); font-size: 13px; padding: 20px; text-align: center; }
+    #sidebar-body { overflow-y: auto; flex: 1 1 auto; padding: 12px 14px; font-size: 13px;
+      color: var(--ink-soft); line-height: 1.55; }
+    #sidebar-body b { color: var(--white); }
+    #sidebar-body .kv { display: flex; justify-content: space-between; gap: 10px;
+      padding: 3px 0; border-bottom: 1px solid var(--line); }
+
+    /* ---- beat rows -------------------------------------------------------- */
+    .row {
+      display: grid;
+      grid-template-columns: var(--n-w) 1fr var(--dur-w) var(--wave-w) var(--btns-w);
+      align-items: center; gap: 10px; padding: 6px 12px;
+      border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer;
+    }
+    .row:hover { background: rgba(255,255,255,.04); }
+    .row.on { background: rgba(212,175,55,.14); }
+    .row .n { color: var(--ink-soft); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+    .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .row .name i { font-style: normal; color: var(--ink-soft); }
+    .row .name .card { color: var(--gold); font-size: 11.5px; margin-left: 6px; }
+    .row .dur { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
+    .row .dur.redone { color: var(--gold); font-weight: 700; }
+    .row canvas { width: 100%; height: 26px; display: block; background: rgba(255,255,255,.05);
+      border-radius: 3px; }
+    .row .btns { display: flex; gap: 4px; justify-content: flex-end; }
+    .row .btns button { font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 4px;
+      border: 1px solid var(--line); background: transparent; color: var(--ink-soft); cursor: pointer; }
+    .row .btns button:hover { color: var(--white); border-color: var(--gold); }
+    .row .btns button.rec { color: var(--bad); }
+    .row .btns button.on { background: var(--bad); color: var(--navy-2); border-color: var(--bad); }
+    /* Flags are raised without being asked: a silent beat, a cue landing mid-word,
+       and a clip beat whose commentary badly overruns its footage. */
+    .flags { grid-column: 2 / -1; font-size: 11.5px; color: var(--warn); padding: 0 0 4px 0; }
+    .flags.bad { color: var(--bad); }
+    .empty-hint { color: var(--ink-soft); font-size: 13.5px; padding: 26px 18px; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Wendover<span>CC</span> · Narrate</h1>
+    <select id="take-picker" aria-label="Take"></select>
+    <button id="delete-btn" class="btn ghost sm" title="Delete this take">Delete take</button>
+    <span class="spacer"></span>
+    <span id="status" class="status"></span>
+    <button id="export-btn" class="btn">Export narration.zip</button>
+  </header>
+  <div id="notices"></div>
+  <div id="take-wrap">
+    <canvas id="wave"></canvas>
+    <div class="take-meta">
+      <span>Take <span class="t" id="take-len">—</span></span>
+      <span id="take-beats"></span>
+      <span id="take-when"></span>
+      <span class="spacer"></span>
+      <button id="play-btn" class="btn ghost sm">Play ▸</button>
+      <span class="offset">
+        <label for="offset">Offset</label>
+        <input id="offset" type="range" min="-500" max="500" step="10" value="0">
+        <span id="offset-val">0 ms</span>
+      </span>
+    </div>
+  </div>
+  <main>
+    <div id="beats"><div class="empty-hint">Loading…</div></div>
+    <aside>
+      <div class="pane-head">
+        <span class="lbl">Beat</span>
+        <span class="count" id="beat-title"></span>
+      </div>
+      <div class="preview-wrap">
+        <!-- The deck, hosted. Review drives the player's own nav (`?hosted`) rather
+             than a second addressing scheme, so a beat is reached exactly the way
+             the narrator reached it. -->
+        <iframe id="preview" title="Deck" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe>
+        <div class="preview-none" id="preview-none">Pick a beat to see it.</div>
+      </div>
+      <div id="sidebar-body"></div>
+    </aside>
+  </main>
+  <audio id="take-audio" preload="auto"></audio>
+  <script src="/assets/js/deck-store.js?v={{ asset_version }}"></script>
+  <script src="/assets/js/take-store.js?v={{ asset_version }}"></script>
+  <script src="/assets/js/zip.js?v={{ asset_version }}"></script>
+  <script src="/assets/js/narrate.js?v={{ asset_version }}"></script>
+</body>
+</html>

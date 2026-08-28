@@ -193,5 +193,14 @@ thing `/deck` will not let an editor edit — its duration cell is read-only and
 - Export the deck **after** finishing curation. The deck itself carries no clips, so this
   does not matter for the reel — but the deck check's clip counts and the preview will be
   confusing otherwise.
-- A narrated deck (phase 7) adds a third artefact and a zip; this runbook covers the
-  silent render only.
+- **A narrated deck sends `narration.zip` instead of a bare deck** (`/deck` → Narrate ↗,
+  then `/narrate` → Export). Inside it: `deck.json`, `timeline.json` (`source:
+  "recorded"`), `take.webm` and any re-recorded `segments/`. The curation export still
+  comes separately and still gets forgotten.
+
+  **This runbook covers the silent render only.** Compositing a *recorded* timeline is
+  phase 8 and `compose.py --timeline` refuses one on purpose — it carries cue times but no
+  media, so rendering it would give a plausible MP4 of stills with no commentary. What
+  works today is the zip's `deck.json` through the normal path
+  (`compose.py --deck-file deck.json`), which is the same deck the narrator played,
+  rendered silently.

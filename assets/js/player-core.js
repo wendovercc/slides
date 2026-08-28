@@ -8,10 +8,16 @@
  *   ?interactive      — touch surface (the bar iPad / phones). The player owns a
  *                       single per-panel timer, drives carousel tabs over the
  *                       slide bridge, and renders an always-on control bar.
- *                       Input (identical in watch and the future record mode):
+ *                       Input (identical in watch and record mode):
  *                         horizontal swipe / arrows = prev/next
  *                         tap / Space                = play/pause (+ centre flash)
  *                         Home/End = first/last, f = fullscreen.
+ *   ?record           — interactive mode with a narration recorder attached: a HUD
+ *                       strip, a continuous audio take, and cue/freeze timestamps
+ *                       stamped as the narrator plays. One subtraction (prev is
+ *                       disabled — a take plus a jump backwards is incoherent) and
+ *                       nothing else changes, so a tap does here exactly what it
+ *                       does on the bar iPad. See docs/narrated-decks.md.
  *                       The bar is placed relative to the letterboxed slide:
  *                       below it, to its right, or (near-16:9, no band) inside
  *                       the slide's top-right safe zone as a collapsible column.
@@ -140,7 +146,7 @@
     var v = params.get('window');
     if (v === 'off' || v === 'none') return null;
     if (v != null && /^\d+$/.test(v)) return parseInt(v, 10);
-    return params.has('interactive') ? 1 : null;
+    return (params.has('interactive') || params.has('record')) ? 1 : null;
   }
 
   window.WccPlayer = {
@@ -154,7 +160,18 @@
     if (items.length === 0) return;
 
     var params = new URLSearchParams(location.search);
-    var interactive = params.has('interactive');
+    // Record mode IS interactive mode — same nav, same timers, same hold points —
+    // plus a recorder and a HUD. Anything that branches on `record` below is either
+    // the recorder itself or the one subtraction (prev).
+    var record = params.has('record');
+    // `?hosted` — the player is embedded in an editor tool that drives it (today
+    // /narrate, which plays a deck back against a take). It gets the same atom
+    // tracking record mode uses, reports every atom boundary to its parent, and
+    // accepts `goto-atom` / `play` / `pause` from it. Nothing else changes: review
+    // has to show what was recorded, so it must be the same nav.
+    var hosted = params.has('hosted');
+    var track = record || hosted;   // atom identity is being followed
+    var interactive = params.has('interactive') || record;
 
     var n = items.length;
     var current = 0;
@@ -178,7 +195,6 @@
     var progressFill = null; // control-bar countdown fill (interactive only)
     var progressAxis = 'x';  // fill grows along x (row bar) or y (column bar)
     var bar = null;          // control bar (interactive only)
-    var mode = 'watch';      // session mode; 'record' (future) reuses the same gestures
 
     /* ---- live highlight news-flash (player-owned interrupt overlay) ----
      * A highlight clip arriving from the live engine interrupts the deck: pause the
@@ -584,6 +600,11 @@
         panelIndex = idx;
         send(i, 'goto-panel', { index: idx });
       }
+      // A slide arrival is an atom boundary like any other; recSync is where every
+      // route into a new atom converges (a no-op unless a take or a review is
+      // following it).
+      clipPhase = track && items[i].video && planPreAt(i, panelIndex) ? 'pre' : null;
+      recSync();
     }
     function interShow(i, panel) { activate(i); applyState(panel); }
     // Every arrival sets the transport state before applying it, so the incoming
@@ -592,13 +613,28 @@
     // carries on through consecutive video slides); forward onto a non-video — and
     // every backward/jump move — stops (pauses) so the user regains manual control.
     function arrive(i, panel, play) { playing = play; updatePlayBtn(); interShow(i, panel); }
-    function fwdSlide() { var i = (current + 1) % n; arrive(i, 0, !!items[i].video); }
+    function fwdSlide() {
+      var i = (current + 1) % n;
+      // Interactive stops on arrival at a non-video slide, deliberately: on the bar
+      // iPad, forward onto a static slide is where you take manual control back.
+      //
+      // Record mode keeps running if — and only if — the narrator has explicitly
+      // handed the deck over (AUTO). "A short introduction, then let it play on the
+      // deck's own durations" is a one-slide gesture otherwise, since it would drop
+      // back to manual at every boundary. `autoRun` is what separates that from
+      // merely playing because a clip happens to be rolling: a reel reaching its end
+      // must NOT quietly start auto-cueing the static slides after it.
+      arrive(i, 0, (record && rec.autoRun) || !!items[i].video);
+    }
     function backSlide() { arrive((current - 1 + n) % n, 'last', false); }
     function goFirst() { arrive(0, 0, false); }
     function goLast() { arrive(n - 1, 0, false); }
 
     function setPlaying(p) {
       playing = p;
+      // Handing the deck over is something the narrator does on a static beat; taking
+      // it back is any freeze, anywhere. See fwdSlide.
+      if (record) rec.autoRun = p ? !(items[current] || {}).video : false;
       updatePlayBtn();
       if (p) {
         send(current, 'resume');
@@ -612,6 +648,10 @@
       } else {
         clearTimer(); send(current, 'pause'); progressFreeze(); pausedAt = Date.now(); drainFlash();
       }
+      // A pause inside a media beat is a freeze, not a cue: it holds what is already
+      // on screen. Captured here rather than in the tap handler so the bar's own
+      // play/pause button records one too.
+      if (record) { if (p) freezeEnd(); else freezeStart(); hudDraw(); }
     }
     // Manual nav preserves the play/pause state (so a paused wall stays paused
     // when you step across slides, including between slide-set members). When
@@ -639,6 +679,11 @@
       }
     }
     function prev() {
+      // Backwards is disabled during a take. A continuous take plus a jump backwards
+      // is incoherent — the audio keeps running while the video rewinds — and the
+      // whole timeline invariant rests on the take being continuous. "I fluffed that
+      // one" is a review-time re-record, which costs the narrator nothing.
+      if (record && rec.state === 'recording') return;
       clearTimer();
       if (!atFirstAtom()) {
         send(current, 'prev-panel');
@@ -760,6 +805,11 @@
     }
     function buildControls() {
       injectStyles();
+      // In record mode the control bar is not built at all. It floats OVER the slide,
+      // and putting the narrator's instruments beside the deck rather than on top of
+      // it is the whole point of the record chrome — which carries the transport and
+      // the countdown instead (see buildHud). Everything below guards on `bar`
+      // already, because placeBar has always been able to run before it exists.
 
       // Full-surface gesture layer. A horizontal swipe steps slides; a clean tap
       // toggles play/pause. Movement + time thresholds keep a tap and a swipe from
@@ -807,18 +857,23 @@
       fb.id = 'wcc-fb';
       document.body.appendChild(fb);
 
+      if (record) return;
       bar = document.createElement('div');
       bar.id = 'wcc-bar';
       // Collapse grip: first child so it sits at the column's top; visible only in
       // inside placement, and the sole control left when collapsed.
       bar.appendChild(button('grip', 'collapse', toggleCollapse));
-      bar.appendChild(button('home', '', function () { location.href = '/'; }));
-      bar.appendChild(button('prev', '', prev));
+      // Everything but the transport comes off the bar while recording: it is a
+      // performance surface, and home/prev/fullscreen are all ways to wreck a take.
+      if (!record) {
+        bar.appendChild(button('home', '', function () { location.href = '/'; }));
+        bar.appendChild(button('prev', '', prev));
+      }
       playBtn = button('pause', 'primary', function () { setPlaying(!playing); });
       bar.appendChild(playBtn);
       bar.appendChild(button('next', '', next));
       var docEl = document.documentElement;
-      if (docEl.requestFullscreen || docEl.webkitRequestFullscreen) {
+      if (!record && (docEl.requestFullscreen || docEl.webkitRequestFullscreen)) {
         fsBtn = button('expand', 'fs', function () { toggleFullscreen(); });
         bar.appendChild(fsBtn);
         document.addEventListener('fullscreenchange', updateFsBtn);
@@ -837,9 +892,826 @@
       window.addEventListener('orientationchange', schedulePlace);
     }
 
+    /* ---- record mode ------------------------------------------------------
+     * Phase 7 of docs/narrated-decks.md. Record mode is interactive mode with a
+     * recorder attached and one subtraction (prev), NOT a second player: a tap does
+     * here exactly what it does on the bar iPad, and hold points cannot diverge.
+     *
+     * What it produces is a *take* — one continuous audio master plus the cue and
+     * freeze timestamps marked on it as the narrator plays. Slicing, review and
+     * export all happen afterwards in /narrate; nothing here edits anything.
+     *
+     * Three states, in order: rehearse (HUD up, mic off), arm (permission, level
+     * check, 3-2-1), record. Rehearse is not a nicety — a 29-clip reel is a lot of
+     * surprise, and a pass to learn what is coming costs nothing.
+     */
+    var rec = {
+      state: 'rehearse',        // rehearse | arming | recording | stopping | done
+      session: null,            // the take-store session record
+      recorder: null,
+      stream: null,
+      audio: null,              // AudioContext + analyser, for the level meter
+      seq: 0,
+      t0: 0,                    // performance.now() of take time zero
+      clock: null,
+      plan: [],                 // flattened atoms: the beat list, known up front
+      pos: -1,                  // index in plan of the atom on screen
+      pending: null,            // { at, start } — a freeze in progress
+      refined: {},              // item index → its atoms came from the slide itself
+      clipAudio: false,         // speakers bleed into the mic; off by default
+      autoRun: false,           // the narrator handed the deck its own durations
+      foot: null, strip: null, els: {}
+    };
+    var TIMESLICE_MS = 1000;
+
+    /* The beat list. Every atom of every slide, in deck order, which is what makes
+     * "beat 14 of 61" sayable before a single one has been played. `_atoms` is the
+     * build's own enumeration (slide_atoms), so the HUD, the compositor and the
+     * deck builder are all reading one list.
+     *
+     * A reel is the exception, and deliberately so: during the sitting its clips are
+     * the editor's live curation, which no build has seen, so its published atoms
+     * are stale or empty. The slide itself knows — it holds the clips and their card
+     * windows — and answers with its own list on the bridge handshake, which
+     * `refineAtoms` swaps in. Deriving it here instead would be a second copy of
+     * slide_atoms in JS, which this design has refused twice already.
+     */
+    function buildPlan() {
+      rec.plan = [];
+      items.forEach(function (it, i) {
+        (it.atoms || []).forEach(function (a) {
+          rec.plan.push({ i: i, slug: it.slug, panel: a.panel || 0, card: a.card || null,
+                          label: a.label || null, phase: a.phase || null,
+                          duration: a.duration || 0, info: a.info || null });
+        });
+      });
+    }
+    function refineAtoms(i, atoms) {
+      if (!track || !atoms || !atoms.length) return;
+      var old = (items[i].atoms || [])[0] || {};
+      items[i].atoms = atoms.map(function (a) {
+        // The runtime knows its clips, not the slide's place in the wall's header
+        // hierarchy, so the build's phase rides along unchanged.
+        return Object.assign({ phase: old.phase || null }, a);
+      });
+      rec.refined[i] = true;
+      buildPlan();
+      buildSpine();
+      recSync();
+      hudDraw();
+    }
+    /* Does the plan say this panel opens on a pre card? That is what makes the pad
+     * the *start* of the pre-card beat rather than a nameless run-up to the freeze:
+     * the atom is entered when the footage is, and the hold only ends it. */
+    function planPreAt(i, panel) {
+      for (var k = 0; k < rec.plan.length; k++) {
+        var p = rec.plan[k];
+        if (p.i === i && p.panel === panel) return p.card === 'pre';
+      }
+      return false;
+    }
+    function findPlan(i, panel, card) {
+      // Forward from where we are, because a deck plays forward and two atoms can
+      // share an identity only across a repeat of the same slide.
+      for (var k = Math.max(0, rec.pos); k < rec.plan.length; k++) {
+        var p = rec.plan[k];
+        if (p.i === i && p.panel === panel && (p.card || null) === (card || null)) return k;
+      }
+      for (var j = 0; j < rec.plan.length; j++) {
+        var q = rec.plan[j];
+        if (q.i === i && q.panel === panel && (q.card || null) === (card || null)) return j;
+      }
+      return -1;
+    }
+
+    function takeTime() { return rec.t0 ? (performance.now() - rec.t0) / 1000 : 0; }
+
+    /* The atom on screen, as the timeline addresses it. `clipPhase` is the card
+     * qualifier: a reel's atoms are finer than its panels, so a clip is up to three
+     * beats and only the slide knows which one is running (phase 5's `hold` echo). */
+    var clipPhase = null;
+    var mediaTime = null;      // last playhead the current slide reported, for freezes
+    function currentAtom() {
+      var it = items[current] || {};
+      return { slide: it.slug, panel: panelIndex, card: clipPhase };
+    }
+    function sameAtom(a, b) {
+      return a && b && a.slide === b.slide && a.panel === b.panel && (a.card || null) === (b.card || null);
+    }
+
+    /* One place decides that the deck has moved on, so every route into a new atom —
+     * a manual cue, a clip auto-cueing at its end, a card hold releasing — stamps
+     * the take identically. Called after anything that can change what is on screen. */
+    var lastAtom = null;
+    function recSync() {
+      if (!record) return;
+      var a = currentAtom();
+      var moved = !sameAtom(a, lastAtom);
+      if (moved) {
+        lastAtom = a;
+        rec.pos = findPlan(current, a.panel, a.card);
+        if (rec.state === 'recording') stampCue(a);
+      }
+      if (moved) hudDraw();
+      if (moved && hosted) {
+        try { parent.postMessage({ type: 'wcc-player-atom', atom: a, plan: rec.pos }, '*'); } catch (e) {}
+      }
+    }
+    function stampCue(a) {
+      var s = rec.session;
+      if (!s) return;
+      s.cues.push({ t: +takeTime().toFixed(3), atom: a });
+      // Written synchronously, every cue: an IndexedDB write in flight when the tab
+      // dies is a lost cue, and the cue log is what makes the audio addressable.
+      if (!WccTakeStore.save(s)) hudError('cue log is full — stop and export now');
+    }
+
+    /* A pause inside a media beat is a FREEZE, not a cue: it holds what is already
+     * on screen rather than changing it. Static beats have nothing to freeze, so a
+     * pause there is captured as nothing at all. `at` is media time within the clip,
+     * which only the slide knows — hence the round trip. */
+    function freezeStart() {
+      if (rec.state !== 'recording' || !items[current] || !items[current].video) return;
+      mediaTime = null;
+      send(current, 'ping-time');
+      rec.pending = { beat: rec.session.cues.length - 1, start: takeTime() };
+    }
+    function freezeEnd() {
+      var p = rec.pending;
+      rec.pending = null;
+      if (!p || rec.state !== 'recording') return;
+      var hold = +(takeTime() - p.start).toFixed(3);
+      if (hold < 0.25) return;      // a tap through a pause, not a held frame
+      rec.session.freezes.push({ beat: p.beat, at: mediaTime == null ? null : +mediaTime.toFixed(3),
+                                 hold: hold });
+      WccTakeStore.save(rec.session);
+    }
+
+    /* ---- HUD ---------------------------------------------------------------
+     * The record chrome is the LIVE CHROME'S L, borrowed. On a match day the slide
+     * layer retracts toward the top-right and a ticker footer + matte strip appear in
+     * the band it uncovers; a take does exactly the same thing, so the narrator's
+     * instruments sit BESIDE the deck rather than over it. Nothing of the slide is
+     * covered, which for a performance surface is the whole point — and it costs one
+     * shared CSS rule (`body.record-chrome`, next to `body.live-chrome` in
+     * player.html), because the retraction was already a property of the stage.
+     *
+     *   ┌──────┬───────────────────────────┐
+     *   │strip │      the deck, 92%        │   strip: state · level · beat count
+     *   │      │                           │   foot:  REC · clock · beat · NEXT ▸
+     *   ├──────┴───────────────────────────┤          + transport, arm, clip audio
+     *   │ foot                             │
+     *   └──────────────────────────────────┘
+     *
+     * Two details worth knowing:
+     *
+     * - **It is positioned, not parented.** The obvious thing is to append the chrome
+     *   to `#stage` as the ticker and strip are — but `#stage` is `transform`ed to
+     *   centre it, which makes it a stacking context, and `#wcc-tap` (the full-screen
+     *   gesture layer, z-index 50) then paints above everything inside it. The chrome
+     *   has buttons; they have to be reachable. So it is fixed and measured off the
+     *   stage's rect instead, re-measured on every resize like `placeBar`.
+     * - **Everything is sized in `--fit` units** (`--u`), the same scale the slide
+     *   layer is drawn at, so the chrome and the deck are one design at any size.
+     */
+    var BAND = 0.08;      // mirrors --live-band; read from the page below
+    function stageEl() { return document.getElementById('stage'); }
+
+    function hudStyles() {
+      try {
+        var v = parseFloat(getComputedStyle(document.documentElement)
+                           .getPropertyValue('--live-band'));
+        if (v > 0 && v < 0.5) BAND = v;
+      } catch (e) {}
+      var css =
+        // One scale for the whole chrome: --fit is stage width / 1920, i.e. exactly
+        // what the slide layer is scaled by, so 30 here is 30 wall pixels.
+        '#wcc-rec-foot,#wcc-rec-strip{--u:calc(var(--fit,1) * 1px);position:fixed;z-index:70;' +
+        'font-family:Lato,-apple-system,Arial,sans-serif;color:#fff;pointer-events:none;}' +
+        '#wcc-rec-foot *,#wcc-rec-strip *{pointer-events:auto;}' +
+        // Foot: the bottom band. Transparent — the stage matte is already behind it,
+        // the same way the ticker sits on it.
+        '#wcc-rec-foot{display:flex;align-items:stretch;gap:calc(22 * var(--u));' +
+        'padding-right:calc(24 * var(--u));border-top:1px solid rgba(212,175,55,0.35);}' +
+        // The gold flag in the bottom-left corner — the live ticker's tile, and the
+        // header for the whole L. Its width is the band, set from the measured stage
+        // in placeChrome, so the strip stands exactly on top of it and the footer's
+        // gold rule runs off its left edge: one continuous L, as on a match day.
+        '#wcc-rec-foot .flag{flex:none;display:flex;flex-direction:column;' +
+        'align-items:center;justify-content:center;gap:calc(2 * var(--u));' +
+        'padding:0 calc(6 * var(--u));background:#d4af37;color:#0f2346;overflow:hidden;' +
+        'font-weight:900;text-transform:uppercase;text-align:center;line-height:1.05;}' +
+        '#wcc-rec-foot .flag .lbl{font-size:calc(22 * var(--u));letter-spacing:.08em;}' +
+        // The dot rides INLINE at the head of the label, as the ticker's does, so it
+        // never strands itself beside a block.
+        '#wcc-rec-foot .flag i{display:none;width:calc(13 * var(--u));height:calc(13 * var(--u));' +
+        'margin-right:calc(7 * var(--u));border-radius:50%;background:#b3261e;' +
+        'vertical-align:0.04em;}' +
+        '#wcc-rec-foot.on .flag i{display:inline-block;animation:wcc-rec-pulse 1.8s infinite;}' +
+        '@keyframes wcc-rec-pulse{0%{box-shadow:0 0 0 0 rgba(179,38,30,0.6);}' +
+        '70%{box-shadow:0 0 0 calc(10 * var(--u)) rgba(179,38,30,0);}' +
+        '100%{box-shadow:0 0 0 0 rgba(179,38,30,0);}}' +
+        // The take clock is the flag's subtitle, where the ticker puts the division.
+        '#wcc-rec-foot .flag .clock{font-size:calc(20 * var(--u));font-weight:700;' +
+        'letter-spacing:.04em;font-variant-numeric:tabular-nums;color:rgba(15,35,70,0.75);}' +
+        '#wcc-rec-foot .txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;' +
+        'justify-content:center;gap:calc(3 * var(--u));}' +
+        '#wcc-rec-foot .r1{display:flex;align-items:center;gap:calc(14 * var(--u));min-width:0;}' +
+        // Reserved height, so the prompt beneath it never moves when an instruction
+        // comes and goes — which it does at every clip boundary.
+        '#wcc-rec-foot .beat{font-size:calc(22 * var(--u));color:#b4c8e4;white-space:nowrap;' +
+        'overflow:hidden;text-overflow:ellipsis;flex:1 1 auto;min-height:calc(27 * var(--u));}' +
+        // A hold is the one state the narrator has to act on, so it reads as an
+        // instruction at the head of the line rather than as a label somewhere else.
+        '#wcc-rec-foot .beat em{font-style:normal;font-weight:900;color:#d4af37;' +
+        'letter-spacing:.06em;}' +
+        '#wcc-rec-foot .err{font-size:calc(20 * var(--u));color:#f0a0a0;flex:none;}' +
+        // The next-up prompt is the highest-value element on the screen: for a clip
+        // its curated narrative, for a card the resolved figures the narrator has to
+        // say aloud, for a static slide its title. It gets the big line.
+        '#wcc-rec-foot .next{font-size:calc(34 * var(--u));font-weight:700;white-space:nowrap;' +
+        'overflow:hidden;text-overflow:ellipsis;line-height:1.15;}' +
+        '#wcc-rec-foot .next span{color:#d4af37;font-weight:900;font-size:calc(20 * var(--u));' +
+        'margin-right:calc(12 * var(--u));}' +
+        '#wcc-rec-foot .next i{color:#b4c8e4;font-style:normal;font-weight:400;' +
+        'font-size:calc(24 * var(--u));margin-left:calc(12 * var(--u));}' +
+        // The meter comes off the strip and into the footer, beside the transport it
+        // belongs with. It is small but it is never off screen, which is all it has to
+        // be — a take that turns out silent or clipped is the worst outcome here.
+        '#wcc-rec-foot .meter{flex:none;width:calc(120 * var(--u));height:calc(12 * var(--u));' +
+        'background:rgba(255,255,255,0.12);border-radius:calc(6 * var(--u));overflow:hidden;}' +
+        '#wcc-rec-foot .meter i{display:block;width:0;height:100%;background:#5ec27a;' +
+        'transition:width 80ms linear;}' +
+        '#wcc-rec-foot.clipped .meter i{background:#e2453c;}' +
+        '#wcc-rec-foot .acts{display:flex;align-items:center;gap:calc(10 * var(--u));flex:none;}' +
+        '#wcc-rec-foot button{font:inherit;font-size:calc(20 * var(--u));font-weight:700;' +
+        'padding:calc(8 * var(--u)) calc(16 * var(--u));border-radius:calc(7 * var(--u));' +
+        'border:1px solid rgba(212,175,55,0.7);background:transparent;color:#d4af37;' +
+        'cursor:pointer;display:flex;align-items:center;gap:calc(6 * var(--u));}' +
+        '#wcc-rec-foot button.primary{background:#d4af37;color:#0a1c3a;}' +
+        '#wcc-rec-foot button.on{background:rgba(212,175,55,0.22);color:#fff;}' +
+        '#wcc-rec-foot button svg{width:calc(24 * var(--u));height:calc(24 * var(--u));' +
+        'fill:currentColor;stroke:currentColor;stroke-width:2;stroke-linejoin:round;}' +
+        // The clip countdown runs along the seam between the deck and the chrome,
+        // which is where the eye already is.
+        '#wcc-rec-progress{position:absolute;left:0;right:0;top:0;height:calc(4 * var(--u));' +
+        'background:rgba(212,175,55,0.16);overflow:hidden;}' +
+        '#wcc-rec-progress i{display:block;width:100%;height:100%;background:#d4af37;' +
+        'transform-origin:left;transform:scaleX(0);}' +
+        // Strip: the left band. State at the top, the level meter down the middle —
+        // a take that turns out silent or clipped after twenty minutes is the worst
+        // outcome this feature has, so the meter is never off screen — beat at the foot.
+        // The strip is the DECK'S SPINE: one tile per slide, top to bottom, each
+        // filling with gold as its atoms are played — the vertical twin of the
+        // countdown along the footer's top edge. A reel is one tile however many
+        // clips it holds, which is the whole reason it is readable: 29 clips are one
+        // thing you narrate, not 29 things to find yourself in.
+        // One padding everywhere: the gap between tiles is also the strip's inset and
+        // the tiles' own, so the column reads as an even stack rather than a boxed list.
+        '#wcc-rec-strip{--u:calc(var(--fit,1) * 1px);--pad:calc(4 * var(--u));' +
+        'display:flex;flex-direction:column;padding:var(--pad);gap:var(--pad);' +
+        'border-right:1px solid rgba(212,175,55,0.2);}' +
+        '#wcc-rec-strip .tile{position:relative;flex:1 1 0;min-height:0;overflow:hidden;' +
+        'display:flex;flex-direction:column;justify-content:center;text-align:center;' +
+        'padding:var(--pad);border-radius:calc(5 * var(--u));' +
+        'background:rgba(255,255,255,0.06);}' +
+        // A set boundary is a bigger gap, not a second colour: gold is the only accent
+        // this design has, and it is already spoken for by progress.
+        '#wcc-rec-strip .tile.set{margin-top:calc(12 * var(--u));}' +
+        '#wcc-rec-strip .tile .fill{position:absolute;left:0;top:0;bottom:0;width:0;' +
+        'background:rgba(212,175,55,0.20);transition:width 0.25s linear;}' +
+        '#wcc-rec-strip .tile.now{background:rgba(255,255,255,0.10);' +
+        'box-shadow:inset 0 0 0 1px rgba(212,175,55,0.65);}' +
+        '#wcc-rec-strip .tile.now .fill{background:rgba(212,175,55,0.42);}' +
+        '#wcc-rec-strip .tile>span{position:relative;white-space:nowrap;overflow:hidden;' +
+        'text-overflow:ellipsis;}' +
+        // Both caption lines are one voice — same size, same weight, white — because
+        // "1st Innings / Highlights" is one name in two levels, not a label and a
+        // heading. Only the gold clip count reads as a different kind of thing.
+        '#wcc-rec-strip .tile .l1,#wcc-rec-strip .tile .l2{font-size:calc(19 * var(--u));' +
+        'font-weight:700;color:#fff;}' +
+        '#wcc-rec-strip .tile:not(.now) .l1,#wcc-rec-strip .tile:not(.now) .l2{' +
+        'color:rgba(255,255,255,0.72);}' +
+        // Set off from the name above it: the count is a different kind of thing, so
+        // it gets the same gap the tiles get from each other.
+        '#wcc-rec-strip .tile .n{font-size:calc(14 * var(--u));font-weight:700;color:#d4af37;' +
+        'margin-top:var(--pad);}' +
+        // A long deck runs out of room for words long before it runs out of tiles, so
+        // past a point the spine is bars only. Still the same answer to "where am I".
+        '#wcc-rec-strip.dense .tile>span{display:none;}' +
+        '#wcc-rec-strip.dense .tile{flex-basis:auto;}' +
+        // The 3-2-1: over the stage, unmissable, and gone before the deck starts.
+        '#wcc-count{position:fixed;inset:0;z-index:80;display:flex;align-items:center;' +
+        'justify-content:center;background:rgba(8,21,44,0.72);color:#d4af37;' +
+        'font:900 22vmax/1 Lato,Arial,sans-serif;}';
+      var s = document.createElement('style');
+      s.textContent = css;
+      document.head.appendChild(s);
+    }
+
+    /* Lay the chrome over the L the retracted slide layer uncovers. Measured off the
+     * stage rather than the viewport, because the stage is the composition — on a
+     * non-16:9 screen it is letterboxed, and chrome anchored to the window would
+     * float away from the deck it belongs to. */
+    function placeChrome() {
+      if (!rec.foot) return;
+      var st = stageEl();
+      // No stage means this is not one of the two players (nothing ships that way
+      // today) — fall back to the viewport so the chrome is still on screen.
+      var r = st ? st.getBoundingClientRect()
+                 : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight,
+                     bottom: window.innerHeight };
+      if (!r.width) return;
+      var bw = Math.round(r.width * BAND), bh = Math.round(r.height * BAND);
+      var css = function (el, o) { Object.keys(o).forEach(function (k) { el.style[k] = o[k] + 'px'; }); };
+      css(rec.foot, { left: r.left, top: r.bottom - bh, width: r.width, height: bh });
+      css(rec.strip, { left: r.left, top: r.top, width: bw, height: r.height - bh });
+      // The flag is exactly the band wide, so the strip stands on it squarely.
+      if (rec.els.flag) rec.els.flag.style.width = bw + 'px';
+    }
+
+    /* The spine's tiles: one per slide, in deck order, each owning a contiguous run
+     * of the plan. Built from the plan rather than from `items`, so a slide that
+     * contributes no atoms (a live slide, an unfilled reel) contributes no tile —
+     * there is nothing to be part-way through. */
+    function spineRuns() {
+      var runs = [], last = null;
+      rec.plan.forEach(function (p, k) {
+        if (!last || last.i !== p.i) { last = { i: p.i, from: k, count: 0 }; runs.push(last); }
+        last.count++;
+      });
+      return runs;
+    }
+    /* A tile's two lines, from the slide's own header hierarchy (`slide_title`), so
+     * the spine reads in the same words as the wall's header and the deck builder's
+     * rows. The leaf names the slide ("Highlights", "Batting", "Pre-match"); above it
+     * sits the phase, which is what groups an innings together. */
+    function tileName(i) {
+      var it = items[i] || {};
+      var lvl = (it.title || it.slug || '').split(' · ');
+      var leaf = lvl[lvl.length - 1] || it.slug;
+      var phase = ((it.atoms || [])[0] || {}).phase || null;
+      var above = (phase && phase !== leaf) ? phase : (lvl.length > 1 ? lvl[lvl.length - 2] : '');
+      return { l1: above, l2: leaf };
+    }
+
+    function buildSpine() {
+      if (!rec.strip) return;
+      rec.strip.innerHTML = '';
+      rec.runs = spineRuns();
+      // Words need room. Past about a dozen tiles there isn't any, so the spine drops
+      // to bars — which still answers "where am I in the deck", the question it exists
+      // to answer.
+      rec.strip.classList.toggle('dense', rec.runs.length > 12);
+      rec.tiles = rec.runs.map(function (run, k) {
+        var t = document.createElement('div');
+        t.className = 'tile';
+        var prev = rec.runs[k - 1];
+        if (prev && (items[run.i].group || items[run.i].slug) !== (items[prev.i].group || items[prev.i].slug)) {
+          t.className += ' set';
+        }
+        var fill = document.createElement('div'); fill.className = 'fill';
+        t.appendChild(fill);
+        var nm = tileName(run.i);
+        if (nm.l1) t.appendChild(mk('span', 'l1', nm.l1));
+        t.appendChild(mk('span', 'l2', nm.l2));
+        // A reel's clips stack into this one tile, so it says how many are in there.
+        // Clips, not atoms: a clip carrying both cards is three beats but one ball,
+        // and "18 clips" is what the editor curated and what the narrator sees.
+        if (items[run.i].video) {
+          var panels = {}, holds = 0;
+          for (var q = run.from; q < run.from + run.count; q++) {
+            panels[rec.plan[q].panel] = 1;
+            // Every card atom is a hold: the pad plays out and the reel freezes on its
+            // last frame until a tap. That is the number of times the narrator has to
+            // do something inside this tile, which is worth knowing before arriving at
+            // it — and it is silent when there are none, because most reels have none.
+            if (rec.plan[q].card) holds++;
+          }
+          t.appendChild(mk('span', 'n', Object.keys(panels).length + ' clips'
+            + (holds ? ' · ' + holds + (holds === 1 ? ' hold' : ' holds') : '')));
+        }
+        rec.strip.appendChild(t);
+        return { el: t, fill: fill, run: run };
+      });
+      spineDraw();
+    }
+    function mk(tag, cls, text) {
+      var n = document.createElement(tag);
+      n.className = cls;
+      n.textContent = text;
+      return n;
+    }
+    /* Gold fills each tile as its atoms are played — the same language as the clip
+     * countdown along the footer's top edge, turned through ninety degrees. */
+    function spineDraw() {
+      (rec.tiles || []).forEach(function (t) {
+        var done = rec.pos >= t.run.from + t.run.count;
+        var now = rec.pos >= t.run.from && !done;
+        var pct = done ? 100
+                : now ? ((rec.pos - t.run.from + 1) / t.run.count) * 100
+                : 0;
+        t.fill.style.width = pct.toFixed(1) + '%';
+        t.el.classList.toggle('now', now);
+      });
+    }
+
+    function fmtClock(sec) {
+      var t = Math.max(0, Math.floor(sec));
+      return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+    }
+    /* What the prompt calls the beat that is coming.
+     *
+     * Clip labels are ordinal-prefixed (`4. Four through cover`) so that two similar
+     * balls stay apart in a LIST — the deck builder's rows, /narrate's beat table. A
+     * prompt is not a list: it shows one thing at a time and the narrator is about to
+     * read it aloud, where a leading number is something to trip over. So the ordinal
+     * is dropped here and kept in the data.
+     *
+     * A card beat is named for what it IS — a flashcard, `/curate`'s own word for it —
+     * and not for the ball it sits against. Two reasons: the ball's narrative is the
+     * next beat's prompt anyway, so carrying it here says it twice; and pre versus post
+     * is a fact about the timeline rather than about the performance. What the narrator
+     * needs off this line is "a card is coming, and these are its figures", which is
+     * the figures' own job.
+     */
+    function promptName(p) {
+      if (!p) return '—';
+      if (p.card) return 'Flashcard';
+      var name = (p.label || p.phase || p.slug).replace(/^\d+\.\s+/, '');
+      // A clip's ball narrative stands on its own — the tile above it already says
+      // which innings' reel this is, and a wicket does not need a heading.
+      if ((items[p.i] || {}).video) return name;
+      // Everything else is prompted in the SAME two parts as its tile in the spine
+      // ("2nd Innings · Bowling"), because a leaf on its own is not a name: thirteen
+      // slides in this build are called "Leaderboards" and every innings has a
+      // "Bowling". Where the atom is finer than the slide — a carousel panel — the
+      // slide is the heading and the panel is the leaf ("Fantasy League · Top
+      // Managers"). Both come from tileName, so the strip and the prompt cannot
+      // drift into two different names for one thing.
+      var nm = tileName(p.i);
+      if (name === nm.l2) return nm.l1 ? nm.l1 + ' · ' + nm.l2 : nm.l2;
+      return nm.l2 + ' · ' + name;
+    }
+    function cardFigures(p) {
+      var c = p && p.info;
+      if (!c) return '';
+      var bits = [c.name, c.headline, c.sublabel].filter(Boolean);
+      (c.stats || []).forEach(function (s) { bits.push(s.v + ' ' + s.l); });
+      return bits.join(' · ');
+    }
+
+    function hudError(msg) { if (rec.els.err) rec.els.err.textContent = msg || ''; }
+
+    /* What ends this beat — and therefore what the narrator's next input is for.
+     *
+     * The rule is one line: **an atom that waits for you says so; one that ends itself
+     * says nothing.** A clip rolling to its own end needs no instruction (the countdown
+     * along the top edge is already saying it); everything that will sit there until it
+     * is touched does, because the deck looks identical either way.
+     *
+     * Two of the three are exceptional and read gold. The third — a static slide, which
+     * is simply the resting state of every panel in the deck — is muted, or a 40-beat
+     * sitting would spend most of itself shouting an instruction the narrator learned
+     * in the first ten seconds.
+     */
+    /* The line names WHO IS DRIVING this beat, and what your next input does about
+     * it. Every state advertises its own key, which is why there is no separate
+     * rehearsal key-map: the deck teaches itself as you play it, in the take as much
+     * as before it.
+     *
+     * Two vocabularies, deliberately, because two different things stop:
+     *
+     *   - a clip is footage, and what stops is the PICTURE — ROLLING / FROZEN, and
+     *     the stop is recorded as a `freezes[]` entry on the beat. "Freeze", not
+     *     "pause": the take never stops, so pause would name the wrong thing, and
+     *     freeze is already the model's own word.
+     *   - a static beat has no picture to stop; what stops is the CLOCK — AUTO /
+     *     MANUAL, an agency question, and nothing is recorded either way.
+     */
+    function instruction() {
+      var it = items[current] || {};
+      if (slideHold) return 'HOLD · → to advance';
+      if (it.video) {
+        return playing ? 'ROLLING · Space to freeze' : 'FROZEN · Space to roll on';
+      }
+      // MANUAL carries the discovery of AUTO, since a narrator who never finds it
+      // has to cue a slideshow they meant to hand over to.
+      return playing ? 'AUTO · Space to take over'
+                     : 'MANUAL · → to advance · Space runs the deck';
+    }
+
+    function hudDraw() {
+      if (!rec.foot) return;
+      var e = rec.els;
+      var nxt = rec.pos >= 0 ? rec.plan[rec.pos + 1] : rec.plan[0];
+      // The top line is the INSTRUCTION and nothing else. There is no caption for the
+      // current atom because there is no question about it: it is on screen, filling
+      // the frame, with its own caption and its own card. The spine says where in the
+      // deck it sits. What the deck cannot say is what your next input does, so that
+      // is the only thing here — and it is the gold, because it is an instruction.
+      e.beat.innerHTML = '<em>' + instruction() + '</em>';
+      // The next atom is the one thing the deck itself cannot show, so it gets the
+      // size — and the card figures, which are prep. On screen they are already on
+      // the card, at wall scale.
+      e.next.innerHTML = nxt
+        ? '<span>NEXT</span>' + promptName(nxt)
+          + (cardFigures(nxt) ? '<i>' + cardFigures(nxt) + '</i>' : '')
+        : '<span>NEXT</span><i>end of deck</i>';
+      // Two words while rehearsing, because the clock's slot is free and the tile can
+      // hold them — and because REHEARSE alone says what you are doing without ever
+      // saying what to. A TAKE, the thing this is a rehearsal for and the word the
+      // rest of the design uses for it. `Rec` stays one word: it has the clock under
+      // it, and a state you are already in needs less naming than one you are about
+      // to leave.
+      e.state.textContent = rec.state === 'rehearse' ? 'Rehearse take'
+        : rec.state === 'arming' ? 'Arming'
+        : rec.state === 'recording' ? 'Rec' : 'Stopped';
+      // The clock is the TAKE's clock — "the take is the artefact; its clock is the one
+      // true time" — so before a take there is no time to show, and a 0:00 sitting
+      // under REHEARSE is a number that means nothing. It appears with the first
+      // recorded chunk, which is also the moment it starts being true.
+      e.clock.style.display = rec.t0 ? '' : 'none';
+      rec.foot.classList.toggle('on', rec.state === 'recording');
+      spineDraw();
+    }
+
+    function buildHud() {
+      hudStyles();
+      // The same retraction the live chrome uses — one rule, shared, in player.html.
+      document.body.classList.add('record-chrome');
+
+      var foot = document.createElement('div');
+      foot.id = 'wcc-rec-foot';
+      var prog = document.createElement('div');
+      prog.id = 'wcc-rec-progress';
+      progressFill = document.createElement('i');
+      prog.appendChild(progressFill);
+      foot.appendChild(prog);
+
+      // The gold tile, in the corner where the live ticker's flag sits: the take's
+      // state and its clock, and the header the strip above it doesn't need to repeat.
+      var flag = document.createElement('div'); flag.className = 'flag';
+      var lbl = document.createElement('div'); lbl.className = 'lbl';
+      var dot = document.createElement('i');
+      var state = document.createElement('span');
+      lbl.appendChild(dot); lbl.appendChild(state);
+      var clock = document.createElement('div'); clock.className = 'clock'; clock.textContent = '0:00';
+      flag.appendChild(lbl); flag.appendChild(clock);
+      foot.appendChild(flag);
+
+      var txt = document.createElement('div'); txt.className = 'txt';
+      var r1 = document.createElement('div'); r1.className = 'r1';
+      var beat = document.createElement('span'); beat.className = 'beat';
+      var err = document.createElement('span'); err.className = 'err';
+      [beat, err].forEach(function (x) { r1.appendChild(x); });
+      var next = document.createElement('div'); next.className = 'next';
+      txt.appendChild(r1); txt.appendChild(next);
+      foot.appendChild(txt);
+
+      // The transport lives here in record mode: the floating control bar is a
+      // surface over the slide, which is the one thing this layout is getting rid of.
+      var meter = document.createElement('div'); meter.className = 'meter';
+      var fill = document.createElement('i'); meter.appendChild(fill);
+      foot.appendChild(meter);
+
+      var acts = document.createElement('div'); acts.className = 'acts';
+      playBtn = button('pause', '', function () { setPlaying(!playing); });
+      acts.appendChild(playBtn);
+      acts.appendChild(button('next', '', next2));
+      var audBtn = document.createElement('button'); audBtn.textContent = 'Clip audio';
+      var armBtn = document.createElement('button'); armBtn.className = 'primary'; armBtn.textContent = 'Arm ▸';
+      acts.appendChild(audBtn); acts.appendChild(armBtn);
+      foot.appendChild(acts);
+
+      var strip = document.createElement('div');
+      strip.id = 'wcc-rec-strip';
+
+      document.body.appendChild(foot);
+      document.body.appendChild(strip);
+      rec.foot = foot; rec.strip = strip;
+      rec.els = { flag: flag, dot: dot, clock: clock, state: state, beat: beat, next: next,
+                  meter: fill, arm: armBtn, aud: audBtn, err: err };
+      armBtn.addEventListener('click', function () {
+        if (rec.state === 'rehearse') arm();
+        else if (rec.state === 'recording') stopTake();
+      });
+      audBtn.addEventListener('click', function () { setClipAudio(!rec.clipAudio); });
+      setClipAudio(false);
+      buildSpine();
+      placeChrome();
+      window.addEventListener('resize', placeChrome);
+      window.addEventListener('orientationchange', placeChrome);
+      updatePlayBtn();
+      hudDraw();
+    }
+    // `next` is the prompt element inside buildHud, so the nav function needs naming
+    // out of its way.
+    function next2() { next(); }
+
+    /* Clip audio is muted while recording: speakers bleed into the mic, and the
+     * render mixes the R2 audio itself under loudnorm/duck, so hearing it live buys
+     * only timing feel. The toggle is for anyone wearing headphones. */
+    function setClipAudio(on) {
+      rec.clipAudio = !!on;
+      if (rec.els.aud) rec.els.aud.classList.toggle('on', rec.clipAudio);
+      items.forEach(function (it, i) { send(i, 'set-mute', { muted: !rec.clipAudio }); });
+    }
+
+    /* ---- arming and the take ---------------------------------------------- */
+    function meterLoop() {
+      if (!rec.audio) return;
+      var buf = rec.audio.buf;
+      rec.audio.analyser.getByteTimeDomainData(buf);
+      var peak = 0, sum = 0;
+      for (var i = 0; i < buf.length; i++) {
+        var v = (buf[i] - 128) / 128;
+        sum += v * v;
+        if (Math.abs(v) > peak) peak = Math.abs(v);
+      }
+      var rms = Math.sqrt(sum / buf.length);
+      if (rec.els.meter) rec.els.meter.style.height = Math.min(100, rms * 260).toFixed(1) + '%';
+      if (rec.foot) rec.foot.classList.toggle('clipped', peak > 0.98);
+      requestAnimationFrame(meterLoop);
+    }
+
+    function arm() {
+      if (rec.state !== 'rehearse') return;
+      rec.state = 'arming';
+      hudError('');
+      hudDraw();
+      navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      }).then(function (stream) {
+        rec.stream = stream;
+        var Ctx = window.AudioContext || window.webkitAudioContext;
+        var ctx = new Ctx();
+        var an = ctx.createAnalyser();
+        an.fftSize = 1024;
+        ctx.createMediaStreamSource(stream).connect(an);
+        rec.audio = { ctx: ctx, analyser: an, buf: new Uint8Array(an.fftSize) };
+        meterLoop();
+        countIn(3);
+      }).catch(function (e) {
+        rec.state = 'rehearse';
+        hudError('no microphone: ' + (e && e.name ? e.name : 'blocked'));
+        hudDraw();
+      });
+    }
+
+    function countIn(n) {
+      var el = document.getElementById('wcc-count');
+      if (!el) { el = document.createElement('div'); el.id = 'wcc-count'; document.body.appendChild(el); }
+      el.textContent = n > 0 ? String(n) : '';
+      if (n <= 0) { el.remove(); startTake(); return; }
+      setTimeout(function () { countIn(n - 1); }, 900);
+    }
+
+    /* The recorder's mime type is whatever the browser will actually give us:
+     * Chrome records WebM/Opus, Safari MP4/AAC. The take carries its own extension
+     * into the export rather than the pipeline assuming one. */
+    function pickMime() {
+      var want = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'];
+      for (var i = 0; i < want.length; i++) {
+        try { if (MediaRecorder.isTypeSupported(want[i])) return want[i]; } catch (e) {}
+      }
+      return '';
+    }
+
+    function startTake() {
+      var mime = pickMime();
+      var deck = opts.deck || null;
+      var s = WccTakeStore.create({
+        title: (deck && deck.title) || document.title,
+        deckKey: opts.deckKey || null,
+        mime: mime,
+        ext: mime.indexOf('mp4') >= 0 ? 'mp4' : 'webm',
+        build_version: (deck && deck.build_version) || null,
+        source_match: (deck && deck.source_match) || null,
+        // The beat list, as played. /narrate names its rows from this rather than
+        // re-deriving atoms from the deck: the reel's atoms are the sitting's live
+        // curation, and the take is the only thing that knows what was actually in
+        // front of the narrator.
+        plan: rec.plan
+      });
+      rec.session = s;
+      // The deck as played, stored where decks are stored — /narrate exports it
+      // beside the timeline, and the whole point of a frozen deck is that the
+      // render is shot against what the narrator actually saw.
+      if (deck && !WccTakeStore.putDeck(s.id, deck)) {
+        hudError('deck too large to store — the take will still record');
+      }
+      try {
+        rec.recorder = new MediaRecorder(rec.stream, mime ? { mimeType: mime } : undefined);
+      } catch (e) {
+        rec.state = 'rehearse';
+        hudError('cannot record: ' + e);
+        return;
+      }
+      rec.recorder.ondataavailable = function (ev) {
+        if (!ev.data || !ev.data.size) return;
+        if (!rec.t0) {
+          // MediaRecorder.start() does not begin capturing when it returns, so a cue
+          // stamped off performance.now() from that moment sits tens of ms out. The
+          // first chunk covers roughly one timeslice, so its ARRIVAL minus that
+          // timeslice is the closest thing to audio t=0 the API offers. /narrate
+          // carries a ±500ms global nudge for whatever the browser actually did.
+          rec.t0 = Math.min(performance.now() - TIMESLICE_MS, rec.armedAt || Infinity);
+          if (!isFinite(rec.t0)) rec.t0 = performance.now();
+          beginDeck();
+        }
+        WccTakeStore.appendChunk(rec.session.id, rec.seq++, ev.data).catch(function (e) {
+          hudError('audio store failed — stop and check /narrate');
+        });
+      };
+      rec.armedAt = performance.now();
+      rec.recorder.start(TIMESLICE_MS);
+      rec.state = 'recording';
+      rec.els.arm.textContent = 'Stop ■';
+      rec.els.arm.classList.remove('primary');
+      rec.clock = setInterval(function () {
+        rec.els.clock.textContent = fmtClock(takeTime());
+        if (rec.pending) hudDraw();
+      }, 250);
+      hudDraw();
+    }
+
+    /* The take starts before the first atom does, so there is lead-in silence to
+     * trim against — and the first cue is stamped by the deck arriving, not by the
+     * recorder starting. */
+    function beginDeck() {
+      lastAtom = null;
+      clipPhase = null;
+      arrive(0, 0, !!items[0].video);
+      recSync();
+    }
+
+    function stopTake() {
+      if (rec.state !== 'recording') return;
+      rec.state = 'stopping';
+      freezeEnd();
+      setPlaying(false);
+      if (rec.clock) { clearInterval(rec.clock); rec.clock = null; }
+      var s = rec.session;
+      // Re-stamp the plan: a windowed deck refines a reel's atoms as its frame loads,
+      // so the list is only complete once the deck has been played through.
+      s.plan = rec.plan;
+      s.duration = +takeTime().toFixed(3);
+      s.stopped = true;
+      WccTakeStore.save(s);
+      var done = function () {
+        try { rec.stream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+        location.href = '/narrate/?take=' + encodeURIComponent(s.id);
+      };
+      try {
+        rec.recorder.onstop = function () { setTimeout(done, 150); };
+        rec.recorder.stop();
+      } catch (e) { done(); }
+    }
+
+    function startRecord() {
+      buildPlan();
+      buildHud();
+      // GH Pages caches this HTML for 10 minutes and /assets for 4 hours, so a page
+      // can pair fresh JS with an HTML document that predates the take store's
+      // script tag. Say so before the narrator has performed anything, rather than
+      // failing at the end of a twenty-minute take.
+      if (!window.WccTakeStore) {
+        hudError('reload this page — the take store has not loaded (stale cache)');
+        rec.els.arm.disabled = true;
+      }
+      // Rehearsal is the deck exactly as the iPad plays it, with the HUD up: the
+      // whole value of a rehearsal is seeing the next-up prompts in place.
+      recSync();
+    }
+
+    /* Drive the player from the page hosting it (`?hosted`). /narrate plays a deck
+     * back beat by beat against the take, and it must reach a beat the same way the
+     * narrator did rather than by a second addressing scheme — so this is the
+     * player's own nav, called from outside. A card atom is reached through the
+     * slide (`goto-atom` on the bridge), because a clip's segments are the slide's
+     * business, not the player's. */
+    function gotoAtom(a) {
+      if (!a) return;
+      var i = -1;
+      for (var k = 0; k < items.length; k++) if (items[k].slug === a.slide) { i = k; break; }
+      if (i < 0) return;
+      var panel = a.panel || 0;
+      arrive(i, panel, false);              // paused: review positions, it doesn't play
+      clipPhase = a.card || null;
+      send(i, 'goto-atom', { panel: panel, card: a.card || null });
+      recSync();
+    }
+
     /* ---- bridge messages from slides ---- */
     window.addEventListener('message', function (e) {
       var d = e.data; if (!d) return;
+      if (d.type === 'wcc-player' && hosted) {
+        if (d.action === 'goto-atom') gotoAtom(d.atom);
+        else if (d.action === 'play') setPlaying(true);
+        else if (d.action === 'pause') setPlaying(false);
+        return;
+      }
       // The flash overlay isn't in `items`; handle its done signal before the idx gate.
       if (d.type === 'wcc-flash-done' && flashWin() && e.source === flashWin()) { onFlashDone(); return; }
       var idx = items.findIndex(function (it) { return it.frame.contentWindow === e.source; });
@@ -866,22 +1738,48 @@
         if (d.type === 'wcc-slide' && idx === current && Date.now() - shownAt < 2000) send(current, 'restart-auto');
         return;
       }
+      // The playhead a slide reports on request. Only a freeze wants it — `at` on a
+      // freeze is media time within the clip, which the player has no way to know.
+      if (d.type === 'wcc-time' && idx === current) { mediaTime = d.t; return; }
       if (d.type === 'wcc-slide') {
         var first = counts[idx] == null;
         counts[idx] = d.panels;
         if (idx === current) setEdges(d);
+        if (track && d.atoms) {
+          // A reel answers with its own atom list, which during the sitting is the
+          // editor's live curation rather than anything the build has seen. It also
+          // re-announces after `set-clips`, so the plan follows the curation.
+          refineAtoms(idx, d.atoms);
+        }
+        if (record) send(idx, 'set-mute', { muted: !rec.clipAudio });
         // Re-apply state on the current slide's handshake (covers the load race
         // where our first commands arrived before the bridge was listening).
         if (idx === current && first && Date.now() - shownAt < 2000) applyState(playing ? 0 : panelIndex);
       } else if (d.type === 'wcc-panel' && idx === current) {
+        var movedPanel = panelIndex !== d.panel;
         panelIndex = d.panel;
         setEdges(d);
+        if (track && movedPanel) {
+          clipPhase = items[current].video && planPreAt(current, panelIndex) ? 'pre' : null;
+          recSync();
+        }
         if (!items[current].video) return;
         // A card hold: the reel has frozen on a pad's last frame and is waiting for a
         // tap, so nothing may run underneath it — not the countdown fill, and not the
         // slide-advance backstop, which would otherwise carry the deck off the card
         // mid-sentence. Releasing the hold re-arms both over what is left of the clip.
         slideHold = !!d.hold;
+        // Which atom of the clip is running. The plan already put us on the pre card
+        // when the pad started (applyState); the echo is what ends it and what names
+        // a post card, since only the slide knows a card is up.
+        if (track) {
+          if (d.hold) clipPhase = d.card || clipPhase || 'pre';
+          else if (d.hold === false) clipPhase = null;
+          recSync();
+          // A hold is a change of instruction without being a change of atom — the
+          // pre card was entered when its pad started — so it redraws on its own.
+          hudDraw();
+        }
         if (d.hold) { clearTimer(); progressFreeze(); return; }
         if (!playing) return;
         if (d.hold === false) armAdvanceTimer(atomMs());
@@ -894,6 +1792,11 @@
 
     /* ---- keyboard ---- */
     document.addEventListener('keydown', function (e) {
+      // PageDown rides along with the right arrow for free, which makes a Bluetooth
+      // page-turner pedal work — worth having when you are standing at a mic rather
+      // than sitting at a screen.
+      if (e.key === 'PageDown' && interactive) { e.preventDefault(); next(); return; }
+      if (e.key === 'Escape' && record) { e.preventDefault(); stopTake(); return; }
       if (e.key === 'ArrowRight') { if (interactive) { next(); } else kioskGo(1); return; }
       if (e.key === 'ArrowLeft')  { if (interactive) { prev(); } else kioskGo(-1); return; }
       if (!interactive) return;
@@ -920,6 +1823,12 @@
 
     if (interactive) {
       buildControls();
+      if (record) startRecord();
+      else if (hosted) {
+        buildPlan();
+        recSync();
+        try { parent.postMessage({ type: 'wcc-player-ready' }, '*'); } catch (e) {}
+      }
       // Learn every slide's panel count up front. On the gated path the iframes
       // finish loading (and post their wcc-slide handshake) before start() attaches
       // the listener above, so those first handshakes are missed and `counts` would
