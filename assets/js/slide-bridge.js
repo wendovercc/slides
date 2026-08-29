@@ -191,8 +191,13 @@
       // slide answers because a clip's segments are its own business — the player
       // knows panels. Anything else treats it as a plain panel move.
       case 'goto-atom':
-        if (window.WccReel && WccReel.gotoAtom) WccReel.gotoAtom(d.panel, d.card || null);
+        if (window.WccReel && WccReel.gotoAtom) WccReel.gotoAtom(d.panel, d.card || null, d.at);
         else show(typeof d.panel === 'number' ? d.panel : current);
+        break;
+      // Hold a clip's last frame at its end rather than rolling on, for a hosted
+      // review whose boundaries come from the take. A slide with no reel ignores it.
+      case 'set-hold-end':
+        if (window.WccReel && WccReel.setHoldEnd) WccReel.setHoldEnd(!!d.hold);
         break;
       // Clip audio on or off, for record mode. A slide with no media ignores it.
       case 'set-mute':

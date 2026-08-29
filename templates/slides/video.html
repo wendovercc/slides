@@ -1116,6 +1116,9 @@
         showVideo(Math.max(0, Math.min(count - 1, current + d)));
     }
 
+    // Set by the player when it is hosted (/narrate): see advanceFrom.
+    var holdEnd = false;
+
     // A built clip carries its measured file duration; a runtime one is a stream
     // segment, so its trim is the duration.
     function clipDuration(i) {
@@ -1142,6 +1145,15 @@
     function advanceFrom(i) {
         if (i !== current) return;
         clearStall();
+        /* A hosted review is timed by the take, not by the footage. The render's rule
+           is that video adapts to audio — truncate if the beat is short, hold the last
+           frame if it is long — so the preview has to do the same, or a nudge changes
+           the timeline and nothing visibly happens. The page around us cues the next
+           beat when its audio says so; until then this clip stands still on its last
+           frame. (A file element has already stopped there; a YouTube segment would
+           otherwise roll on into the broadcast, which is the continuous playback that
+           made the render look nothing like the preview.) */
+        if (holdEnd) { if (SRC && SRC.pause) SRC.pause(); return; }
         if (i < count - 1) { showVideo(i + 1); }
         else { try { parent.postMessage({ type: 'wcc-done' }, '*'); } catch (e) {} }
     }
@@ -1291,13 +1303,20 @@
         // Park on one atom of one clip, paused. A clip is up to three atoms and only
         // this document knows where they start, so review ("play beat 14 again",
         // "re-record it") addresses them here rather than seeking from outside.
-        gotoAtom: function (panel, card) {
+        // `at` is how far into this atom to park — /narrate passing the offset of a
+        // playhead sitting mid-clip, so the frame under the review matches the
+        // commentary over it. A card has no footage to scrub, so it ignores it.
+        gotoAtom: function (panel, card, at) {
             var i = Math.max(0, Math.min(count - 1, panel || 0));
             if (i !== current) showVideo(i);
             var pre = cardWindow(i, 'pre'), post = cardWindow(i, 'post');
             var t = card === 'post' ? (post ? post[0] : 0)
                   : card === 'pre' ? 0
                   : (pre ? pre[1] : 0);
+            if (!card && at > 0) {
+                var len = clipDuration(i);
+                t += len ? Math.min(at, Math.max(0, len - t - 0.1)) : at;
+            }
             if (SRC) { SRC.pause(); if (SRC.seek) SRC.seek(t); }
             phase = card || 'action';
             holding = false;
@@ -1305,6 +1324,9 @@
             updateCard(t + 0.01);
             report();
         },
+        // Stop rolling into the next clip; hold the last frame instead. The reviewing
+        // page owns every boundary (see advanceFrom).
+        setHoldEnd: function (on) { holdEnd = !!on; },
         // Dress the page as it looks at one beat: clip `panel`, optionally with its
         // "pre"/"post" card open. Nothing plays — the caller wants a still. Returns
         // false on a non-reel video slide, which has no overlay layer to shoot.

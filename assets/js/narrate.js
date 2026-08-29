@@ -19,7 +19,14 @@
   "use strict";
 
   var BIN = 0.01;          // envelope resolution, seconds — 10ms is plenty for a cue
-  var NUDGE = 0.1;         // one click of the boundary drag
+  /* One step, both instruments: 10ms, which is finer than the frame the render
+     quantises to and fine enough for the audio split a nudge really moves. `shift`
+     is the syllable-scale gesture the cue used to have as its base step, and the
+     sweep unit for the take's ±500ms hunt — the coarse action differs by job, the
+     unit does not. */
+  var STEP = 10;           // ms, on a cue and on the take alike
+  var COARSE = 10;         // shift: 100ms, a syllable
+  var OFF_MAX = 1000;      // the take's calibration is tens of ms; this is slack, not scope
   var MIN_BEAT = 0.2;      // a nudge may not swallow a beat whole
 
   var state = {
@@ -29,8 +36,13 @@
     env: null,       // { max: Float32Array, rms: Float32Array } at BIN resolution
     segs: {},        // beat index → re-recorded Blob
     sel: -1,         // selected beat
-    stop: null,      // when the current range playback should stop
-    rec: null        // { recorder, beat, started, stream }
+    rec: null,       // { recorder, beat, started, stream }
+    titles: {},      // slug → the catalogue's title, for a take that carries none
+    off: 0,          // the whole-take offset, in ms
+    rows: [],        // beat index → its row element, so selection is a class not a rebuild
+    drag: false,     // the playhead is being scrubbed
+    raf: 0,          // the playhead's animation frame
+    cache: null      // the take's envelope, drawn once (see waveCache)
   };
 
   var $ = function (s) { return document.querySelector(s); };
@@ -57,7 +69,10 @@
      A beat runs from its cue to the next one; a re-recorded beat's duration is its
      segment's instead, which is what "the segment list is authoritative from there
      on" means in practice. Cue times are kept either way, as provenance. */
+  var _beats = null;                      // see invalidate(): the playhead asks 60×/s
+  function invalidate() { _beats = null; }
   function beats() {
+    if (_beats) return _beats;
     var t = state.take;
     if (!t) return [];
     var cues = t.cues || [];
@@ -86,6 +101,7 @@
         plan: hit
       });
     }
+    _beats = out;
     return out;
   }
   function same(p, a) {
@@ -94,8 +110,48 @@
   }
   function atomName(b) {
     var p = b.plan;
-    var name = (p && (p.label || p.phase)) || b.atom.slide;
-    return name;
+    return (p && (p.label || p.phase)) || b.atom.slide;
+  }
+  /* A beat's name is the deck's, one level deeper. The wall's header hierarchy gives
+     the two levels the record HUD's spine uses (`1st Innings · Highlights`) and the
+     atom adds the third (`OUT! G Jackson gets M Moss`) — so the row, the detail pane,
+     the strip and the deck builder are all saying the same string about the same
+     thing. A leaf on its own is not a name: every innings has a Bowling. */
+  function beatName(b) {
+    var slide = null;
+    ((state.deck && state.deck.slides) || []).some(function (s) {
+      if (s.slug === b.atom.slide) { slide = s; return true; }
+      return false;
+    });
+    // A slug is a filename, and no editor should have to read one. The name comes
+    // from what the deck builder showed — the entry's own title where the take
+    // carried one, the site catalogue's otherwise — and the slug is only ever the
+    // last resort for a slide neither knows about.
+    var title = (slide && (slide._title || slide.title))
+                || state.titles[b.atom.slide] || b.atom.slide;
+    var lvl = String(title).split(" · ");
+    var leaf = lvl[lvl.length - 1] || b.atom.slide;
+    var phase = b.plan && b.plan.phase;
+    var above = (phase && phase !== leaf) ? phase : (lvl.length > 1 ? lvl[lvl.length - 2] : "");
+    var label = clipLabel(b.plan && b.plan.label);
+    if (label && label !== leaf) return { path: [above, leaf].filter(Boolean), leaf: label };
+    return { path: above ? [above] : [], leaf: leaf };
+  }
+  /* Clip labels are ordinal-prefixed (`4. Four through cover`) so two similar balls
+     stay apart in the curation list. A beat row has a number of its own in the
+     column beside it, so the ordinal here is the same fact printed twice — and it
+     reads as part of the commentary, which it is not. Dropped in the display, kept
+     in the data (the same call the record HUD's prompt makes). */
+  function clipLabel(s) { return s ? String(s).replace(/^\s*\d+\.\s*/, "") : s; }
+  /* One caption, built twice over: `<i>` for the levels above, plain for the beat. */
+  function caption(into, b) {
+    var n = beatName(b);
+    if (n.path.length) into.appendChild(el("i", { text: n.path.join(" · ") + " · " }));
+    into.appendChild(document.createTextNode(n.leaf));
+    if (b.atom.card) into.appendChild(el("span", { class: "card", text: b.atom.card + "-card" }));
+    var fz = freezesFor(b.i);
+    if (fz.length) into.appendChild(el("span", { class: "card", text: "· " + fz.length + " freeze" }));
+    return into;
   }
   function freezesFor(i) {
     return ((state.take && state.take.freezes) || []).filter(function (f) { return f.beat === i; });
@@ -144,37 +200,6 @@
     return t / (s.b - s.a);
   }
 
-  function drawWave(canvas, from, to, marks) {
-    var e = state.env;
-    var w = canvas.clientWidth || 300, h = canvas.clientHeight || 60;
-    var dpr = window.devicePixelRatio || 1;
-    canvas.width = w * dpr; canvas.height = h * dpr;
-    var c = canvas.getContext("2d");
-    c.scale(dpr, dpr);
-    c.clearRect(0, 0, w, h);
-    if (!e) {
-      c.fillStyle = "rgba(180,200,228,.45)";
-      c.font = "11px Lato, Arial";
-      c.fillText("no waveform (the browser could not decode this take)", 8, h / 2);
-      return;
-    }
-    var a = Math.floor(from / BIN), b = Math.min(e.max.length, Math.ceil(to / BIN));
-    var span = Math.max(1, b - a);
-    c.fillStyle = "#7fa8dd";
-    for (var x = 0; x < w; x++) {
-      var i0 = a + Math.floor(x * span / w), i1 = a + Math.floor((x + 1) * span / w);
-      var m = 0;
-      for (var i = i0; i < Math.max(i1, i0 + 1); i++) if (e.max[i] > m) m = e.max[i];
-      var hh = Math.max(1, m * (h - 2));
-      c.fillRect(x, (h - hh) / 2, 1, hh);
-    }
-    (marks || []).forEach(function (mk) {
-      var x = ((mk.t - from) / (to - from)) * w;
-      c.fillStyle = mk.color || "rgba(212,175,55,.75)";
-      c.fillRect(x, 0, 1, h);
-    });
-  }
-
   // ---- flags --------------------------------------------------------------
   /* Raised without being asked, because the editor has no way to find these by
      looking: a silent beat, a cue that landed mid-word, and a clip beat whose
@@ -197,8 +222,10 @@
   // ---- render -------------------------------------------------------------
   function render() {
     var list = $("#beats");
+    invalidate();
     var bs = beats();
     list.innerHTML = "";
+    state.rows = [];
     if (!bs.length) {
       list.appendChild(el("div", { class: "empty-hint",
         text: "This take has no cues — the deck never moved while it was recording." }));
@@ -207,90 +234,198 @@
     bs.forEach(function (b) {
       var row = el("div", { class: "row" + (b.i === state.sel ? " on" : "") });
       row.appendChild(el("span", { class: "n", text: String(b.i + 1) }));
-      var name = el("span", { class: "name" });
-      name.appendChild(el("i", { text: (b.plan && b.plan.phase ? b.plan.phase + " · " : "") }));
-      name.appendChild(document.createTextNode(atomName(b)));
-      if (b.atom.card) name.appendChild(el("span", { class: "card", text: b.atom.card + "-card" }));
-      var fz = freezesFor(b.i);
-      if (fz.length) name.appendChild(el("span", { class: "card", text: "· " + fz.length + " freeze" }));
-      row.appendChild(name);
+      row.appendChild(caption(el("span", { class: "name" }), b));
       row.appendChild(el("span", { class: "dur" + (b.redone ? " redone" : ""),
                                    text: b.duration.toFixed(1) + "s" }));
-      var cv = el("canvas");
-      row.appendChild(cv);
-      var btns = el("div", { class: "btns" });
-      var play = el("button", { title: "Play this beat", text: "▸" });
-      play.addEventListener("click", function (ev) { ev.stopPropagation(); playBeat(b); });
-      var back = el("button", { title: "Nudge this cue earlier", text: "◂" });
-      back.addEventListener("click", function (ev) { ev.stopPropagation(); nudge(b.i, -NUDGE); });
-      var fwd = el("button", { title: "Nudge this cue later", text: "▸|" });
-      fwd.addEventListener("click", function (ev) { ev.stopPropagation(); nudge(b.i, NUDGE); });
-      var re = el("button", { class: "rec" + (state.rec && state.rec.beat === b.i ? " on" : ""),
-                              title: "Re-record this beat",
-                              text: state.rec && state.rec.beat === b.i ? "■" : "⏺" });
-      re.addEventListener("click", function (ev) { ev.stopPropagation(); toggleRecord(b); });
-      [play, back, fwd, re].forEach(function (x) { btns.appendChild(x); });
-      if (b.redone) {
-        var undo = el("button", { title: "Drop the re-record and go back to the take", text: "↺" });
-        undo.addEventListener("click", function (ev) { ev.stopPropagation(); dropSegment(b.i); });
-        btns.appendChild(undo);
-      }
-      row.appendChild(btns);
-      row.addEventListener("click", function () { select(b.i); });
-      list.appendChild(row);
-      drawWave(cv, b.cue, b.cue + Math.max(0.1, b.recorded), []);
-
       var fl = flagsFor(b);
       if (fl.length) {
-        list.appendChild(el("div", { class: "flags" + (fl.some(function (f) { return f.bad; }) ? " bad" : ""),
-                                     text: "⚠ " + fl.map(function (f) { return f.text; }).join(" · ") }));
+        row.appendChild(el("div", { class: "flags" + (fl.some(function (f) { return f.bad; }) ? " bad" : ""),
+                                    text: "⚠ " + fl.map(function (f) { return f.text; }).join(" · ") }));
       }
+      // Selecting a beat is a move of the playhead — the list and the strip are two
+      // views of one position — and it says nothing about whether the take is
+      // rolling: it lands there paused if you were paused, and keeps playing from
+      // there if you were playing.
+      row.addEventListener("click", function () {
+        seekTo(cueAt(b), { select: false });
+        select(b.i, { force: true });   // its own cue, so the clip starts at its start
+      });
+      state.rows[b.i] = row;
+      list.appendChild(row);
     });
+    paintSel();
+    paintActs();
     drawTake();
-    $("#take-beats").textContent = bs.length + " beats";
+    $("#beat-count").textContent = bs.length + " beats";
+  }
+
+  // ---- the take strip -----------------------------------------------------
+  /* The strip answers three questions at once — what the take sounds like, which
+     part of it is the selected beat, and where the playhead is — and only the first
+     of those is expensive. So the envelope is drawn once into an offscreen canvas
+     and blitted; a twenty-minute take is 120k bins, and re-walking them sixty times
+     a second to redraw bars that never change is the one thing that would make the
+     playhead stutter. */
+  function takeDur() {
+    return (state.take && state.take.duration) || (state.env && state.env.dur) || 0;
+  }
+  /* Cue times are take times; the offset slider says how far the deck's clock sat
+     from the recorder's. Everything the strip draws and everything it resolves a
+     click into goes through here, so moving the slider visibly moves the beats
+     against the audio rather than silently changing only the export. */
+  function cueAt(b) { return b.cue + offset(); }
+
+  function waveCache(w, h, dpr) {
+    var c = state.cache, dur = takeDur();
+    if (c && c.w === w && c.h === h && c.dur === dur && c.env === state.env) return c.canvas;
+    var off = document.createElement("canvas");
+    off.width = Math.round(w * dpr); off.height = Math.round(h * dpr);
+    var x2 = off.getContext("2d");
+    x2.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var e = state.env;
+    if (!e) {
+      x2.fillStyle = "rgba(180,200,228,.45)";
+      x2.font = "11px Lato, Arial";
+      x2.fillText("no waveform (the browser could not decode this take)", 8, h / 2);
+    } else {
+      var span = Math.max(1, Math.ceil((dur || e.dur) / BIN));
+      x2.fillStyle = "#7fa8dd";
+      for (var x = 0; x < w; x++) {
+        var i0 = Math.floor(x * span / w), i1 = Math.floor((x + 1) * span / w), m = 0;
+        for (var i = i0; i < Math.max(i1, i0 + 1) && i < e.max.length; i++) if (e.max[i] > m) m = e.max[i];
+        var hh = Math.max(1, m * (h - 2));
+        x2.fillRect(x, (h - hh) / 2, 1, hh);
+      }
+    }
+    state.cache = { w: w, h: h, dur: dur, env: state.env, canvas: off };
+    return off;
   }
 
   function drawTake() {
+    var cv = $("#wave");
+    var w = Math.round(cv.clientWidth || 300), h = Math.round(cv.clientHeight || 74);
+    var dpr = window.devicePixelRatio || 1;
+    if (cv.width !== Math.round(w * dpr)) cv.width = Math.round(w * dpr);
+    if (cv.height !== Math.round(h * dpr)) cv.height = Math.round(h * dpr);
+    var c = cv.getContext("2d");
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, w, h);
+    var dur = takeDur() || 1;
+    var xOf = function (t) { return Math.max(0, Math.min(w, (t / dur) * w)); };
     var bs = beats();
-    var dur = (state.take && state.take.duration) || (state.env && state.env.dur) || 0;
-    drawWave($("#wave"), 0, dur || 1, bs.map(function (b) {
-      return { t: b.cue, color: b.i === state.sel ? "#fff" : "rgba(212,175,55,.6)" };
-    }));
-    $("#take-len").textContent = fmtT(dur);
-  }
-
-  function select(i) {
-    state.sel = i;
-    var b = beats()[i];
-    render();
-    if (!b) return;
-    $("#beat-title").textContent = "beat " + (i + 1) + " · " + atomName(b);
-    $("#preview-none").hidden = true;
-    postPlayer({ action: "goto-atom", atom: b.atom });
-    sidebar(b);
-  }
-
-  function sidebar(b) {
-    var box = $("#sidebar-body");
-    box.innerHTML = "";
-    var kv = function (k, v) {
-      box.appendChild(el("div", { class: "kv" }, [el("span", { text: k }), el("b", { text: v })]));
-    };
-    kv("Slide", b.atom.slide);
-    kv("Panel", String(b.atom.panel) + (b.atom.card ? " · " + b.atom.card + "-card" : ""));
-    kv("Cue", b.cue.toFixed(2) + "s");
-    kv("Recorded", b.recorded.toFixed(2) + "s");
-    if (b.redone) kv("Re-recorded", b.duration.toFixed(2) + "s");
-    if (b.plan && b.plan.duration) kv("Footage", b.plan.duration.toFixed(2) + "s");
-    freezesFor(b.i).forEach(function (f, n) {
-      kv("Freeze " + (n + 1), (f.at == null ? "?" : f.at.toFixed(1) + "s in")
-                              + " · held " + f.hold.toFixed(1) + "s");
-    });
-    if (b.plan && b.plan.info) {
-      var c = b.plan.info;
-      box.appendChild(el("div", { class: "kv" },
-        [el("span", { text: "Card" }), el("b", { text: [c.badge, c.name, c.headline].filter(Boolean).join(" · ") })]));
+    // The selected beat is a band, not a tick. "Where in the take is this beat" is
+    // the question the strip exists to answer, and a boundary line never answers it.
+    var sel = bs[state.sel];
+    if (sel) {
+      var a = xOf(cueAt(sel)), b = xOf(cueAt(sel) + Math.max(0.1, sel.recorded));
+      c.fillStyle = "rgba(212,175,55,.16)";
+      c.fillRect(a, 0, Math.max(2, b - a), h);
     }
+    c.drawImage(waveCache(w, h, dpr), 0, 0, w, h);
+    bs.forEach(function (b) {
+      c.fillStyle = b.i === state.sel ? "rgba(212,175,55,.95)" : "rgba(212,175,55,.4)";
+      c.fillRect(xOf(cueAt(b)), 0, 1, h);
+    });
+    var at = $("#take-audio").currentTime || 0;
+    c.fillStyle = "#fff";
+    c.fillRect(Math.min(w - 2, xOf(at)), 0, 2, h);
+    $("#take-clock").textContent = fmtT(at) + " / " + fmtT(dur);
+  }
+
+  // ---- transport ----------------------------------------------------------
+  /* The playhead runs on rAF rather than `timeupdate`, which fires four times a
+     second — fine for a number, visibly stepped for a line. */
+  function pump() { if (!state.raf) state.raf = requestAnimationFrame(tick); }
+  function tick() {
+    state.raf = 0;
+    var a = $("#take-audio");
+    drawTake();
+    follow();
+    if (!a.paused || state.drag) state.raf = requestAnimationFrame(tick);
+  }
+  /* The playhead selects as it travels: crossing a cue is the deck moving on, and
+     the table, the detail pane and the hosted deck all follow it. */
+  function follow(t) {
+    var at = t != null ? t : $("#take-audio").currentTime, bs = beats();
+    for (var i = bs.length - 1; i >= 0; i--) {
+      if (at >= cueAt(bs[i])) { if (i !== state.sel) select(i); return; }
+    }
+  }
+  /* One playhead. Setting `currentTime` moves the element's official position
+     synchronously — the seek that follows is asynchronous, the position is not —
+     so the strip draws the element itself and can never show a playhead the audio
+     is not at. That equivalence is a property of the take being seekable at all:
+     see `withDuration` in take-store.js, without which the assignment below is
+     ignored outright and every control on this page lies. */
+  function seekTo(t, opts) {
+    var a = $("#take-audio"), dur = takeDur();
+    t = Math.max(0, dur ? Math.min(t, dur - 0.01) : t);
+    if (a.src) { try { a.currentTime = t; } catch (e) {} }
+    if (!opts || opts.select !== false) follow(a.src ? a.currentTime : t);
+    drawTake();
+  }
+  function setTransport() {
+    var a = $("#take-audio");
+    $("#play-btn").textContent = a.paused ? "Play \u25b8" : "Pause \u2016";
+  }
+
+  function select(i, opts) {
+    var b = beats()[i];
+    if (!b) return;
+    var moved = i !== state.sel;
+    state.sel = i;
+    paintSel();
+    drawTake();
+    paintCap();
+    $("#preview-none").hidden = true;
+    paintActs();
+    if (moved || (opts && opts.force)) cueDeck();
+  }
+  /* Stand the deck where the playhead is. For a static beat that is the atom; for a
+     clip it is the atom **and how far into its footage the take has got**, because
+     a playhead parked halfway through a ball has to show the middle of the ball. Cue
+     without the offset and Play runs the clip from its first frame while the
+     commentary is already halfway through it.
+     A card is a still pad with nothing to scrub, so it takes the atom alone. */
+  function cueDeck() {
+    var b = beats()[state.sel];
+    if (!b) return;
+    var msg = { action: "goto-atom", atom: b.atom };
+    if (!b.atom.card) {
+      var into = $("#take-audio").currentTime - cueAt(b);
+      if (into > 0.05) msg.at = +into.toFixed(2);
+    }
+    postPlayer(msg);
+    // A deck driven by a running take has to roll with it: the cue positions the
+    // beat, and the play that follows is what makes this a preview of the render
+    // rather than a slideshow of stills.
+    if (!$("#take-audio").paused) postPlayer({ action: "play" });
+  }
+  function paintCap() {
+    var b = beats()[state.sel], cap = $("#beat-title");
+    cap.innerHTML = "";
+    if (b) caption(cap, b); else cap.textContent = "Nothing selected";
+  }
+  /* The beat's actions live with the beat, not on every row: a nudge and a
+     re-record are things you do to the one you are looking at, and thirty-five
+     copies of a record button is thirty-five chances to hit the wrong one. */
+  function paintActs() {
+    var b = beats()[state.sel], on = state.rec && b && state.rec.beat === b.i;
+    paintNudges();
+    $("#redo-btn").disabled = !b;
+    $("#redo-btn").textContent = on ? "■ Stop" : "⏺ Re-record";
+    $("#redo-btn").classList.toggle("on", !!on);
+    $("#undo-btn").hidden = !b || !b.redone;
+  }
+  /* Selection changes at every cue the playhead crosses, so it is a class and a
+     scroll — rebuilding sixty rows at a beat boundary is what would make following
+     a take feel heavy. */
+  function paintSel() {
+    state.rows.forEach(function (row, i) {
+      if (row) row.classList.toggle("on", i === state.sel);
+    });
+    var r = state.rows[state.sel];
+    if (r && r.scrollIntoView) r.scrollIntoView({ block: "nearest" });
   }
 
   // ---- editing ------------------------------------------------------------
@@ -301,24 +436,87 @@
     if (i <= 0 || i >= cues.length) return;    // beat 0 starts where the take does
     var lo = cues[i - 1].t + MIN_BEAT;
     var hi = (i + 1 < cues.length ? cues[i + 1].t : (t.duration || cues[i].t)) - MIN_BEAT;
+    if (cues[i].t0 == null) cues[i].t0 = cues[i].t;   // where the narrator cued it
+    var was = cues[i].t;
     cues[i].t = Math.min(Math.max(cues[i].t + delta, lo), hi);
     WccTakeStore.save(t);
     render();
+    /* The playhead comes along when it was standing on this cue — which it is
+       whenever the beat was reached by selecting it — so a run of presses keeps
+       moving the same boundary and the picture keeps up. Left where it is otherwise:
+       a playhead parked mid-beat is a position the editor chose.
+       The selection is pinned either way. Letting `follow` have it would hand the
+       next press to the beat before, which is how a nudge quietly becomes a nudge of
+       something else. */
+    if (Math.abs($("#take-audio").currentTime - (was + offset())) < 0.05) {
+      seekTo(cues[i].t + offset(), { select: false });
+    }
+    // A nudge you cannot see is a nudge you cannot judge: re-cue the deck for wherever
+    // the playhead now stands against the moved boundary.
+    select(i, { force: true });
   }
 
-  function playBeat(b) {
-    var a = $("#take-audio");
-    if (!a.src) return;
-    a.currentTime = Math.max(0, b.cue + offset());
-    state.stop = b.cue + offset() + b.recorded;
-    a.play().catch(function () {});
-    select(b.i);
-    // The closest thing to a render without spending minutes on compose.py: the
-    // deck, driven to the beat, with the take laid over it.
-    postPlayer({ action: "play" });
+  function offset() { return (state.off || 0) / 1000; }
+  /* The take's calibration: what the browser did between `MediaRecorder.start()` and
+     the first chunk, which no API will answer. One number for the whole sitting, so
+     it reads as an absolute — `+40 ms` IS the calibration. */
+  function setOffset(ms) {
+    state.off = Math.max(-OFF_MAX, Math.min(OFF_MAX, Math.round(ms)));
+    var t = state.take;
+    if (t) { t.offset = offset(); WccTakeStore.save(t); }
+    paintNudges();
+    drawTake();
+    cueDeck();
   }
+  /* A cue's correction reads as a DELTA, because the absolute time a beat starts at
+     (`41.83s`) means nothing to an editor while "I have moved this 200ms" means
+     everything — and the delta is what makes a way back possible: `t0` is where the
+     narrator actually cued it, stamped on the first nudge and never overwritten. */
+  /* `t0` is where the narrator actually cued it, stamped on the first nudge — the
+     readout is the distance from there, which is the only number about a cue an
+     editor can act on. */
+  function cueDelta(i) {
+    var c = ((state.take && state.take.cues) || [])[i];
+    return c && c.t0 != null ? c.t - c.t0 : 0;
+  }
+  /* One unit for both readouts, because they are one instrument. */
+  function ms(n) { return (n > 0 ? "+" : "") + Math.round(n) + "ms"; }
+  function paintNudges() {
+    var v = $("#take-off-val");
+    v.textContent = ms(state.off);
+    v.classList.toggle("zero", !state.off);
 
-  function offset() { return (parseInt($("#offset").value, 10) || 0) / 1000; }
+    var b = beats()[state.sel], d = b ? cueDelta(b.i) : 0;
+    var cv = $("#cue-off-val");
+    cv.textContent = ms(d * 1000);
+    cv.classList.toggle("zero", !d);
+    // Beat one starts where the take does; there is no boundary in front of it.
+    var locked = !b || b.i <= 0 || !!state.rec;
+    $("#cue-back").disabled = $("#cue-fwd").disabled = locked;
+  }
+  /* Holding a button repeats it, and accelerates: without that, crossing 300ms at a
+     10ms step is thirty presses, which is the one real argument a slider had. */
+  function holdRepeat(el, fn) {
+    var timer = null, n = 0;
+    var stop = function () { clearTimeout(timer); timer = null; n = 0; };
+    // Re-scheduled rather than an interval, because the gap has to shrink as the
+    // hold goes on — an interval fixes its period at the moment it is created.
+    var again = function (ev) {
+      if (el.disabled) return stop();
+      n++;
+      fn(ev);
+      timer = setTimeout(function () { again(ev); }, n > 8 ? 45 : 90);
+    };
+    el.addEventListener("pointerdown", function (ev) {
+      if (el.disabled) return;
+      ev.preventDefault();
+      fn(ev);
+      timer = setTimeout(function () { again(ev); }, 400);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach(function (t) {
+      el.addEventListener(t, stop);
+    });
+  }
 
   // ---- re-record ----------------------------------------------------------
   /* Play that beat's video from its start while capturing a replacement segment.
@@ -529,12 +727,15 @@
     if (!t) { $("#beats").innerHTML = ""; return; }
     state.take = t;
     state.sel = -1;
+    invalidate();
     state.env = null;
     state.deck = WccTakeStore.getDeck(id) || { title: t.title, slides: [] };
+    state.off = Math.round((t.offset || 0) * 1000);
     fillPicker();
     $("#take-when").textContent = (t.started || "").slice(0, 16).replace("T", " ");
     render();
     notices();
+    setTransport();
 
     // The deck, hosted. `local:` keeps it out of the network entirely, and the take's
     // own copy is what the narrator saw rather than whatever the draft has become.
@@ -555,12 +756,45 @@
         if (!t.duration) { t.duration = audio.duration; WccTakeStore.save(t); }
         render();
         notices();
+        // The decode is the second chance at a seekable take. A take that stopped
+        // cleanly knows its own length and was patched on the way out of the store;
+        // one recovered from a crash does not, so the store had nothing to write
+        // into the container and the element will refuse every seek on this page.
+        // Now the length is known — the envelope just measured it — so the file is
+        // patched and re-attached.
+        reseek(blob, audio.duration);
       }).catch(function () {
         // No waveform is a degraded page, not a broken one: the table, the nudge,
         // the re-record and the export all work without it. Only the flags need it.
         status("this browser cannot decode the take's audio — no waveform or flags");
       });
     }).catch(function () { status("could not read the take's audio"); });
+  }
+
+  /* Every control on this page is a seek, so a take the browser will not seek is a
+     read-only page pretending to be an editor. Patch, re-attach, and if it still
+     will not seek, say so rather than drawing a playhead that cannot move. */
+  function reseek(blob, dur) {
+    var au = $("#take-audio");
+    if (au.seekable && au.seekable.length) return;
+    WccTakeStore.withDuration(blob, dur).then(function (fixed) {
+      if (fixed === blob) return said();
+      if (state.url) URL.revokeObjectURL(state.url);
+      state.url = URL.createObjectURL(fixed);
+      var at = au.currentTime;
+      au.src = state.url;
+      au.addEventListener("loadedmetadata", function once() {
+        au.removeEventListener("loadedmetadata", once);
+        try { au.currentTime = at; } catch (e) {}
+        said();
+        drawTake();
+      });
+    }).catch(said);
+    function said() {
+      if (!au.seekable || !au.seekable.length) {
+        status("this browser will not seek this take — see the console for why");
+      }
+    }
   }
 
   function wire() {
@@ -578,38 +812,76 @@
                + "Narration starts in the deck builder: assemble a deck, then Narrate ↗.</div>"; }
       });
     });
+    // The beat's own actions, driven off the selection rather than off a row.
+    var step = function (ev) { return STEP * (ev && ev.shiftKey ? COARSE : 1); };
+    holdRepeat($("#cue-back"), function (ev) { nudge(state.sel, -step(ev) / 1000); });
+    holdRepeat($("#cue-fwd"), function (ev) { nudge(state.sel, step(ev) / 1000); });
+    holdRepeat($("#take-back"), function (ev) { setOffset(state.off - step(ev)); });
+    holdRepeat($("#take-fwd"), function (ev) { setOffset(state.off + step(ev)); });
+    $("#redo-btn").addEventListener("click", function () {
+      var b = beats()[state.sel];
+      if (b) toggleRecord(b);
+    });
+    $("#undo-btn").addEventListener("click", function () {
+      if (state.sel >= 0) dropSegment(state.sel);
+    });
     $("#play-btn").addEventListener("click", function () {
       var a = $("#take-audio");
-      if (a.paused) { state.stop = null; a.play().catch(function () {}); } else a.pause();
+      if (!a.src) return;
+      if (a.paused) a.play().catch(function () {}); else a.pause();
     });
-    $("#offset").addEventListener("input", function () {
-      $("#offset-val").textContent = this.value + " ms";
-      var t = state.take;
-      if (t) { t.offset = offset(); WccTakeStore.save(t); }
+    // One place says "we are rolling", and both the deck and the button read it off
+    // the audio element rather than off whoever started it.
+    var au = $("#take-audio");
+    au.addEventListener("play", function () { setTransport(); cueDeck(); pump(); });
+    au.addEventListener("seeked", function () { drawTake(); });
+    au.addEventListener("pause", function () { setTransport(); postPlayer({ action: "pause" }); drawTake(); });
+    au.addEventListener("ended", function () { setTransport(); drawTake(); });
+
+    // Scrub the take: pointer down lands the playhead, a drag carries it, and
+    // letting go plays from there — landing somewhere in a take is a request to
+    // hear it. The audio is paused for the duration of the drag so the scrub is a
+    // position rather than a chase.
+    var wave = $("#wave");
+    var timeAt = function (ev) {
+      var r = wave.getBoundingClientRect();
+      return ((ev.clientX - r.left) / Math.max(1, r.width)) * (takeDur() || 1);
+    };
+    // The drag is tracked on the window rather than by capturing the pointer on the
+    // canvas: a scrub that runs off the end of the strip — or off the window — is
+    // the normal way to drag to the start, and it must not strand the playhead.
+    var move = function (ev) { if (state.drag) seekTo(timeAt(ev)); };
+    var resume = false;
+    var drop = function () {
+      if (!state.drag) return;
+      state.drag = false;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", drop);
+      window.removeEventListener("pointercancel", drop);
+      if (resume && au.src) au.play().catch(function () {});
+      else cueDeck();
+      drawTake();
+    };
+    wave.addEventListener("pointerdown", function (ev) {
+      if (!state.take) return;
+      ev.preventDefault();
+      state.drag = true;
+      // Held for the length of the scrub so the drag is a position rather than a
+      // chase, and handed back exactly as it was found.
+      resume = !au.paused;
+      au.pause();
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", drop);
+      window.addEventListener("pointercancel", drop);
+      seekTo(timeAt(ev));
+      pump();
     });
-    $("#take-audio").addEventListener("timeupdate", function () {
-      if (state.stop != null && this.currentTime >= state.stop) {
-        this.pause();
-        state.stop = null;
-        postPlayer({ action: "pause" });
-      }
+
+    var rt = 0;
+    window.addEventListener("resize", function () {
+      clearTimeout(rt);
+      rt = setTimeout(render, 120);
     });
-    // Click the take to hear it from there, and to select the beat you landed in —
-    // the fastest way to answer "what did I say over the second innings?".
-    $("#wave").addEventListener("click", function (ev) {
-      var t = state.take;
-      if (!t) return;
-      var r = this.getBoundingClientRect();
-      var dur = t.duration || (state.env && state.env.dur) || 0;
-      var at = ((ev.clientX - r.left) / r.width) * dur;
-      var bs = beats();
-      for (var i = bs.length - 1; i >= 0; i--) {
-        if (at >= bs[i].cue) { select(i); break; }
-      }
-      var a = $("#take-audio");
-      if (a.src) { a.currentTime = Math.max(0, at); state.stop = null; a.play().catch(function () {}); }
-    });
-    window.addEventListener("resize", function () { render(); });
     window.addEventListener("message", function (e) {
       var d = e.data;
       if (!d || d.type !== "wcc-player-ready") return;
@@ -633,6 +905,9 @@
     loadTake(t.id);
     // Build drift, the same guard the deck check and the compositor apply.
     fetch("/slides.json").then(function (r) { return r.json(); }).then(function (cat) {
+      (cat.slides || []).forEach(function (s) { if (s.slug) state.titles[s.slug] = s.title; });
+      render();
+      paintCap();
       if (state.take && state.take.build_version && cat.build_version
           && cat.build_version !== state.take.build_version) {
         state.buildDrift = state.take.build_version + " → " + cat.build_version;

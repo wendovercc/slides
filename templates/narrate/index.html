@@ -13,10 +13,9 @@
       --navy-1: #0f2346; --navy-2: #0a1c3a; --gold: #d4af37; --ink-soft: #b4c8e4;
       --panel: #12294f; --line: rgba(180,200,228,.18); --white: #fff;
       --warn: #f2c96b; --bad: #f0a0a0; --good: #7fd39b;
-      /* The beat table's fixed columns. One grid for every row, so the durations,
-         the slices and the buttons line up down the whole take — the same rule the
-         deck builder's rows follow. */
-      --n-w: 30px; --dur-w: 58px; --wave-w: 150px; --btns-w: 150px;
+      /* The beat table's fixed columns, as the deck builder's rows do it: the
+         numbers line up down the whole take whatever the captions are doing. */
+      --n-w: 30px; --dur-w: 58px;
     }
     * { box-sizing: border-box; }
     body {
@@ -51,40 +50,72 @@
     /* ---- the take: one waveform, the whole sitting ------------------------ */
     #take-wrap { flex: 0 0 auto; padding: 8px 18px 10px; border-bottom: 1px solid var(--line);
       background: rgba(10,28,58,.5); }
+    /* The strip is a scrub surface, not a picture: `touch-action:none` is what
+       lets a pointer drag the playhead instead of scrolling the page under it. */
     #wave { width: 100%; height: 74px; display: block; cursor: pointer;
-      background: rgba(255,255,255,.04); border-radius: 6px; }
+      touch-action: none; background: rgba(255,255,255,.04); border-radius: 6px; }
     .take-meta { display: flex; align-items: center; gap: 14px; margin-top: 6px;
       font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
-    .take-meta .t { color: var(--white); font-weight: 700; }
-    /* Whatever the browser actually did between MediaRecorder.start() and the first
-       chunk, in one control. Cheap, and it covers what cannot be measured. */
-    .offset { display: flex; align-items: center; gap: 7px; }
-    .offset input { width: 160px; }
+    /* One control, twice: the take's calibration and a cue's correction are the same
+       verb, so they are the same instrument — a step, a readout, and a way back. They
+       differ only in step size and in what the number means (see narrate.js). Buttons
+       rather than a slider because the action is "again, again, again": each press is
+       a discrete A/B you can hear land, and holding one repeats. */
+    .nudge { display: inline-flex; align-items: stretch; flex: 0 0 auto;
+      border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+    .nudge button { font: inherit; font-size: 12px; font-weight: 700; line-height: 1;
+      border: 0; background: transparent; color: var(--gold); padding: 5px 10px; cursor: pointer; }
+    .nudge button:hover:not(:disabled) { background: rgba(212,175,55,.14); }
+    .nudge button:disabled { opacity: .3; cursor: not-allowed; }
+    /* The name and its value are one thing, between the two steps that change it —
+       the readout sits where the effect is, rather than trailing the control. */
+    .nudge .mid { display: flex; align-items: center; gap: 8px; padding: 4px 10px;
+      border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+    .nudge .cap2 { font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .05em; color: var(--ink-soft); white-space: nowrap; }
+    /* Fixed width, so a run of presses does not make the box breathe. */
+    .nudge .val { min-width: 6ch; text-align: right; font-size: 12px; color: var(--white);
+      font-variant-numeric: tabular-nums; }
+    .nudge .val.zero { color: var(--ink-soft); }
 
-    main { display: grid; grid-template-columns: 1fr minmax(360px, 460px); gap: 0;
+    /* The beat table is a fixed-width instrument — its columns do not grow — so on a
+       landscape screen every extra pixel goes to the pane where the judging happens:
+       the deck itself. */
+    main { display: grid; grid-template-columns: minmax(380px, 620px) 1fr; gap: 0;
       flex: 1 1 auto; min-height: 0; overflow: hidden; }
-    #beats { overflow-y: auto; border-right: 1px solid var(--line); }
+    #beat-pane { display: flex; flex-direction: column; min-height: 0;
+      border-right: 1px solid var(--line); }
+    #beats { overflow-y: auto; flex: 1 1 auto; }
     aside { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     .pane-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; flex: 0 0 auto;
       border-bottom: 1px solid var(--line); background: var(--navy-2); }
     .pane-head .lbl { font-size: 11px; font-weight: 700; text-transform: uppercase;
       letter-spacing: .05em; color: var(--gold); white-space: nowrap; }
-    .pane-head .count { font-size: 11.5px; color: var(--ink-soft); }
+    .pane-head .count { font-size: 11.5px; color: var(--ink-soft);
+      font-variant-numeric: tabular-nums; }
+    .pane-head .spacer { flex: 1; }
+    .pane-head .btn.sm { padding: 4px 9px; font-size: 12px; }
+    /* The beat's name, in the pane that shows it: the same string the row carries,
+       set the same way — the levels above it muted, the beat itself in white. */
+    .pane-head .cap { font-size: 13px; color: var(--white); flex: 1 1 auto; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pane-head .cap i { font-style: normal; color: var(--ink-soft); }
+    /* The beat's own actions, where /deck puts a preview's: in the head above it,
+       icon and word, so a destructive one has to be read before it is hit. */
+    .acts { display: flex; gap: 6px; flex: 0 0 auto; }
+    .acts .btn.sm { padding: 4px 9px; font-size: 12px; }
+    .acts .btn.rec { border-color: var(--bad); color: var(--bad); }
+    .acts .btn.rec.on { background: var(--bad); color: var(--navy-2); }
+    #preview-pane { flex: 1 1 auto; min-height: 0; padding: 12px 14px; overflow: hidden; }
     .preview-wrap { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000;
-      flex: 0 0 auto; border-bottom: 1px solid var(--line); }
+      max-width: calc(72vh * 16 / 9); margin: 0 auto; border-radius: 8px; overflow: hidden;
+      border: 1px solid var(--line); }
     #preview { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
     .preview-none { position: absolute; inset: 0; display: flex; align-items: center;
       justify-content: center; color: var(--ink-soft); font-size: 13px; padding: 20px; text-align: center; }
-    #sidebar-body { overflow-y: auto; flex: 1 1 auto; padding: 12px 14px; font-size: 13px;
-      color: var(--ink-soft); line-height: 1.55; }
-    #sidebar-body b { color: var(--white); }
-    #sidebar-body .kv { display: flex; justify-content: space-between; gap: 10px;
-      padding: 3px 0; border-bottom: 1px solid var(--line); }
-
     /* ---- beat rows -------------------------------------------------------- */
     .row {
-      display: grid;
-      grid-template-columns: var(--n-w) 1fr var(--dur-w) var(--wave-w) var(--btns-w);
+      display: grid; grid-template-columns: var(--n-w) 1fr var(--dur-w);
       align-items: center; gap: 10px; padding: 6px 12px;
       border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer;
     }
@@ -92,21 +123,16 @@
     .row.on { background: rgba(212,175,55,.14); }
     .row .n { color: var(--ink-soft); font-size: 11.5px; font-variant-numeric: tabular-nums; }
     .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The levels above the beat are context, not the name: muted, so a list of
+       thirty-five reads as thirty-five beats rather than as thirty-five paths. */
     .row .name i { font-style: normal; color: var(--ink-soft); }
     .row .name .card { color: var(--gold); font-size: 11.5px; margin-left: 6px; }
     .row .dur { text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
     .row .dur.redone { color: var(--gold); font-weight: 700; }
-    .row canvas { width: 100%; height: 26px; display: block; background: rgba(255,255,255,.05);
-      border-radius: 3px; }
-    .row .btns { display: flex; gap: 4px; justify-content: flex-end; }
-    .row .btns button { font: inherit; font-size: 12px; padding: 2px 6px; border-radius: 4px;
-      border: 1px solid var(--line); background: transparent; color: var(--ink-soft); cursor: pointer; }
-    .row .btns button:hover { color: var(--white); border-color: var(--gold); }
-    .row .btns button.rec { color: var(--bad); }
-    .row .btns button.on { background: var(--bad); color: var(--navy-2); border-color: var(--bad); }
     /* Flags are raised without being asked: a silent beat, a cue landing mid-word,
-       and a clip beat whose commentary badly overruns its footage. */
-    .flags { grid-column: 2 / -1; font-size: 11.5px; color: var(--warn); padding: 0 0 4px 0; }
+       and a clip beat whose commentary badly overruns its footage. They sit INSIDE
+       the row they are about — a warning between two rows belongs to neither. */
+    .flags { grid-column: 2 / -1; font-size: 11.5px; color: var(--warn); padding-top: 2px; }
     .flags.bad { color: var(--bad); }
     .empty-hint { color: var(--ink-soft); font-size: 13.5px; padding: 26px 18px; line-height: 1.6; }
   </style>
@@ -124,33 +150,51 @@
   <div id="take-wrap">
     <canvas id="wave"></canvas>
     <div class="take-meta">
-      <span>Take <span class="t" id="take-len">—</span></span>
-      <span id="take-beats"></span>
       <span id="take-when"></span>
       <span class="spacer"></span>
-      <button id="play-btn" class="btn ghost sm">Play ▸</button>
-      <span class="offset">
-        <label for="offset">Offset</label>
-        <input id="offset" type="range" min="-500" max="500" step="10" value="0">
-        <span id="offset-val">0 ms</span>
+      <span class="nudge" id="nudge-take"
+            title="Every cue in the take moves together. It corrects the gap between the recorder starting and the deck's clock starting — a constant for the whole sitting, set once. Hold a button to repeat; shift for a coarser step.">
+        <button id="take-back" title="Every cue 10ms earlier (shift: 100ms)">◂</button>
+        <span class="mid"><span class="cap2">Nudge take</span><span class="val zero" id="take-off-val">0ms</span></span>
+        <button id="take-fwd" title="Every cue 10ms later (shift: 100ms)">▸</button>
       </span>
     </div>
   </div>
   <main>
-    <div id="beats"><div class="empty-hint">Loading…</div></div>
+    <div id="beat-pane">
+      <div class="pane-head">
+        <span class="lbl">Beats</span>
+        <span class="count" id="beat-count"></span>
+        <span class="count" id="take-clock">0:00 / —</span>
+        <span class="spacer"></span>
+        <button id="play-btn" class="btn ghost sm">Play ▸</button>
+      </div>
+      <div id="beats"><div class="empty-hint">Loading…</div></div>
+    </div>
     <aside>
       <div class="pane-head">
         <span class="lbl">Beat</span>
-        <span class="count" id="beat-title"></span>
+        <span class="cap" id="beat-title">Nothing selected</span>
+        <span class="acts">
+          <span class="nudge" id="nudge-cue"
+                title="Where this beat begins in the take. It moves one boundary, so it reflows this beat and the one before it — the mid-word fix. Hold a button to repeat; shift for a coarser step.">
+            <button id="cue-back" title="Start this beat 10ms earlier (shift: 100ms)">◂</button>
+            <span class="mid"><span class="cap2">Nudge cue</span><span class="val zero" id="cue-off-val">0ms</span></span>
+            <button id="cue-fwd" title="Start this beat 10ms later (shift: 100ms)">▸</button>
+          </span>
+          <button id="redo-btn" class="btn ghost sm rec" title="Record this beat again">⏺ Re-record</button>
+          <button id="undo-btn" class="btn ghost sm" title="Drop the re-record and go back to the take" hidden>↺ Undo</button>
+        </span>
       </div>
-      <div class="preview-wrap">
-        <!-- The deck, hosted. Review drives the player's own nav (`?hosted`) rather
-             than a second addressing scheme, so a beat is reached exactly the way
-             the narrator reached it. -->
-        <iframe id="preview" title="Deck" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe>
-        <div class="preview-none" id="preview-none">Pick a beat to see it.</div>
+      <div id="preview-pane">
+        <div class="preview-wrap">
+          <!-- The deck, hosted. Review drives the player's own nav (`?hosted`) rather
+               than a second addressing scheme, so a beat is reached exactly the way
+               the narrator reached it. -->
+          <iframe id="preview" title="Deck" allow="autoplay; fullscreen; encrypted-media; picture-in-picture"></iframe>
+          <div class="preview-none" id="preview-none">Pick a beat to see it.</div>
+        </div>
       </div>
-      <div id="sidebar-body"></div>
     </aside>
   </main>
   <audio id="take-audio" preload="auto"></audio>

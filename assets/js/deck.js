@@ -385,9 +385,14 @@
      document keeps naming the slide and nothing else, so an export cannot pick up
      a sitting's YouTube segments (which carry no `_atoms` and would silently drop
      the whole reel from a render). */
+  /* `_title` rides along because the copy outlives the builder: a take's deck is
+     read back in /narrate, where the catalogue may have moved on and a slug is the
+     only other thing to show. The name the editor assembled under is the name the
+     beat list should carry. */
   function playable(e) {
     var clips = resolveReel(e);
-    return clips ? Object.assign({}, e, { videos: clips }) : e;
+    var named = Object.assign({}, e, { _title: titleOf(e) });
+    return clips ? Object.assign(named, { videos: clips }) : named;
   }
 
   // ---- fetching entries -------------------------------------------------

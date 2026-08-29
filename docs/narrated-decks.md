@@ -2076,6 +2076,82 @@ A table over a waveform of the take, one row per beat:
   it — the closest thing to a render without spending minutes on `compose.py`. Clicking
   the take's own waveform seeks it and selects the beat you landed in.
 
+#### The first sitting — **built**
+
+The page above was built to spec and had never been sat in front of anyone. Driving it
+against a real take rewrote most of its surface and found one bug that made every control
+on it a lie:
+
+- **A recorded take does not seek, and nothing said so.** Firefox's recorder writes an
+  Info `Duration` element and leaves it at **zero** — the file is streamed, so the length
+  was not known when the header went out — and Chrome writes none at all. Either way the
+  element reports `duration: Infinity` with an empty `seekable`, and ignores
+  `currentTime` outright: dragging the playhead did nothing and Play started from
+  wherever the audio had got to. `withDuration` in `take-store.js` writes the take's own
+  measured length into the container on the way out of the store — overwritten in place
+  where the element exists, appended to Info where it does not — so one master serves
+  playback and the export, and `take.webm` reaches `compose.py` with a real duration.
+  *Verified* against ffmpeg's `-live 1` output, which has exactly the streamed shape: no
+  Duration → patched, zero Duration → overwritten (3 bytes, same length), real duration
+  → untouched. **"It already has a Duration" and "it has a Duration that says nothing"
+  look identical until you read the bytes**, which is what made this expensive.
+- **One playhead.** An intermediate cut drew an *intended* position over the element's
+  real one, which papered over the above rather than fixing it. The strip now draws
+  `currentTime` and nothing else: a seek the browser refuses shows as a seek that did not
+  happen, and the page says so in its status line.
+- **`?hosted` means one driver.** The bar is not built, the gesture layer is not
+  appended, keyboard nav returns early, and `armAdvanceTimer` does nothing — a hosted
+  deck that also ran its own durations drifted off the commentary between cues and
+  snapped back at the next one.
+- **The preview obeys the render's rule, not the player's.** A reel reaching a clip's end
+  used to roll on to the next clip, so a nudge changed the timeline and nothing visibly
+  happened. `set-hold-end` makes a hosted reel **freeze on its last frame** and wait for
+  the page to cue the next beat — which, with truncation already falling out of cueing at
+  the boundary, makes the preview a statement of "truncate if the beat is short, hold the
+  last frame if it is long" rather than a contradiction of it.
+- **A cue carries an offset into the clip** (`goto-atom`'s `at`, through the bridge to
+  `WccReel.gotoAtom`), so a playhead parked mid-ball shows the middle of the ball. Without
+  it, Play from mid-clip started the footage from its first frame under commentary that
+  was already half-way through.
+- **No slug ever reaches the editor.** The take's deck copy carries `_title` (added in
+  `deck.js`'s `playable`) and `/narrate` falls back to the catalogue, so a beat is named
+  the way `/deck` names it: the slide's last two levels plus the atom — `1st Innings ·
+  Highlights · OUT! G Jackson gets M Moss`. **Clip ordinals are dropped in the display**
+  as the record HUD's prompt drops them: the row has a number of its own beside it, so
+  the ordinal was the same fact twice, reading as part of the commentary.
+- **Two nudges, one instrument.** The take's calibration and a cue's correction are the
+  same verb, so they are the same control — a bordered `◂ | NUDGE TAKE 0ms | ▸` unit,
+  hold-to-repeat, one 10ms step with `shift` for 100ms. The take reads an absolute
+  (that *is* the calibration); a cue reads a **delta from where the narrator cued it**
+  (`t0`, stamped on the first nudge), because the absolute time a beat starts at is a
+  number no editor can act on. A slider lost on being a second idiom for one verb.
+- **A nudge pins its selection.** Moving a cue later, with the playhead standing on it,
+  put the playhead behind the new boundary — so the selection followed it back a beat and
+  the next press moved a *different* cue. The playhead now travels with the boundary it
+  was standing on, and `follow` never takes the selection during a nudge.
+
+Everything the layout gained is `/deck`'s: panes with a gold `.lbl` head, the transport
+and the counts in the beats head, the beat's actions in the head above its preview,
+warnings inside the row they are about rather than between two rows.
+
+**Still to do on take editing** — the next sitting's list, in the order I would take it:
+
+1. **Auditioning a re-record.** The per-row `▸` is gone (select a beat and press Play),
+   but Play plays the *take*, so a re-recorded beat still cannot be heard back. The
+   segment has to enter the transport.
+2. **The re-record flow itself**: no lead-in count, no level check, no confirm — record
+   mode arms properly and this does not, on the same microphone.
+3. **The end cue.** The one nudge moves a beat's start. Where a clip is cut off, the
+   boundary to move is the *next* beat's, which nothing on screen says.
+4. **Getting to the flags.** They are raised where they belong now, but on a 61-beat take
+   you still scroll hunting for three of them; the head should count them and walk you
+   through.
+5. **The per-beat waveform**, dropped from the row for width, wants to come back above
+   the preview where it has room — with the beat's own slice and its boundaries draggable.
+6. **Keyboard.** A page whose whole job is repetition still has no shortcuts.
+7. **Export could say what it made** — beats, re-records, offset, size — and `status()`
+   should stop rendering "building the zip…" in the same red it uses for failures.
+
 ### Export
 
 ```

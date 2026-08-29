@@ -512,6 +512,10 @@
     // slide after the last. Shared by panelTimer and the video-resume path.
     function armAdvanceTimer(ms) {
       clearTimer();
+      // Hosted: every boundary comes from the take. A deck that also advanced itself
+      // on its own durations would drift off the commentary between cues and then
+      // snap back at the next one, which reads as the preview being broken.
+      if (hosted) return;
       timer = setTimeout(function () {
         var count = counts[current] || 1;
         if (panelIndex < count - 1) {
@@ -851,13 +855,17 @@
         }
       });
       tap.addEventListener('pointercancel', function () { gp = null; });
-      document.body.appendChild(tap);
+      // A hosted player has one driver, and it is the page around it. The gesture
+      // layer and the bar are a second one: a stray tap in /narrate's preview would
+      // roll the deck out from under the take with nothing to put it back. (Record
+      // mode keeps the gestures — a tap there is the freeze.)
+      if (!hosted) document.body.appendChild(tap);
 
       fb = document.createElement('div');
       fb.id = 'wcc-fb';
       document.body.appendChild(fb);
 
-      if (record) return;
+      if (record || hosted) return;
       bar = document.createElement('div');
       bar.id = 'wcc-bar';
       // Collapse grip: first child so it sits at the column's top; visible only in
@@ -1691,7 +1699,7 @@
      * player's own nav, called from outside. A card atom is reached through the
      * slide (`goto-atom` on the bridge), because a clip's segments are the slide's
      * business, not the player's. */
-    function gotoAtom(a) {
+    function gotoAtom(a, at) {
       if (!a) return;
       var i = -1;
       for (var k = 0; k < items.length; k++) if (items[k].slug === a.slide) { i = k; break; }
@@ -1699,7 +1707,9 @@
       var panel = a.panel || 0;
       arrive(i, panel, false);              // paused: review positions, it doesn't play
       clipPhase = a.card || null;
-      send(i, 'goto-atom', { panel: panel, card: a.card || null });
+      // `at` rides through untouched: how far into a clip's footage to park is the
+      // slide's arithmetic, not the player's.
+      send(i, 'goto-atom', { panel: panel, card: a.card || null, at: at || 0 });
       recSync();
     }
 
@@ -1707,7 +1717,7 @@
     window.addEventListener('message', function (e) {
       var d = e.data; if (!d) return;
       if (d.type === 'wcc-player' && hosted) {
-        if (d.action === 'goto-atom') gotoAtom(d.atom);
+        if (d.action === 'goto-atom') gotoAtom(d.atom, d.at);
         else if (d.action === 'play') setPlaying(true);
         else if (d.action === 'pause') setPlaying(false);
         return;
@@ -1719,6 +1729,9 @@
 
       // wcc-done: video ended naturally — advance slide (works in both kiosk and interactive)
       if (d.type === 'wcc-done' && idx === current) {
+        // Hosted: the take decides when a beat ends, so a slide running out of its
+        // own footage is not a reason to move. It holds where it stopped.
+        if (hosted) return;
         if (interactive) {
           if (playing) fwdSlide(); // paused → hold last frame until user acts
         } else {
@@ -1752,6 +1765,7 @@
           refineAtoms(idx, d.atoms);
         }
         if (record) send(idx, 'set-mute', { muted: !rec.clipAudio });
+        if (hosted) send(idx, 'set-hold-end', { hold: true });
         // Re-apply state on the current slide's handshake (covers the load race
         // where our first commands arrived before the bridge was listening).
         if (idx === current && first && Date.now() - shownAt < 2000) applyState(playing ? 0 : panelIndex);
@@ -1792,6 +1806,7 @@
 
     /* ---- keyboard ---- */
     document.addEventListener('keydown', function (e) {
+      if (hosted) return;              // same rule as the bar: one driver
       // PageDown rides along with the right arrow for free, which makes a Bluetooth
       // page-turner pedal work — worth having when you are standing at a mic rather
       // than sitting at a screen.
