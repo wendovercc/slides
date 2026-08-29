@@ -237,3 +237,6 @@ live-worker/
 
 # Wrangler local state (live proxy deploys)
 .wrangler/
+
+# Photographer/asset drops awaiting import (zips, full-res originals)
+_inbox/
