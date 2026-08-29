@@ -149,8 +149,34 @@
     return (params.has('interactive') || params.has('record')) ? 1 : null;
   }
 
+  /* The surface rule, in ONE place.
+   *
+   * Two callers need it and they must never disagree: start() below, to decide
+   * whether to build controls, and the player TEMPLATE, which has to stamp
+   * `?interactive=1` onto every slide iframe *before* start() is called (a slide
+   * reads it from its own URL — see applySurface in slide-bridge.js). When the
+   * template kept its own copy of the rule, a deck could be interactive while its
+   * slides still rendered their wall variant: controls you could press, over a QR
+   * code meant for someone standing at a television.
+   *
+   * `deckStandalone` is the deck's own claim (content/slideshows/<slug>.json). The
+   * caller is responsible for withholding it on a wall — see player.html, where
+   * screen mode passes false, because the surface beats the deck's idea of itself. */
+  function surface(deckStandalone) {
+    var p = null;
+    try { p = new URLSearchParams(location.search); } catch (e) { /* older engine */ }
+    function has(k) { return !!p && p.has(k); }
+    var standalone = has('standalone') || !!deckStandalone;
+    return {
+      standalone: standalone,
+      interactive: has('record') ||
+        (!has('kiosk') && (has('interactive') || standalone))
+    };
+  }
+
   window.WccPlayer = {
     start: start,
+    surface: surface,
     windowRadius: function () { return windowRadius(new URLSearchParams(location.search)); }
   };
 
@@ -171,7 +197,34 @@
     // has to show what was recorded, so it must be the same nav.
     var hosted = params.has('hosted');
     var track = record || hosted;   // atom identity is being followed
-    var interactive = params.has('interactive') || record;
+    /* Standalone decks are interactive by default.
+     *
+     * A deck that declares itself standalone exists to be handed to someone: they
+     * follow a link and open it on a phone. Requiring `?interactive` on top would
+     * mean the shareable URL is the wrong one, and any forward that drops the
+     * query string would silently downgrade a viewer to a slideshow they cannot
+     * steer. The deck is the authority on what it is; the URL only has to name it.
+     *
+     * `?kiosk` is the escape hatch, and the wall does not need it: a pavilion
+     * screen plays through /screen/<loc>/, which withholds the deck's standalone
+     * flag entirely (see player.html). So a wall stays hands-free with a QR code,
+     * and `?kiosk` is left for previewing that surface from a desk. */
+    var surf = surface(opts.standalone);
+    var interactive = record || surf.interactive;
+    /* Standalone — this deck is the whole of what the viewer was sent, not a page
+     * within a site they are browsing.
+     *
+     * It changes the home button: back to the deck's first slide rather than a
+     * navigation to `/`. For someone who followed a link to the pavilion showcase,
+     * `/` is a club statistics site they never asked for and cannot return from
+     * except with the back button, so the one control that looks like "start
+     * again" would be the one that loses their place entirely. The Home KEY has
+     * always meant first-slide (see keydown); this makes the button agree with it.
+     *
+     * Set by the deck (`standalone: true` in content/slideshows/<slug>.json) or
+     * forced with `?standalone`. The deck-level flag is the authoritative one and
+     * also turns interactive on, per the block above. */
+    var standalone = surf.standalone;
 
     var n = items.length;
     var current = 0;
@@ -298,6 +351,25 @@
     var zoomed = false;
     var ZOOM_IN = 1.05;
     var cancelGesture = function () {};   // set by buildControls (interactive only)
+    /* Tap-through.
+     *
+     * `#wcc-tap` is a full-surface gesture layer above the slide stack, so by
+     * default NOTHING inside a slide can be touched — which is right, because a
+     * slide is a picture, not a page. A slide that offers the viewer a real link
+     * (the showcase deck's hire and credits cards) is the exception: it announces
+     * `taps` on its handshake and we stand the gesture layer down while it is the
+     * current slide.
+     *
+     * The cost is swipe and tap-to-pause on that slide alone; the control bar sits
+     * above the gesture layer (z-index 60) and keeps working, so navigation is
+     * never lost. Kiosk never reaches this — there is no tap layer on a wall, and
+     * a link there would be unpressable anyway, which is why such a slide must
+     * also carry a QR code rather than relying on the link. */
+    var tapEl = null;
+    var tapThrough = {};
+    function applyTapThrough() {
+      if (tapEl) tapEl.style.pointerEvents = tapThrough[current] ? 'none' : '';
+    }
     function effRadius() { return winRadius === null ? null : (zoomed ? 0 : winRadius); }
 
     function onZoomChange() {
@@ -369,6 +441,7 @@
       items.forEach(function (it, j) { it.frame.classList.toggle('active', j === i); });
       current = i;
       shownAt = Date.now();
+      applyTapThrough();
       onShow(i);
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
@@ -619,16 +692,24 @@
     function arrive(i, panel, play) { playing = play; updatePlayBtn(); interShow(i, panel); }
     function fwdSlide() {
       var i = (current + 1) % n;
-      // Interactive stops on arrival at a non-video slide, deliberately: on the bar
-      // iPad, forward onto a static slide is where you take manual control back.
+      // A playing deck keeps playing across the boundary. This used to read
+      // `!!items[i].video`, which stopped the deck on arrival at any static slide —
+      // so a slideshow left to run advanced exactly once and then sat there. The
+      // intent behind it was narrower: a *paused* deck that reaches the end of a
+      // video clip should stay paused rather than be started by the clip running
+      // out. Carrying `playing` across says that, and only that.
+      //
+      // Arriving at a video slide still starts it even from paused: stepping
+      // forward onto a reel is a request to watch the reel.
       //
       // Record mode keeps running if — and only if — the narrator has explicitly
-      // handed the deck over (AUTO). "A short introduction, then let it play on the
-      // deck's own durations" is a one-slide gesture otherwise, since it would drop
-      // back to manual at every boundary. `autoRun` is what separates that from
-      // merely playing because a clip happens to be rolling: a reel reaching its end
-      // must NOT quietly start auto-cueing the static slides after it.
-      arrive(i, 0, (record && rec.autoRun) || !!items[i].video);
+      // handed the deck over (AUTO), which is why it reads `autoRun` here and not
+      // `playing`. "A short introduction, then let it play on the deck's own
+      // durations" is a one-slide gesture otherwise, since it would drop back to
+      // manual at every boundary. `autoRun` is what separates that from merely
+      // playing because a clip happens to be rolling: a reel reaching its end must
+      // NOT quietly start auto-cueing the static slides after it.
+      arrive(i, 0, (record ? rec.autoRun : playing) || !!items[i].video);
     }
     function backSlide() { arrive((current - 1 + n) % n, 'last', false); }
     function goFirst() { arrive(0, 0, false); }
@@ -737,18 +818,27 @@
       setPlaceClass(place);
       // Inside is pinned inline to the viewport's top-right corner (below/right are
       // positioned entirely by their class). The far corner clears most slide content
-      // — titles/hero sit top-left or centre — and, collapsed to its grip by default,
-      // a column here is the least intrusive option when no band can hold the bar.
+      // — titles/hero sit top-left or centre — so a column here is the least
+      // intrusive option when no band can hold the bar.
       if (place === 'inside') {
         bar.style.top = edge + 'px';
         bar.style.right = edge + 'px';
       }
       progressAxis = place === 'below' ? 'x' : 'y';
       // Collapse belongs to inside only — the one placement that overlaps the slide.
-      // It starts collapsed to its grip (clearing content) and only the grip toggles
-      // it; there's no auto-hide. Entering inside afresh collapses; staying inside
-      // across a resize preserves whatever the user last set. Elsewhere: always open.
-      if (place === 'inside') { if (!wasInside) bar.classList.add('collapsed'); }
+      // It starts OPEN, and only the grip toggles it; there's no auto-hide.
+      //
+      // Open by default is a discoverability call, and it beats the tidier look.
+      // Collapsed, the bar is a single grip glyph in a corner, which does not say
+      // "you are holding a slideshow you can step through" — a first-time viewer
+      // following a link we sent them reads a static picture and never finds the
+      // controls. That viewer is now the common case, not the bar iPad. Anyone who
+      // wants the picture clean can still collapse it, and that choice survives a
+      // resize (below).
+      //
+      // Entering inside afresh opens; staying inside across a resize preserves
+      // whatever the user last set. Elsewhere: always open.
+      if (place === 'inside') { if (!wasInside) bar.classList.remove('collapsed'); }
       else { bar.classList.remove('collapsed'); }
       progressRelayout();
     }
@@ -820,6 +910,7 @@
       // firing each other (a drag never counts as a tap, and vice versa).
       var tap = document.createElement('div');
       tap.id = 'wcc-tap';
+      tapEl = tap;
       var TAP_SLOP = 10, TAP_MAX_MS = 500, SWIPE_MIN = 45, DBLTAP_MS = 300;
       var gp = null, lastTapAt = 0;
       // While the user is pinched in, the browser owns the surface: a drag pans the
@@ -874,7 +965,8 @@
       // Everything but the transport comes off the bar while recording: it is a
       // performance surface, and home/prev/fullscreen are all ways to wreck a take.
       if (!record) {
-        bar.appendChild(button('home', '', function () { location.href = '/'; }));
+        bar.appendChild(button('home', '',
+          standalone ? goFirst : function () { location.href = '/'; }));
         bar.appendChild(button('prev', '', prev));
       }
       playBtn = button('pause', 'primary', function () { setPlaying(!playing); });
@@ -1757,6 +1849,8 @@
       if (d.type === 'wcc-slide') {
         var first = counts[idx] == null;
         counts[idx] = d.panels;
+        tapThrough[idx] = !!d.taps;
+        if (idx === current) applyTapThrough();
         if (idx === current) setEdges(d);
         if (track && d.atoms) {
           // A reel answers with its own atom list, which during the sitting is the

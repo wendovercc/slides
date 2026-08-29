@@ -1,0 +1,19 @@
+{
+  "template": "showcase-card",
+  "title": "The Seabrook Pavilion",
+  "eyebrow": "Available to hire",
+  "subtitle": "Tring Road, Wendover",
+  "backdrop": "assets/images/pavilion/view.jpg",
+  "body": [
+    "The club room is bright and spacious, opening out onto two terraces. It has adaptable furniture, Wi-Fi throughout and a large screen you can connect to from a laptop, tablet or phone.",
+    "The bar, servery and kitchen are there if you want them."
+  ],
+  "strapline": [
+    "Clubs & Classes",
+    "Meetings",
+    "Away Days",
+    "Special Events"
+  ],
+  "footnote": "Photographs by Sarah Greer Photography",
+  "panel_duration": 15
+}

@@ -80,10 +80,22 @@
     return { first: o === 0, last: o === nPanels() - 1 };
   }
 
+  /* Does this slide want the player's gesture layer stood down while it is
+   * showing? Only a slide that offers the viewer something to actually press —
+   * `<body data-taps>` — which in practice means a link that is live on the
+   * interactive surface and absent on the wall. Announced on every message so a
+   * player that reloads a windowed frame re-learns it with no extra handshake.
+   * Read lazily: the bridge may post before <body> exists (video.html loads it
+   * in <head>). */
+  function wantsTaps() {
+    return !!(document.body && document.body.hasAttribute('data-taps'));
+  }
+
   function post(type, extra) {
     try {
       parent.postMessage(Object.assign(
-        { type: type, panel: toOrd(current), panels: nPanels() }, edge(), extra || {}), '*');
+        { type: type, panel: toOrd(current), panels: nPanels(), taps: wantsTaps() },
+        edge(), extra || {}), '*');
     } catch (e) { /* not embedded — ignore */ }
   }
 
@@ -263,10 +275,62 @@
     }
   }
 
+  /* Surface.
+   *
+   * A slide renders for the wall by default. `?interactive=1` says it is embedded
+   * in a player the viewer can touch — the bar iPad, or a phone following a link
+   * we sent a prospective hirer. That distinction is not cosmetic: a QR code is
+   * the only way to hand a URL to someone standing in front of a television, and
+   * it is useless on the device already in their hand, which can simply be tapped.
+   *
+   * `body.interactive` lets CSS pick between the two, so one slide serves both
+   * surfaces and they cannot drift apart. Same reasoning as ctx above, and the
+   * flag arrives the same way — on the iframe URL (see FRAME_Q in player.html),
+   * because a windowed deck reloads its frames as it moves and a URL survives
+   * that with no handshake.
+   *
+   * Anything the class reveals must be inert on the wall: a link is not tappable
+   * there, so it may never be the only route to the information.
+   */
+  function applySurface() {
+    var interactive = false;
+    try {
+      interactive = new URLSearchParams(location.search).get('interactive') === '1';
+    } catch (e) { /* older engine */ }
+    document.body.classList.add(interactive ? 'interactive' : 'wall');
+    if (interactive) showCursor();
+  }
+
+  /* Every slide sets `cursor: none` (the wall has no pointer and a stray arrow
+   * parked on a television is the giveaway that it is a browser). That is wrong
+   * the moment a person is pointing at it.
+   *
+   * It used to be masked rather than handled: the player's full-surface gesture
+   * layer sat over every slide with `cursor: default`, so what you saw was the
+   * LAYER's cursor, never the slide's. The player even claims to override the
+   * slide bases — it cannot, being a different document. As soon as a slide asks
+   * that layer to stand down (`data-taps`, so its links can be clicked) the
+   * slide's own rule showed through and the pointer vanished over exactly the
+   * slides you most need to point at.
+   *
+   * Injected rather than written into each template's `*` rule so one fix covers
+   * both bases and every standalone template. `*` is specificity 0,0,0, so any
+   * element that names its own cursor (`.link { cursor: pointer }`) still wins. */
+  function showCursor() {
+    var st = document.createElement('style');
+    st.textContent = '*{cursor:auto}';
+    document.head.appendChild(st);
+  }
+
+  function applyFlags() {
+    applyContext();
+    applySurface();
+  }
+
   // video.html loads this in <head>, so <body> may not exist yet.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', applyContext);
+    document.addEventListener('DOMContentLoaded', applyFlags);
   } else {
-    applyContext();
+    applyFlags();
   }
 })();

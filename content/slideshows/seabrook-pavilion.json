@@ -1,0 +1,37 @@
+{
+  "title": "The Seabrook Pavilion",
+  "standalone": true,
+  "refresh_interval_seconds": 3600,
+  "slides": [
+    {
+      "slug": "pavilion-intro"
+    },
+    {
+      "slug": "pavilion-01-exterior"
+    },
+    {
+      "slug": "pavilion-02-club-room"
+    },
+    {
+      "slug": "pavilion-03-bar"
+    },
+    {
+      "slug": "pavilion-04-servery"
+    },
+    {
+      "slug": "pavilion-05-big-screen"
+    },
+    {
+      "slug": "pavilion-06-dining"
+    },
+    {
+      "slug": "pavilion-07-terrace-doors"
+    },
+    {
+      "slug": "pavilion-08-view"
+    },
+    {
+      "slug": "pavilion-hire"
+    }
+  ]
+}

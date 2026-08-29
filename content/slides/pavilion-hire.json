@@ -1,0 +1,47 @@
+{
+  "template": "showcase-card",
+  "title": "Hire the pavilion",
+  "sections": [
+    {
+      "layout": "centred",
+      "eyebrow": "Enquiries",
+      "title": "Hire the pavilion",
+      "body": [
+        "We would love to hear from you. Ask us anything."
+      ],
+      "strapline": [
+        "Clubs & Classes",
+        "Meetings",
+        "Away Days",
+        "Special Events"
+      ],
+      "qr_url": "https://www.wendovercc.org/bookings",
+      "qr_label": "wendovercc.org/bookings",
+      "links": [
+        {
+          "label": "Booking details and enquiries",
+          "url": "https://www.wendovercc.org/bookings"
+        }
+      ]
+    },
+    {
+      "layout": "credit",
+      "eyebrow": "Sarah Greer Photography",
+      "body": [
+        "Thank you to Sarah Greer for all of the photographs in this showcase. Sarah is a photographer based in Wendover who has photographed hundreds of local families and small businesses. Take a look at her work."
+      ],
+      "links": [
+        {
+          "label": "sarahgreerphotography.co.uk",
+          "url": "https://sarahgreerphotography.co.uk"
+        },
+        {
+          "label": "@sarah_greer_photography",
+          "url": "https://www.instagram.com/sarah_greer_photography/"
+        }
+      ],
+      "secondary_links": true
+    }
+  ],
+  "panel_duration": 20
+}

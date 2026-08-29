@@ -376,9 +376,25 @@ const SLIDE_Q = CTX ? `?ctx=${encodeURIComponent(CTX)}` : '';
 // same reason ?ctx is passed this way. See docs/narrated-decks.md.
 // Record mode is interactive mode with a recorder attached, so it gets holds too —
 // the two must never disagree about what a tap does.
-const FRAME_Q = (params.has('interactive') || params.has('record'))
-    ? (SLIDE_Q ? `${SLIDE_Q}&holds=1` : '?holds=1')
-    : SLIDE_Q;
+// `interactive=1` rides along for the same reason and by the same route, but says
+// something broader than holds do: the viewer can touch this. A slide uses it to
+// choose between a QR code (the only way to pass a URL to someone standing in
+// front of a television) and a tappable link (the only sensible thing to offer on
+// the phone that is already in their hand). See applySurface in slide-bridge.js.
+//
+// A FUNCTION, not a const, because a deck can declare itself standalone and that
+// is only known once data.json has been fetched. As a const evaluated at load it
+// missed the deck flag entirely, so `/slideshow/<standalone-deck>/` gave you a
+// player with controls whose slides still rendered their wall variant.
+//
+// The interactive test itself comes from WccPlayer.surface so this and the player
+// cannot drift; the deck's claim is withheld in screen mode, because a wall is a
+// wall whatever it is showing.
+function frameQuery(show) {
+    const deckStandalone = {% if screen %}false{% else %}!!(show && show.standalone){% endif %};
+    if (!WccPlayer.surface(deckStandalone).interactive) return SLIDE_Q;
+    return `${SLIDE_Q || '?'}${SLIDE_Q ? '&' : ''}holds=1&interactive=1`;
+}
 {%- if screen %}
 const LOCATION_ID = {{ location.id | tojson }};
 {%- else %}
@@ -768,6 +784,7 @@ async function init() {
     const WIN = (window.WccPlayer && WccPlayer.windowRadius) ? WccPlayer.windowRadius() : null;
     const slideLayer = document.getElementById('slide-layer');
     const stage = document.getElementById('stage');
+    const FRAME_Q = frameQuery(show);
     const frames = slides.map((s, i) => {
         const f = document.createElement('iframe');
         // Permissions Policy is delegated ONE HOP AT A TIME. On the wall this player is
@@ -892,6 +909,17 @@ async function init() {
                     build_version: show.build_version || null,
                     source_match: show.source_match || null },
             {% if not screen %}deckKey: LOCAL_DECK,{% endif %}
+            // A deck may declare itself standalone (content/slideshows/<slug>.json):
+            // something we hand to a person rather than a page within the site. It
+            // makes the deck interactive and points the home button at slide one,
+            // so the URL we send needs no query string to be the right experience.
+            //
+            // Withheld in screen mode, which is the override: a pavilion wall plays
+            // through /screen/<loc>/ and must stay hands-free whatever deck it is
+            // showing, with a QR code rather than controls nobody can press. The
+            // wall is the surface, and the surface beats the deck's own idea of
+            // itself. `?standalone` still forces it anywhere, for previewing.
+            standalone: {% if screen %}false{% else %}!!show.standalone{% endif %},
             shouldReloadNow,
             onReload,
             flash: { frame: document.getElementById('flash-frame') },

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>{{ slide.title }}</title>
+    <style>
+        /* A text card for a photo showcase: the opening title, the call to
+           action, the closing credit. Standalone (no base) and therefore free of
+           the club footer and the sponsor strip — deliberate, because this deck
+           goes to people hiring a room, not to members watching a wall. Sponsor
+           logos on three slides out of eleven would read as a different document
+           interrupting the one they opened.
+
+           Token block mirrors _base.html; keep in step when tokens change.
+
+           Two surfaces, one card. `body.interactive` (set by slide-bridge.js from
+           the iframe's ?interactive=1) swaps the QR code for tappable links. The
+           wall is the default, so a card renders correctly even if the script
+           never runs. */
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+        @font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+        :root {
+            --navy-1: #0f2346;
+            --navy-2: #0a1c3a;
+            --gold:   #d4af37;
+            --light-blue: #b4c8e4;
+            --bg:     linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+            --text:   #ffffff;
+            --muted:  var(--light-blue);
+            --accent: var(--gold);
+            --safe-x: 5vw;
+            --safe-y: 5vh;
+            /* Canonical _base.html values — keep in step with it. Do not scale the
+               whole block for one slide's fit: these are the wall's reading sizes,
+               calibrated for 10ft, and a slide that will not fit at them wants
+               different choices per element, not smaller type throughout.
+
+               --t-hero is one rung above --t-xl and local to this template: a card
+               holds a name and a line or two, never a table, so its headline can
+               run past the hero numerals --t-xl is calibrated for. video.html
+               reaches past --t-xl for the same reason (a raw 6vw reel headline);
+               this names the size rather than inlining it. */
+            --t-hero: 5.5vw;
+            --t-xl:   4vw;
+            --t-lg:   2.8vw;
+            --t-md:   2vw;
+            --t-ms:   1.5vw;
+            --t-sm:   1.2vw;
+            --t-xs:   0.9vw;
+            --hair:   0.1vh;
+            --radius: 0.4vh;
+            --title-shadow: 0 0.28vh 0.55vh rgba(0,0,0,0.4);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: var(--bg);
+            font-family: 'Lato', -apple-system, Arial, sans-serif;
+            color: var(--text);
+        }
+        /* Optional photograph behind the card, darkened so type stays legible over
+           whatever the picture is doing. Sits under everything. */
+        .backdrop {
+            position: absolute; inset: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .backdrop-veil {
+            position: absolute; inset: 0;
+            background: linear-gradient(165deg,
+                        rgba(15,35,70,0.86) 0%,
+                        rgba(10,28,58,0.93) 100%);
+        }
+        .card {
+            position: absolute; inset: 0;
+            padding: var(--safe-y) var(--safe-x);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .eyebrow {
+            font-size: var(--t-sm);
+            font-weight: 700;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 1.6vh;
+        }
+        .title {
+            font-size: var(--t-xl);
+            font-weight: 900;
+            line-height: 1.15;
+            text-shadow: var(--title-shadow);
+        }
+        .subtitle {
+            font-size: var(--t-md);
+            color: var(--accent);
+            margin-top: 1.2vh;
+            letter-spacing: 0.04em;
+        }
+        .rule {
+            width: 12vw;
+            height: 0.3vh;
+            background: var(--accent);
+            margin: 3vh 0;
+            flex-shrink: 0;
+        }
+        .body {
+            font-size: var(--t-ms);
+            line-height: 1.6;
+            max-width: 62vw;
+        }
+        .body p + p { margin-top: 1.6vh; }
+        /* Strapline: what the room is FOR, as a short gold line under the pitch.
+           Authored as a list rather than one string with dots baked in, so the
+           separator is styled here (spacing, weight, dimming) instead of being a
+           character someone has to type consistently. Keep it to about five items
+           — past that it stops being a strapline and becomes a list nobody reads
+           at 10ft. Order is not neutral: it is read as priority. */
+        .strapline {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            font-size: var(--t-md);
+            font-weight: 700;
+            color: var(--accent);
+            letter-spacing: 0.06em;
+            line-height: 1.4;
+            /* Deliberately wider than the 3vh either side of the rule above: that
+               gap groups the title block with the body, this one separates the
+               prose from the strapline so it reads as a summary line rather than
+               a fourth sentence. */
+            margin-top: 5.5vh;
+        }
+        .strap-item + .strap-item::before {
+            content: '·';
+            opacity: 0.55;
+            margin: 0 0.7em;
+        }
+        /* Quieter than the body: the honest aside about the ground still growing
+           in, which should read as candour rather than as small print. */
+        .note {
+            font-size: var(--t-sm);
+            line-height: 1.5;
+            color: var(--muted);
+            max-width: 58vw;
+            margin-top: 3vh;
+            font-style: italic;
+        }
+        /* Club mark, top-left. The card templates carry no footer or sidebar (that
+           is the point of them), so without this the deck never says whose room it
+           is — the photographs show a building and nothing names it. Same lockup
+           the sidebar uses, laid out horizontally and sized to be read rather than
+           merely present: the sidebar can afford --t-xxs because it sits under a
+           large crest in a dedicated column, and here it is on its own.
+
+           Top-LEFT deliberately: the interactive control bar takes the top-right
+           corner when it has no letterbox band to sit in, so the two never meet. */
+        .brand {
+            position: absolute;
+            top: var(--safe-y); left: var(--safe-x);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1vh;
+        }
+        .brand-logo {
+            height: 13vh;
+            width: auto;
+            object-fit: contain;
+        }
+        .brand-name {
+            /* Held at --t-sm rather than stepped down with the rest: --t-xs is
+               column-header size, which the conventions rule out for anything the
+               viewer is meant to read, and this one names the club. */
+            font-size: var(--t-sm);
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            line-height: 1.3;
+            opacity: 0.85;
+            text-align: center;
+            /* Broken to two lines in the markup: on one line the name is far wider
+               than the crest above it, so the lockup reads as a mark with a caption
+               trailing off either side. Two lines sit under the crest's own width.
+               nowrap keeps each of those lines intact. */
+            white-space: nowrap;
+        }
+        /* NB: `.footnote` is this absolutely-positioned bottom credit line, and
+           nothing else may share the name. A section layout was briefly called
+           `footnote` too, so `class="sec footnote"` silently picked up this rule's
+           position/uppercase/dimming — the section left the layout flow entirely
+           and took the slide's vertical geometry with it. The section variant is
+           `credit`. */
+        .footnote {
+            position: absolute;
+            left: var(--safe-x); right: var(--safe-x); bottom: var(--safe-y);
+            font-size: var(--t-sm);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.6);
+        }
+
+
+        /* ── Sections layout ──────────────────────────────────────────────
+           A card may instead carry `sections`: blocks stacked down the slide, so
+           the closing slide can hold the hire call-to-action and the
+           photographer's credit at once rather than spending two near-identical
+           text slides in a row at the end of the deck.
+
+           Each section names its own `layout`, because the two are not peers:
+
+           - `centred` is the ordinary card, unchanged — centred column, full type
+             scale, aside falling below the text. The call to action keeps this.
+           - `footnote` is a row: smaller type, text beside a small QR. It is a
+             credit, and a credit that competed with the call to action above it
+             would be the wrong emphasis on a slide whose job is to get someone to
+             enquire.
+
+           The centred single-message card (no `sections` at all) is still the
+           default and is what the intro slide uses. */
+        .card.sections {
+            /* An explicit two-row grid, not a flex column: row 1 takes every pixel
+               the footnote does not, row 2 is the footnote at its natural height.
+               Said this way the geometry is declared rather than emergent — a
+               `flex: 1` child has to win a negotiation with its siblings' bases to
+               get the same result, and when it doesn't the failure is silent and
+               looks like a spacing bug. */
+            display: grid;
+            grid-template-rows: 1fr auto;
+            align-items: stretch;
+            gap: 3vh;
+        }
+        .sec { display: flex; }
+        .sec-main { min-width: 0; }
+        .sec + .sec { border-top: var(--hair) solid rgba(255,255,255,0.18); padding-top: 3vh; }
+
+        .sec.centred {
+            /* Fills grid row 1 (see .card.sections) and centres its content in it,
+               so the call to action sits midway between the top of the slide and
+               the rule rather than bunching against either. */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .sec.centred .sec-main { width: 100%; }
+        .sec.centred .sec-title { font-size: var(--t-lg); }
+        .sec.centred .body { max-width: 62vw; margin: 1.6vh auto 0; }
+
+        /* Footnote: text left, small QR right. Left-aligned because centred text
+           beside a QR has no shared edge to line up on. */
+        /* Centred, now that this section has no QR beside it. The left alignment
+           was there to give the text and the code a shared edge; with the code
+           gone it left a full-width line of prose under a centred gold label with
+           centred buttons below it, and nothing lined up with anything. */
+        .sec.credit {
+            align-items: center;
+            gap: 3vw;
+            text-align: center;
+        }
+        .sec.credit .sec-main { flex: 1; }
+        .sec.credit .sec-title { font-size: var(--t-md); }
+        /* The credit's one gold line IS an eyebrow, and deliberately the same one
+           the call to action uses: it labels the block rather than titling it, so
+           it inherits `.eyebrow` untouched (gold, uppercase, --t-ms) and the
+           section needs no title of its own.
+
+           The scan-to label below it is a different matter — sentence case there,
+           because uppercase with wide tracking at that size reads as shouting in
+           small print rather than as a label. */
+        .sec.credit .scan-to { text-transform: none; letter-spacing: 0.04em; }
+        /* Body stays at the deck's reading size (--t-md, as in the main content).
+           The credit is quieter than the call to action through its layout and its
+           secondary buttons, not by making the prose harder to read. */
+        /* Held to the same measure as the call to action's body above. Full width
+           at this size runs to about a hundred characters a line, which is roughly
+           half as long again as the eye tracks comfortably — the reader loses the
+           return sweep and re-reads a line. */
+        .sec.credit .body { max-width: 62vw; margin: 1.2vh auto 0; }
+        .sec.credit .sec-aside { flex-shrink: 0; }
+        .sec.credit .qr-panel { margin-top: 0; }
+        .sec.credit .qr-image { width: 15vh; }
+        .sec.credit .scan-to, .sec.credit .qr-url { font-size: var(--t-sm); }
+        .sec.credit .links { margin-top: 2vh; }
+        .sec.credit .link { font-size: var(--t-sm); padding: 1.1vh 2vw; }
+
+        .sec-title { font-weight: 900; line-height: 1.15; text-shadow: var(--title-shadow); }
+        /* Side by side, not stacked: on the interactive surface the aside is gone,
+           so the text column is full width and there is room for a row. */
+        .sections .links {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 1.4vw;
+            margin-top: 2.4vh;
+        }
+        .sec.centred .links { justify-content: center; }
+        .sec.credit .links { justify-content: center; }
+        /* The arrow says "press me", which is a lie on a wall. Drop it there and
+           the same chip reads as a label carrying a URL. */
+        body.wall .link::after { content: none; }
+        /* `.links` carries no display of its own: on the interactive-only path it
+           is turned into a flex row by `body.interactive .on-interactive`. A links
+           row shown on BOTH surfaces gets none of that, so it needs its own — and
+           it has to be two classes deep to sit above `.on-interactive { display:
+           none }`, which is the safe default for anything the wall must not show. */
+        .links.always { display: flex; }
+        .sections .qr-panel { margin-top: 3vh; }
+        /* The printed URL is the fallback for anyone who cannot scan, so it has to
+           read at 10ft — but a rung below the body, which is the thing being read. */
+        .sections .qr-url { font-size: var(--t-sm); }
+        /* The QR stays in the flow, centred under the body: that is the order it
+           is read in — what this is, why you would get in touch, then the thing
+           you point a phone at. A corner placement freed space but broke that
+           reading line. Sized down from a lone-QR card's 21vh because here it
+           shares the column with a full message above it. */
+        .sec.centred .qr-image { width: 16vh; }
+        /* A section's strapline is pinned to the bottom of the section rather than
+           joining the centred stack. It fills space that was already empty, so
+           adding it leaves the call to action exactly where it was — which is the
+           point: it is a repeat of the intro's line, not a new element of the
+           pitch competing for the middle of the slide. */
+        /* The strapline is out of flow (below), so nothing reserves its band and
+           the centred stack would otherwise centre straight through it and meet it
+           at the bottom. This padding is that reservation — it is what makes the
+           content centre in the space actually available rather than merely in the
+           row, which is what read as "tight". */
+        .sec.centred {
+            position: relative;
+            padding-bottom: 8.5vh;
+        }
+        .sec.centred .strapline {
+            position: absolute;
+            left: 0; right: 0; bottom: 0;
+            margin-top: 0;
+        }
+
+        /* ── The two surfaces ─────────────────────────────────────────────
+           Wall is the default so the card is correct with no JS. */
+        .on-interactive { display: none; }
+        body.interactive .on-interactive { display: flex; }
+        body.interactive .on-wall { display: none; }
+
+        /* Wall: a QR code, because there is no other way to pass a URL to
+           someone standing in front of a television. */
+        .qr-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.4vh;
+            margin-top: 4vh;
+        }
+        .qr-image {
+            width: 26vh;
+            aspect-ratio: 1;
+            background: #fff;
+            padding: 0.8vh;
+            border-radius: var(--radius);
+        }
+        .qr-image img { width: 100%; height: 100%; display: block; }
+        .scan-to {
+            font-size: var(--t-sm);   /* floor: --t-xs is column-header size */
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0.75;
+        }
+        .qr-url {
+            font-size: var(--t-ms);
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        /* Interactive: tappable links, because the device is already in hand. */
+        .links {
+            flex-direction: column;
+            align-items: center;
+            gap: 1.6vh;
+            margin-top: 4vh;
+        }
+        .link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.8vw;
+            font-size: var(--t-ms);
+            font-weight: 700;
+            color: var(--navy-1);
+            background: var(--accent);
+            text-decoration: none;
+            padding: 1.4vh 3vw;
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+        /* Trailing arrow: on a slide where nothing else is pressable, a gold
+           rectangle alone reads as a heading. The arrow is what says "this goes
+           somewhere". Pseudo-element, so it stays out of the link text and out of
+           the accessible name. The flex gap spaces it. */
+        .link::after {
+            content: '\2192';
+            font-weight: 400;
+            opacity: 0.85;
+        }
+        .link.secondary {
+            color: var(--accent);
+            background: transparent;
+            border: var(--hair) solid rgba(212,175,55,0.55);
+        }
+    </style>
+    <script src="/assets/js/slide-bridge.js?v={{ asset_version }}"></script>
+</head>
+{%- set section_links = slide.sections is defined
+      and (slide.sections | selectattr('links', 'defined') | list | length > 0) -%}
+<body{% if slide.links is defined or section_links %} data-taps{% endif %}>
+    {% if slide.backdrop is defined %}
+    <img class="backdrop" src="/{{ slide.backdrop }}" alt="">
+    <div class="backdrop-veil"></div>
+    {% endif %}
+    <div class="brand">
+        <img class="brand-logo" src="/assets/images/wcc-logo.png" alt="">
+        <span class="brand-name">Wendover<br>Cricket Club</span>
+    </div>
+    {% if slide.sections is defined %}
+    <div class="card sections">
+        {% for sec in slide.sections %}
+        <section class="sec {{ sec.layout | default('centred') }}">
+            <div class="sec-main">
+                {% if sec.eyebrow is defined %}<div class="eyebrow">{{ sec.eyebrow }}</div>{% endif %}
+                {% if sec.title is defined %}<div class="sec-title">{{ sec.title }}</div>{% endif %}
+                {% if sec.body is defined %}
+                <div class="body">
+                    {% for para in sec.body %}<p>{{ para }}</p>{% endfor %}
+                </div>
+                {% endif %}
+                {% if sec.links is defined %}
+                {# Links are interactive-only ONLY when a QR covers the wall. A
+                   section with no QR must show them on both surfaces, or the wall
+                   loses the information entirely — they read as labels there, and
+                   short URLs are memorable enough to be worth printing. #}
+                <div class="links {{ 'on-interactive' if sec.qr_url is defined else 'always' }}">
+                    {% for link in sec.links %}
+                    <a class="link{{ ' secondary' if sec.get('secondary_links') or not loop.first else '' }}"
+                       href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% if sec.strapline is defined %}
+            <div class="strapline">
+                {% for item in sec.strapline %}<span class="strap-item">{{ item }}</span>{% endfor %}
+            </div>
+            {% endif %}
+            {% if sec.qr_url is defined %}
+            <div class="sec-aside on-wall">
+                <div class="qr-panel">
+                    <div class="qr-image"><img src="{{ sec._qr_data_url }}" alt="QR code"></div>
+                    {% if sec.cta is defined %}<div class="scan-to">Scan for {{ sec.cta }}</div>{% endif %}
+                    <div class="qr-url">{{ sec.qr_label | default(sec.qr_url) }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </section>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card">
+        {% if slide.eyebrow is defined %}<div class="eyebrow">{{ slide.eyebrow }}</div>{% endif %}
+        <div class="title">{{ slide.title }}</div>
+        {% if slide.subtitle is defined %}<div class="subtitle">{{ slide.subtitle }}</div>{% endif %}
+        {% if slide.body is defined %}
+        <div class="rule"></div>
+        <div class="body">
+            {% for para in slide.body %}<p>{{ para }}</p>{% endfor %}
+        </div>
+        {% endif %}
+        {% if slide.strapline is defined %}
+        <div class="strapline">
+            {% for item in slide.strapline %}<span class="strap-item">{{ item }}</span>{% endfor %}
+        </div>
+        {% endif %}
+        {% if slide.note is defined %}<div class="note">{{ slide.note }}</div>{% endif %}
+
+        {% if slide.qr_url is defined %}
+        <div class="qr-panel on-wall">
+            <div class="qr-image"><img src="{{ slide._qr_data_url }}" alt="QR code"></div>
+            {% if slide.cta is defined %}<div class="scan-to">Scan for {{ slide.cta }}</div>{% endif %}
+            <div class="qr-url">{{ slide.qr_label | default(slide.qr_url) }}</div>
+        </div>
+        {% endif %}
+        {% if slide.links is defined %}
+        <div class="links on-interactive">
+            {% for link in slide.links %}
+            <a class="link{{ ' secondary' if not loop.first else '' }}"
+               href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if slide.footnote is defined %}<div class="footnote">{{ slide.footnote }}</div>{% endif %}
+</body>
+</html>

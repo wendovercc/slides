@@ -3603,8 +3603,14 @@ def build_slides(env):
                 slide, teams_by_id, load_fixtures(), slide["_player_standings"]
             )
 
-        if slide.get("template") == "cta" and "qr_url" in slide:
-            slide["_qr_data_url"] = generate_qr_data_url(slide["qr_url"])
+        # Any slide that names a qr_url gets a code rendered for it. Was
+        # cta-only; the showcase cards need the same thing, and a QR is a
+        # property of the field, not of the template that happens to print it.
+        # Sections carry their own, so a card that stacks two messages can point
+        # at two different places (hire enquiries; the photographer's site).
+        for holder in [slide, *slide.get("sections", [])]:
+            if "qr_url" in holder:
+                holder["_qr_data_url"] = generate_qr_data_url(holder["qr_url"])
 
         if slide.get("template") == "sponsors":
             sponsorship_url = config.get("preview", {}).get("sponsorship_url", "")
