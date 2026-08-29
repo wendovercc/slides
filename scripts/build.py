@@ -551,6 +551,96 @@ def build_honours(slide, bat_historic, bat_season, bowl_historic, bowl_season):
     slide["_season_year"] = bat.get("_season_year")
 
 
+# Link-preview image size. 1200x630 is the size Facebook, WhatsApp and iMessage
+# all render a large card at; anything else gets cropped by whichever of them is
+# fussiest. Kept modest in bytes too — WhatsApp gives up on a slow or heavy image
+# and falls back to a bare link, which is the failure this whole feature exists to
+# avoid.
+OG_W, OG_H = 1200, 630
+# Brand navy (--navy-1), for a `contain` card's background.
+OG_BG = (0x0f, 0x23, 0x46)
+
+
+def build_og_image(source_rel: str, slug: str, fit: str = "cover") -> str | None:
+    """Render a page's link-preview image at 1200x630.
+
+    Two fits, and the difference matters:
+
+    - ``cover`` centre-crops a photograph to fill the card. Cropped rather than
+      letterboxed because some clients crop the card AGAIN, so bars baked into
+      the image survive into the final render.
+    - ``contain`` scales a mark down onto the brand navy without cropping it.
+      A logo is the wrong shape for this card and usually has transparency —
+      cover would slice it up and flatten the transparency to black.
+
+    Returns a site-absolute path, or None if the source is missing: a missing
+    image must cost the page its picture, never the build.
+    """
+    from PIL import Image
+
+    src = ROOT / source_rel
+    if not src.exists():
+        print(f"  og: {source_rel} not found — {slug} shared without an image")
+        return None
+    out_dir = SITE / "og"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with Image.open(src) as im:
+        if fit == "contain":
+            mark = im.convert("RGBA")
+            # 62% of the card's height leaves the mark room to breathe; a logo
+            # bled to the edges of a preview card reads as a cropping accident.
+            scale = (OG_H * 0.62) / mark.height
+            mark = mark.resize((max(1, round(mark.width * scale)),
+                                max(1, round(mark.height * scale))), Image.LANCZOS)
+            canvas = Image.new("RGB", (OG_W, OG_H), OG_BG)
+            canvas.paste(mark, ((OG_W - mark.width) // 2, (OG_H - mark.height) // 2), mark)
+            out = canvas
+        else:
+            im = im.convert("RGB")
+            w, h = im.size
+            target = OG_W / OG_H
+            if w / h > target:                  # too wide — trim the sides
+                new_w = round(h * target)
+                left = (w - new_w) // 2
+                box = (left, 0, left + new_w, h)
+            else:                               # too tall — trim top and bottom
+                new_h = round(w / target)
+                top = (h - new_h) // 2
+                box = (0, top, w, top + new_h)
+            out = im.crop(box).resize((OG_W, OG_H), Image.LANCZOS)
+        out.save(out_dir / f"{slug}.jpg", "JPEG",
+                 quality=82, optimize=True, progressive=True)
+    return f"/og/{slug}.jpg"
+
+
+def deck_og(show: dict, slug: str, title: str, site_url: str, club_name: str,
+            url: str = "") -> dict:
+    """The link-preview block for one deck page.
+
+    A deck opts into a picture with `og_image` in its slideshow JSON and into a
+    summary with `description`. Both are optional: a deck with neither still gets
+    a correct title and site name, which is a better share than the bare URL a
+    page with no metadata produces.
+    """
+    base = site_url.rstrip("/")
+    og = {
+        "site_name": club_name,
+        "title": title,
+        "description": show.get("description"),
+        "url": url or (f"{base}/slideshow/{slug}/" if slug else f"{base}/slideshow/"),
+        "image": None,
+        "image_w": OG_W,
+        "image_h": OG_H,
+        "image_alt": show.get("og_image_alt"),
+    }
+    if show.get("og_image") and base:
+        path = build_og_image(show["og_image"], slug or "home",
+                              show.get("og_image_fit", "cover"))
+        if path:
+            og["image"] = f"{base}{path}"
+    return og
+
+
 def generate_qr_data_url(url: str) -> str:
     img = qrcode.make(url)
     buf = io.BytesIO()
@@ -4659,6 +4749,7 @@ def build_slideshows(env, slide_meta, sets=None):
     # "Intelligent refresh"). UTC, second-granularity ISO-8601.
     build_version = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     site_url = preview_cfg.get("site_url", "")
+    club_name = preview_cfg.get("club_name", "Wendover Cricket Club")
     qr_data_url = generate_qr_data_url(site_url) if site_url else ""
 
     default_refresh = config.get("default_refresh_interval_seconds", 300)
@@ -4684,7 +4775,8 @@ def build_slideshows(env, slide_meta, sets=None):
         (out_dir / "index.html").write_text(
             env.get_template("player.html").render(
                 screen=False, title=show["title"], slug=slug, preview=preview_cfg,
-                built_at=built_at, qr_data_url=qr_data_url))
+                built_at=built_at, qr_data_url=qr_data_url,
+                og=deck_og(show, slug, show["title"], site_url, club_name)))
         n_clips = _write_deck_data(out_dir, show, build_version)
         print(f"  slideshow/{slug}  ({n_clips} clip(s) to precache)")
         # Members, not just a count: the deck builder adds a slideshow's slides only
@@ -4733,7 +4825,8 @@ def build_slideshows(env, slide_meta, sets=None):
         (out_dir / "index.html").write_text(
             env.get_template("player.html").render(
                 screen=False, title=deck["title"], slug=set_slug, preview=preview_cfg,
-                built_at=built_at, qr_data_url=qr_data_url))
+                built_at=built_at, qr_data_url=qr_data_url,
+                og=deck_og(s, set_slug, deck["title"], site_url, club_name)))
         _write_deck_data(out_dir, deck, build_version)
         n_sets += 1
 
@@ -4758,7 +4851,9 @@ def build_slideshows(env, slide_meta, sets=None):
     (SITE / "slideshow" / "index.html").write_text(
         env.get_template("player.html").render(
             screen=False, title="Slideshow", slug=None, preview=preview_cfg,
-            built_at=built_at, qr_data_url=qr_data_url))
+            built_at=built_at, qr_data_url=qr_data_url,
+            og=deck_og({}, None, preview_cfg.get("title", "Slideshow"),
+                       site_url, club_name)))
 
     write_slide_catalogue(slide_meta, sets, authored_decks, build_version)
 
@@ -4823,10 +4918,17 @@ def build_screen_locations(env, homepage_shows=None):
             })
             youtube_data = {"live": yt.get("live", []), "upcoming": yt.get("upcoming", [])}
 
+    club_name = preview_cfg.get("club_name", "Wendover Cricket Club")
     index_tmpl = env.get_template("screen/index.html")
     (SITE / "index.html").write_text(
         index_tmpl.render(preview=preview_cfg, built_at=built_at,
-                          cards=cards, team_names=team_names, youtube=youtube_data)
+                          cards=cards, team_names=team_names, youtube=youtube_data,
+                          # The most-shared URL of the lot, so it gets the same
+                          # treatment a deck does — from config rather than a
+                          # slideshow file, since the homepage has no deck.
+                          og=deck_og(preview_cfg, None,
+                                     preview_cfg.get("title", "Wendover CC Slides"),
+                                     site_url, club_name, url=site_url.rstrip("/") + "/"))
     )
     print("  index.html")
 

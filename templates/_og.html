@@ -1,0 +1,38 @@
+{#- Link-preview metadata (Open Graph + Twitter cards).
+
+    A deck is shared by pasting its URL into WhatsApp, Facebook or a message, and
+    the scraper that renders the preview fetches the HTML and reads nothing else:
+    it does not run our JavaScript. Everything here therefore has to be baked at
+    build time. The player sets `document.title` from data.json once the deck
+    loads, which is invisible to a scraper — hence a real <title> and og:title on
+    every deck page.
+
+    Absolute URLs throughout: og:image and og:url are resolved against nothing, so
+    a site-relative path silently yields no preview image. -#}
+{#- `og is defined` guards the screen player: a pavilion wall is not a page
+    anyone shares, so build_screens passes nothing and this partial goes quiet. -#}
+{%- if og is defined and og %}
+{%- if og.description %}
+<meta name="description" content="{{ og.description }}">
+{%- endif %}
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{ og.site_name }}">
+<meta property="og:title" content="{{ og.title }}">
+{%- if og.description %}
+<meta property="og:description" content="{{ og.description }}">
+{%- endif %}
+{%- if og.url %}
+<meta property="og:url" content="{{ og.url }}">
+{%- endif %}
+{%- if og.image %}
+<meta property="og:image" content="{{ og.image }}">
+<meta property="og:image:width" content="{{ og.image_w }}">
+<meta property="og:image:height" content="{{ og.image_h }}">
+{%- if og.image_alt %}
+<meta property="og:image:alt" content="{{ og.image_alt }}">
+{%- endif %}
+<meta name="twitter:card" content="summary_large_image">
+{%- else %}
+<meta name="twitter:card" content="summary">
+{%- endif %}
+{%- endif %}

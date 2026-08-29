@@ -28,6 +28,11 @@
     "club_name": "Wendover Cricket Club",
     "club_url": "https://www.wendovercc.org",
     "site_url": "https://slides.wendovercc.org",
+    "_comment_og": "Link-preview (Open Graph) metadata for the site homepage. Deck pages carry their own in content/slideshows/*.json; og_image_fit is `cover` (centre-crop a photograph) or `contain` (scale a mark onto brand navy, uncropped).",
+    "description": "Wendover Cricket Club's pavilion screens: club stats, match highlights and what's on. Watch anywhere.",
+    "og_image": "assets/images/wcc-logo.png",
+    "og_image_fit": "contain",
+    "og_image_alt": "Wendover Cricket Club crest",
     "github_url": "https://github.com/wendovercc/slides",
     "support_email": "wendovercctreasurer@gmail.com",
     "sponsorship_url": "https://www.wendovercc.org/sponsorship-opportunities"

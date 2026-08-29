@@ -1,6 +1,9 @@
 {
   "title": "The Seabrook Pavilion",
   "standalone": true,
+  "description": "A new pavilion at Wendover Cricket Club on Tring Road, available to hire for clubs and classes, meetings, away days and special events.",
+  "og_image": "assets/images/pavilion/view.jpg",
+  "og_image_alt": "The club room at the Seabrook Pavilion, doors open onto the terrace at sunset with the cricket ground beyond.",
   "refresh_interval_seconds": 3600,
   "slides": [
     {

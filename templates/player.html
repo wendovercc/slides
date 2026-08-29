@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     {% include "_pwa_head.html" %}
     <title>{{ title }}</title>
+    {% include "_og.html" %}
     {#- One player, two deck sources. `screen` mode resolves its deck from the context
         calendar for a location (the pavilion walls, /screen/<loc>/); deck mode plays a
         named deck (/slideshow/<slug>/, or any deck via ?deck=<slug>). Everything else —
