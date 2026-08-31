@@ -1,11 +1,19 @@
 # Portrait Decks — the phone surface
 
-> Status: **designed, nothing built.** The model below is settled through three
-> worked examples; the open questions at the end are genuinely open. First build
-> target is the **Seabrook Pavilion** deck, with every other deck on the default
-> fallback behaviour.
+> Status: **the letterbox fallback is built and shipped; the portrait fragments
+> are not.** Every deck now has a phone surface — a column of full-height steps
+> that snap, one slide per step, each slide in a 16:9 band. What is designed and
+> unbuilt is the part that replaces a band with a real portrait layout. The model
+> below is settled through three worked examples; the open questions at the end
+> are genuinely open.
 >
-> Read alongside: `assets/js/player-core.js` (`surface`, `placeBar`, the windowing
+> **The build order was deliberately inverted** — see "Phase 0" under Phasing.
+> The doc originally deferred the fallback as speculative and started with the
+> pavilion's fragments; taking the fallback first gave every deck we already build
+> a phone surface for one file, and made portrait a property of the surface rather
+> than something a deck opts into template by template.
+>
+> Read alongside `assets/js/portrait.js` (the built surface) and: `assets/js/player-core.js` (`surface`, `placeBar`, the windowing
 > valve), `templates/player.html` (`fitLayer`), `assets/js/slide-bridge.js`,
 > `templates/slides/photo.html`, `showcase-card.html`, `video.html`,
 > `scripts/build.py` (`slide_title_parts`, `slide_atoms`, `_resolve_deck`,
@@ -189,10 +197,11 @@ loads, so it composes into the scroller with no height measurement and no
 placeholder guessing. Window those (and `<video>` elements) by proximity to the
 viewport; leave plain sections alone.
 
-**But it is not phase-1 work** — see "Phasing". Until a deck's templates all have
-portrait layouts, that deck simply does not offer the portrait surface and plays
-as it does today. Portrait is opt-in per deck, all-or-nothing, and the fallback is
-what later relaxes that.
+**This turned out to be phase-0 work, not deferred work** — see "Phasing". Taking
+it first inverts the opt-in: portrait is a property of the *surface*, every deck
+has it, and a portrait fragment is an upgrade to one step rather than the
+precondition for a deck offering the surface at all. Nothing is all-or-nothing,
+and no deck has to wait for its last template.
 
 ### Where the portrait document lives
 
@@ -455,16 +464,20 @@ section that is not one.**
 - Optional `focus` on photo slides (phase 3 — wide interiors do not crop).
 - Sponsors closing step (below, phase 4).
 
-**`assets/js/player-core.js`** (or a new `portrait.js` — see open questions)
-- `surface()` gains `portrait`; the overlay exception; rotation swap in place.
-- Per-step scrollers + the overscroll commit gesture.
+**`assets/js/player-core.js` + `assets/js/portrait.js`** — the split is settled
+(open question 3). *Struck through = built in phase 0.*
+- ~~`surface()` gains `portrait`~~; the overlay exception; ~~rotation swap in
+  place~~ (not for bands — see phase 0).
+- ~~Per-step scrollers~~ + the overscroll commit gesture (owed to scrolling
+  fragment steps, not to bands).
 - Assemble a deck from fragments (any runtime deck, including `/deck`'s).
 - The driven path: anchor traversal, auto-scroll, interruptible scroll-to-anchor.
 - Media strip (horizontal swipe) and the reel poster → player overlay, each with
   a driven mode alongside its user mode.
-- Progress rail and share (phase 1); history-backed overlays and the contents
-  sheet when a deck earns them.
-- Windowing for fallback iframes and `<video>` only.
+- ~~Progress rail and share~~; history-backed overlays and the contents sheet
+  when a deck earns them.
+- ~~Windowing for fallback iframes~~ (`windowRadius` now follows the surface) and
+  `<video>` only.
 
 **`templates/`** — portrait fragments for `photo`, `showcase-card` first; then
 `video`, `sponsors`, `match-intro`, `scorecard`, `match-result`, `match-league`,
@@ -494,7 +507,126 @@ hirer read as a different document interrupting theirs, which is the reasoning i
 
 ## Phasing
 
-**Phase 1 — infrastructure, targeting the pavilion.** *(next)*
+**Phase 0 — the letterbox fallback.** *(built)*
+
+Taken first, ahead of the phase 1 below, because it is the whole of the surface
+for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
+`player-core.js`. What it decided, which the rest now builds on:
+
+- **The surface rule lives in `WccPlayer.surface()`**, as designed, built on
+  `interactive` — which the same work redefined. **The route now decides whether a
+  person is driving, and the URL overrides it**: `/screen/<loc>/` is hands-free,
+  `/slideshow/<slug>/` is steerable, with `?interactive` and `?kiosk` as the two
+  escape hatches. That removed the reason portrait had to *confer* interactive,
+  and with it the older special case where `standalone` did the same — a URL we
+  hand to a person no longer needs a query string to be the right experience,
+  because none of them do. `standalone` is back to meaning only what it says.
+  Baking the default into the template rather than the URL is what made this safe:
+  a wall's URL lives in a file on the Pi (`~/.kiosk_url`) and is not ours to
+  change, so the bare screen URL every wall already holds still means the wall.
+  `?preview` sides with the wall on either route, as it always has.
+- **The stage seam is the only difference between the two surfaces.** Transport,
+  panel timers, atom pacing, holds, video, windowing and the reload all stay in
+  `player-core.js`; the stage owns geometry and geometric input. A scroll to a
+  step goes through `arrive()` exactly as a bar press does, so both directions
+  reach a slide the same way and there is no second nav model.
+- **`scroll-snap-type: y mandatory` is right for a fallback step** and does not
+  contradict the rejection above: the trap is a step *taller than the viewport*,
+  and a fallback step is one screen by construction. The bounce-then-commit
+  gesture is owed to the scrolling steps that portrait fragments bring, not to
+  this. A step is `height: 100%` of the scrollport rather than `100dvh`, so
+  `scrollTop / stepHeight` cannot round to the wrong step while iOS's chrome
+  collapses.
+- **Windowing follows the surface, not the URL** (`windowRadius(params, surf)`).
+  The old `?interactive` test silently missed a standalone deck — the pavilion,
+  whose whole point is a link with no query string — and would have missed every
+  portrait deck, on exactly the device the windowing exists to protect.
+- **A step is what `/deck` gives one row to**, and that rule already existed:
+  `childrenOf()` in `deck.js` — a package counts its members, a carousel its
+  panels, and a reel counts as one however many clips it holds. The column applies
+  the same derivation (`stepsFor` in `portrait.js`), verified to agree with
+  `childrenOf` on every slide of every built deck, so a deck the editor sees as
+  "4 steps" scrolls as four. **Step is one structural concept across the builder
+  and the phone.**
+
+  *Not* the wall's tab strip, which is coarser: a match package's strip reads
+  `1st Innings` over what are three steps (highlights, batting, bowling). The
+  strip groups steps into phases — which is the grouping the portrait *fragments*
+  will want, and is why `step` and `phase` stay separate words here.
+
+  So a carousel slide is one step per panel and its band is `position: sticky`
+  across them: panels change under a pinned slide, and only crossing into another
+  slide moves it. A reel is ONE step whatever its clip count — the doc's rejection
+  of the vertical-feed reading, enforced here.
+
+  Getting this wrong is what the first cut did, and it mattered more than it
+  looked: `teams`, `leaderboards`, `honours`, `fantasy-league` and every `team-*`
+  and `leaderboard-*` deck are SINGLE-slide decks, so a step-per-slide column gave
+  a phone visitor one screen that would not scroll with five of its six panels
+  behind a timer. Step-per-step turns `teams` into 89 positions and
+  `fantasy-league` into 4, while `last-match-1st-xi` stays at 9 because its reels
+  are one step each.
+
+  Phase grouping remains a property of the portrait *fragments*, which collapse a
+  run of atoms into one scrolling step. Both readings satisfy "every atom appears
+  exactly once, in order".
+- **The surface upgrades one way, and swaps live.** Decided at boot from the
+  aspect; a deck *opened* in landscape and then turned portrait crosses the edge
+  and moves onto the column without a page reload — same player, same items, same
+  slide, same controls (`WccPlayer.setStage`). What the route change above bought
+  is exactly this: a deck page is interactive on both stages, so the swap no
+  longer has to reconstitute the control bar, the windowing and the slides' own
+  interactive variant, which is what forced a reload in the first draft.
+  The residual cost is one iframe: a frame moved in the DOM reloads its document,
+  so the slide on screen and its two windowed neighbours come back fresh and a
+  clip loses its position. That is also the closest this form of the surface gets
+  to "rotation swaps in place, no reload" — the rest of that promise is owed to
+  the portrait fragments, where a step is our own DOM and nothing reloads at all.
+  Portrait → landscape does **not** switch back, which is now a judgement rather
+  than a limit: the swap would work in both directions, but the column reads
+  perfectly well in landscape (the band grows to fill the viewport), so going back
+  would spend a viewer's clip position to fix nothing — and a surface that only
+  ratchets cannot thrash at the boundary.
+- **No tap layer, and tap-through comes free.** The player's `#wcc-tap` is a
+  fixed full-viewport overlay, which over a scroller swallows the scroll. Without
+  it a tap on the slide stays in the slide — so a slide's own links work with no
+  `data-taps` machinery — and a tap on the matte toggles transport. An overlay
+  confined to the band would have cost the links *and*, being a non-`auto`
+  touch-action, WebKit's pinch-zoom with it.
+- **Two axes, and the second one earns its place.** VERTICAL is the step axis;
+  HORIZONTAL is the axis *inside* a step, and means what it means on the landscape
+  player — `next()`/`prev()`, the atom move. The pairing pays off on a reel, which
+  is one step by the `/deck` rule: scrolling down leaves the reel entirely, which
+  nothing could do before, while swiping steps through its clips.
+
+  Reported by `slide-bridge.js` rather than read off a gesture layer, since
+  portrait deliberately has none (above). No flag distinguishes the surfaces —
+  in landscape and record mode `#wcc-tap` sits above the iframe and these events
+  never arrive, so the geometry does it. Thresholds are fractions of the viewport,
+  never px: a slide lays out in the fixed 1920x1080 box, where 45px is about 9
+  real ones. A gesture starting in the edge strip is declined so that iOS's
+  unpreventable edge-back-swipe does one thing rather than two.
+
+  This does **not** contradict the rejection of horizontal-as-step-axis below: the
+  step axis is still vertical, and a swipe that reaches the end of a slide's atoms
+  crosses to the next slide exactly as the control bar does.
+- **No live chrome.** The ticker and strip live in the L a retracting 16:9 slide
+  layer uncovers, and there is no such band here.
+- **Chrome is the progress rail and share**, and nothing else, as designed.
+
+Deliberately *not* done here, and still open below: portrait fragments and their
+token scale, phase grouping, the media strip, overlays, longer lists.
+
+**Untested on a device, and it matters:** whether a *vertical* drag starting on
+the band scrolls the column. The band is an iframe, so that depends on touch
+scroll chaining from a non-scrollable child document to the parent scroller.
+Modern iOS should do it, but if it does not, dragging on the slide feels dead and
+only the matte scrolls — which would also undermine the swipe work above, since
+that assumes the slide stays exposed to touch. Check this first on a phone. The
+fix, if needed, is an overlay confined to the band, and it is not free: it costs
+the slide's own links and, at any non-`auto` touch-action, pinch-zoom.
+
+**Phase 1 — the first portrait fragments, targeting the pavilion.** *(next)*
 
 Build:
 - The surface rule, the portrait token scale, the shared portrait stylesheet.
@@ -512,8 +644,7 @@ these cost little now and are a rewrite later:
 - A driven mode alongside the user mode on the photo strip.
 
 **Explicitly not in phase 1** — all deferred as speculative until a deck needs
-them: the letterbox fallback and its iframe windowing; any overlay at all (so no
-history/back machinery either — the pavilion needs no "view larger", since on an
+them: any overlay at all (so no history/back machinery either — the pavilion needs no "view larger", since on an
 iPhone it opens the photograph at the width it already had); the sticky title; the
 contents sheet; the `focus` crop field, which wide interiors do not use.
 
@@ -526,7 +657,7 @@ player running the whole innings reel in order with narrative captions, card
 overlays and the existing clip-by-clip nav; close returns to scroll position (and
 brings the first overlay, so history/back lands here). Native video fullscreen
 handles landscape. Inline driven playback for play mode. The letterbox fallback
-arrives here too, which is what relaxes portrait from all-or-nothing per deck.
+arrived in phase 0 instead, which is why nothing here is all-or-nothing.
 
 **Phase 3 — the match package.** `match-intro`, `scorecard`, `match-result`,
 `match-league` portrait fragments; the cards-vs-table rules; the longer-list
@@ -552,11 +683,12 @@ in phase 1; this is the driver on top.
    of authorial intent, not a technical one. **Unresolved — James's call.**
 2. **Does the match intro split** into Last Match / Pre-match (two steps), or stay
    one scrolling step? Try one first; allow an explicit override.
-3. **Where does the portrait JS live** — inside `player-core.js`, or a separate
-   `portrait.js` loaded only on the portrait path? The player is already ~2000
-   lines and the portrait surface shares little of its machinery (no iframes, no
-   `--fit`, no panel timers). Leaning separate, with `surface()` staying the single
-   arbiter in `player-core`.
+3. ~~**Where does the portrait JS live**~~ — **settled: a separate
+   `assets/js/portrait.js`**, with `surface()` staying the single arbiter in
+   `player-core`, which is where the lean already was. The seam turned out to be
+   narrower than expected: a `stage` object with `show(i)` and `attach(transport)`.
+   Everything geometric is on one side of it and everything about *playing a deck*
+   on the other, which is the line the fragments should keep to as well.
 4. **Does `/deck` need to know?** An editor building for a phone audience might
    want to see which steps have a real portrait layout and which will letterbox.
    Later nicety, but a reason for `slides.json` to carry a per-template `portrait`

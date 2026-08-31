@@ -275,6 +275,64 @@
     }
   }
 
+  /* Horizontal swipe, reported to the player.
+   *
+   * The player owns navigation, so this only *reports*: the slide says "a thumb
+   * went sideways across me" and player-core decides what that means (its own
+   * next()/prev() — the same atom move the control bar makes).
+   *
+   * Why it lives in the slide rather than in the player, where every other
+   * gesture does: the portrait column (portrait.js) has no gesture layer over the
+   * slide, deliberately. The landscape player covers every slide with `#wcc-tap`
+   * and reads swipes off that, but a fixed full-viewport overlay swallows the
+   * scroll of a column that scrolls, and an overlay confined to the band would
+   * swallow the slide's own links and — being a non-`auto` touch-action — WebKit's
+   * pinch-zoom with it (see the touch-action note in player-core). Leaving the
+   * slide exposed is what makes links, taps and pinch work there for free; the
+   * cost is that a swipe over it has to be noticed here.
+   *
+   * So this is inert wherever the player has its own layer: in landscape and in
+   * record mode `#wcc-tap` is above the iframe and these events never arrive.
+   * No flag is needed to tell the two apart — the geometry already does.
+   *
+   * Thresholds are FRACTIONS of the viewport, never px: a slide lays out in a
+   * fixed 1920x1080 box scaled into the band, so its clientX is in design px and
+   * 45 of them is about 9 real ones on a phone.
+   */
+  function bindSwipe() {
+    var start = null;
+    var MAX_MS = 700;        // longer than this is a drag, not a swipe
+    var SLOP = 0.10;         // of viewport width — travel needed to count
+    var EDGE = 0.05;         // of viewport width — dead strip at each side
+    var DOMINANCE = 1.5;     // how much more horizontal than vertical
+
+    document.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { start = null; return; }
+      var t = e.touches[0], w = window.innerWidth || 1920;
+      // iOS Safari's left-edge swipe is browser-back and cannot be prevented. We
+      // can at least decline to ALSO navigate the deck, so one gesture does one
+      // thing. The right edge is dead for symmetry (forward, in the same idiom).
+      if (t.clientX < w * EDGE || t.clientX > w * (1 - EDGE)) { start = null; return; }
+      start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+
+    document.addEventListener('touchend', function (e) {
+      var s = start; start = null;
+      if (!s || Date.now() - s.at > MAX_MS) return;
+      var t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      var w = window.innerWidth || 1920;
+      var dx = t.clientX - s.x, dy = t.clientY - s.y;
+      // A vertical drag is the column being scrolled and is none of our business.
+      if (Math.abs(dx) < w * SLOP || Math.abs(dx) < Math.abs(dy) * DOMINANCE) return;
+      try {
+        parent.postMessage({ type: 'wcc-swipe', dir: dx < 0 ? 'next' : 'prev' }, '*');
+      } catch (err) { /* not embedded — ignore */ }
+    }, { passive: true });
+
+    document.addEventListener('touchcancel', function () { start = null; });
+  }
+
   /* Surface.
    *
    * A slide renders for the wall by default. `?interactive=1` says it is embedded
@@ -325,6 +383,7 @@
   function applyFlags() {
     applyContext();
     applySurface();
+    bindSwipe();
   }
 
   // video.html loads this in <head>, so <body> may not exist yet.

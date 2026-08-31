@@ -142,10 +142,18 @@
    * revealed. `?window=2` / `?window=off` force it either way for testing.
    * The players call this too — they must not give every iframe a src up front on a
    * windowed deck, or the boot peak is exactly the resident set we're avoiding. */
-  function windowRadius(params) {
+  function windowRadius(params, surf) {
     var v = params.get('window');
     if (v === 'off' || v === 'none') return null;
     if (v != null && /^\d+$/.test(v)) return parseInt(v, 10);
+    /* Windowed whenever the SURFACE is interactive, not merely when the URL says so.
+     * The URL test used to stand in for "a phone", and two decks slipped through it:
+     * a standalone deck (the pavilion — interactive by its own claim, with no query
+     * string, which is the whole point of the link we send) and now a portrait one,
+     * where a 38-slide deck would otherwise hold 38 live documents on exactly the
+     * device the windowing exists to protect (project_ios_pwa_crash). `surf` is
+     * optional so an older caller keeps the old test. */
+    if (surf) return surf.interactive ? 1 : null;
     return (params.has('interactive') || params.has('record')) ? 1 : null;
   }
 
@@ -162,22 +170,74 @@
    * `deckStandalone` is the deck's own claim (content/slideshows/<slug>.json). The
    * caller is responsible for withholding it on a wall — see player.html, where
    * screen mode passes false, because the surface beats the deck's idea of itself. */
-  function surface(deckStandalone) {
+  function surface(deckStandalone, kioskDefault) {
     var p = null;
     try { p = new URLSearchParams(location.search); } catch (e) { /* older engine */ }
     function has(k) { return !!p && p.has(k); }
     var standalone = has('standalone') || !!deckStandalone;
+    /* Is a person driving this?
+     *
+     * THE ROUTE DECIDES, AND THE URL OVERRIDES. `kioskDefault` is the route's own
+     * answer, baked by the template that built the page: /screen/<loc>/ is a wall
+     * (hands-free), /slideshow/<slug>/ is a page someone opened (theirs to steer).
+     * Each keeps one escape hatch — `?interactive` on a screen, which is how the
+     * home page offers a visitor the deck a pavilion television is showing, and
+     * `?kiosk` on a deck, which previews the wall's surface from a desk.
+     *
+     * Baking the default rather than requiring a flag is what makes this safe to
+     * change: a wall's URL lives in a file on the Pi (`~/.kiosk_url`, see
+     * docs/raspberry-pi.md) and is not ours to update, so the bare screen URL every
+     * wall already holds has to keep meaning what it has always meant.
+     *
+     * What this replaced: `?interactive` as the sole positive signal, with
+     * `standalone` and then the portrait surface each having to CONFER interactive
+     * so that a URL we hand to a person didn't need a query string to be the right
+     * experience. That reasoning is now the default itself, so both special cases
+     * are gone — `standalone` is back to meaning only what it says (see below), and
+     * portrait is back to being a choice about geometry. */
+    // `?preview` (the 50%-scale debug view) sides with the wall whatever route it is
+    // on: it exists to watch a deck rotate hands-free beside its slide list, and it
+    // has always needed `?interactive` on top to be steerable. Keeping it that way
+    // means the route default cannot quietly change what the debug view shows.
+    var handsFreeByDefault = !!kioskDefault || has('preview');
+    var interactive = has('record') ||
+      (handsFreeByDefault ? has('interactive') : !has('kiosk'));
     return {
       standalone: standalone,
-      interactive: has('record') ||
-        (!has('kiosk') && (has('interactive') || standalone))
+      interactive: interactive,
+      /* The phone surface (docs/portrait-decks.md). A deck held in a hand and read
+       * end to end down the screen, rather than a 16:9 rectangle floating in the
+       * middle of a portrait one. Every deck the build emits gets it — a template
+       * with no portrait layout shows its 16:9 self in a letterboxed band.
+       *
+       * NEVER ON THE WALL, and it needs no rule of its own to say so: a wall is
+       * hands-free by route, so `interactive` already excludes it — including a
+       * panel mounted the tall way round, which an aspect test would not have.
+       *
+       * Record is excluded EXPLICITLY: `?record` sets interactive above, so without
+       * this a narrator holding a phone would record a take against the portrait
+       * surface. A take is authored once, in landscape. `?hosted` (the /narrate
+       * preview pane) and `?preview` (the debug view) drive a deck themselves and
+       * own their own geometry; `?kiosk` stays the escape hatch for previewing the
+       * wall's surface from a phone.
+       *
+       * Read once, at boot, and NOT re-evaluated on rotation — see the orientation
+       * note in portrait.js. */
+      portrait: interactive && !has('record') && !has('hosted') && !has('preview') &&
+        window.innerWidth < window.innerHeight
     };
   }
 
   window.WccPlayer = {
     start: start,
     surface: surface,
-    windowRadius: function () { return windowRadius(new URLSearchParams(location.search)); }
+    // Callers pass what surface() takes, for the same reason it takes them: the
+    // answer depends on the surface, and the surface is not knowable from the URL
+    // alone — the route carries the default.
+    windowRadius: function (deckStandalone, kioskDefault) {
+      return windowRadius(new URLSearchParams(location.search),
+                          surface(deckStandalone, kioskDefault));
+    }
   };
 
   function start(opts) {
@@ -197,22 +257,24 @@
     // has to show what was recorded, so it must be the same nav.
     var hosted = params.has('hosted');
     var track = record || hosted;   // atom identity is being followed
-    /* Standalone decks are interactive by default.
-     *
-     * A deck that declares itself standalone exists to be handed to someone: they
-     * follow a link and open it on a phone. Requiring `?interactive` on top would
-     * mean the shareable URL is the wrong one, and any forward that drops the
-     * query string would silently downgrade a viewer to a slideshow they cannot
-     * steer. The deck is the authority on what it is; the URL only has to name it.
-     *
-     * `?kiosk` is the escape hatch, and the wall does not need it: a pavilion
-     * screen plays through /screen/<loc>/, which withholds the deck's standalone
-     * flag entirely (see player.html). So a wall stays hands-free with a QR code,
-     * and `?kiosk` is left for previewing that surface from a desk. */
-    var surf = surface(opts.standalone);
+    // `opts.kioskDefault` is the route's own answer to "is a person driving this",
+    // baked by the template that built the page. See surface().
+    var surf = surface(opts.standalone, opts.kioskDefault);
     var interactive = record || surf.interactive;
+    /* The stage — where a slide goes when it becomes the current one.
+     *
+     * Default (null) is the wall's: every frame stacked at inset:0 and crossfaded
+     * by an `active` class. The portrait surface passes an adapter (portrait.js)
+     * that instead scrolls a column of full-height steps. That is the ONLY
+     * difference between the two surfaces: transport, panel timers, atom pacing,
+     * windowing, holds, video and the reload all stay in here, driving one deck.
+     * Anything that has to know about geometry belongs on this seam, not in a
+     * second player. */
+    var stage = opts.stage || null;
     /* Standalone — this deck is the whole of what the viewer was sent, not a page
-     * within a site they are browsing.
+     * within a site they are browsing. It says one thing and no longer implies a
+     * second: a deck page is now interactive by route (see surface), so the flag is
+     * about what the deck IS, not about who is driving it.
      *
      * It changes the home button: back to the deck's first slide rather than a
      * navigation to `/`. For someone who followed a link to the pavilion showcase,
@@ -222,8 +284,7 @@
      * always meant first-slide (see keydown); this makes the button agree with it.
      *
      * Set by the deck (`standalone: true` in content/slideshows/<slug>.json) or
-     * forced with `?standalone`. The deck-level flag is the authoritative one and
-     * also turns interactive on, per the block above. */
+     * forced with `?standalone`. */
     var standalone = surf.standalone;
 
     var n = items.length;
@@ -287,7 +348,7 @@
      * The cost is that a slide is a fresh document each time it comes round, so its
      * carousel/video state doesn't persist. Nothing depends on it: every arrival
      * already sends reset/goto-panel/restart-auto. */
-    var winRadius = windowRadius(params);
+    var winRadius = windowRadius(params, surf);
     var pendingCmds = items.map(function () { return []; });
     var loaded = items.map(function () { return false; });
     var pruneTimer = null;
@@ -438,11 +499,26 @@
     function activate(i) {
       if (i !== current) { edgeFirst = edgeLast = null; slideHold = false; }   // stale the moment we leave
       reconcileWindow(i);   // before .active — a cold frame needs its src first
-      items.forEach(function (it, j) { it.frame.classList.toggle('active', j === i); });
+      // Reveal it. On the wall that is a crossfade between stacked frames; on the
+      // portrait surface the frames are already all on screen in a scroller and
+      // revealing means scrolling to the right one. `current` is still the
+      // outgoing index here, which is what a stage needs to know which way it is
+      // travelling.
+      if (stage) stage.show(i, current);
+      else items.forEach(function (it, j) { it.frame.classList.toggle('active', j === i); });
       current = i;
       shownAt = Date.now();
       applyTapThrough();
       onShow(i);
+    }
+    /* Tell the stage which STEP the transport is on. `activate` reveals the slide;
+     * this refines it to the panel, which is the finer position the portrait column
+     * scrolls to (a carousel is one step per panel there — the same rule /deck gives
+     * one row to). Called wherever panelIndex settles: the arrival, and the slide's
+     * own echo. A stage with no step axis (the wall's crossfade stack) has no
+     * showAtom and this is a no-op. */
+    function stageAtom() {
+      if (stage && stage.showAtom) stage.showAtom(current, panelIndex);
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
 
@@ -681,6 +757,7 @@
       // route into a new atom converges (a no-op unless a take or a review is
       // following it).
       clipPhase = track && items[i].video && planPreAt(i, panelIndex) ? 'pre' : null;
+      stageAtom();
       recSync();
     }
     function interShow(i, panel) { activate(i); applyState(panel); }
@@ -950,7 +1027,12 @@
       // layer and the bar are a second one: a stray tap in /narrate's preview would
       // roll the deck out from under the take with nothing to put it back. (Record
       // mode keeps the gestures — a tap there is the freeze.)
-      if (!hosted) document.body.appendChild(tap);
+      // A stage that owns input gets no gesture layer. `#wcc-tap` is a fixed
+      // full-viewport overlay, and a fixed overlay over a scroller swallows the
+      // scroll: the touch lands on an element whose nearest scrollable ancestor is
+      // the (unscrollable) body, so the portrait deck would simply not move. The
+      // portrait stage takes the tap itself, off its own scroller.
+      if (!hosted && !(stage && stage.ownsInput)) document.body.appendChild(tap);
 
       fb = document.createElement('div');
       fb.id = 'wcc-fb';
@@ -1819,6 +1901,29 @@
       var idx = items.findIndex(function (it) { return it.frame.contentWindow === e.source; });
       if (idx < 0) return;
 
+      /* A thumb went sideways across the current slide (slide-bridge reports it;
+       * only the portrait column leaves a slide exposed to touch, so this is that
+       * surface's horizontal gesture arriving by a different route).
+       *
+       * It means exactly what a sideways swipe means on the landscape player:
+       * next()/prev(), the atom move — so a reel steps clip by clip and a carousel
+       * panel by panel, and the two surfaces agree about what a swipe does.
+       *
+       * The pairing that gives portrait is worth naming: VERTICAL is the step axis
+       * and HORIZONTAL is the axis inside a step. On a 20-clip reel — one step, by
+       * the /deck rule — scrolling down leaves the reel entirely, which nothing
+       * could do before, while swiping steps through its clips.
+       *
+       * Ignored where the player has another driver (hosted) or another gesture
+       * layer (landscape's #wcc-tap, which means these never arrive), and while
+       * pinched in, where a sideways drag is the viewer panning a magnified slide.
+       */
+      if (d.type === 'wcc-swipe' && idx === current) {
+        if (!interactive || hosted || zoomed) return;
+        if (d.dir === 'next') next(); else prev();
+        return;
+      }
+
       // wcc-done: video ended naturally — advance slide (works in both kiosk and interactive)
       if (d.type === 'wcc-done' && idx === current) {
         // Hosted: the take decides when a beat ends, so a slide running out of its
@@ -1867,6 +1972,10 @@
         var movedPanel = panelIndex !== d.panel;
         panelIndex = d.panel;
         setEdges(d);
+        // The slide is the authority on which panel it is showing, so this is where
+        // the column re-aligns — including for a panel the PLAYER's timer stepped,
+        // which no other path reports.
+        if (movedPanel) stageAtom();
         if (track && movedPanel) {
           clipPhase = items[current].video && planPreAt(current, panelIndex) ? 'pre' : null;
           recSync();
@@ -1918,6 +2027,55 @@
     // Expose the flash entry point for the live engine (running in this same frame).
     window.WccPlayer.flash = enqueueFlash;
 
+    /* Hand a stage the transport it drives. `goTo` is the viewer reaching a slide by
+     * hand — scrolling to it — and goes through arrive() like every other arrival, so
+     * a scrolled-to slide is reset, timed and tracked exactly as a stepped-to one is.
+     * Deliberately carries `playing`: scrolling is navigation, not a transport
+     * command. */
+    function attachStage(s) {
+      if (!s || !s.attach) return;
+      s.attach({
+        goTo: function (i) { if (i !== current) arrive(i, 0, playing); },
+        toggle: onTap,
+        next: next,
+        prev: prev
+      });
+    }
+
+    /* Change stage mid-session — a phone turned portrait, arriving on the column.
+     *
+     * The deck keeps playing: same player, same items, same place. What moves is
+     * where the frames live, and that is the one real cost — an iframe reloads when
+     * it is moved in the DOM, so the slide on screen (and its ≤2 windowed
+     * neighbours) comes back fresh and a clip loses its position. Everything the
+     * boot decision used to fan out into — the control bar, the windowing, the
+     * slides' own interactive variant — is already in place on both stages now that
+     * a deck page is interactive by route, which is what makes this a swap rather
+     * than the page reload it replaced. */
+    window.WccPlayer.setStage = function (s) {
+      if (!s || s === stage) return;
+      stage = s;
+      if (s.host) {
+        for (var i = 0; i < n; i++) {
+          var host = s.host(i);
+          var f = items[i].frame;
+          if (!host || f.parentNode === host) continue;
+          host.appendChild(f);        // moves it, which reloads it
+          // Re-arm the load bookkeeping: whatever was queued belonged to a document
+          // that no longer exists, and the bridge will handshake again.
+          if (frameIsLive(i)) { loaded[i] = false; pendingCmds[i] = []; watchLoad(i); }
+        }
+      }
+      // A stage that owns input gets no gesture layer — `#wcc-tap` is a fixed
+      // full-viewport overlay and would swallow the scroll of a stage that scrolls.
+      if (s.ownsInput && tapEl && tapEl.parentNode) tapEl.parentNode.removeChild(tapEl);
+      attachStage(s);
+      schedulePlace();                // the bar's letterbox bands just changed shape
+      // Arrive where we already are: the current frame has just reloaded and needs
+      // its panel state back, and the new stage needs to reveal it.
+      arrive(current, panelIndex || 0, playing);
+    };
+
     /* ---- go ---- */
     // Seed the load state from whatever the player template already started. The
     // first activate() pulls the rest of the opening window in.
@@ -1932,6 +2090,7 @@
 
     if (interactive) {
       buildControls();
+      attachStage(stage);
       if (record) startRecord();
       else if (hosted) {
         buildPlan();

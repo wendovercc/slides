@@ -4887,6 +4887,9 @@ def build_screen_locations(env, homepage_shows=None):
         cards.append({
             "type": "screen",
             "title": loc["name"],
+            # `?interactive` stays here, and is now the ONLY place it is used: a
+            # screen is hands-free by route, and this card offers a visitor the deck
+            # a pavilion television is showing, to steer themselves.
             "href": f"/screen/{loc['id']}/?interactive",
             "loc_id": loc["id"],
         })
@@ -4894,7 +4897,9 @@ def build_screen_locations(env, homepage_shows=None):
         cards.append({
             "type": "slideshow",
             "title": show["title"],
-            "href": f"/slideshow/{show['slug']}/?interactive",
+            # No query string: a deck page is interactive by route now (see
+            # surface() in player-core.js), and this URL is one people copy.
+            "href": f"/slideshow/{show['slug']}/",
             "description": show.get("description"),
         })
     youtube_data = None

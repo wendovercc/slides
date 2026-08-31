@@ -356,6 +356,7 @@
 <script src="/assets/js/preload-gate.js?v={{ asset_version }}"></script>
 <script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
 <script src="/assets/js/player-core.js?v={{ asset_version }}"></script>
+{% if not screen %}{# The phone surface. A wall can never be portrait (the rule is built on `interactive`, which /screen/ withholds), so it is not shipped there. #}<script src="/assets/js/portrait.js?v={{ asset_version }}"></script>{% endif %}
 {% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script><script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script><script src="/assets/js/live-engine.js?v={{ asset_version }}"></script>{% endif %}
 <script>
 const params = new URLSearchParams(window.location.search);
@@ -389,11 +390,11 @@ const SLIDE_Q = CTX ? `?ctx=${encodeURIComponent(CTX)}` : '';
 // player with controls whose slides still rendered their wall variant.
 //
 // The interactive test itself comes from WccPlayer.surface so this and the player
-// cannot drift; the deck's claim is withheld in screen mode, because a wall is a
-// wall whatever it is showing.
+// cannot drift; the route's default goes with it, because a wall is a wall whatever
+// it is showing.
 function frameQuery(show) {
     const deckStandalone = {% if screen %}false{% else %}!!(show && show.standalone){% endif %};
-    if (!WccPlayer.surface(deckStandalone).interactive) return SLIDE_Q;
+    if (!WccPlayer.surface(deckStandalone, {{ 'true' if screen else 'false' }}).interactive) return SLIDE_Q;
     return `${SLIDE_Q || '?'}${SLIDE_Q ? '&' : ''}holds=1&interactive=1`;
 }
 {%- if screen %}
@@ -430,6 +431,23 @@ const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
 // in the deck is still *shown*, rendering the static pre-match content it carries
 // before any feed arrives. Suppressing the feed is not the same as dropping slides.
 const LIVE_FEED_ON = LIVE_ON{% if not screen %} && !LOCAL_DECK{% endif %};
+
+/* Is this slide a video reel? One definition, because two things read it and they
+   must agree: the player (a reel auto-plays on forward arrival) and the portrait
+   column (a reel is ONE step however many clips it holds — see stepsFor in
+   portrait.js and childrenOf in deck.js). `videos` is the injected-deck form of the
+   same thing: an editor's sitting has no build behind it, so no `_videos`. */
+function isVideoSlide(s) {
+    return (s._videos || []).length > 0 || !!s._is_video || (s.videos || []).length > 0;
+}
+
+/* The shape the portrait column is built from: how many STEPS each slide is worth,
+   in play order. A step is what /deck gives one row to — a carousel's panels one
+   each, a reel one for the whole strip — so a deck the editor sees as "4 steps"
+   scrolls as four. portrait.js applies the rule; this only supplies the inputs. */
+function portraitSlides(list) {
+    return list.map(s => ({ atoms: (s._atoms || []).length, video: isVideoSlide(s) }));
+}
 
 let _currentSlug = null;
 function openCurrentSlide() { if (_currentSlug) window.open(`/slide/${_currentSlug}/${SLIDE_Q}`, '_blank'); }
@@ -782,8 +800,26 @@ async function init() {
     // max-age=600 and /assets/js with max-age=14400, so for up to four hours after a
     // deploy a client can pair fresh HTML with stale JS. Falling back to null = load
     // everything = exactly the pre-windowing behaviour, right for old JS anyway.
-    const WIN = (window.WccPlayer && WccPlayer.windowRadius) ? WccPlayer.windowRadius() : null;
+    const WIN = (window.WccPlayer && WccPlayer.windowRadius)
+        ? WccPlayer.windowRadius({% if screen %}false, true{% else %}!!show.standalone, false{% endif %}) : null;
     const slideLayer = document.getElementById('slide-layer');
+    /* The phone surface (docs/portrait-decks.md). A deck opened in portrait becomes a
+       column of full-height steps that snap, one slide per step, rather than a 16:9
+       rectangle floating in the middle of the screen. The rule itself lives in
+       WccPlayer.surface — this is the same single-arbiter discipline `interactive` has,
+       and for the same reason: two copies of a surface rule is how a deck ends up
+       interactive while its slides render their wall variant.
+
+       Guarded on `window.WccPortrait`, not just the flag: Pages serves this HTML with
+       max-age=600 and /assets/js with max-age=14400, so for up to four hours after a
+       deploy fresh HTML can pair with JS that has neither the file nor the `portrait`
+       key. Both fall back to the landscape stage, which is exactly today's behaviour. */
+    const PORTRAIT = !!window.WccPortrait &&
+        !!WccPlayer.surface({% if screen %}false, true{% else %}!!show.standalone, false{% endif %}).portrait;
+    // Built BEFORE the frames below, because each frame is appended straight into its
+    // own step: an iframe moved after the fact reloads its document, which on the gated
+    // path would throw away everything the loading gate just waited for.
+    const portrait = PORTRAIT ? WccPortrait.create({ slides: portraitSlides(slides) }) : null;
     const stage = document.getElementById('stage');
     const FRAME_Q = frameQuery(show);
     const frames = slides.map((s, i) => {
@@ -815,13 +851,17 @@ async function init() {
             });
         }
         if (WIN === null || i <= WIN) f.src = f.dataset.src;
-        slideLayer.appendChild(f);
+        (portrait ? portrait.host(i) : slideLayer).appendChild(f);
         return f;
     });
     const bootFrames = WIN === null ? frames : frames.slice(0, WIN + 1);
 
     {% if live_enabled %}
-    if (LIVE_FEED_ON) {
+    // Not in portrait. The L-frame chrome is a property of a WALL on a match day: the
+    // ticker and strip live in the band a retracting 16:9 slide layer uncovers, and
+    // there is no such band here — the slide fills the width of its step. A phone that
+    // wants the live match has the live surfaces themselves.
+    if (LIVE_FEED_ON && !PORTRAIT) {
     // Live chrome, in the L the retracting slide layer uncovers: ticker along the
     // bottom band, standings strip up the right. Both sit on the stage (not the slide
     // layer) so they don't scale with it. An unprovisioned device never loads them.
@@ -878,7 +918,47 @@ async function init() {
         onReload = refresh.onReload;
     }
 
+    /* ---- the surface upgrade, one way only -------------------------------------
+       The surface is chosen at boot from the viewport aspect, so a deck OPENED in
+       landscape and then turned portrait — a phone held sideways when the link was
+       tapped, a browser window dragged narrow — would sit on the letterboxed stage
+       for the rest of the session, which is the wrong surface for the shape it is
+       now. Crossing that edge switches it, live: the deck keeps playing, at the
+       same slide, with the same controls. See WccPlayer.setStage.
+
+       ONE WAY, which is a judgement rather than a limit — the swap would work in
+       both directions. It costs an iframe reload of whatever is on screen, and the
+       column reads perfectly well in landscape (the band simply grows to fill the
+       viewport), so going back would spend a viewer's clip position to fix nothing.
+       Portrait never arms this, and one `done` closes it after it fires. */
+    function armPortraitUpgrade(finalSlides) {
+        // `setStage` is checked, not assumed: Pages serves this HTML with max-age=600
+        // and /assets/js with max-age=14400, so fresh HTML can pair with JS that
+        // predates it. Without the swap there is simply no upgrade, which is exactly
+        // the behaviour this page had before there was one.
+        if (PORTRAIT || !window.WccPortrait || !(window.WccPlayer && WccPlayer.setStage)) return;
+        let t = null, done = false;
+        const check = () => {
+            if (done) return;
+            if (t) clearTimeout(t);
+            // Debounced: a window dragged across the boundary must swap once, when the
+            // drag stops, not on every resize event along the way.
+            t = setTimeout(() => {
+                if (done || !WccPlayer.surface({% if screen %}false, true{% else %}!!show.standalone, false{% endif %}).portrait) return;
+                done = true;
+                WccPlayer.setStage(
+                    WccPortrait.create({ slides: portraitSlides(finalSlides) }).stage);
+            }, 400);
+        };
+        window.addEventListener('resize', check);
+        window.addEventListener('orientationchange', check);
+    }
+
     function startPlayer(finalSlides) {
+        // The gate below can drop slides after the column was built (a video whose
+        // clips didn't store), so tell it what actually survived: the step column and
+        // the item list must agree about what slide 4 is.
+        if (portrait) portrait.keep(finalSlides.map(s => s._i));
         WccPlayer.start({
             items: finalSlides.map(s => ({
                 slug: s.slug,
@@ -896,7 +976,7 @@ async function init() {
                 title: s._title || null,
                 // video slide → auto-plays on forward arrival. `videos` is the
                 // injected-deck form of the same thing (no build, so no _videos).
-                video: (s._videos || []).length > 0 || !!s._is_video || (s.videos || []).length > 0,
+                video: isVideoSlide(s),
                 frame: frames[s._i],
             })),
             onShow: i => {
@@ -921,14 +1001,27 @@ async function init() {
             // wall is the surface, and the surface beats the deck's own idea of
             // itself. `?standalone` still forces it anywhere, for previewing.
             standalone: {% if screen %}false{% else %}!!show.standalone{% endif %},
+            // The route's own answer to "is a person driving this": a screen is a wall
+            // unless a visitor asks otherwise (?interactive), a deck page is theirs to
+            // steer unless it is previewing a wall (?kiosk). See surface().
+            kioskDefault: {{ 'true' if screen else 'false' }},
             shouldReloadNow,
             onReload,
-            flash: { frame: document.getElementById('flash-frame') },
+            // Where a slide goes when it becomes the current one: the wall's crossfade
+            // stack by default, the portrait column when there is one. The only
+            // difference between the two surfaces — everything else about playing a
+            // deck stays in player-core.
+            stage: portrait ? portrait.stage : null,
+            // A news-flash is a full-bleed 16:9 takeover raised over the stage, and in
+            // portrait there is no stage to raise it over (the chrome above is not
+            // built). Withheld rather than left dangling on a null frame.
+            flash: PORTRAIT ? null : { frame: document.getElementById('flash-frame') },
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
         {% if live_enabled %}if (LIVE_FEED_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
+        armPortraitUpgrade(finalSlides);
     }
 
     // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
