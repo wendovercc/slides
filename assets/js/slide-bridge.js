@@ -275,7 +275,7 @@
     }
   }
 
-  /* Horizontal swipe, reported to the player.
+  /* Swipe, reported to the player — BOTH axes.
    *
    * The player owns navigation, so this only *reports*: the slide says "a thumb
    * went sideways across me" and player-core decides what that means (its own
@@ -295,39 +295,87 @@
    * record mode `#wcc-tap` is above the iframe and these events never arrive.
    * No flag is needed to tell the two apart — the geometry already does.
    *
+   * VERTICAL is reported too, and it has to be: the portrait column stopped being
+   * a scroller (portrait.js), so a vertical drag on a band no longer chains into a
+   * parent that scrolls — there is no longer one. The band is an iframe, so this is
+   * the only place that drag can be noticed at all. The player routes the two axes
+   * differently, which is the pairing the design doc names: VERTICAL is the step
+   * axis (leave this slide), HORIZONTAL is the axis inside a step (next()/prev(),
+   * the atom move — so a reel steps clip by clip while a vertical swipe leaves the
+   * reel entirely).
+   *
    * Thresholds are FRACTIONS of the viewport, never px: a slide lays out in a
    * fixed 1920x1080 box scaled into the band, so its clientX is in design px and
    * 45 of them is about 9 real ones on a phone.
    */
   function bindSwipe() {
-    var start = null;
-    var MAX_MS = 700;        // longer than this is a drag, not a swipe
-    var SLOP = 0.10;         // of viewport width — travel needed to count
+    var start = null, fired = false;
+    var MAX_MS = 700;        // longer than this is a drag, not a swipe (X only)
+    var SLOP = 0.10;         // of viewport WIDTH — sideways travel to count
     var EDGE = 0.05;         // of viewport width — dead strip at each side
-    var DOMINANCE = 1.5;     // how much more horizontal than vertical
+    var DOMINANCE = 1.5;     // how much more one axis than the other
+
+    /* Vertical wants a much bigger fraction than horizontal, and the reason is the
+     * design box rather than taste. A band is fitted to the screen's WIDTH, so a
+     * fraction of 1920 design px is the same fraction of the screen — 0.10 across
+     * is 0.10 across. Height does not work that way: the band is 1080 design px
+     * tall but only `screenWidth x 9/16` real px, so 0.10 of it is about 0.056 of
+     * the screen's width and a fifth of what the same gesture needs on the matte
+     * beside the band. 0.25 lands a band drag on the same real distance as
+     * `armMatte`'s 8%-of-the-deck, so one gesture feels like one gesture wherever
+     * the thumb happens to be. */
+    var V_SLOP = 0.25;       // of viewport HEIGHT — see above
+
+    function post(msg) {
+      try { parent.postMessage(msg, '*'); } catch (err) { /* not embedded */ }
+    }
 
     document.addEventListener('touchstart', function (e) {
-      if (e.touches.length !== 1) { start = null; return; }
+      start = null; fired = false;
+      if (e.touches.length !== 1) return;
       var t = e.touches[0], w = window.innerWidth || 1920;
       // iOS Safari's left-edge swipe is browser-back and cannot be prevented. We
       // can at least decline to ALSO navigate the deck, so one gesture does one
       // thing. The right edge is dead for symmetry (forward, in the same idiom).
-      if (t.clientX < w * EDGE || t.clientX > w * (1 - EDGE)) { start = null; return; }
+      if (t.clientX < w * EDGE || t.clientX > w * (1 - EDGE)) return;
       start = { x: t.clientX, y: t.clientY, at: Date.now() };
+    }, { passive: true });
+
+    /* VERTICAL fires HERE, mid-drag, and horizontal deliberately does not.
+     *
+     * Vertical is the step axis, and every other route to it — `armMatte` on the
+     * matte, `armCommit` past the end of a fragment — acts the moment the threshold
+     * is crossed. Leaving the band on the touchend path made it the odd one out
+     * twice over: a deliberate slow drag on a photograph exceeded MAX_MS and was
+     * discarded, and even a quick one did nothing until the thumb lifted. The band
+     * is most of what a reader touches, so the surface felt dead exactly where they
+     * were aiming.
+     *
+     * Horizontal stays a flick decided at touchend. It is the atom move, it is
+     * shared with the landscape player, and firing it mid-drag would let a diagonal
+     * that was on its way to becoming a vertical drag change a clip first. */
+    document.addEventListener('touchmove', function (e) {
+      if (!start || fired || e.touches.length !== 1) return;
+      var t = e.touches[0], h = window.innerHeight || 1080;
+      var dx = t.clientX - start.x, dy = t.clientY - start.y;
+      var ax = Math.abs(dx), ay = Math.abs(dy);
+      if (ay < h * V_SLOP || ay < ax * DOMINANCE) return;
+      fired = true;
+      post({ type: 'wcc-swipe', axis: 'y', dir: dy < 0 ? 'next' : 'prev' });
     }, { passive: true });
 
     document.addEventListener('touchend', function (e) {
       var s = start; start = null;
-      if (!s || Date.now() - s.at > MAX_MS) return;
+      // Already answered as a vertical drag: the gesture is spent.
+      if (!s || fired || Date.now() - s.at > MAX_MS) return;
       var t = e.changedTouches && e.changedTouches[0];
       if (!t) return;
       var w = window.innerWidth || 1920;
       var dx = t.clientX - s.x, dy = t.clientY - s.y;
-      // A vertical drag is the column being scrolled and is none of our business.
+      // One axis or the other, never both: the dominance test is what stops a lazy
+      // diagonal from counting as whichever axis it happened to travel furthest on.
       if (Math.abs(dx) < w * SLOP || Math.abs(dx) < Math.abs(dy) * DOMINANCE) return;
-      try {
-        parent.postMessage({ type: 'wcc-swipe', dir: dx < 0 ? 'next' : 'prev' }, '*');
-      } catch (err) { /* not embedded — ignore */ }
+      post({ type: 'wcc-swipe', axis: 'x', dir: dx < 0 ? 'next' : 'prev' });
     }, { passive: true });
 
     document.addEventListener('touchcancel', function () { start = null; });

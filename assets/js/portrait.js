@@ -49,17 +49,42 @@
  * timer. A reel stays one step deliberately: its clips are an authored sequence
  * with their own time, and the doc rejects the vertical-feed reading of them.
  *
- * Within a slide the band is STICKY, so panels change under a pinned slide and
- * only crossing into another slide moves it. That is the whole mechanism: one
- * scroller, uniform step heights, and a table mapping scroll position to
- * (slide, panel).
+ * ---- the column does not scroll ----
+ * THE TRANSPORT IS THE ONLY AUTHORITY FOR WHERE THE DECK IS. `atSlide`/`atPanel`
+ * are what the player says; a transform on the track renders them; nothing is ever
+ * read back out of the DOM to decide position.
  *
- * UNIFORM HEIGHTS SURVIVE FRAGMENTS, and that is the load-bearing decision: a
- * fragment step is one scrollport in the column and scrolls INSIDE itself, so
- * `scrollTop / stepHeight` still names the step and mandatory snap stays safe (the
- * trap the doc rejects it for is a step taller than the viewport, which this is not
- * — the interior is). What it costs is one gesture, because a scroller that
- * contains its overscroll can never chain out of itself: see armCommit.
+ * It was the other way round first — the deck was one tall scroller with
+ * `scroll-snap-type: y mandatory` and its position DERIVED as
+ * `scrollTop / stepHeight`. Three agents then wrote that number: the transport
+ * (every advance was performed by writing scrollTop), the reader's thumb, and the
+ * browser, which has its own opinion about where a mandatory-snap container rests.
+ * And the denominator was `deck.clientHeight`, which iOS changes on its own when
+ * Safari's chrome collapses — so the deck's idea of where it was could change with
+ * nobody touching anything. `pending`, `settle`, the settle timer, the 1200ms
+ * backstop and the resize re-anchor were five patches on that one premise, and on
+ * an iPhone the control bar still could not move the column: the rail advanced and
+ * the deck sat still.
+ *
+ * So the seam between steps is a transform and the position is a number we own.
+ * Native scrolling stays exactly where it earns its keep — INSIDE a fragment step,
+ * which is its own scroller with momentum, rubber-band and `overscroll-behavior:
+ * contain`. What that costs is one gesture, because a scroller that contains its
+ * overscroll can never chain out of itself: see armCommit.
+ *
+ * ---- one verb, three routes ----
+ * A step change is always `stepBy(±1)`, which asks the PLAYER to move — the same
+ * call the control bar makes, so a swipe and a bar press are one event:
+ *
+ *   fragment step → armCommit, past the end of its own interior
+ *   matte         → armMatte, a drag beside the band
+ *   band          → slide-bridge posts `wcc-swipe` with `axis:'y'`, since the touch
+ *                   never leaves the iframe and there is no parent scroller to
+ *                   chain into any more
+ *
+ * A slide with several panels is ONE row whose content changes under a stationary
+ * frame, which is what the sticky band used to buy with a travel calculation and
+ * now falls out of doing nothing.
  *
  * ---- orientation ----
  * The surface follows the shape of the screen, at boot and on every rotation, IN
@@ -111,65 +136,53 @@
       // withholds it in portrait, so this hides an empty box.
       'body.wcc-portrait #stage{display:none;}' +
 
-      /* The deck: one scroller, `position:fixed` because the player's html/body are
-         overflow:hidden (they letterbox a stage; nothing there ever scrolled).
-         Snap is `mandatory` and safe HERE — the case the doc rejects it for is a
-         step taller than the viewport, which strands a reader mid-section, and
-         every step in this column is exactly one screen by construction. Vertical
-         overscroll-behavior:contain keeps the bounce at the end of the deck from
-         becoming the browser's pull-to-refresh. */
-      /* `bottom` is the DOCK, not 0: the control bar is a toolbar along the bottom
-         edge in portrait (placeBar's `portrait` placement), and the scroller stops
-         where it starts — so a step is the space above the bar and nothing ever
-         scrolls behind it. `--pdock-h` is set from the bar's measured height the
-         moment it is placed; until then it is 0 and the column is full height,
-         which is what a deck with no controls (there is none today) would get. */
+      /* THE DECK IS NOT A SCROLLER, and that is the whole architecture.
+         It was one: ten full-height steps with `scroll-snap-type: y mandatory`, and
+         the column's position DERIVED as `scrollTop / stepHeight`. Three agents
+         then wrote that one number — the transport (every advance was performed by
+         writing scrollTop), the reader's thumb, and the browser, which has its own
+         opinion about where a mandatory-snap container comes to rest and acts on
+         it. Worse, the derivation's denominator is `deck.clientHeight`, which iOS
+         changes on its own when Safari's chrome collapses: the deck's idea of where
+         it was could change with nobody touching anything. `pending`, `settle`, the
+         1200ms backstop, the idle guard and the re-anchor were five patches on one
+         wrong premise, and on an iPhone the control bar still could not move the
+         column at all — the rail advanced and the deck sat still.
+
+         So: the TRANSPORT is the only authority, and the column merely renders it.
+         One slide per row in a track, translated to the current one. Nothing reads
+         a scroll position to decide where the deck is, which makes an iOS resize
+         pure layout and a bar press correct by construction.
+         `bottom` is the DOCK (placeBar's `portrait` placement): a step is the space
+         above the bar, and `--pdock-h` is the height the bar measured itself at. */
       '#wcc-pdeck{position:fixed;top:0;left:0;right:0;bottom:var(--pdock-h,0px);' +
-      'z-index:5;overflow-y:auto;overflow-x:hidden;' +
-      'scroll-snap-type:y mandatory;overscroll-behavior-y:contain;' +
-      '-webkit-overflow-scrolling:touch;background:var(--matte,#08152c);}' +
+      'z-index:5;overflow:hidden;background:var(--matte,#08152c);}' +
 
-      /* A slide occupies as many steps as it has panels. Its height is not stated
-         here — it is the sum of its children: the sticky band's one step plus a
-         mark for each step after it. */
-      '.pslide{position:relative;}' +
+      /* The track: one row per SLIDE, moved by transform. Per slide and not per
+         step, because a slide with several panels is one band whose CONTENT changes
+         under a stationary frame — which is what the sticky band used to buy with a
+         travel calculation, and now falls out of doing nothing. */
+      '#wcc-ptrack{position:absolute;top:0;left:0;right:0;' +
+      'transition:transform 0.34s cubic-bezier(0.22,0.61,0.36,1);}' +
+      /* Honour a reader who has asked the OS for less motion: the step still
+         changes, it just arrives rather than travels. */
+      '@media (prefers-reduced-motion:reduce){#wcc-ptrack{transition:none;}}' +
 
-      /* One empty full-screen block per step AFTER the first, which the sticky band
-         above occupies. Between them they decide the slide's height (steps x one
-         screen) and carry the snap points — plain in-flow boxes, the case
-         scroll-snap handles most predictably.
+      /* One row of the track. Exactly one step tall whatever is inside it, so the
+         track's arithmetic stays `slide index x step height` and cannot drift.
+         `--pstep-h` is measured in JS, NOT `100dvh`: iOS resolves a fixed element's
+         box and `dvh` against different viewports while the browser chrome
+         collapses, and the row has to match the box the deck actually occupies. */
+      '.pslide{position:relative;height:var(--pstep-h,100dvh);overflow:hidden;}' +
 
-         `--pstep-h` is one scrollport in px, measured in JS, NOT `100dvh`: the
-         current step is read as `scrollTop / stepHeight`, and iOS resolves a fixed
-         element's box and `dvh` against different viewports while the browser
-         chrome collapses — enough drift to round to the wrong step. */
-      '.pmark{height:var(--pstep-h,100dvh);scroll-snap-align:start;}' +
-
-      /* The band, pinned across its slide's run of steps.
-         A sticky box travels by (containing-block height − its own margin-box
-         height), and that is the SAME quantity as what it contributes to the flow —
-         so the two cannot both be zero, and the band must occupy its step. Height
-         one step gives travel of (steps − 1) screens, which is exactly right: pinned
-         while its own panels change, released as its last step scrolls past.
-         An earlier version made this zero-height to keep it out of the flow, which
-         bought a travel of `steps` screens instead: every band stayed pinned one step
-         too long, so the slide seen scrolling away at a transition was the one two
-         back. Nothing here may be zero-height. */
-      /* `--pshift` biases the band UP off centre, and it is an affordance rather
-         than a taste: a step whose composition is symmetric reads as a finished
-         screen, so a deck of centred bands gives a first-time reader nothing that
-         says the column continues. Deeper matte below than above is the oldest cue
-         there is for "there is more this way". Uniform across every step — a bias
+      /* A band slide centres its band, biased UP by `--pshift` — an affordance
+         rather than a taste: a screen whose composition is symmetric reads as a
+         finished one, so a deck of centred bands gives a first-time reader nothing
+         that says the column continues. Deeper matte below than above is the oldest
+         cue there is for "there is more this way". Uniform across every step; a bias
          that switched off on the last one would make the bands jump. */
-      '.psticky{position:sticky;top:0;height:var(--pstep-h,100dvh);z-index:1;' +
-      'box-sizing:border-box;padding-bottom:var(--pshift,0px);' +
+      '.pslide.band{box-sizing:border-box;padding-bottom:var(--pshift,0px);' +
       'display:flex;align-items:center;justify-content:center;}' +
-      /* Which leaves the first step with no in-flow snap target of its own — the
-         marks below start one step in. A zero-height box at the slide's top edge is
-         one, and adds nothing to the height. (Deliberately not `scroll-snap-align`
-         on the sticky box itself: its snap area would travel with the stickiness and
-         could hold the scroller against it.) */
-      '.psnap{height:0;scroll-snap-align:start;}' +
 
       /* The band. Full-bleed width in portrait; capped by height so that a rotated
          phone (or an iPad) gets a band that fits rather than one that overflows. */
@@ -197,14 +210,15 @@
       'visibility:visible;opacity:1;}' +
 
       /* A step that is a portrait FRAGMENT (phase 1): our own DOM rather than a
-         letterboxed document, so it is full-bleed and it SCROLLS. One scrollport
-         tall in the column's flow like every other step — the interior is what may
-         be longer — which is what keeps `scrollTop / stepHeight` reading the right
-         step and keeps mandatory snap safe. Interior scrolling is entirely native;
+         letterboxed document, so it is full-bleed and it SCROLLS.
+         THIS is where native scrolling earns its place and keeps it — momentum,
+         rubber-band, scrollbars and accessibility, inside one step. What the
+         rewrite above removed was the DECK-level scroller, never this one: the seam
+         between steps became a transform, the interior stayed native.
          `overscroll-behavior: contain` gives the bounce at the end for free and
-         stops the pull becoming the browser's. The one thing written by hand is the
-         commit gesture (see armCommit). */
-      '.pstep{height:var(--pstep-h,100dvh);scroll-snap-align:start;overflow-y:auto;' +
+         stops the pull becoming the browser's; it also means a thumb can never
+         leave the step on its own, which is what armCommit is for. */
+      '.pstep{position:absolute;top:0;left:0;right:0;bottom:0;overflow-y:auto;' +
       'overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;' +
       'scrollbar-width:none;}' +
       '.pstep::-webkit-scrollbar{display:none;}' +
@@ -276,6 +290,7 @@
          on a bare glyph it was half of what made it look alive. */
       '@keyframes wcc-pcue-bob{0%,100%{transform:translateY(-0.55vmax);}' +
       '50%{transform:translateY(0.55vmax);}}' +
+
 
       /* Share. The deck's distribution model IS being forwarded, and until now it
          had no forward button. Top matte, and top-LEFT deliberately: the control
@@ -419,6 +434,12 @@
 
     var deck = document.createElement('div');
     deck.id = 'wcc-pdeck';
+    // Everything the column shows lives in the track; the deck is just the window
+    // it is moved behind. Separating them is what lets the transform be the ONLY
+    // expression of position — the deck's own box never moves.
+    var track = document.createElement('div');
+    track.id = 'wcc-ptrack';
+    deck.appendChild(track);
     var bands = [];       // one band per LETTERBOXED slide — the iframe's home (else null)
     var steps = [];       // one scroller per FRAGMENT slide (else null)
     var fetched = [];     // fragment requested for this slide already
@@ -439,11 +460,10 @@
     }
 
     function build() {
-      deck.innerHTML = '';
+      track.innerHTML = '';
       bands = []; steps = []; fetched = []; slideEls = [];
       retable();
       for (var i = 0; i < list.length; i++) {
-        var nsteps = stepsFor(list[i]);
         var el = document.createElement('div');
         el.className = 'pslide';
         el.dataset.slide = String(i);
@@ -452,38 +472,29 @@
         slideEls[i] = el;
         /* A slide with a portrait fragment is not a band at all: its step is a
            scroller holding our own markup, full-bleed, sized by the portrait scale
-           rather than the wall's design box. It needs neither the sticky mechanism
-           (a fragment slide is one step) nor the zero-height snap target (an in-flow
-           step carries its own snap alignment). The markup itself arrives later —
-           see warm() — and nothing about the column's geometry waits for it, because
-           a step is one scrollport whatever is inside it. */
+           rather than the wall's design box. The markup itself arrives later — see
+           warm() — and nothing about the column's geometry waits for it, because a
+           row is one step tall whatever is inside it. */
         if (fragUrl(list[i])) {
           var step = document.createElement('div');
           step.className = 'pstep';
           el.appendChild(step);
-          deck.appendChild(el);
+          track.appendChild(el);
           steps[i] = step;
           armCommit(step, el);
           continue;
         }
-        // Zero-height snap target for the slide's first step (see .psnap).
-        var snap = document.createElement('div');
-        snap.className = 'psnap';
-        el.appendChild(snap);
-        // The band, one step tall and sticky across the rest.
-        var sticky = document.createElement('div');
-        sticky.className = 'psticky';
+        /* A BAND slide is one row whatever its panel count. The sticky box, the
+           per-step marks and the zero-height snap target are all gone with the
+           deck's scroller: they existed to give a multi-panel slide a run of snap
+           points to scroll THROUGH while its band stayed pinned. With the track
+           driven by the transport, a panel change simply does not move the track,
+           which is the same result and no arithmetic. */
         var band = document.createElement('div');
         band.className = 'pband';
-        sticky.appendChild(band);
-        el.appendChild(sticky);
-        // A mark per REMAINING step: the sticky band is the first one's height.
-        for (var m = 1; m < nsteps; m++) {
-          var mark = document.createElement('div');
-          mark.className = 'pmark';
-          el.appendChild(mark);
-        }
-        deck.appendChild(el);
+        el.className = 'pslide band';
+        el.appendChild(band);
+        track.appendChild(el);
         bands[i] = band;
       }
     }
@@ -508,68 +519,43 @@
 
     /* ---- geometry ---- */
     function stepH() { return deck.clientHeight || 1; }
-    var lastH = 0;          // the step height the current scroll position is in
-    // When the column last moved, and how long after that it counts as still moving.
-    // Declared here rather than with the scroll machinery below because fit() runs
-    // before that block does.
-    var lastScrollAt = 0;
-    var SCROLL_IDLE_MS = 300;
 
+    /* Layout only, now. It writes the three custom properties the CSS is built on
+     * and re-lands the track on the current slide at the new height — and that is
+     * ALL, because nothing derives the deck's position from geometry any more.
+     *
+     * What used to be here was the re-anchor: `scrollTop` did not change when the
+     * step height did, so `scrollTop / stepHeight` silently re-pointed at a
+     * different step and mandatory snap slid the column to it, which fired a
+     * scroll, which `settle` reported to the transport as a navigation — rotating a
+     * phone on photo 1 advanced the deck a slide. It needed `pending` to hide its
+     * own scroll, an idle guard so it never fired mid-drag, and a 1200ms backstop.
+     * All of it existed to defend a derived position. There is no derived position
+     * now: a resize is a resize. */
     function fit() {
       if (dead) return;
       var h = deck.clientHeight;
       if (!h) return;
       var root = document.documentElement.style;
-      // One scrollport in px, so a step's height and `deck.clientHeight` are the
-      // same number by construction — see .pmark.
+      // One step is exactly the deck's box, so a row's height and the distance the
+      // track travels per slide are the same number by construction.
       root.setProperty('--pstep-h', h + 'px');
-      /* How far off centre a band sits (see .psticky). A fraction of the step so it
-         holds its proportion on every screen, and capped so a landscape phone —
-         where the band already fills most of the step — is not shoved into its own
+      /* How far off centre a band sits (see `.pslide.band`). A fraction of the step
+         so it holds its proportion on every screen, and capped so a landscape phone
+         — where the band already fills most of the step — is not shoved into its own
          bottom edge. */
       var shift = Math.round(Math.min(h * 0.07, Math.max(0, (h - deck.clientWidth * 9 / 16) / 3)));
       root.setProperty('--pshift', shift + 'px');
-      // The band's width, derived rather than measured off a band: a deck may now
-      // have none in it at all (both of the pavilion's cards are fragments), and this
-      // is the same width the CSS gives one — full bleed, capped by height so a
-      // rotated phone gets a band that fits rather than one that overflows. The
-      // `- shift` is the bias above; this and .pband's width must agree exactly.
+      // The band's width, derived rather than measured off a band: a deck may have
+      // none in it at all (both of the pavilion's cards are fragments), and this is
+      // the same width the CSS gives one — full bleed, capped by height so a rotated
+      // phone gets a band that fits rather than one that overflows. The `- shift` is
+      // the bias above; this and `.pband`'s width must agree exactly.
       var w = Math.min(deck.clientWidth, (h - shift) * 16 / 9);
       if (w) root.setProperty('--pfit', w / 1920);
-
-      /* EVERY STEP JUST CHANGED HEIGHT, AND `scrollTop` DID NOT.
-       *
-       * The step under the reader is `scrollTop / stepHeight`, so re-writing the
-       * height silently re-points that ratio at a different step — and the browser's
-       * mandatory snap then slides the column to it, which fires a scroll, which
-       * `settle` reports to the transport as a navigation. Rotating a phone while on
-       * photo 1 advanced the deck a slide, and it was not the stage swap doing it:
-       * the resize handler had already moved the column before the swap's debounce
-       * elapsed. (390->844 is a 2.5x change in step height; scrollTop 844 stops
-       * meaning "step 1" and starts meaning "step 3".)
-       *
-       * So re-anchor on the step the PLAYER says we are on, which is the authority
-       * here — geometry is what just became unreliable. Marked `pending` so the
-       * scroll it causes is recognised as ours and reported to nobody. */
-      if (h !== lastH) {
-        var was = lastH;
-        lastH = h;
-        // Not while the reader is scrolling. iOS resizes the viewport when its own
-        // chrome collapses, which happens DURING a scroll — and yanking a moving
-        // column to a step boundary is worse than letting the scroll finish and
-        // settle honestly wherever it lands. A rotation, the case this is for, is
-        // never mid-scroll.
-        if (was && Date.now() - lastScrollAt > SCROLL_IDLE_MS) {
-          // The custom property above only takes effect at the next layout, and
-          // `scrollTop` is meaningless until it does.
-          void deck.scrollHeight;
-          var k = (first[atSlide] != null) ? first[atSlide] + atPanel : indexAt();
-          pending = k;
-          if (pendingTimer) clearTimeout(pendingTimer);
-          pendingTimer = setTimeout(clearPending, 1200);
-          deck.scrollTop = k * h;
-        }
-      }
+      // The rows just changed height, so the track's offset for the same slide has
+      // changed with them. No animation: this is a relayout, not a move.
+      place(false);
     }
     fit();
     // Named, because `detach` has to take them off again: a rotation away from this
@@ -647,7 +633,7 @@
     function armCommit(el, slideEl) {
       var y0 = 0, fired = false, wheel = 0, wheelAt = 0;
       // Which ends the CURRENT gesture began at. See the arming rule below.
-      var fromTop = false, fromBottom = false, wheelArmed = 0;
+      var fromTop = false, fromBottom = false, wheelArmed = 0, wheelDone = false;
       function scrolls() { return el.scrollHeight > el.clientHeight + 2; }
       /* Two thresholds, one rule. Past the end of a step that HAS an interior, the
        * commit should take a deliberate second pull — the reader has just been
@@ -661,8 +647,13 @@
           bottom: el.scrollTop >= el.scrollHeight - el.clientHeight - 2
         };
       }
-      // Which step this is, read at gesture time: `keep()` renumbers the column.
-      function at() { return first[Number(slideEl.dataset.slide)]; }
+      /* Ask the transport to move, exactly as the matte drag and the control bar
+       * do. Guarded on this being the slide actually on screen: only one row of the
+       * track is visible, so a stale listener on a neighbour must not navigate. The
+       * index is read at gesture time because `keep()` renumbers the column. */
+      function go(d) {
+        if (Number(slideEl.dataset.slide) === atSlide) stepBy(d);
+      }
 
       /* THE ARMING RULE, and the thing that makes the commit a second gesture
        * rather than the tail of the first: a drag can only commit past an end it
@@ -695,8 +686,8 @@
         if (fired || e.touches.length > 1) return;
         var y = e.touches[0].clientY, dy = y - y0, end = ends();
         if (!end.top && !end.bottom) { y0 = y; return; }
-        if (dy < -threshold() && end.bottom && fromBottom) { fired = true; commitTo(at() + 1); }
-        else if (dy > threshold() && end.top && fromTop) { fired = true; commitTo(at() - 1); }
+        if (dy < -threshold() && end.bottom && fromBottom) { fired = true; go(1); }
+        else if (dy > threshold() && end.top && fromTop) { fired = true; go(-1); }
       }, { passive: true });
 
       /* A trackpad or a mouse wheel in a narrow desktop window. Same rule, but the
@@ -710,91 +701,58 @@
         var now = Date.now();
         if (now - wheelAt > 400) {
           wheel = 0;
+          wheelDone = false;
           wheelArmed = (end.top ? 1 : 0) | (end.bottom ? 2 : 0);
         }
         wheelAt = now;
+        // One stream is one step — see the note in armMatte. Without this the
+        // momentum tail of a single flick keeps crossing the threshold.
+        if (wheelDone) return;
         var want = e.deltaY > 0 ? 2 : 1;          // down needs the bottom, up the top
         if (!(wheelArmed & want)) { wheel = 0; return; }
         if ((e.deltaY > 0 && end.bottom) || (e.deltaY < 0 && end.top)) wheel += e.deltaY;
         else wheel = 0;
         if (Math.abs(wheel) > threshold()) {
           wheel = 0;
-          commitTo(at() + (e.deltaY > 0 ? 1 : -1));
+          wheelDone = true;
+          go(e.deltaY > 0 ? 1 : -1);
         }
       }, { passive: true });
     }
 
-    function indexAt() {
-      return Math.max(0, Math.min(pos.length - 1,
-                                  Math.round(deck.scrollTop / stepH())));
+    /* ---- position ------------------------------------------------------------
+     * ONE authority: the transport. `atSlide`/`atPanel` are what the player says,
+     * `place()` renders them, and nothing reads anything back. That is the whole of
+     * the navigation model on this surface, and it replaced a scroll-derived
+     * position that needed `pending`, `settle`, a 110ms settle timer, a 1200ms
+     * backstop and a re-anchor to keep two authorities agreeing — see the note on
+     * `#wcc-pdeck` in the stylesheet for why that could not be made to work.
+     *
+     * The track moves by SLIDE, not by step: a slide with several panels is one
+     * band whose content changes under a stationary frame, so a panel move renders
+     * as no movement at all. That is the same thing the sticky band used to
+     * achieve, minus the arithmetic.
+     */
+    function place(animate) {
+      var y = atSlide * stepH();
+      if (!animate) {
+        track.style.transition = 'none';
+        track.style.transform = 'translate3d(0,' + (-y) + 'px,0)';
+        // Flush, so the transition coming back on cannot animate the jump we just
+        // made. Reading a layout property is what forces the style to be applied.
+        void track.offsetHeight;
+        track.style.transition = '';
+        return;
+      }
+      track.style.transform = 'translate3d(0,' + (-y) + 'px,0)';
     }
 
-    /* ---- reaching a step ----------------------------------------------------
-     * Two directions, one position. The player calls show()/showAtom() when the
-     * transport moves (a bar press, a panel timer running out, the deck opening);
-     * the scroll listener calls back into the player when the reader moves.
-     * `pending` is what keeps those from echoing: a smooth scroll we started fires
-     * the same events a thumb does, and reporting the steps it passes through would
-     * re-arrive on every one between here and there. */
-    var pending = -1;
-    var pendingTimer = null;
-    var settleTimer = null;
-
-    function clearPending() {
-      pending = -1;
-      if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; }
+    /* Which step of the deck we are on — for the rail, and as the origin of a
+     * gesture move. DERIVED FROM THE TRANSPORT, never from geometry. */
+    function stepIndex() {
+      return (first[atSlide] != null) ? first[atSlide] + atPanel : 0;
     }
 
-    function scrollToPos(k) {
-      drawRail(k);
-      var top = k * stepH();
-      // Already there (the common case when the reader scrolled us here): don't arm
-      // `pending`, or the next genuine settle would be swallowed as ours.
-      if (Math.abs(deck.scrollTop - top) < 2) { clearPending(); return; }
-      /* Smooth for a move to a neighbouring step — that is the transport stepping,
-       * and the glide is what says "the next one, just below". Far moves CUT: the
-       * home button from slide nine, or a column built fresh at the top by a
-       * rotation and immediately asked for the slide the reader was already on,
-       * would otherwise fly through every intervening screen. */
-      var far = Math.abs(deck.scrollTop - top) > 1.6 * stepH();
-      pending = k;
-      if (pendingTimer) clearTimeout(pendingTimer);
-      // Backstop: a smooth scroll that never settles (interrupted by a thumb, or a
-      // browser that drops the animation) must not leave scroll reporting disabled
-      // for the rest of the session.
-      pendingTimer = setTimeout(clearPending, 1200);
-      if (far) { deck.scrollTop = top; return; }
-      try { deck.scrollTo({ top: top, behavior: 'smooth' }); }
-      catch (e) { deck.scrollTop = top; }   // older engine: no options object
-    }
-
-    /* A step the READER moved us to, by pulling past the end of a fragment step's
-     * own scroller (armCommit). Deliberately not scrollToPos: that arms `pending`,
-     * which exists to keep the player's own scrolls from echoing back at it — and
-     * this scroll must be reported, or the transport would stay on the slide the
-     * reader has just left. Everything else about it is the same move. */
-    function commitTo(k) {
-      if (k < 0 || k >= pos.length) return;   // the ends of the deck: nothing to commit to
-      clearPending();
-      drawRail(k);
-      // Place the destination's interior BEFORE the scroll rather than leaving it to
-      // the arrival below: `settle` runs ~110ms after the column stops moving, so a
-      // backward commit would otherwise show the top of the card and then jump it to
-      // the bottom under the reader's eyes.
-      var p = pos[k];
-      if (p) { warm(p.slide); placeAt(p.slide, k < indexAt()); }
-      var top = k * stepH();
-      try { deck.scrollTo({ top: top, behavior: 'smooth' }); }
-      catch (e) { deck.scrollTop = top; }
-    }
-
-    /* Put a fragment step's interior where an arrival should find it. Forward, that
-     * is its top — the doc's forgiving commit: you never see the tail of one step
-     * sharing a screen with the head of the next. BACKWARD, it is its bottom, which
-     * is not a special case so much as the same rule read the other way: someone
-     * scrolling back up is continuing to read, and landing them at the top of the
-     * previous card would skip everything they were reaching for. `from` is the
-     * outgoing slide, which player-core passes for exactly this. */
     /* Which way the transport travelled to reach slide i. The player passes only the
      * outgoing index, and the deck WRAPS — advancing off the last slide arrives at
      * the first, which is a forward move with `from > i`. So direction is the shorter
@@ -805,6 +763,12 @@
       return fwd * 2 > list.length;
     }
 
+    /* Put a fragment step's interior where an arrival should find it. Forward, that
+     * is its top — the doc's forgiving commit: you never see the tail of one step
+     * sharing a screen with the head of the next. BACKWARD, it is its bottom, which
+     * is not a special case so much as the same rule read the other way: someone
+     * going back is continuing to read, and landing them at the top of the previous
+     * card would skip everything they were reaching for. */
     function placeAt(i, back) {
       var el = steps[i];
       if (!el) return;
@@ -815,67 +779,117 @@
     // next and answers with showAtom), so this goes to the slide's FIRST step.
     function show(i, from) {
       if (first[i] == null) return;
+      var d = Math.abs(i - atSlide);
       atSlide = i; atPanel = 0;
       placeAt(i, goingBack(i, from));
       warm(i);
-      scrollToPos(first[i]);
+      drawRail(stepIndex());
+      /* Travel for a neighbour, CUT for anything further. The glide is what says
+         "the next one, just below"; sliding it across nine rows because the deck
+         wrapped from the last slide to the first — or because a rotation restored a
+         position — would be a journey through slides nobody asked to see. Not moved
+         at all: leave the transform alone rather than re-writing it, which would
+         cost a forced reflow on every panel change. */
+      if (d) place(d === 1);
     }
 
     // The player is on a definite panel — an arrival settling, a bar press, a timer,
-    // or the slide's own echo. This is what keeps the column in step with the
-    // transport when the viewer drives from the control bar rather than by scrolling.
+    // or the slide's own echo. Only the rail moves: the band is already on screen
+    // and its panels change inside it.
     function showAtom(i, p) {
       if (first[i] == null) return;
+      var d = Math.abs(i - atSlide);
       atSlide = i;
       atPanel = Math.max(0, Math.min(stepsFor(list[i]) - 1, p || 0));
-      scrollToPos(first[i] + atPanel);
+      drawRail(stepIndex());
+      if (d) place(d === 1);
     }
 
-    function settle() {
-      if (dead) return;
-      var k = indexAt();
-      if (pending >= 0) {
-        var t = pending;
-        clearPending();
-        if (k === t) return;    // our own scroll, arrived — nothing to report
-      }
-      var p = pos[k];
-      if (!p || !api) return;
-      warm(p.slide);
-      if (p.slide !== atSlide) {
-        // Crossing into another slide. It opens at ITS first step, which is also
-        // where a fling that lands mid-slide settles — the doc's forgiving commit.
-        // The alternative, replaying panel steps into a slide that is still being
-        // reset, is a race for no gain.
-        api.goTo(p.slide);
-        return;
-      }
-      var delta = p.panel - atPanel;
-      if (!delta) return;
-      // Step within the slide. `next`/`prev` are the transport's own atom moves, so
-      // a scrolled panel change is the same event as a pressed one — holds, reel
-      // cards and the countdown all behave identically either way.
-      var stepFn = delta > 0 ? api.next : api.prev;
-      for (var z = Math.abs(delta); z > 0; z--) stepFn();
+    /* ---- moving by one step --------------------------------------------------
+     * The gesture's only verb, and it asks the TRANSPORT to move rather than moving
+     * the column itself — so a swipe and a bar press are the same event, and the
+     * column updates the same way from both. There is no second nav model here to
+     * keep in sync with the first.
+     *
+     * A step is an entry in `pos`, so this crosses to the next slide when the
+     * current one has no panel left. Which is what makes a reel behave the way the
+     * doc asks: a reel is ONE step whatever its clip count, so a vertical swipe
+     * leaves it entirely while a horizontal one steps through its clips.
+     *
+     * Deliberately does NOT wrap. The control bar may take you off the end of the
+     * deck round to the front; a swipe is a scroll gesture and a scroll stops. */
+    function stepBy(d) {
+      if (!api) return;
+      var k = stepIndex() + d;
+      if (k < 0 || k >= pos.length) return;
+      var t = pos[k];
+      if (!t) return;
+      if (t.slide !== atSlide) { api.goTo(t.slide); return; }
+      var n = t.panel - atPanel;
+      var f = n > 0 ? api.next : api.prev;
+      for (var z = Math.abs(n); z > 0; z--) f();
     }
 
-    deck.addEventListener('scroll', function () {
-      /* Only the READER'S scrolling counts as the column being in motion. `pending`
-       * marks a movement we started, and ours must not read as activity: iOS fires
-       * `resize` more than once through a rotation, and the second one would find
-       * the timestamp our own re-anchor had just written, conclude a scroll was in
-       * progress, and decline to re-anchor — leaving the column pointing at a step
-       * the reader is not on, which is the bug this all exists to prevent. */
-      if (pending < 0) lastScrollAt = Date.now();
-      /* Track the rail with the column rather than with the transport. The rail was
-         only ever redrawn from scrollToPos/commitTo, so a reader dragging through
-         band steps saw it move on the 110ms settle behind them. A continuous fill
-         creeping late is invisible; a tick lighting late is a beat out of time with
-         the thumb, and the tick is the whole point of segmenting it. */
-      drawRail(indexAt());
-      if (settleTimer) clearTimeout(settleTimer);
-      settleTimer = setTimeout(settle, 110);
-    }, { passive: true });
+    /* ---- a drag on the matte -------------------------------------------------
+     * A band does not fill its step: there is matte above and below it, and that
+     * matte is this document. A drag there is the same instruction as a drag on the
+     * band (which arrives from inside the iframe, via slide-bridge) or on a fragment
+     * (armCommit) — so it gets the same answer.
+     *
+     * Gestures that start inside a `.pstep` are left alone: that scroller has its
+     * own interior to move first, and armCommit decides when a pull has become a
+     * step change.
+     */
+    function armMatte() {
+      var y0 = 0, x0 = 0, live = false, fired = false;
+      deck.addEventListener('touchstart', function (e) {
+        live = false; fired = false;
+        if (e.touches.length !== 1) return;
+        if (e.target && e.target.closest && e.target.closest('.pstep')) return;
+        y0 = e.touches[0].clientY; x0 = e.touches[0].clientX;
+        live = true;
+      }, { passive: true });
+      deck.addEventListener('touchmove', function (e) {
+        if (!live || fired || e.touches.length > 1) return;
+        var dy = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
+        // Vertical only, and clearly so: a diagonal drag on the matte beside a reel
+        // should not step the deck while the reader is aiming sideways.
+        if (Math.abs(dy) < Math.abs(dx) * 1.2) return;
+        var t = deck.clientHeight * 0.08;
+        if (dy < -t) { fired = true; stepBy(1); }
+        else if (dy > t) { fired = true; stepBy(-1); }
+      }, { passive: true });
+      deck.addEventListener('touchcancel', function () { live = false; });
+
+      /* A trackpad or a wheel in a narrow desktop window. Accumulated and expired,
+       * because a wheel has no touchstart to anchor on — two unrelated flicks a
+       * minute apart must not add up.
+       *
+       * ONE STREAM IS ONE STEP. A trackpad flick is not one event, it is a hundred
+       * of them over a second or more of momentum, so an accumulator that merely
+       * resets after firing crosses the threshold again immediately and walks the
+       * deck several slides on a single gesture. `locked` is the equivalent of
+       * lifting a finger: nothing more moves until the stream actually stops. Which
+       * is also what the touch path does — `fired` there, released at touchstart. */
+      var acc = 0, at = 0, locked = false;
+      var GAP_MS = 250;   // no wheel event for this long = the gesture ended
+      deck.addEventListener('wheel', function (e) {
+        if (e.target && e.target.closest && e.target.closest('.pstep')) return;
+        var now = Date.now();
+        if (now - at > GAP_MS) { acc = 0; locked = false; }
+        at = now;
+        if (locked) return;
+        acc += e.deltaY;
+        if (Math.abs(acc) > deck.clientHeight * 0.08) {
+          locked = true;
+          var d = acc > 0 ? 1 : -1;
+          acc = 0;
+          stepBy(d);
+        }
+      }, { passive: true });
+    }
+    armMatte();
+
 
     /* ---- input --------------------------------------------------------------
      * No gesture overlay (see the guard in player-core's buildControls): the band
@@ -999,7 +1013,7 @@
         }
         document.body.appendChild(r);
         chromeEls.push(r);
-        drawRail(indexAt());
+        drawRail(stepIndex());
       }
       buildCue();
       // Share, where the browser has it. The URL is the canonical one the link
@@ -1061,8 +1075,8 @@
           if (wanted[i]) {
             keptList.push(list[i]); keptBands.push(bands[i]); keptSteps.push(steps[i]);
             keptFetched.push(fetched[i]); keptEls.push(slideEls[i]);
-            // Read back by armCommit to find the step it is on, so it must be
-            // renumbered here with everything else.
+            // Read back by armCommit to tell whether it is the slide on screen, so
+            // it must be renumbered here with everything else.
             slideEls[i].dataset.slide = String(keptEls.length - 1);
           } else if (slideEls[i] && slideEls[i].parentNode) {
             slideEls[i].parentNode.removeChild(slideEls[i]);
@@ -1070,6 +1084,10 @@
         }
         list = keptList; bands = keptBands; steps = keptSteps;
         fetched = keptFetched; slideEls = keptEls;
+        // The player is restarted on the shortened deck, so the column goes back to
+        // the top with it — and `atSlide` must not be left pointing past the end.
+        if (atSlide >= list.length) atSlide = 0;
+        atPanel = 0;
         retable();
         fit();
         warm(0);
@@ -1086,9 +1104,7 @@
          * docked. */
         detach: function () {
           dead = true;
-          if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
           if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
-          clearPending();
           window.removeEventListener('resize', fit);
           window.removeEventListener('orientationchange', fit);
           if (deck.parentNode) deck.parentNode.removeChild(deck);
@@ -1124,6 +1140,11 @@
         },
         show: show,
         showAtom: showAtom,
+        /* A vertical swipe that happened INSIDE a slide's iframe, forwarded by
+         * player-core from slide-bridge. The matte and fragment steps reach `stepBy`
+         * directly; a band cannot, because the touch never leaves the iframe. Same
+         * verb either way, so all three routes are one gesture. */
+        step: stepBy,
         attach: function (transport) { api = transport; buildChrome(); },
         // Where frame i belongs, or null if this stage renders the slide itself
         // (a portrait fragment — see host() above). Read at boot by the template,

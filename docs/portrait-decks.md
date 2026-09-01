@@ -4,11 +4,19 @@
 > fragments with it.** Every deck has a phone surface — a column of full-height
 > steps that snap — and a step is now rendered one of two ways: a real portrait
 > layout where its template has one (`templates/portrait/<template>.html`,
+>
 > published per slide, fetched and inserted as DOM), or its 16:9 self in a band
 > where it does not. `showcase-card` is the first template with a fragment, which
 > makes the pavilion deck's opening and closing cards a real phone layout with
 > eight letterboxed photographs between them. The model below is settled through
 > three worked examples; the open questions at the end are genuinely open.
+>
+> **The column stopped being a scroller** after testing on a real iPhone — see
+> "One authority", which is the correction to read first if you are coming back to
+> this. The transport owns the deck's position and a transform renders it; native
+> scrolling stays inside a step, where it belongs. Phase 0's mandatory-snap
+> decision and the "hand-built transform step-stack" rejection are both reversed
+> there, with the reasoning.
 >
 > **The build order was deliberately inverted** — see "Phase 0" under Phasing.
 > The doc originally deferred the fallback as speculative and started with the
@@ -63,9 +71,14 @@ Batting *then* Bowling is over time. The phone has scroll, so it stacks them.
   momentum, rubber-band, scrollbars, accessibility — and `overscroll-behavior:
   contain` gives the bounce at the end for free.
 - **Forgiving commit** (decided): you scroll to the bottom of a step, it bounces,
-  and a further strong swipe up snaps to the next step, which settles at its top.
+  and a further strong swipe up moves to the next step, which arrives at its top.
   You never see the tail of one step sharing a screen with the head of the next.
-- The only thing we write is that commit gesture. Everything else is the platform.
+  "A further strong swipe" means a *further* swipe: reaching the end of the
+  interior ends the gesture, and the commit has to begin at the end it crosses.
+- **The seam between steps is NOT a scroll.** Interior scrolling is native; moving
+  between steps is the transport being asked to move, and the column renders where
+  it lands. See "One authority" below — this is the correction that made the
+  surface work on a phone at all.
 
 **Steps may be much longer than a screen, and that is a feature.** The wall lists
 `top_rows: 12` fantasy players because that is what reads at ten feet. The phone
@@ -75,6 +88,10 @@ can list 25 and be *better*. See "The phone wants more content".
 trappy — it can strand a reader mid-section. `proximity` lets the scroll run
 smoothly *through* the seam, which is the thing we are avoiding. Neither gives the
 bounce-then-commit feel. Per-step scrollers plus one gesture does.
+
+Phase 0 read that as "safe for a one-screen fallback step" and used `mandatory` on
+the deck anyway. That was wrong for a reason the doc had not identified — not the
+stranding trap, but *who owns the scroll position*. See below.
 
 ### 2. Media is a sideways axis
 
@@ -164,6 +181,103 @@ clips into its poster.
 
 This is what keeps the narration seam alive (below) and stops the phone becoming a
 second nav model that has to be kept in sync with the first.
+
+---
+
+## One authority
+
+> **The transport knows where the deck is. The column renders that, and nothing is
+> ever read back out of the DOM to decide position.**
+
+This replaced the phase-0 model and is the most important correction in the
+document. The original column was one tall scroller — a row per step,
+`scroll-snap-type: y mandatory` — with its position *derived* as
+`scrollTop / stepHeight`. That put **three agents on one number**:
+
+1. the **transport**, which performed every advance by writing `scrollTop`;
+2. the reader's **thumb**;
+3. the **browser**, which has its own opinion about where a mandatory-snap
+   container comes to rest, and acts on it.
+
+And the denominator, `deck.clientHeight`, is a number **iOS changes on its own**
+when Safari's chrome collapses — so the deck's idea of where it was could change
+with nobody touching anything.
+
+Every one of these was a patch on that premise: `pending` (to stop the transport's
+own scroll echoing back as a navigation), `settle` on a 110ms timer, a 1200ms
+backstop for a smooth scroll that never arrived, an idle guard so a re-anchor never
+fired mid-drag, and the re-anchor itself. They were not five bugs. They were one
+wrong idea, five times.
+
+It failed anyway. On an iPhone in a Safari tab, pressing Next advanced the rail and
+left the column where it was — four times, and then a jump to the last step.
+Nothing reproduced in a desktop emulator, because none of the three agents behaves
+the same there.
+
+**So the seam between steps became a transform and the position became a number we
+own.** What that changes:
+
+- `place()` writes `translate3d` on a track from `atSlide`. That is the entire
+  rendering of position.
+- **A step change is always `stepBy(±1)`**, which asks the *player* to move —
+  literally the call the control bar makes. A swipe and a bar press are one event,
+  and there is no second nav model to keep in sync with the first.
+- `fit()` is layout only. An iOS resize is a resize.
+- `indexAt`, `scrollToPos`, `commitTo`, `settle`, `pending` and the re-anchor are
+  **gone**, not repaired.
+
+**Native scrolling stays exactly where it earns its keep — inside a step.** A
+fragment step is still its own `overflow-y: auto` scroller with momentum,
+rubber-band and `overscroll-behavior: contain`. The rewrite removed the *deck*
+scroller; it never touched the interior one, which is the thing the "no hand-built
+step-stack" rejection was actually protecting.
+
+### The three routes into one verb
+
+A step change reaches `stepBy` from three places, because a phone screen has three
+kinds of surface on it and a drag on each must mean the same thing:
+
+| Where the thumb is | How it arrives |
+|---|---|
+| A **fragment** step | `armCommit`, past the end of the step's own interior |
+| The **matte** beside a band | `armMatte`, a drag on the column itself |
+| The **band** (an iframe) | `slide-bridge.js` posts `wcc-swipe` with `axis: 'y'` |
+
+**All three fire mid-drag, on `touchmove`.** The band route did not at first — it
+reported at `touchend` inside a 700ms window, which is a flick detector — and the
+result was that a deliberate drag on a photograph did nothing at all, on the part
+of the screen a reader is most likely to touch. Horizontal stays a touchend flick:
+it is the atom move, shared with the landscape player, and firing it mid-drag would
+let a diagonal on its way to becoming a vertical drag change a clip first.
+
+**A threshold in design px is not a threshold on screen, and only one axis is
+safe.** A band is fitted to the screen's *width*, so a fraction of 1920 design px
+is that same fraction of the screen. Height is not: the band is 1080 design px tall
+but only `screenWidth × 9/16` real px, so the same fraction is about 2.5× less
+travel. The vertical slop is 0.25 where the horizontal one is 0.10, which lands a
+band drag on the same real distance as a matte drag.
+
+The third route is not optional: with no deck scroller there is no parent for a
+band's vertical drag to chain into, so the only place that gesture can be noticed is
+inside the slide.
+
+**One wheel stream is one step.** A trackpad flick is a hundred events over a
+second or more of momentum, so an accumulator that only resets after firing crosses
+its threshold again immediately and walks the deck several slides on one gesture.
+Both wheel paths latch until the stream actually stops (250ms of silence), which is
+the equivalent of lifting a finger. `slide-bridge` already reported horizontal swipes for the same
+reason (the column deliberately has no gesture overlay); it now reports both axes
+and the player routes them — **vertical to the stage's step axis, horizontal to
+`next()`/`prev()`**, the atom move. Which is the pairing this doc already named: a
+reel is one step, so a vertical swipe leaves it and a horizontal one walks its
+clips.
+
+### What it cost
+
+Momentum-flicking through several steps at once, and the native scrollbar. Neither
+is wanted: the design already says a step change is a deliberate, one-at-a-time act
+(that is what "forgiving commit" means), and the segmented progress rail is a
+better position indicator than a scrollbar on a deck of ten.
 
 ---
 
@@ -496,7 +610,8 @@ section that is not one.**
   (an item whose stage renders it, so it has no iframe to load, post to or tear
   down).
 - ~~Per-step scrollers + the overscroll commit gesture~~ (owed to scrolling
-  fragment steps, not to bands).
+  fragment steps, not to bands) — and the commit now asks the TRANSPORT to move
+  (`stepBy`) rather than scrolling the column itself. See "One authority".
 - ~~Assemble a deck from fragments~~ (any runtime deck, including `/deck`'s) — the
   column fetches each fragment near the reader, so any deck resolved at runtime is
   first-class without the build knowing it exists.
@@ -514,6 +629,11 @@ section that is not one.**
 
 **`docs/design-conventions.md`** — ~~portrait token scale, the scoped `px`
 exception~~ (both written in), cards-vs-table, crop-to-fill.
+
+**`assets/js/slide-bridge.js`** — reports swipes on BOTH axes (`axis: 'x' | 'y'`),
+since a band's vertical drag has nowhere else to be noticed once the deck is not a
+scroller. Inert on the wall and in record mode, where `#wcc-tap` sits above the
+iframe and these events never arrive.
 
 **Not changed:** the wall. No `vw` layout, no base template, no `--fit` behaviour,
 no `/screen/` path. No new URLs; no second catalogue; no extra precache entries.
@@ -559,30 +679,26 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
   `player-core.js`; the stage owns geometry and geometric input. A scroll to a
   step goes through `arrive()` exactly as a bar press does, so both directions
   reach a slide the same way and there is no second nav model.
-- **`scroll-snap-type: y mandatory` is right for a fallback step** and does not
-  contradict the rejection above: the trap is a step *taller than the viewport*,
-  and a fallback step is one screen by construction. The bounce-then-commit
-  gesture is owed to the scrolling steps that portrait fragments bring, not to
-  this. A step is `height: 100%` of the scrollport rather than `100dvh`, so
-  `scrollTop / stepHeight` cannot round to the wrong step while iOS's chrome
-  collapses.
+- ~~**`scroll-snap-type: y mandatory` is right for a fallback step**~~ —
+  **SUPERSEDED, and it was the phase's one real mistake.** The reasoning here was
+  that the trap is a step *taller than the viewport* and a fallback step is one
+  screen by construction, which is true and beside the point. The problem with
+  snap was never stranding; it was that it makes the browser a third writer of a
+  scroll position the transport is also writing.
 
-  **The corollary bit us and is worth stating as a rule: if the step height
-  changes, the column must be re-anchored on the step the PLAYER says it is on.**
-  `scrollTop` does not change when the height does, so the ratio silently
-  re-points at a different step; mandatory snap then slides the column to it,
-  which fires a scroll, which `settle` reports to the transport as a navigation.
-  Rotating a phone on photo 1 advanced the deck a slide — and not in the stage
-  swap, which had not run yet: the resize handler had already moved the column
-  (390→844 is a 2.5× change in step height, so `scrollTop` 844 stops meaning
-  "step 1" and starts meaning "step 3"). Geometry is the thing that just became
-  unreliable, so the transport's position is the authority, and the re-anchoring
-  scroll is marked `pending` so it is reported to nobody. Two conditions on it:
-  never while the READER is scrolling (iOS resizes when its own chrome collapses,
-  mid-scroll, and yanking a moving column is worse than letting it settle
-  honestly), and our own scrolls do not count as the reader scrolling — iOS fires
-  `resize` more than once through a rotation, and the second one would otherwise
-  see our own re-anchor as activity and decline.
+  Everything this bullet went on to describe — *"if the step height changes, the
+  column must be re-anchored on the step the PLAYER says it is on"*, the `pending`
+  marking so the re-anchor is reported to nobody, the two conditions on when it may
+  fire — was a correct patch on a broken premise. The tell is in its own wording:
+  **"geometry is the thing that just became unreliable, so the transport's position
+  is the authority."** That sentence is right, and the conclusion should have been
+  to stop deriving position from geometry at all rather than to reconcile the two
+  after the fact.
+
+  It did not hold. On an iPhone the control bar could not move the column: the rail
+  advanced and the deck sat still. See "One authority" for the model that replaced
+  it, and for what the symptom was worth — a rotation on photo 1 no longer advances
+  a slide either, because there is nothing left to re-anchor.
 - **Windowing follows the surface, not the URL** (`windowRadius(params, surf)`).
   The old `?interactive` test silently missed a standalone deck — the pavilion,
   whose whole point is a link with no query string — and would have missed every
@@ -698,13 +814,15 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
 - **Two axes, and the second one earns its place.** VERTICAL is the step axis;
   HORIZONTAL is the axis *inside* a step, and means what it means on the landscape
   player — `next()`/`prev()`, the atom move. The pairing pays off on a reel, which
-  is one step by the `/deck` rule: scrolling down leaves the reel entirely, which
-  nothing could do before, while swiping steps through its clips.
+  is one step by the `/deck` rule: swiping down leaves the reel entirely, which
+  nothing could do before, while swiping sideways steps through its clips.
 
   Reported by `slide-bridge.js` rather than read off a gesture layer, since
   portrait deliberately has none (above). No flag distinguishes the surfaces —
   in landscape and record mode `#wcc-tap` sits above the iframe and these events
-  never arrive, so the geometry does it. Thresholds are fractions of the viewport,
+  never arrive, so the geometry does it. **Both axes are reported now**: with the
+  deck no longer a scroller there is no parent for a band's vertical drag to chain
+  into, so the slide is the only place it can be seen at all. Thresholds are fractions of the viewport,
   never px: a slide lays out in the fixed 1920x1080 box, where 45px is about 9
   real ones. A gesture starting in the edge strip is declined so that iOS's
   unpreventable edge-back-swipe does one thing rather than two.
@@ -719,14 +837,12 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
 Deliberately *not* done here, and still open below: portrait fragments and their
 token scale, phase grouping, the media strip, overlays, longer lists.
 
-**Untested on a device, and it matters:** whether a *vertical* drag starting on
-the band scrolls the column. The band is an iframe, so that depends on touch
-scroll chaining from a non-scrollable child document to the parent scroller.
-Modern iOS should do it, but if it does not, dragging on the slide feels dead and
-only the matte scrolls — which would also undermine the swipe work above, since
-that assumes the slide stays exposed to touch. Check this first on a phone. The
-fix, if needed, is an overlay confined to the band, and it is not free: it costs
-the slide's own links and, at any non-`auto` touch-action, pinch-zoom.
+~~**Untested on a device, and it matters:** whether a *vertical* drag starting on
+the band scrolls the column.~~ **Settled, and then made moot.** Chaining from the
+band's iframe to the parent scroller did work on iOS — and then the parent scroller
+was removed, so a band's vertical drag is reported explicitly by `slide-bridge.js`
+as `axis: 'y'` instead. The feared fix (an overlay confined to the band, costing
+the slide's own links and pinch-zoom) was never needed in either world.
 
 **Phase 1 — the first portrait fragments, targeting the pavilion.** *(partly built:
 the cards are done, the photographs are not)*
@@ -869,10 +985,20 @@ Recorded so they are not relitigated from scratch.
 
 - **CSS `scroll-snap` for the whole deck** — `mandatory` strands readers in
   taller-than-viewport sections; `proximity` runs through the seam; neither gives
-  bounce-then-commit.
-- **A hand-built transform step-stack** (the first draft's mechanism) — reproduces
-  in JS what per-step native scrollers give free, and was only proposed because
-  iframes made native scrolling hard. Dropping iframes removed the reason.
+  bounce-then-commit. **And a second reason, found on a phone and worth more than
+  the first:** snap makes the browser a third agent writing a scroll position the
+  transport is also writing. See "One authority".
+- ~~**A hand-built transform step-stack**~~ — **this rejection was wrong, and is
+  reversed.** Its stated reason was that a step-stack "reproduces in JS what
+  per-step native scrollers give free". That is true of the *interior* of a step,
+  which is why the interior is still a native scroller and always will be — but it
+  was never true of the seam BETWEEN steps, which gives nothing free and costs a
+  derived position that three agents fight over. The deck is a transformed track
+  now; only the deck. See "One authority" for what it fixed.
+- **Deriving the deck's position from `scrollTop`** — the actual mistake behind
+  both of the above. A position the platform can change without being asked (iOS
+  resizes the viewport when its chrome collapses) cannot be the authority for where
+  a deck is.
 - **Fixed 1080×1920 design box scaled by `--fit`** — leaves ~18% of a modern phone
   screen empty, and portrait aspects span too wide a range for any one box.
 - **Step = atom** — the phone has a vertical axis and should stack what the wall

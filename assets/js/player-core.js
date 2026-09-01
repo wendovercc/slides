@@ -2005,6 +2005,14 @@
        */
       if (d.type === 'wcc-swipe' && idx === current) {
         if (!interactive || hosted || zoomed) return;
+        /* VERTICAL is the step axis, and only a stage that has one can answer it —
+         * the portrait column, which stopped being a scroller and so no longer
+         * receives a band's vertical drags by scroll chaining. The landscape stack
+         * has no vertical axis and simply ignores it. */
+        if (d.axis === 'y') {
+          if (stage && stage.step) stage.step(d.dir === 'next' ? 1 : -1);
+          return;
+        }
         if (d.dir === 'next') next(); else prev();
         return;
       }
