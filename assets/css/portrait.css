@@ -1,0 +1,293 @@
+/* portrait.css — the one stylesheet every portrait FRAGMENT is styled by.
+ *
+ * docs/portrait-decks.md, phase 1. A portrait fragment is real DOM in the player
+ * document, not an iframe (the doc's "no iframes except one case" — the exception
+ * being the letterbox band, which is a whole other document and keeps its own
+ * styles). That buys the memory win the iOS jetsam work was about, and it costs
+ * exactly one thing: isolation. Every slide template reuses `.panel`, `.row`,
+ * `.title`, so their fragments cannot bring their own CSS into a shared document.
+ *
+ * The discipline that replaces it: ONE stylesheet, and every rule scoped under
+ * `.pfrag-<template>`, which the build emits systematically from the template name.
+ * Nothing here may style a bare element or a generic class name. Fragment-local
+ * class names are prefixed `pf-` for the same reason.
+ *
+ * Loaded by portrait.js when — and only when — the portrait surface is built, so a
+ * wall and a landscape deck never fetch it.
+ *
+ * ---- no fixed design box ----
+ * The wall lays a slide out at 1920x1080 and scales it (--fit); a phone must show
+ * type a hand-held reader can read, and 16px is 16px on every phone. So a fragment
+ * fills its step and sizes itself from the scale below. See the doc's "No fixed
+ * design box in portrait" for why the wall's rule does not carry over — and note
+ * that the band fallback still uses it, scoped to the band, because the slide
+ * inside one is a wall slide.
+ */
+
+@font-face { font-family: 'Lato'; font-style: normal; font-weight: 400; font-display: swap; src: url('/assets/fonts/lato-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Lato'; font-style: normal; font-weight: 700; font-display: swap; src: url('/assets/fonts/lato-latin-700-normal.woff2') format('woff2'); }
+@font-face { font-family: 'Lato'; font-style: normal; font-weight: 900; font-display: swap; src: url('/assets/fonts/lato-latin-900-normal.woff2') format('woff2'); }
+
+.pfrag {
+    /* THE SCALE. One knob (`--u`) with a floor and a ceiling, per the doc.
+       This is the documented, scoped exception to "no px anywhere in a slide"
+       (docs/design-conventions.md): that rule guards against browser zoom on a
+       panel whose resolution we do not control, and neither condition holds here —
+       a phone's pinch is VISUAL zoom, which does not change the layout viewport
+       (project_touch_pinch_zoom), and a fragment is not an accumulating table.
+       The floor is the whole point: unfloored `vw` type is what resolves to a
+       handful of CSS px on a phone, where WebKit stops honouring it. */
+    --u: clamp(3.4px, 1vw, 6px);
+    --t-hero: calc(9 * var(--u));
+    --t-lg:   calc(6 * var(--u));
+    --t-md:   calc(4.4 * var(--u));
+    --t-sm:   calc(3.4 * var(--u));
+    --t-xs:   calc(2.9 * var(--u));
+
+    /* Brand tokens, same values as the slide bases (docs/design-conventions.md).
+       Restated rather than imported: this document is the player, which has no
+       slide base behind it. */
+    --navy-1: #0f2346;
+    --navy-2: #0a1c3a;
+    --gold:   #d4af37;
+    --light-blue: #b4c8e4;
+    --text:   #ffffff;
+    --muted:  var(--light-blue);
+    --accent: var(--gold);
+    --hair:   1px;
+    --radius: calc(1.2 * var(--u));
+
+    /* The step's own margin. `--safe-x` is a real gutter on a phone rather than
+       the wall's 5% overscan allowance. */
+    --pf-x: 6vw;
+    /* The card's own margin from the edges of its step.
+       NOT a reservation for the chrome, which is the point: the control bar is
+       DOCKED along the bottom edge and the column's scroller ends where the dock
+       begins, so a step is already the space above it — nothing here has to leave
+       room for a floating control, and no content passes behind one. The share
+       button rides in the dock for the same reason.
+       What is left is the safe-area inset at the top (the dock carries its own at
+       the bottom) and enough air that the type is not against the glass. */
+    --pf-top:    calc(var(--sa-t, 0px) + 4vmax);
+    --pf-bottom: 4vmax;
+
+    position: relative;
+    box-sizing: border-box;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Lato', -apple-system, Arial, sans-serif;
+    color: var(--text);
+    background: linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+    /* The reader's thumb is the only pointer here, and the deck's own gesture
+       reads a drag past the end of the scroller. A long-press selection mid-drag
+       would fight it for the same touch. */
+    -webkit-user-select: none;
+    user-select: none;
+}
+.pfrag * { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* A full-bleed photograph behind a card, veiled so type stays legible over
+   whatever the picture is doing. Covers the whole fragment, which on a scrolling
+   step is taller than the screen — deliberately: the picture is the ground the
+   text sits on, not a banner at the top of it. */
+.pfrag .pf-backdrop {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+}
+.pfrag .pf-veil {
+    position: absolute; inset: 0;
+    background: linear-gradient(165deg, rgba(15,35,70,0.86) 0%, rgba(10,28,58,0.93) 100%);
+}
+/* Everything readable sits above the two layers above. */
+.pfrag .pf-flow {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: var(--pf-top) var(--pf-x) var(--pf-bottom);
+}
+
+/* ── Shared fragment furniture ─────────────────────────────────────────────
+   Type roles, not layout: a template's fragment arranges these, and only the
+   `.pfrag-<template>` blocks below may set position or size. */
+.pfrag .pf-eyebrow {
+    font-size: var(--t-sm);
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+.pfrag .pf-title {
+    font-size: var(--t-hero);
+    font-weight: 900;
+    line-height: 1.1;
+    text-shadow: 0 calc(0.5 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,0.4);
+}
+.pfrag .pf-subtitle {
+    font-size: var(--t-md);
+    color: var(--accent);
+    letter-spacing: 0.04em;
+}
+.pfrag .pf-rule {
+    width: calc(18 * var(--u));
+    height: calc(0.6 * var(--u));
+    background: var(--accent);
+    flex: none;
+}
+.pfrag .pf-body {
+    font-size: var(--t-md);
+    line-height: 1.65;
+}
+.pfrag .pf-body p + p { margin-top: 0.8em; }
+.pfrag .pf-note {
+    font-size: var(--t-sm);
+    line-height: 1.5;
+    color: var(--muted);
+    font-style: italic;
+}
+.pfrag .pf-footnote {
+    font-size: var(--t-xs);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.6);
+}
+/* What the room is FOR. On the wall this is one gold line; on a phone the same
+   four items wrap to two, so the separator is a rule between wrapped rows rather
+   than a dot that would strand itself at a line end. */
+.pfrag .pf-strapline {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.35em 0.9em;
+    font-size: var(--t-sm);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    text-transform: uppercase;
+}
+.pfrag .pf-strap + .pf-strap::before {
+    content: '·';
+    opacity: 0.55;
+    margin-right: 0.9em;
+}
+
+/* Links. THE ONE PLACE PORTRAIT DIFFERS FROM THE INTERACTIVE WALL SURFACE BY
+   DROPPING SOMETHING: a QR code is a way to pass a URL to someone standing in
+   front of a television, and this reader is holding the phone the code exists to
+   reach. So a portrait fragment never renders a QR and always renders the links —
+   which is why the build's `qr_url` fields have no portrait counterpart.
+   Full-width because a thumb target should be a bar, not a chip. */
+.pfrag .pf-links {
+    display: flex;
+    flex-direction: column;
+    gap: calc(2.6 * var(--u));
+}
+.pfrag .pf-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6em;
+    min-height: calc(11 * var(--u));
+    padding: calc(2.6 * var(--u)) calc(3.4 * var(--u));
+    border-radius: var(--radius);
+    font-size: var(--t-sm);
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+    color: var(--navy-1);
+    background: var(--accent);
+    -webkit-tap-highlight-color: transparent;
+}
+.pfrag .pf-link::after { content: '\2192'; font-weight: 400; opacity: 0.85; }
+.pfrag .pf-link:active { background: #e7ce74; }
+.pfrag .pf-link.secondary {
+    color: var(--accent);
+    background: transparent;
+    border: var(--hair) solid rgba(212,175,55,0.55);
+}
+
+/* The club mark. The card templates carry no footer or sidebar, so without this
+   the deck never says whose room it is. Centred here rather than the wall's
+   top-left corner: that corner is where portrait.js floats the share button, and
+   a scrolling column has a natural top-centre the wall's fixed frame does not. */
+.pfrag .pf-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: calc(1.2 * var(--u));
+    flex: none;
+}
+.pfrag .pf-brand img {
+    height: calc(18 * var(--u));
+    width: auto;
+    object-fit: contain;
+}
+.pfrag .pf-brand span {
+    font-size: var(--t-xs);
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    line-height: 1.3;
+    text-align: center;
+    opacity: 0.85;
+}
+
+/* ══ showcase-card ═════════════════════════════════════════════════════════
+   The opening title card and the closing call to action of a photo showcase.
+   Two shapes, as on the wall: a single centred message, or `sections` stacked.
+
+   On the wall those two are laid out very differently (a centred column; a grid
+   with a credit row pinned under it) because the wall has one screen and must fit
+   both blocks in it. The phone has a scroll, so a sections card is simply the
+   blocks in order, ruled apart — which is the doc's rule 1 (a step is a phase)
+   arriving in the smallest possible case. */
+.pfrag-showcase .pf-flow {
+    gap: calc(6 * var(--u));
+    /* Centred when it fits, top-aligned and scrolling when it does not.
+       `justify-content: center` alone would push the overflow out of BOTH ends of
+       a scroller and make the head of a long card unreachable; auto margins on the
+       first and last child collapse to nothing once the content fills the box. */
+    justify-content: flex-start;
+}
+ /* The card itself: everything between the club mark and the footnote. Centred in
+    the leftover space by auto margins rather than `justify-content`, which is what
+    lets the same rule serve both shapes — auto margins collapse to nothing the
+    moment the content fills the box, so a long card scrolls from its top instead of
+    having its head pushed out of the scroller's reachable range. */
+.pfrag-showcase .pf-main {
+    margin: auto 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: calc(6 * var(--u));
+}
+
+.pfrag-showcase .pf-sec {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: calc(3.4 * var(--u));
+}
+.pfrag-showcase .pf-sec + .pf-sec {
+    border-top: var(--hair) solid rgba(255,255,255,0.18);
+    padding-top: calc(7 * var(--u));
+    margin-top: calc(2 * var(--u));
+}
+/* The credit is quieter than the call to action above it through its type and its
+   secondary buttons — the same relationship the wall's `credit` layout draws, said
+   in the one dimension a column has. */
+.pfrag-showcase .pf-sec.credit .pf-title,
+.pfrag-showcase .pf-sec.credit .pf-body { font-size: var(--t-sm); }
+.pfrag-showcase .pf-sec.credit .pf-body { color: var(--muted); }
+.pfrag-showcase .pf-sec-title {
+    font-size: var(--t-lg);
+    font-weight: 900;
+    line-height: 1.15;
+}
+.pfrag-showcase .pf-links { width: 100%; }
+.pfrag-showcase .pf-tail { flex: none; text-align: center; }

@@ -3828,7 +3828,30 @@ def build_slides(env):
         out_dir = SITE / "slide" / slug
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "index.html").write_text(html)
-        print(f"  slide/{slug}")
+
+        # The phone rendering, where its template has one (docs/portrait-decks.md).
+        #
+        # A PER-SLIDE FRAGMENT is the canonical artefact, not a per-deck page: the
+        # obvious move — inlining a deck's portrait markup into its own page —
+        # breaks the moment a deck is assembled at runtime, which /deck does and
+        # play mode requires. Published beside the slide's own document, so the
+        # portrait runner can assemble any deck (authored, auto, or built in the
+        # editor five seconds ago) from the same files. Inlining survives as an
+        # optimisation for the decks we share; it is not what makes this work.
+        #
+        # Same `slide` dict as the wall render above, so the words cannot drift
+        # between the two surfaces — only the layout differs. A template with no
+        # fragment simply has none: the portrait surface letterboxes its 16:9 self
+        # in a band (phase 0), so nothing is all-or-nothing and no deck waits for
+        # its last template.
+        portrait_tpl = f"portrait/{slide['template']}.html"
+        if (TEMPLATES / portrait_tpl).exists():
+            (out_dir / "portrait.html").write_text(
+                env.get_template(portrait_tpl).render(slide=slide, slug=slug))
+            slide_meta[slug]["_portrait"] = True
+            print(f"  slide/{slug} (+ portrait)")
+        else:
+            print(f"  slide/{slug}")
 
     return slide_meta
 

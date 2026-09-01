@@ -1,11 +1,14 @@
 # Portrait Decks — the phone surface
 
-> Status: **the letterbox fallback is built and shipped; the portrait fragments
-> are not.** Every deck now has a phone surface — a column of full-height steps
-> that snap, one slide per step, each slide in a 16:9 band. What is designed and
-> unbuilt is the part that replaces a band with a real portrait layout. The model
-> below is settled through three worked examples; the open questions at the end
-> are genuinely open.
+> Status: **the letterbox fallback is built and shipped, and the first portrait
+> fragments with it.** Every deck has a phone surface — a column of full-height
+> steps that snap — and a step is now rendered one of two ways: a real portrait
+> layout where its template has one (`templates/portrait/<template>.html`,
+> published per slide, fetched and inserted as DOM), or its 16:9 self in a band
+> where it does not. `showcase-card` is the first template with a fragment, which
+> makes the pavilion deck's opening and closing cards a real phone layout with
+> eight letterboxed photographs between them. The model below is settled through
+> three worked examples; the open questions at the end are genuinely open.
 >
 > **The build order was deliberately inverted** — see "Phase 0" under Phasing.
 > The doc originally deferred the fallback as speculative and started with the
@@ -303,9 +306,12 @@ portrait = interactive && !record && deckHasPortrait && (innerWidth / innerHeigh
   would record against the portrait surface. A take is authored once, in
   landscape.
 - **Kiosk unaffected** — it is not interactive.
-- **Rotation swaps in place**, keeping position. The portrait tree is built once
-  (inlined or fetched) and *kept*; rotation toggles which tree is shown. Not a
-  reload, and not a rebuild — a played clip keeps its position.
+- **Rotation swaps in place**, keeping position, and in BOTH directions — see the
+  swap note under Phase 0. The portrait tree is built once (inlined or fetched)
+  and *kept*; rotation toggles which tree is shown. Not a reload, and not a
+  rebuild — a played clip keeps its position. (Today the column's letterbox bands
+  still cost a reload of the frames on screen, because a moved iframe reloads;
+  fragments are what redeem the rest of the promise.)
 - **An open overlay suspends re-evaluation.** This is a freeze on the *rule*, not
   a term in it: if someone rotates while inside the video player they must not be
   flipped into the 16:9 player, but they have not stopped being on the portrait
@@ -349,10 +355,26 @@ it necessary.
   to jump, dismiss. Zero standing viewport cost. Absurd for three steps; earns
   itself at the match package's five long ones. *(Phase 3.)*
 
-`placeBar()`'s three placements (`below`/`right`/`inside`) all assume a letterbox
-band; in portrait there is none, so it would land `inside` — the placement that
-overlaps the slide. Portrait needs its own placement, not a fourth guess from that
-function.
+`placeBar()`'s three placements (`below`/`right`/`inside`) all answer one question —
+which letterbox band can hold the bar — and a portrait deck has no band to answer it
+with. **So portrait has a fourth placement, `portrait`, and it is a DOCK rather than
+a float** (built): a full-width toolbar along the bottom edge, opaque and square,
+with the safe-area inset inside its own padding.
+
+The part that matters is not how it looks but what it costs: **the column shortens
+its scroller by the bar's measured height**, so a step is the space *above* the dock
+and nothing ever scrolls behind it. The other three placements can float because
+they sit over a letterbox band — over nothing. A full-bleed portrait layout has no
+such space to give away, and content sliding under a translucent widget is the
+difference between a phone app and a slideshow with something on top of it.
+
+That makes it a two-way seam, which is why it is on the stage rather than in
+`placeBar`'s aspect arithmetic: the stage asks for the dock (`barDock`), and the bar
+reports its height back (`stage.chrome(h)`), re-measured on every placement so a
+rotation or a safe-area change stays right. The share button moved into the dock
+with it — beside the transport, where a phone app puts it, and where it costs no
+content. It floated in the top-left corner while the bar was a pill over a
+letterboxed slide; that is a corner a full-bleed layout wants back.
 
 ---
 
@@ -454,11 +476,12 @@ section that is not one.**
 
 ## What changes
 
-**`scripts/build.py`**
-- Group a deck's atoms into phase-steps; publish per-slide portrait fragments, and
-  inline them into shareable deck pages as an optimisation.
-- Portrait fragments per template (Jinja includes/macros fed the same `slide` dict),
-  every atom carrying its anchor id.
+**`scripts/build.py`** — *struck through = built.*
+- Group a deck's atoms into phase-steps; ~~publish per-slide portrait fragments~~,
+  and inline them into shareable deck pages as an optimisation.
+- ~~Portrait fragments per template~~ (a Jinja template under `templates/portrait/`
+  fed the same `slide` dict; `_portrait` rides in `slide_meta` into every deck's
+  `data.json`), every atom carrying its anchor id.
 - Media collapse: consecutive photo slides → one strip; a reel → one poster.
 - The longer-list mechanism for capped tables (phase 3).
 - Optional `focus` on photo slides (phase 3 — wide interiors do not crop).
@@ -468,9 +491,15 @@ section that is not one.**
 (open question 3). *Struck through = built in phase 0.*
 - ~~`surface()` gains `portrait`~~; the overlay exception; ~~rotation swap in
   place~~ (not for bands — see phase 0).
-- ~~Per-step scrollers~~ + the overscroll commit gesture (owed to scrolling
+- ~~A `portrait` placement for `placeBar`~~ — the dock, plus the `barDock` /
+  `stage.chrome(h)` seam it reports its height back through, and ~~frameless items~~
+  (an item whose stage renders it, so it has no iframe to load, post to or tear
+  down).
+- ~~Per-step scrollers + the overscroll commit gesture~~ (owed to scrolling
   fragment steps, not to bands).
-- Assemble a deck from fragments (any runtime deck, including `/deck`'s).
+- ~~Assemble a deck from fragments~~ (any runtime deck, including `/deck`'s) — the
+  column fetches each fragment near the reader, so any deck resolved at runtime is
+  first-class without the build knowing it exists.
 - The driven path: anchor traversal, auto-scroll, interruptible scroll-to-anchor.
 - Media strip (horizontal swipe) and the reel poster → player overlay, each with
   a driven mode alongside its user mode.
@@ -479,12 +508,12 @@ section that is not one.**
 - ~~Windowing for fallback iframes~~ (`windowRadius` now follows the surface) and
   `<video>` only.
 
-**`templates/`** — portrait fragments for `photo`, `showcase-card` first; then
+**`templates/`** — portrait fragments for ~~`showcase-card`~~, `photo` first; then
 `video`, `sponsors`, `match-intro`, `scorecard`, `match-result`, `match-league`,
 `fantasy-league`. Everything else takes the fallback until it doesn't.
 
-**`docs/design-conventions.md`** — portrait token scale, the scoped `px`
-exception, cards-vs-table, crop-to-fill.
+**`docs/design-conventions.md`** — ~~portrait token scale, the scoped `px`
+exception~~ (both written in), cards-vs-table, crop-to-fill.
 
 **Not changed:** the wall. No `vw` layout, no base template, no `--fit` behaviour,
 no `/screen/` path. No new URLs; no second catalogue; no extra precache entries.
@@ -537,6 +566,23 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
   this. A step is `height: 100%` of the scrollport rather than `100dvh`, so
   `scrollTop / stepHeight` cannot round to the wrong step while iOS's chrome
   collapses.
+
+  **The corollary bit us and is worth stating as a rule: if the step height
+  changes, the column must be re-anchored on the step the PLAYER says it is on.**
+  `scrollTop` does not change when the height does, so the ratio silently
+  re-points at a different step; mandatory snap then slides the column to it,
+  which fires a scroll, which `settle` reports to the transport as a navigation.
+  Rotating a phone on photo 1 advanced the deck a slide — and not in the stage
+  swap, which had not run yet: the resize handler had already moved the column
+  (390→844 is a 2.5× change in step height, so `scrollTop` 844 stops meaning
+  "step 1" and starts meaning "step 3"). Geometry is the thing that just became
+  unreliable, so the transport's position is the authority, and the re-anchoring
+  scroll is marked `pending` so it is reported to nobody. Two conditions on it:
+  never while the READER is scrolling (iOS resizes when its own chrome collapses,
+  mid-scroll, and yanking a moving column is worse than letting it settle
+  honestly), and our own scrolls do not count as the reader scrolling — iOS fires
+  `resize` more than once through a rotation, and the second one would otherwise
+  see our own re-anchor as activity and decline.
 - **Windowing follows the surface, not the URL** (`windowRadius(params, surf)`).
   The old `?interactive` test silently missed a standalone deck — the pavilion,
   whose whole point is a link with no query string — and would have missed every
@@ -570,23 +616,79 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
   Phase grouping remains a property of the portrait *fragments*, which collapse a
   run of atoms into one scrolling step. Both readings satisfy "every atom appears
   exactly once, in order".
-- **The surface upgrades one way, and swaps live.** Decided at boot from the
-  aspect; a deck *opened* in landscape and then turned portrait crosses the edge
-  and moves onto the column without a page reload — same player, same items, same
+- **The surface follows the shape of the screen, live, in both directions.**
+  Decided at boot from the aspect and re-decided whenever it crosses 1: a deck
+  opened in landscape and turned portrait moves onto the column, and a deck on the
+  column turned landscape goes back to the 16:9 presentation with the controls in
+  the right-hand band — no page reload either way, same player, same items, same
   slide, same controls (`WccPlayer.setStage`). What the route change above bought
   is exactly this: a deck page is interactive on both stages, so the swap no
   longer has to reconstitute the control bar, the windowing and the slides' own
   interactive variant, which is what forced a reload in the first draft.
+
+  **Two-way is a correction.** The first cut ratcheted one way, arguing that the
+  column reads acceptably in landscape (the band grows to fill the viewport) so
+  going back would spend a viewer's clip position to fix nothing, and that a
+  surface which only ratchets cannot thrash at the boundary. What that misses is
+  that a deck is *authored* for 16:9 — a landscape screen showing a portrait
+  column is a screen showing the wrong thing, and a rotation is the clearest
+  instruction a phone can give about the shape it now is. The column is what a
+  portrait screen wants, not a preference the viewer expressed. Thrash is handled
+  by debouncing the crossing (400ms), which is what it was always for.
+
+  Going back makes the swap symmetrical, and symmetry is what the seam had been
+  missing. Three things move, and each is somebody's property: **frames** (a stage
+  that renders a slide itself wants none, the stack wants one for every slide — so
+  a frameless item gets its document back from `opts.newFrame`, cold, and the
+  arrival's own windowing decides whether to load it); **the outgoing stage's
+  chrome**, which only it knows about, so it is asked to `detach()` — column, rail,
+  share button, body class, custom properties, listeners; and **the gesture
+  layer**, which is the player's and follows the stage. The stack is a stage here
+  too, even though it is not an object: the only thing the seam needs is where a
+  frame goes, and for the stack that is one element (`opts.slideHost`) for all of
+  them.
+
   The residual cost is one iframe: a frame moved in the DOM reloads its document,
   so the slide on screen and its two windowed neighbours come back fresh and a
-  clip loses its position. That is also the closest this form of the surface gets
-  to "rotation swaps in place, no reload" — the rest of that promise is owed to
-  the portrait fragments, where a step is our own DOM and nothing reloads at all.
-  Portrait → landscape does **not** switch back, which is now a judgement rather
-  than a limit: the swap would work in both directions, but the column reads
-  perfectly well in landscape (the band grows to fill the viewport), so going back
-  would spend a viewer's clip position to fix nothing — and a surface that only
-  ratchets cannot thrash at the boundary.
+  clip loses its position. That has not changed; what has is that it can be paid
+  twice. It is also the closest this form of the surface gets to "rotation swaps
+  in place, no reload" — the rest of that promise is owed to the portrait
+  fragments, where a step is our own DOM and nothing reloads at all.
+
+  **How long the wrong surface is on screen**, which is a separate question from
+  whether the swap works, and was the first thing anyone noticed. Three windows,
+  and only two of them are ours:
+
+  1. *The debounce.* A rotation and a dragged window are not the same event, and
+     treating them as one is what made the swap feel slow. A drag fires a stream of
+     resizes and must be debounced or the deck swaps — and reloads its frames — at
+     every step across the boundary. A rotation is ONE discrete instruction,
+     already committed to by the person holding the phone. So `orientationchange`
+     opens a short window (1.2s) in which any resize is acted on immediately, with a
+     150ms backstop in case none arrives; the 400ms debounce survives for the drag
+     it was written for. The surface now changes about a frame after the viewport
+     settles rather than 400ms after it.
+  2. *The flip itself.* Unavoidable: iOS updates `innerWidth`/`innerHeight` **after**
+     `orientationchange` fires, not with it, so there is always a moment where the
+     old surface is laid out in the new shape. It cannot be removed, only covered.
+  3. *The reload.* A frame moved in the DOM reloads its document, so the slide on
+     screen comes back blank and paints again. Structural, and the reason it gets
+     cheaper as templates gain portrait fragments: a fragment is our own DOM and its
+     markup comes back from cache, where an iframe boots a document.
+
+  (2) and (3) are covered by **the veil** — a plain matte sheet raised over
+  everything from the moment `orientationchange` fires until shortly after the swap.
+  It turns "the wrong thing, then a white flash" into a beat of the background the
+  deck already sits on, which is what a rotation looks like in any app. It comes
+  down on a short fixed timer rather than on the frames' load events: it is covering
+  a repaint, and a deck must never be able to sit behind a sheet waiting for a
+  document that is slow or never arrives.
+
+  One consequence worth naming: **the live chrome is a property of the landscape
+  stage**, so a deck that opens in portrait builds none of it and builds it if the
+  phone is turned (`ensureLiveChrome`, and `WccPlayer.setFlashFrame` for the
+  overlay the player raises). The ticker and strip live in a band a retracting
+  16:9 slide layer uncovers, and the column has no such band.
 - **No tap layer, and tap-through comes free.** The player's `#wcc-tap` is a
   fixed full-viewport overlay, which over a scroller swallows the scroll. Without
   it a tap on the slide stays in the slide — so a slide's own links work with no
@@ -626,16 +728,66 @@ that assumes the slide stays exposed to touch. Check this first on a phone. The
 fix, if needed, is an overlay confined to the band, and it is not free: it costs
 the slide's own links and, at any non-`auto` touch-action, pinch-zoom.
 
-**Phase 1 — the first portrait fragments, targeting the pavilion.** *(next)*
+**Phase 1 — the first portrait fragments, targeting the pavilion.** *(partly built:
+the cards are done, the photographs are not)*
 
-Build:
-- The surface rule, the portrait token scale, the shared portrait stylesheet.
-- Per-slide portrait fragments (canonical) + client-side assembly; inlining for
-  the pavilion page.
-- Per-step scrollers and the overscroll commit gesture.
-- The media strip: horizontal swipe, inset from the screen edges.
-- Portrait fragments for `photo` and `showcase-card`.
-- Chrome: progress rail and share, and nothing else.
+Built:
+- ~~The portrait token scale and the shared portrait stylesheet~~ —
+  `assets/css/portrait.css`, one file, every rule scoped under `.pfrag-<template>`.
+  That scoping is not tidiness: a fragment is real DOM in the *player's* document,
+  alongside every other fragment, and the slide templates it is derived from all
+  reuse `.panel`, `.row`, `.title`. The `px`-floored scale is written into
+  `docs/design-conventions.md` as the one scoped exception to the zoom rule.
+- ~~Per-slide fragments as the canonical artefact + client-side assembly~~ —
+  `build.py` writes `/slide/<slug>/portrait.html` for any slide whose template has
+  one and flags `_portrait` through `slide_meta` into every deck's `data.json`; the
+  column fetches them near the reader (radius 2) and inserts them as DOM. No
+  iframe, so an off-screen step is not a render surface. *Inlining into the
+  pavilion page is NOT done* — it is the optimisation the doc always said it was
+  (first paint with no round trip), and the canonical path had to come first.
+- ~~Per-step scrollers and the overscroll commit gesture~~ — a fragment step is one
+  scrollport in the column and scrolls *inside* itself, which is what lets uniform
+  step heights (and therefore `scrollTop / stepHeight`, and therefore mandatory
+  snap) survive contact with a step that is three screens long. The gesture is owed
+  entirely to `overscroll-behavior: contain`: it gives the bounce for free and, by
+  the same token, means a thumb can never leave the step on its own.
+- ~~A portrait fragment for `showcase-card`~~ — the pavilion's opening title card
+  and its closing hire/credit card. Two things differ from the wall's interactive
+  variant, both by design: **no QR code** (a QR passes a URL to someone standing in
+  front of a television; this reader is holding the phone it exists to reach, so
+  the links are unconditional), and the brand lockup is centred at the top rather
+  than in the corner the share button floats in.
+- ~~Chrome: progress rail and share~~ (phase 0), **re-placed around the dock.** Both
+  the rail and the bar used to float over a letterboxed slide, where floating costs
+  nothing; a fragment step is full-bleed, and over full-bleed content a float is
+  something to read around. So: the control bar is now the `portrait` DOCK described
+  under Chrome above (the column ends where it begins), the share button moved into
+  it, and the **rail moved to the top edge** — the opposite edge deliberately, since
+  the bar carries its own gold fill along its top and that is the countdown within
+  one step. Two gold hairlines a few pixels apart, measuring different things, read
+  as one confused instrument. Fragments therefore reserve nothing for chrome:
+  `--pf-top` / `--pf-bottom` are the card's own margin from the edges of its step.
+- **A frameless item**, in `player-core`. A fragment step has no iframe, so its
+  item has no frame: no url, never live, commands dropped, counted as loaded, and
+  its panel count seeded from the atoms the deck was built with instead of a bridge
+  handshake. It is not a special case in the transport — every timer, hold and nav
+  move works on it unchanged — and `setStage` tears an existing frame down when a
+  rotation hands a slide to a stage that renders it itself.
+
+Still open in this phase:
+- Portrait fragment for `photo`, and the media strip (horizontal swipe, inset from
+  the screen edges) that collapses the eight photographs into one. **Until that
+  lands the pavilion's photographs are eight letterboxed steps**, which is the
+  phase-0 behaviour and is exactly the point of having taken the fallback first.
+- Inlining the fragments into the pavilion's own page (first paint).
+- A driven mode alongside the user mode on the photo strip.
+
+A limit worth knowing, enforced in `fragUrl`: **a fragment serves a single-step
+slide only.** A slide the column gives several steps to (a carousel, one per panel)
+keeps its band until fragments carry an addressable step per atom. Both showcase
+cards are one atom; the multi-panel templates are phases 3 and 4 anyway. Stated as
+a condition rather than left implicit because the failure it prevents is silent — a
+multi-panel fragment would swallow every panel after the first.
 
 Structural, and **not deferrable** even though the transport ships in phase 5 —
 these cost little now and are a rewrite later:

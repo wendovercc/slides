@@ -98,6 +98,23 @@
       // Right of the slide: vertical column, right-anchored, centred vertically.
       '#wcc-bar.place-right{flex-direction:column;right:0.6vmax;top:50vh;' +
       'transform:translateY(-50%);}' +
+      /* DOCKED: the portrait column's own placement, and the only one that is not a
+         float. The bar spans the bottom edge as a toolbar and the stage shortens its
+         scroller by exactly this height (see `chrome` in portrait.js), so nothing
+         ever scrolls behind it — which is the difference between a phone app and a
+         slideshow with a widget on top of it. The other three placements can float
+         because they sit in a letterbox band, over nothing; a portrait deck is
+         full-bleed and has no band to give away.
+         Opaque, square, and no blur: it is an edge of the interface rather than a
+         pane over the content, and a backdrop filter over content that is no longer
+         behind it is a compositing layer bought for nothing. The bottom padding
+         carries the safe-area inset, so the buttons clear the home indicator and the
+         bar's own colour fills the strip under it. */
+      '#wcc-bar.place-portrait{flex-direction:row;justify-content:center;' +
+      'left:0;right:0;bottom:0;border-radius:0;border:none;' +
+      'border-top:1px solid rgba(212,175,55,0.28);background:#08152c;' +
+      'backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;' +
+      'transform:none;padding:0.7vmax 0.6vmax calc(0.7vmax + var(--sa-b,0px));}' +
       // Inside the slide (near-16:9, no usable band): vertical column pinned to the
       // slide's top-right safe corner (top/right set inline from geometry) and
       // collapsible so it never permanently obstructs slide content.
@@ -124,10 +141,14 @@
       // bottom strip when the bar is a row, left strip when it is a column.
       '#wcc-bar-progress{position:absolute;background:rgba(212,175,55,0.16);}' +
       '#wcc-bar.place-below #wcc-bar-progress{left:0;right:0;bottom:0;height:0.35vmax;}' +
+      // Docked: along the bar's TOP edge, which is the seam with the content — the
+      // bottom edge is under the home indicator and half of it would be invisible.
+      '#wcc-bar.place-portrait #wcc-bar-progress{left:0;right:0;top:0;height:0.35vmax;}' +
       '#wcc-bar.place-right #wcc-bar-progress,#wcc-bar.place-inside #wcc-bar-progress{' +
       'top:0;bottom:0;right:0;width:0.35vmax;}' +
       '#wcc-bar-progress i{display:block;width:100%;height:100%;background:#d4af37;}' +
-      '#wcc-bar.place-below #wcc-bar-progress i{transform-origin:left;transform:scaleX(0);}' +
+      '#wcc-bar.place-below #wcc-bar-progress i,' +
+      '#wcc-bar.place-portrait #wcc-bar-progress i{transform-origin:left;transform:scaleX(0);}' +
       '#wcc-bar.place-right #wcc-bar-progress i,#wcc-bar.place-inside #wcc-bar-progress i{' +
       'transform-origin:top;transform:scaleY(0);}';
     var s = document.createElement('style');
@@ -221,8 +242,9 @@
        * own their own geometry; `?kiosk` stays the escape hatch for previewing the
        * wall's surface from a phone.
        *
-       * Read once, at boot, and NOT re-evaluated on rotation — see the orientation
-       * note in portrait.js. */
+       * Read at boot AND re-evaluated on rotation: the surface follows the shape of
+       * the screen in both directions, so a phone turned sideways gets the landscape
+       * presentation back (WccPlayer.setStage, and the watcher in player.html). */
       portrait: interactive && !has('record') && !has('hosted') && !has('preview') &&
         window.innerWidth < window.innerHeight
     };
@@ -271,6 +293,17 @@
      * Anything that has to know about geometry belongs on this seam, not in a
      * second player. */
     var stage = opts.stage || null;
+    /* The default stage's host — where a frame goes when there is no stage object:
+     * the crossfade stack's container (`#slide-layer`). Named by the template rather
+     * than looked up here, because the two players' markup is the template's to own
+     * and this file has never known an element id. Only `setStage` reads it; the
+     * boot path puts the frames there itself.
+     * `newFrame(i)` is the same story for building one — url, permissions policy and
+     * the deck entry's own clip/panel push all belong to the template that knows the
+     * deck. Both are optional: without them a deck simply cannot swap back to the
+     * stack, which is exactly what this file did before the swap was two-way. */
+    var slideHost = opts.slideHost || null;
+    var newFrame = opts.newFrame || null;
     /* Standalone — this deck is the whole of what the viewer was sent, not a page
      * within a site they are browsing. It says one thing and no longer implies a
      * second: a deck page is now interactive by route (see surface), so the flag is
@@ -289,7 +322,13 @@
 
     var n = items.length;
     var current = 0;
-    var counts = items.map(function () { return null; }); // panel count per item
+    /* Panel count per item, answered by the slide itself over the bridge. A
+     * FRAMELESS item (see below) has no bridge, so it is seeded from the atom list
+     * the deck was built with — the same list the wall's slide would have reported.
+     * Null still means "not heard from yet" everywhere else. */
+    var counts = items.map(function (it) {
+      return it.frame ? null : ((it.atoms && it.atoms.length) || 1);
+    });
     var panelIndex = 0;
     // Atom edges reported by the CURRENT slide (null = not heard from yet, fall back
     // to the panel arithmetic). A reel's atoms are finer than its panels — a card
@@ -350,16 +389,35 @@
      * already sends reset/goto-panel/restart-auto. */
     var winRadius = windowRadius(params, surf);
     var pendingCmds = items.map(function () { return []; });
-    var loaded = items.map(function () { return false; });
+    /* A frameless item counts as loaded from the start. Nothing will ever load, so
+     * the alternative is `send` queueing every command it is ever given into a
+     * pendingCmds list that is never flushed — a slow leak, and a queue that would
+     * fire at a document if one ever appeared. `post` drops them instead. */
+    var loaded = items.map(function (it) { return !it.frame; });
     var pruneTimer = null;
     var PRUNE_DELAY_MS = 1200;   // longer than the 0.8s crossfade: the outgoing frame is still fading
 
+    /* ---- frameless items -----------------------------------------------------
+     * An item may have NO frame. That is the portrait surface's fragment step
+     * (docs/portrait-decks.md phase 1): the stage renders the slide as real DOM in
+     * the player's own document, so there is no iframe to create, load, post to or
+     * tear down — which is the whole memory argument for fragments.
+     *
+     * Everything below therefore treats a null frame as an item with nothing to
+     * talk to: no url, never live, commands dropped. It is NOT a special case in the
+     * transport — a frameless item still has its atoms, its duration and its place
+     * in the deck, and every timer, hold and nav move works on it unchanged. */
     function frameUrl(i) {
       var f = items[i].frame;
+      if (!f) return '';
       return f.dataset.src || f.getAttribute('src') || '';
     }
-    function frameIsLive(i) { return !!items[i].frame.getAttribute('src'); }
+    function frameIsLive(i) {
+      var f = items[i].frame;
+      return !!(f && f.getAttribute('src'));
+    }
     function post(i, msg) {
+      if (!items[i].frame) return;
       try { items[i].frame.contentWindow.postMessage(msg, '*'); } catch (e) {}
     }
     function markLoaded(i) {
@@ -370,13 +428,14 @@
     }
     function watchLoad(i) {
       var f = items[i].frame;
+      if (!f) return;
       try {
         if (f.contentDocument && f.contentDocument.readyState === 'complete') { markLoaded(i); return; }
       } catch (e) {}
       f.addEventListener('load', function () { markLoaded(i); }, { once: true });
     }
     function loadFrame(i) {
-      if (frameIsLive(i)) return;
+      if (!items[i].frame || frameIsLive(i)) return;
       loaded[i] = false;
       items[i].frame.src = frameUrl(i);
       watchLoad(i);
@@ -505,7 +564,7 @@
       // outgoing index here, which is what a stage needs to know which way it is
       // travelling.
       if (stage) stage.show(i, current);
-      else items.forEach(function (it, j) { it.frame.classList.toggle('active', j === i); });
+      else items.forEach(function (it, j) { if (it.frame) it.frame.classList.toggle('active', j === i); });
       current = i;
       shownAt = Date.now();
       applyTapThrough();
@@ -861,7 +920,7 @@
      * controls may overhang that band into the slide's outer 5% non-safe strip;
      * they only fall inside (collapsible) when neither band+strip can hold them. ---- */
     function setPlaceClass(p) {
-      bar.classList.remove('place-below', 'place-right', 'place-inside');
+      bar.classList.remove('place-below', 'place-right', 'place-inside', 'place-portrait');
       bar.classList.add('place-' + p);
     }
     function placeBar() {
@@ -872,6 +931,21 @@
       // placement would otherwise stretch the bar and corrupt the fit measurement
       // below (so it could never switch back out into a newly-opened letterbox).
       bar.style.top = bar.style.right = bar.style.left = bar.style.bottom = bar.style.transform = '';
+      /* A STAGE MAY OWN THE PLACEMENT. The three placements below all answer the same
+       * question — which letterbox band can hold the bar — and a portrait deck has no
+       * band to answer it with: the slide fills the width of its step. So the portrait
+       * column asks for the dock instead, and is told how tall it came out, because it
+       * shortens its own scroller by that much rather than letting the bar float over
+       * the reading. This is the placement the design doc said portrait would need
+       * "rather than a fourth guess from that function". */
+      if (stage && stage.barDock) {
+        setPlaceClass('portrait');
+        bar.classList.remove('collapsed');   // the dock is never in the way, so never hides
+        progressAxis = 'x';
+        if (stage.chrome) stage.chrome(bar.getBoundingClientRect().height);
+        progressRelayout();
+        return;
+      }
       var iw = window.innerWidth, ih = window.innerHeight;
       var slideW = Math.min(iw, ih * 16 / 9), slideH = Math.min(ih, iw * 9 / 16);
       var bandBelow = (ih - slideH) / 2, bandRight = (iw - slideW) / 2; // per-side bands
@@ -1898,7 +1972,7 @@
       }
       // The flash overlay isn't in `items`; handle its done signal before the idx gate.
       if (d.type === 'wcc-flash-done' && flashWin() && e.source === flashWin()) { onFlashDone(); return; }
-      var idx = items.findIndex(function (it) { return it.frame.contentWindow === e.source; });
+      var idx = items.findIndex(function (it) { return it.frame && it.frame.contentWindow === e.source; });
       if (idx < 0) return;
 
       /* A thumb went sideways across the current slide (slide-bridge reports it;
@@ -2027,6 +2101,14 @@
     // Expose the flash entry point for the live engine (running in this same frame).
     window.WccPlayer.flash = enqueueFlash;
 
+    /* The news-flash overlay, handed over after the fact. It is a property of the
+     * LANDSCAPE stage — a full-bleed 16:9 takeover raised over a 16:9 stage — so a
+     * deck that opened in portrait has none, and gets one if the phone is turned
+     * (see ensureLiveChrome in player.html). Boot still passes it through `start`. */
+    window.WccPlayer.setFlashFrame = function (f) {
+      flashItem = f ? { frame: f } : null;
+    };
+
     /* Hand a stage the transport it drives. `goTo` is the viewer reaching a slide by
      * hand — scrolling to it — and goes through arrive() like every other arrival, so
      * a scrolled-to slide is reset, timed and tracked exactly as a stepped-to one is.
@@ -2042,33 +2124,91 @@
       });
     }
 
-    /* Change stage mid-session — a phone turned portrait, arriving on the column.
+    /* Change stage mid-session — a phone turned, arriving on the other surface.
      *
-     * The deck keeps playing: same player, same items, same place. What moves is
-     * where the frames live, and that is the one real cost — an iframe reloads when
-     * it is moved in the DOM, so the slide on screen (and its ≤2 windowed
-     * neighbours) comes back fresh and a clip loses its position. Everything the
-     * boot decision used to fan out into — the control bar, the windowing, the
-     * slides' own interactive variant — is already in place on both stages now that
-     * a deck page is interactive by route, which is what makes this a swap rather
-     * than the page reload it replaced. */
+     * BOTH WAYS. The deck keeps playing: same player, same items, same place, same
+     * controls. What moves is where the frames live, and that is the one real cost —
+     * an iframe reloads when it is moved in the DOM, so the slide on screen (and its
+     * <=2 windowed neighbours) comes back fresh and a clip loses its position.
+     * Everything the boot decision used to fan out into — the control bar, the
+     * windowing, the slides' own interactive variant — is in place on both stages
+     * now that a deck page is interactive by route, which is what makes this a swap
+     * rather than the page reload it replaced.
+     *
+     * `null` is the DEFAULT stage: the wall's crossfade stack, every frame at
+     * inset:0 in `opts.slideHost` and revealed by an `active` class. It is a stage
+     * like any other here even though it is not an object — the only thing this
+     * needs from a stage is where a frame goes, and for the stack that is one
+     * element for all of them.
+     *
+     * Three things have to be undone or redone in the right order, and each is
+     * somebody's property:
+     *   - FRAMES. A stage that renders a slide itself (a portrait fragment) wants
+     *     no frame; the stack wants one for every slide, so a frameless item gets
+     *     its document back from `opts.newFrame`. Done first, so the outgoing stage
+     *     is empty by the time it is dismantled.
+     *   - THE OUTGOING STAGE'S OWN CHROME — its column, its rail, its share button.
+     *     Only it knows what it built, so it is asked to `detach()`.
+     *   - THE GESTURE LAYER, which is the player's and follows the stage: a stage
+     *     that owns input has none, and one that does not gets it back.
+     */
     window.WccPlayer.setStage = function (s) {
-      if (!s || s === stage) return;
+      s = s || null;
+      if (s === stage) return;
+      // Going home needs to know where home is. An older template that does not
+      // pass `slideHost` can still be upgraded onto a stage (that was the one-way
+      // swap), but cannot be brought back to a stack it never named — so decline,
+      // and leave the deck exactly as it is rather than half-moved.
+      if (!s && !slideHost) return;
+      var prev = stage;
       stage = s;
-      if (s.host) {
-        for (var i = 0; i < n; i++) {
-          var host = s.host(i);
-          var f = items[i].frame;
-          if (!host || f.parentNode === host) continue;
-          host.appendChild(f);        // moves it, which reloads it
-          // Re-arm the load bookkeeping: whatever was queued belonged to a document
-          // that no longer exists, and the bridge will handshake again.
-          if (frameIsLive(i)) { loaded[i] = false; pendingCmds[i] = []; watchLoad(i); }
+      function hostFor(i) { return s && s.host ? s.host(i) : slideHost; }
+      for (var i = 0; i < n; i++) {
+        var host = hostFor(i);
+        var f = items[i].frame;
+        /* The new stage renders this slide itself (a portrait fragment), so its
+         * document is not merely in the wrong place — it should not exist. Tear it
+         * down through the usual path, which is the only reliable reclaim, and then
+         * drop the frame so nothing reloads it: `reconcileWindow` would otherwise
+         * bring back an invisible document behind the fragment on the next move. */
+        if (!host) {
+          if (!f) continue;
+          unloadFrame(i);
+          if (items[i].frame.parentNode) items[i].frame.parentNode.removeChild(items[i].frame);
+          items[i].frame = null;
+          loaded[i] = true;      // nothing left to load — see the seed above
+          pendingCmds[i] = [];   // and nothing left to send them to
+          continue;
         }
+        /* ...and the reverse: this stage shows slides as documents, so an item that
+         * had none needs one back. Cold — `dataset.src` and no `src` — because the
+         * arrival below reconciles the window and loads exactly what belongs in it.
+         * Giving it a src here would load a document the reader may be nowhere
+         * near, on the surface the windowing exists to protect. */
+        if (!f) {
+          if (!newFrame) continue;
+          f = items[i].frame = newFrame(i);
+          loaded[i] = false;
+          pendingCmds[i] = [];
+          host.appendChild(f);
+          continue;
+        }
+        if (f.parentNode === host) continue;
+        host.appendChild(f);        // moves it, which reloads it
+        // Re-arm the load bookkeeping: whatever was queued belonged to a document
+        // that no longer exists, and the bridge will handshake again.
+        if (frameIsLive(i)) { loaded[i] = false; pendingCmds[i] = []; watchLoad(i); }
       }
+      // The stage that is leaving takes its own chrome with it.
+      if (prev && prev.detach) prev.detach();
       // A stage that owns input gets no gesture layer — `#wcc-tap` is a fixed
       // full-viewport overlay and would swallow the scroll of a stage that scrolls.
-      if (s.ownsInput && tapEl && tapEl.parentNode) tapEl.parentNode.removeChild(tapEl);
+      // The stack does not scroll, so the layer comes back with it.
+      if (s && s.ownsInput) {
+        if (tapEl && tapEl.parentNode) tapEl.parentNode.removeChild(tapEl);
+      } else if (tapEl && !tapEl.parentNode && !hosted) {
+        document.body.appendChild(tapEl);
+      }
       attachStage(s);
       schedulePlace();                // the bar's letterbox bands just changed shape
       // Arrive where we already are: the current frame has just reloaded and needs

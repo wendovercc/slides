@@ -1,0 +1,89 @@
+{#- portrait/showcase-card.html — the phone rendering of templates/slides/showcase-card.html.
+
+    docs/portrait-decks.md, phase 1. A FRAGMENT, not a document: no doctype, no
+    <head>, no styles of its own. It is fetched by portrait.js and inserted into
+    the player document, so everything it needs is in assets/css/portrait.css under
+    `.pfrag-showcase` — see the isolation note at the top of that file.
+
+    Same `slide` dict as the wall template, and deliberately so: the words are the
+    slide's, the layout is the surface's. Two things differ, both decided in the
+    doc:
+
+    - NO QR CODE. A QR is how you pass a URL to someone standing in front of a
+      television; this reader is holding the phone it exists to reach. So the links
+      are unconditional here, where the wall template hides them behind
+      `body.interactive` whenever a code covers the wall.
+    - The brand lockup is centred at the top rather than pinned to the top-left
+      corner, which is where portrait.js floats the share button.
+
+    `data-atom` is the structural requirement, not decoration: an atom is an
+    addressable position on the portrait surface exactly as it is a beat on the
+    wall, and play mode (phase 5) traverses these. A showcase card is one atom, so
+    the fragment carries one anchor at its root.
+-#}
+<article class="pfrag pfrag-showcase" data-atom="{{ slug }}#0">
+    {%- if slide.backdrop is defined %}
+    <img class="pf-backdrop" src="/{{ slide.backdrop }}" alt="">
+    <div class="pf-veil"></div>
+    {%- endif %}
+    <div class="pf-flow">
+        <div class="pf-brand">
+            <img src="/assets/images/wcc-logo.png" alt="">
+            <span>Wendover<br>Cricket Club</span>
+        </div>
+
+        <div class="pf-main">
+        {%- if slide.sections is defined %}
+        {#- Stacked blocks, in order, ruled apart. The wall has to fit both into one
+            screen (a grid with the credit pinned beneath); a column just reads
+            down. #}
+        {%- for sec in slide.sections %}
+        <section class="pf-sec {{ sec.layout | default('centred') }}">
+            {%- if sec.eyebrow is defined %}<div class="pf-eyebrow">{{ sec.eyebrow }}</div>{% endif %}
+            {%- if sec.title is defined %}<div class="pf-sec-title">{{ sec.title }}</div>{% endif %}
+            {%- if sec.body is defined %}
+            <div class="pf-body">{% for para in sec.body %}<p>{{ para }}</p>{% endfor %}</div>
+            {%- endif %}
+            {%- if sec.strapline is defined %}
+            <div class="pf-strapline">{% for item in sec.strapline %}<span class="pf-strap">{{ item }}</span>{% endfor %}</div>
+            {%- endif %}
+            {%- if sec.links is defined %}
+            <div class="pf-links">
+                {%- for link in sec.links %}
+                <a class="pf-link{{ ' secondary' if sec.get('secondary_links') or not loop.first else '' }}"
+                   href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+                {%- endfor %}
+            </div>
+            {%- endif %}
+        </section>
+        {%- endfor %}
+        {%- else %}
+        <section class="pf-sec">
+            {%- if slide.eyebrow is defined %}<div class="pf-eyebrow">{{ slide.eyebrow }}</div>{% endif %}
+            <div class="pf-title">{{ slide.title }}</div>
+            {%- if slide.subtitle is defined %}<div class="pf-subtitle">{{ slide.subtitle }}</div>{% endif %}
+            {%- if slide.body is defined %}
+            <div class="pf-rule"></div>
+            <div class="pf-body">{% for para in slide.body %}<p>{{ para }}</p>{% endfor %}</div>
+            {%- endif %}
+            {%- if slide.strapline is defined %}
+            <div class="pf-strapline">{% for item in slide.strapline %}<span class="pf-strap">{{ item }}</span>{% endfor %}</div>
+            {%- endif %}
+            {%- if slide.note is defined %}<div class="pf-note">{{ slide.note }}</div>{% endif %}
+            {%- if slide.links is defined %}
+            <div class="pf-links">
+                {%- for link in slide.links %}
+                <a class="pf-link{{ ' secondary' if not loop.first else '' }}"
+                   href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+                {%- endfor %}
+            </div>
+            {%- endif %}
+        </section>
+        {%- endif %}
+        </div>
+
+        {%- if slide.footnote is defined %}
+        <div class="pf-tail pf-footnote">{{ slide.footnote }}</div>
+        {%- endif %}
+    </div>
+</article>

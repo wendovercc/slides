@@ -112,6 +112,31 @@ inside it, `overflow: hidden`, and clamp multi-line text:
 This is the same reasoning as the fixed-height tile stack (see "Tile stacks"):
 let surplus space fall at the end rather than letting content decide geometry.
 
+### The one exception: portrait fragments
+
+**Scoped to `assets/css/portrait.css` and the fragments under `templates/portrait/`,
+which the rule above does not apply to.** A portrait fragment is the phone rendering
+of a slide (`docs/portrait-decks.md`): it is not laid out in the 1920×1080 design
+box, it is not scaled by `--fit`, and it sizes its type from a **floored fluid
+scale** whose floor and ceiling are `px`:
+
+```css
+.pfrag { --u: clamp(3.4px, 1vw, 6px);  /* one knob for the whole scale */
+         --t-hero: calc(9 * var(--u)); --t-lg: calc(6 * var(--u)); … }
+```
+
+The floor is the point of it. Unfloored `vw` type on a phone resolves to a handful
+of CSS px, which is where WebKit stops honouring it (text autosizing,
+minimum-font-size, whole-px line-box rounding) — the failure the wall's design box
+exists to prevent, arriving by a different route.
+
+Neither condition the zoom rule guards against holds on this surface: a phone's
+pinch is **visual** zoom, which does not change the layout viewport
+(`project_touch_pinch_zoom`), and a fragment is a flex column of intrinsic text
+blocks rather than an accumulating table. **The wall rule stands unchanged
+everywhere else, including inside a portrait deck's letterbox bands** — the slide in
+one of those is a wall slide, laid out in the design box exactly as on a panel.
+
 To check: `grep -rE '[0-9.]+px' templates/slides` should return only comments.
 Stricter still, against the build output, `grep -rE '[0-9.]+px' site/slide`
 should return only the token block's `~2px`-style comments and `0px`.

@@ -45,6 +45,16 @@
            clipped equally at top and bottom behind the browser chrome. dvh tracks the
            visible viewport instead. The `100%` line stays first as the pre-dvh fallback. */
         html, body { width: 100%; height: 100%; height: 100dvh; overflow: hidden; background: #000; }
+        /* Raised across a surface swap (rotation), and nothing else — see veilUp().
+           Above every surface AND the control bar, because all three change at once;
+           the matte is what the deck sits on either way, so what a rotation shows is
+           background rather than a half-swapped player. Never takes a tap. */
+        #wcc-swap-veil {
+            position: fixed; inset: 0; z-index: 200;
+            display: none; opacity: 0;
+            background: var(--matte);
+            pointer-events: none;
+        }
         {%- if screen %}
         body:not(.preview) { cursor: none; }
         {%- endif %}
@@ -446,7 +456,16 @@ function isVideoSlide(s) {
    each, a reel one for the whole strip — so a deck the editor sees as "4 steps"
    scrolls as four. portrait.js applies the rule; this only supplies the inputs. */
 function portraitSlides(list) {
-    return list.map(s => ({ atoms: (s._atoms || []).length, video: isVideoSlide(s) }));
+    return list.map(s => ({
+        atoms: (s._atoms || []).length,
+        video: isVideoSlide(s),
+        // The slide's published portrait fragment, where its template has one
+        // (build.py writes /slide/<slug>/portrait.html and flags it here). The
+        // column renders that instead of a letterboxed iframe — and asks for no
+        // iframe at all. Absent on an editor-injected deck entry, which has no build
+        // behind it, so a sitting letterboxes exactly as it does today.
+        portrait: s._portrait ? `/slide/${s.slug}/portrait.html` : null,
+    }));
 }
 
 let _currentSlug = null;
@@ -822,7 +841,12 @@ async function init() {
     const portrait = PORTRAIT ? WccPortrait.create({ slides: portraitSlides(slides) }) : null;
     const stage = document.getElementById('stage');
     const FRAME_Q = frameQuery(show);
-    const frames = slides.map((s, i) => {
+    /* Build one slide's iframe, COLD (its url in `data-src`, no `src`): who loads it
+       and when is the windowing's business, at boot below and on every stage change.
+       A function rather than an inline body because a rotation back to the landscape
+       stack has to build one for a slide that had none — see `newFrame` in the
+       player options. */
+    function makeFrame(s) {
         const f = document.createElement('iframe');
         // Permissions Policy is delegated ONE HOP AT A TIME. On the wall this player is
         // top-level, so a slide frame inherits autoplay from the default self-allowlist
@@ -850,38 +874,61 @@ async function init() {
                 } catch (e) {}
             });
         }
+        return f;
+    }
+
+    /* One iframe per slide — EXCEPT a slide the portrait column renders itself.
+       `host(i)` answering null means the step is a portrait fragment: real DOM in
+       this document, so there is no document to create, which is the memory win the
+       fragments are for. The item still exists in the deck and still has its atoms;
+       it simply has no frame, and player-core treats a frameless item as one with
+       nothing to post to. Everything else — a landscape deck, a wall, a template
+       with no portrait layout — takes the branch it always has. */
+    const frames = slides.map((s, i) => {
+        const host = portrait ? portrait.host(i) : slideLayer;
+        if (!host) return null;
+        const f = makeFrame(s);
         if (WIN === null || i <= WIN) f.src = f.dataset.src;
-        (portrait ? portrait.host(i) : slideLayer).appendChild(f);
+        host.appendChild(f);
         return f;
     });
-    const bootFrames = WIN === null ? frames : frames.slice(0, WIN + 1);
+    // NULLS ARE LOAD-BEARING HERE: `frames` stays index-aligned with `slides` (every
+    // item finds its own frame by `s._i`), so a frameless slide is a hole in it, not
+    // a shorter array. Only the gate's list is compacted — it awaits load events, and
+    // a slide with no document has none to wait for.
+    const bootFrames = (WIN === null ? frames : frames.slice(0, WIN + 1)).filter(Boolean);
 
     {% if live_enabled %}
     // Not in portrait. The L-frame chrome is a property of a WALL on a match day: the
     // ticker and strip live in the band a retracting 16:9 slide layer uncovers, and
     // there is no such band here — the slide fills the width of its step. A phone that
     // wants the live match has the live surfaces themselves.
-    if (LIVE_FEED_ON && !PORTRAIT) {
-    // Live chrome, in the L the retracting slide layer uncovers: ticker along the
-    // bottom band, standings strip up the right. Both sit on the stage (not the slide
-    // layer) so they don't scale with it. An unprovisioned device never loads them.
-    const tickerFrame = document.createElement('iframe');
-    tickerFrame.id = 'ticker-frame';
-    tickerFrame.className = 'ticker';
-    tickerFrame.src = '/live-ticker/';
-    stage.appendChild(tickerFrame);
-    const stripFrame = document.createElement('iframe');
-    stripFrame.id = 'strip-frame';
-    stripFrame.className = 'strip';
-    stripFrame.src = '/live-strip/';
-    stage.appendChild(stripFrame);
-    // Live-highlight news-flash overlay (not a slide; the player raises it on top).
-    const flashFrame = document.createElement('iframe');
-    flashFrame.id = 'flash-frame';
-    flashFrame.className = 'flash';
-    flashFrame.src = '/live-flash/';
-    stage.appendChild(flashFrame);
+    /* Live chrome, in the L the retracting slide layer uncovers: ticker along the
+       bottom band, standings strip up the right, and the news-flash overlay the
+       player raises over both. All three sit on the stage (not the slide layer) so
+       they don't scale with it. An unprovisioned device never loads them.
+
+       A PROPERTY OF THE LANDSCAPE STAGE, built on demand rather than at boot: the
+       ticker and strip live in a band a retracting 16:9 slide layer uncovers, and
+       the portrait column has no such band — the slide fills the width of its step.
+       So a deck that opens in portrait builds none of this, and builds it if the
+       phone is turned. Idempotent, because that can happen more than once. */
+    function ensureLiveChrome() {
+        if (!LIVE_FEED_ON || document.getElementById('ticker-frame')) return;
+        for (const [id, cls, src] of [['ticker-frame', 'ticker', '/live-ticker/'],
+                                      ['strip-frame',  'strip',  '/live-strip/'],
+                                      ['flash-frame',  'flash',  '/live-flash/']]) {
+            const f = document.createElement('iframe');
+            f.id = id; f.className = cls; f.src = src;
+            stage.appendChild(f);
+        }
+        // The flash is the player's to raise, so it has to be handed over — at boot
+        // through `start`, and here when it arrives mid-session.
+        if (window.WccPlayer && WccPlayer.setFlashFrame) {
+            WccPlayer.setFlashFrame(document.getElementById('flash-frame'));
+        }
     }
+    if (!PORTRAIT) ensureLiveChrome();
     {% endif %}
     applyDebugScale();
 
@@ -918,40 +965,148 @@ async function init() {
         onReload = refresh.onReload;
     }
 
-    /* ---- the surface upgrade, one way only -------------------------------------
-       The surface is chosen at boot from the viewport aspect, so a deck OPENED in
-       landscape and then turned portrait — a phone held sideways when the link was
-       tapped, a browser window dragged narrow — would sit on the letterboxed stage
-       for the rest of the session, which is the wrong surface for the shape it is
-       now. Crossing that edge switches it, live: the deck keeps playing, at the
-       same slide, with the same controls. See WccPlayer.setStage.
+    /* ---- the surface follows the screen ----------------------------------------
+       The surface is chosen at boot from the viewport aspect, and re-chosen whenever
+       that aspect crosses 1. A phone opened in portrait becomes the column; turned
+       sideways it goes back to the landscape presentation — the 16:9 slide with the
+       controls in the right-hand band — and turned upright again it returns to the
+       column. Same player, same slide, same controls throughout: `WccPlayer.setStage`
+       moves the frames and swaps the geometry, nothing reloads the page.
 
-       ONE WAY, which is a judgement rather than a limit — the swap would work in
-       both directions. It costs an iframe reload of whatever is on screen, and the
-       column reads perfectly well in landscape (the band simply grows to fill the
-       viewport), so going back would spend a viewer's clip position to fix nothing.
-       Portrait never arms this, and one `done` closes it after it fires. */
-    function armPortraitUpgrade(finalSlides) {
+       BOTH WAYS, which is a change of mind rather than of mechanism (the first cut
+       ratcheted one way, on the argument that the column reads acceptably in
+       landscape and going back would spend a viewer's clip position to fix nothing).
+       What that misses is that the deck is AUTHORED for 16:9: a landscape screen
+       showing a portrait column is a screen showing the wrong thing, and a rotation
+       is the clearest instruction a phone can give about the shape it now is. The
+       column is what a portrait screen wants, not a preference the viewer expressed.
+
+       Debounced, so a window dragged across the boundary swaps once, when the drag
+       stops, rather than on every resize event along the way. The residual cost is
+       an iframe reload of whatever is on screen — a frame moved in the DOM reloads
+       its document — so a clip loses its position on each crossing. That is the
+       price of the swap and it has not changed; what has is that it can now be paid
+       twice. */
+    /* The veil: a plain matte sheet over everything, raised across a surface swap.
+       It is not decoration — it is what the swap costs, made deliberate.
+
+       Two windows are ugly and neither can be removed, only covered. The FIRST is
+       the rotation itself: the viewport flips before we can know it has (iOS updates
+       `innerWidth`/`innerHeight` after `orientationchange` fires, not with it), so
+       there is unavoidably a moment of the old surface laid out in the new shape.
+       The SECOND is the swap's own cost: a frame moved in the DOM reloads its
+       document, so the slide on screen comes back blank and paints again.
+
+       Covering both with the matte the deck already sits on turns "the wrong thing,
+       then a white flash" into "a beat of background" — which is what a rotation
+       looks like in any app. `pointer-events: none` so the veil can never eat a tap
+       even if it were somehow left up, and a hard timer so it cannot be. */
+    let veil = null, veilT = null;
+    function veilUp() {
+        if (!veil) {
+            veil = document.createElement('div');
+            veil.id = 'wcc-swap-veil';
+            document.body.appendChild(veil);
+        }
+        clearTimeout(veilT);
+        veil.style.display = 'block';
+        veil.style.transition = 'none';   // instant: what it is hiding is wrong NOW
+        veil.style.opacity = '1';
+        veilT = setTimeout(() => veilDown(), 1500);   // never leave the deck under a sheet
+    }
+    function veilDown(delay) {
+        if (!veil) return;
+        clearTimeout(veilT);
+        veilT = setTimeout(() => {
+            veil.style.transition = 'opacity 0.18s ease';
+            veil.style.opacity = '0';
+            setTimeout(() => { if (veil.style.opacity === '0') veil.style.display = 'none'; }, 240);
+        }, delay || 0);
+    }
+
+    /* ---- the surface follows the screen ----------------------------------------
+       The surface is chosen at boot from the viewport aspect, and re-chosen whenever
+       that aspect crosses 1. A phone opened in portrait becomes the column; turned
+       sideways it goes back to the landscape presentation — the 16:9 slide with the
+       controls in the right-hand band — and turned upright again it returns to the
+       column. Same player, same slide, same controls throughout: `WccPlayer.setStage`
+       moves the frames and swaps the geometry, nothing reloads the page.
+
+       BOTH WAYS, which is a change of mind rather than of mechanism (the first cut
+       ratcheted one way, on the argument that the column reads acceptably in
+       landscape and going back would spend a viewer's clip position to fix nothing).
+       What that misses is that the deck is AUTHORED for 16:9: a landscape screen
+       showing a portrait column is a screen showing the wrong thing, and a rotation
+       is the clearest instruction a phone can give about the shape it now is. The
+       column is what a portrait screen wants, not a preference the viewer expressed.
+
+       ---- how long the wrong surface is on screen ----
+       A ROTATION AND A DRAGGED WINDOW ARE NOT THE SAME EVENT, and treating them as
+       one is what made the swap feel slow. A drag fires a stream of resizes and has
+       to be debounced or the deck would swap — and reload its frames — at every step
+       across the boundary. A rotation is ONE discrete instruction, already committed
+       to by the person holding the phone, and there is nothing to wait for except
+       the numbers catching up.
+
+       So `orientationchange` opens a short window in which any resize is acted on at
+       once, with a timer behind it in case none arrives. That is the fix for the
+       delay: the surface changes about a frame after the viewport settles instead of
+       400ms after it, and the debounce survives for the case it was written for.
+
+       The rest is covered rather than removed — see the veil above. */
+    function armRotation(finalSlides) {
         // `setStage` is checked, not assumed: Pages serves this HTML with max-age=600
         // and /assets/js with max-age=14400, so fresh HTML can pair with JS that
-        // predates it. Without the swap there is simply no upgrade, which is exactly
-        // the behaviour this page had before there was one.
-        if (PORTRAIT || !window.WccPortrait || !(window.WccPlayer && WccPlayer.setStage)) return;
-        let t = null, done = false;
-        const check = () => {
-            if (done) return;
-            if (t) clearTimeout(t);
-            // Debounced: a window dragged across the boundary must swap once, when the
-            // drag stops, not on every resize event along the way.
-            t = setTimeout(() => {
-                if (done || !WccPlayer.surface({% if screen %}false, true{% else %}!!show.standalone, false{% endif %}).portrait) return;
-                done = true;
+        // predates it. Without the swap there is simply no rotation handling, which is
+        // exactly the behaviour this page had before there was any.
+        if (!window.WccPortrait || !(window.WccPlayer && WccPlayer.setStage)) return;
+        const SETTLE_MS = 400;      // a dragged window, mid-drag
+        const FLIP_MS = 1200;       // how long after a rotation a resize is "the rotation"
+        let t = null, on = PORTRAIT, flipUntil = 0;
+
+        const run = () => {
+            t = null;
+            const want = !!WccPlayer.surface({% if screen %}false, true{% else %}!!show.standalone, false{% endif %}).portrait;
+            if (want === on) {
+                // A rotation that did not cross the aspect — 180 degrees, or landscape
+                // to landscape. Nothing to swap, so put the veil straight back down.
+                if (Date.now() < flipUntil) veilDown();
+                return;
+            }
+            on = want;
+            flipUntil = 0;
+            veilUp();
+            if (want) {
                 WccPlayer.setStage(
                     WccPortrait.create({ slides: portraitSlides(finalSlides) }).stage);
-            }, 400);
+            } else {
+                // Back to the crossfade stack. The column takes itself apart
+                // (stage.detach) and any slide it was rendering itself gets its
+                // iframe back — see setStage.
+                WccPlayer.setStage(null);
+                {% if live_enabled %}ensureLiveChrome();{% endif %}
+            }
+            // The 16:9 stage was display:none until a moment ago, so the fit it
+            // measured during the rotation's own resize was of a zero-width box.
+            fitLayer();
+            // Lift once the frames the swap moved have had a moment to come back.
+            // Deliberately a short fixed beat rather than a wait on their load events:
+            // the veil is covering a repaint, and a deck should never be able to sit
+            // behind it waiting for a document that is slow or never arrives.
+            veilDown(160);
         };
-        window.addEventListener('resize', check);
-        window.addEventListener('orientationchange', check);
+        const schedule = (delay) => {
+            if (t) clearTimeout(t);
+            t = setTimeout(run, delay);
+        };
+        // A resize inside the window a rotation opened IS the rotation, arriving with
+        // the numbers finally updated: act on it now.
+        window.addEventListener('resize', () => schedule(Date.now() < flipUntil ? 0 : SETTLE_MS));
+        window.addEventListener('orientationchange', () => {
+            flipUntil = Date.now() + FLIP_MS;
+            veilUp();          // before the flip is visible, not after
+            schedule(150);     // ...and a backstop, for a browser that sends no resize
+        });
     }
 
     function startPlayer(finalSlides) {
@@ -1012,6 +1167,12 @@ async function init() {
             // difference between the two surfaces — everything else about playing a
             // deck stays in player-core.
             stage: portrait ? portrait.stage : null,
+            // ...and what the stack IS, for when a rotation hands the deck back to it.
+            // The element and the frame-building are the template's to own (it knows
+            // the markup and the deck), so a swap back to the stack borrows both from
+            // here rather than player-core learning either.
+            slideHost: slideLayer,
+            newFrame: i => makeFrame(finalSlides[i]),
             // A news-flash is a full-bleed 16:9 takeover raised over the stage, and in
             // portrait there is no stage to raise it over (the chrome above is not
             // built). Withheld rather than left dangling on a null frame.
@@ -1021,7 +1182,7 @@ async function init() {
         // iframe (live-aware slides render it; others ignore it).
         {% if live_enabled %}if (LIVE_FEED_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
-        armPortraitUpgrade(finalSlides);
+        armRotation(finalSlides);
     }
 
     // Preview (the 50%-scale debug view) and any browser without the cache APIs keep
