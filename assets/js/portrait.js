@@ -155,7 +155,14 @@
          bought a travel of `steps` screens instead: every band stayed pinned one step
          too long, so the slide seen scrolling away at a transition was the one two
          back. Nothing here may be zero-height. */
+      /* `--pshift` biases the band UP off centre, and it is an affordance rather
+         than a taste: a step whose composition is symmetric reads as a finished
+         screen, so a deck of centred bands gives a first-time reader nothing that
+         says the column continues. Deeper matte below than above is the oldest cue
+         there is for "there is more this way". Uniform across every step — a bias
+         that switched off on the last one would make the bands jump. */
       '.psticky{position:sticky;top:0;height:var(--pstep-h,100dvh);z-index:1;' +
+      'box-sizing:border-box;padding-bottom:var(--pshift,0px);' +
       'display:flex;align-items:center;justify-content:center;}' +
       /* Which leaves the first step with no in-flow snap target of its own — the
          marks below start one step in. A zero-height box at the slide's top edge is
@@ -166,7 +173,13 @@
 
       /* The band. Full-bleed width in portrait; capped by height so that a rotated
          phone (or an iPad) gets a band that fits rather than one that overflows. */
-      '.pband{position:relative;width:min(100%, calc(var(--pstep-h,100dvh) * 16 / 9));' +
+      /* The height cap subtracts `--pshift` for the same reason the padding adds it:
+         the band has to fit the space that is left, or a rotated phone (or an iPad,
+         where height rather than width is the binding constraint) overflows its
+         step by exactly the bias. This formula and `fit()`'s `--pfit` are the same
+         arithmetic and must stay that way. */
+      '.pband{position:relative;' +
+      'width:min(100%, calc((var(--pstep-h,100dvh) - var(--pshift,0px)) * 16 / 9));' +
       'aspect-ratio:16/9;overflow:hidden;background:#000;}' +
 
       /* The slide, laid out at the wall's fixed 1920x1080 design box and scaled
@@ -209,12 +222,60 @@
          step WAS a band; a fragment step is full-bleed, so that position is now the
          middle of somebody's reading. The top edge is the one line no surface
          claims — the share button sits below it and the control bar takes the
-         bottom (placeBar's `below`, pinned to the viewport). */
+         bottom (placeBar's `below`, pinned to the viewport).
+
+         SEGMENTED by default: one tick per step, filled up to where you are. A
+         continuous fill answers "how far through", which a reader who does not yet
+         know the deck HAS a length cannot use; ticks answer "how many", which is
+         the question a first screen actually raises. It costs no viewport — it is
+         the same hairline, cut. Long decks fall back to the continuous fill (see
+         `TICK_MAX`): eighty-nine ticks on a phone is a dotted line, not a count. */
       '#wcc-prail{position:fixed;top:var(--sa-t,0px);left:0;z-index:58;' +
-      'width:100%;height:0.3vmax;' +
-      'background:rgba(255,255,255,0.14);overflow:hidden;pointer-events:none;}' +
-      '#wcc-prail i{display:block;width:100%;height:100%;background:#d4af37;' +
-      'transform-origin:left;transform:scaleX(0);transition:transform 0.35s ease;}' +
+      'box-sizing:border-box;width:100%;height:max(3px,0.4vmax);' +
+      'display:flex;gap:2px;padding:0 2px;overflow:hidden;pointer-events:none;}' +
+      '#wcc-prail i{display:block;flex:1 1 0;height:100%;' +
+      'background:rgba(255,255,255,0.18);transition:background 0.3s ease;}' +
+      '#wcc-prail i.on{background:#d4af37;}' +
+      // The continuous fallback: one child, scaled, on a track of its own.
+      '#wcc-prail.cont{gap:0;padding:0;background:rgba(255,255,255,0.14);}' +
+      '#wcc-prail.cont i{background:#d4af37;transition:transform 0.35s ease;' +
+      'transform-origin:left;transform:scaleX(0);}' +
+
+      /* The nudge. Motion is the only thing that reliably says "this scrolls" — a
+         static hint says "there is more page", which is a different sentence and
+         not the one a reader needs. So: a chevron that bobs, in the matte above the
+         dock, shown once per page and then not again (`cueDone`). It
+         teaches the gesture and gets out of the way; a cue that came back every
+         time would be an instruction repeated to someone who has already obeyed it.
+         Never takes a tap: it is a sign, not a control, and swallowing a scroll
+         that starts on it would undo the whole point. */
+      /* A BADGE, not a bare glyph. A chevron drawn straight onto the step has to
+         survive whatever is behind it, and on a fragment card that is the card's own
+         white text — where a white stroke with a shadow under it reads as a piece of
+         the content that has come loose. The ring is what separates chrome from
+         content, and it is deliberately the treatment the share button already had
+         when it floated (navy ground, gold hairline, white glyph), so the reader has
+         seen this vocabulary before and it says "control" without being one.
+         Solid ground rather than a blur: it is over content for a few seconds and a
+         backdrop filter is a compositing layer bought for that. */
+      '#wcc-pcue{position:fixed;left:50%;z-index:57;pointer-events:none;' +
+      'bottom:calc(var(--pdock-h,0px) + 2.2vmax);transform:translateX(-50%);' +
+      'opacity:0;transition:opacity 0.6s ease;}' +
+      '#wcc-pcue.on{opacity:1;}' +
+      /* The positioner keeps `translateX`, the badge takes `translateY`: one element
+         cannot hold a centring transform and an animated one at the same time — the
+         keyframe would overwrite the centring and shunt the cue half its width right. */
+      '#wcc-pcue i{display:flex;align-items:center;justify-content:center;' +
+      'width:max(40px,4.7vmax);height:max(40px,4.7vmax);border-radius:50%;' +
+      'background:rgba(10,28,58,0.9);border:1px solid rgba(212,175,55,0.45);' +
+      'box-shadow:0 0.4vh 1.4vh rgba(0,0,0,0.5);' +
+      'animation:wcc-pcue-bob 1.9s ease-in-out infinite;}' +
+      '#wcc-pcue svg{display:block;width:2.3vmax;height:2.3vmax;fill:none;' +
+      'stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}' +
+      /* Travel only. An opacity pulse on a bordered badge reads as a flicker, where
+         on a bare glyph it was half of what made it look alive. */
+      '@keyframes wcc-pcue-bob{0%,100%{transform:translateY(-0.55vmax);}' +
+      '50%{transform:translateY(0.55vmax);}}' +
 
       /* Share. The deck's distribution model IS being forwarded, and until now it
          had no forward button. Top matte, and top-LEFT deliberately: the control
@@ -244,6 +305,59 @@
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
+  }
+
+  /* Above this many steps the rail stops counting and goes back to a fill: the
+   * ticks have to be wide enough to read as separate marks, and `teams` is 89
+   * positions. Sized off the narrowest phone we care about (390px), where 24 ticks
+   * are ~14px each. */
+  var TICK_MAX = 24;
+
+  /* The badge is the outer <i>, and it is what bobs — the chevron sits still inside
+   * it. A glyph moving within a fixed ring reads as a loose part; the whole control
+   * moving reads as a nudge. */
+  var CUE_ICON = '<i><svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<polyline points="6 9 12 15 18 9" /></svg></i>';
+
+  /* Shown once per PAGE, and this module scope is exactly the right lifetime for
+   * that — it outlives any one stage, so a rotation (which tears this stage down
+   * and builds another) does not re-teach a gesture the reader has already used,
+   * which was the whole requirement.
+   *
+   * It was `sessionStorage` first, and that was wrong in both directions. A session
+   * is the TAB: the flag survived every reload, so the cue showed once ever and
+   * then never again — invisible in testing and, for a real reader, absent from the
+   * arrival it exists for if they had opened any deck earlier. And it was reaching
+   * for storage (with a private-mode try/catch) to remember something that only
+   * needs to be true for as long as the document does. A reload is a reader
+   * arriving; showing them the cue again is correct. */
+  var cueShown = false;
+
+  /* The strip above the rail — the notch/status bar in a Safari TAB, and the
+   * browser toolbar with it — is not ours to paint, but its tint is: iOS Safari
+   * colours both from `<meta name="theme-color">`, and re-reads it live. The site
+   * declares `#0f2346` in `_pwa_head.html`, which is the brand navy the home page
+   * and the installed app's chrome are built on; against a portrait deck it lands
+   * as a lighter band sitting directly on top of the gold rail, reading as a piece
+   * of the page that has the wrong colour rather than as browser furniture.
+   *
+   * So the portrait stage takes it to the matte for as long as it is on screen, and
+   * hands it back in `detach()` — a stage property like the dock and the rail, not
+   * a change to the site's declared colour. The bottom toolbar gets the same tint,
+   * which is a second gain: it stops being a separate shade under our dock.
+   *
+   * Set on the existing tag rather than an added one: Safari honours the FIRST
+   * theme-color it finds, so an appended tag would be ignored. */
+  var themeMeta = null, themeWas = null;
+  function themeColor(to) {
+    if (!themeMeta) themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (!themeMeta) return;
+    if (to == null) {
+      if (themeWas != null) { themeMeta.setAttribute('content', themeWas); themeWas = null; }
+      return;
+    }
+    if (themeWas == null) themeWas = themeMeta.getAttribute('content') || '';
+    themeMeta.setAttribute('content', to);
   }
 
   var SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
@@ -298,6 +412,10 @@
     injectCss();
     linkCss();
     document.body.classList.add('wcc-portrait');
+    /* Read off the document rather than hard-coded, so the browser furniture and
+       the column's own ground can never drift apart — they are the same token. */
+    themeColor((getComputedStyle(document.documentElement)
+                .getPropertyValue('--matte') || '').trim() || '#08152c');
 
     var deck = document.createElement('div');
     deck.id = 'wcc-pdeck';
@@ -374,7 +492,10 @@
     warm(0);   // the opening card, and its neighbours, before anything is shown
 
     var api = null;                 // the transport, handed over by attach()
-    var rail = null;                // the fill inside the rail
+    var rail = null;                // the fill inside the rail (continuous mode)
+    var ticks = null;               // one <i> per step (segmented mode), or null
+    var cue = null;                 // the scroll nudge, once per session
+    var cueTimer = null;
     var chromeEls = [];             // everything this stage added outside the column
     /* Detached — the phone was turned and another stage has the deck now. Anything
      * that can still fire after that has to check it: a settle timer armed by the
@@ -402,11 +523,18 @@
       // One scrollport in px, so a step's height and `deck.clientHeight` are the
       // same number by construction — see .pmark.
       root.setProperty('--pstep-h', h + 'px');
+      /* How far off centre a band sits (see .psticky). A fraction of the step so it
+         holds its proportion on every screen, and capped so a landscape phone —
+         where the band already fills most of the step — is not shoved into its own
+         bottom edge. */
+      var shift = Math.round(Math.min(h * 0.07, Math.max(0, (h - deck.clientWidth * 9 / 16) / 3)));
+      root.setProperty('--pshift', shift + 'px');
       // The band's width, derived rather than measured off a band: a deck may now
       // have none in it at all (both of the pavilion's cards are fragments), and this
       // is the same width the CSS gives one — full bleed, capped by height so a
-      // rotated phone gets a band that fits rather than one that overflows.
-      var w = Math.min(deck.clientWidth, h * 16 / 9);
+      // rotated phone gets a band that fits rather than one that overflows. The
+      // `- shift` is the bias above; this and .pband's width must agree exactly.
+      var w = Math.min(deck.clientWidth, (h - shift) * 16 / 9);
       if (w) root.setProperty('--pfit', w / 1920);
 
       /* EVERY STEP JUST CHANGED HEIGHT, AND `scrollTop` DID NOT.
@@ -511,16 +639,22 @@
      * of a long flick, which would commit the instant a fast scroll reached the end.
      * A step whose content fits the screen is at both ends at once, and then this
      * reads as a plain swipe to the next step, which is right.
+     *
+     * That re-anchoring is necessary and was not sufficient: see the arming rule
+     * below, which is what makes the commit a SEPARATE gesture from the scroll that
+     * reached the end.
      */
     function armCommit(el, slideEl) {
       var y0 = 0, fired = false, wheel = 0, wheelAt = 0;
+      // Which ends the CURRENT gesture began at. See the arming rule below.
+      var fromTop = false, fromBottom = false, wheelArmed = 0;
       function scrolls() { return el.scrollHeight > el.clientHeight + 2; }
       /* Two thresholds, one rule. Past the end of a step that HAS an interior, the
        * commit should take a deliberate second pull — the reader has just been
        * scrolling, and a light one is how you nudge the last line into view. A step
        * whose content fits the screen was never scrolling at all, so the same
        * gesture is just a swipe to the next step and should feel like one. */
-      function threshold() { return el.clientHeight * (scrolls() ? 0.12 : 0.06); }
+      function threshold() { return el.clientHeight * (scrolls() ? 0.18 : 0.06); }
       function ends() {
         return {
           top: el.scrollTop <= 2,
@@ -530,9 +664,30 @@
       // Which step this is, read at gesture time: `keep()` renumbers the column.
       function at() { return first[Number(slideEl.dataset.slide)]; }
 
+      /* THE ARMING RULE, and the thing that makes the commit a second gesture
+       * rather than the tail of the first: a drag can only commit past an end it
+       * was ALREADY at when the finger went down.
+       *
+       * Without it, one continuous pull that runs a step's interior out and keeps
+       * going commits on the spot — you reach for the last two lines of a card and
+       * the deck takes you to the next step. The anchor re-taken mid-scroll below
+       * limits how much of that pull counts, but it cannot stop it: past the end
+       * there is nothing left to re-anchor on, so the remainder of the same drag
+       * accumulates straight through the threshold.
+       *
+       * So the end of the content ends the gesture. You scroll down, the step
+       * bounces and holds; lift, pull again, and THAT one crosses. Which is the
+       * doc's forgiving commit read strictly — "a further strong swipe" is a
+       * further swipe, not a longer one.
+       *
+       * A step whose content fits the screen starts at both ends at once, so it is
+       * armed both ways from the first touch and stays a plain swipe. */
       el.addEventListener('touchstart', function (e) {
         y0 = e.touches[0].clientY;
         fired = false;
+        var e0 = ends();
+        fromTop = e0.top;
+        fromBottom = e0.bottom;
       }, { passive: true });
       el.addEventListener('touchmove', function (e) {
         // A pinch is two fingers moving apart, which reads as a large vertical drag
@@ -540,18 +695,26 @@
         if (fired || e.touches.length > 1) return;
         var y = e.touches[0].clientY, dy = y - y0, end = ends();
         if (!end.top && !end.bottom) { y0 = y; return; }
-        if (dy < -threshold() && end.bottom) { fired = true; commitTo(at() + 1); }
-        else if (dy > threshold() && end.top) { fired = true; commitTo(at() - 1); }
+        if (dy < -threshold() && end.bottom && fromBottom) { fired = true; commitTo(at() + 1); }
+        else if (dy > threshold() && end.top && fromTop) { fired = true; commitTo(at() - 1); }
       }, { passive: true });
 
       /* A trackpad or a mouse wheel in a narrow desktop window. Same rule, but the
        * gesture has no touchstart to anchor on, so the deltas are accumulated and
-       * expire — otherwise two unrelated flicks a minute apart would add up. */
+       * expire — otherwise two unrelated flicks a minute apart would add up. A gap
+       * of 400ms is what stands in for lifting a finger, and it is where the arming
+       * above is applied: a stream that BEGAN mid-content cannot commit however far
+       * it runs, exactly as a drag cannot. */
       el.addEventListener('wheel', function (e) {
         var end = ends();
         var now = Date.now();
-        if (now - wheelAt > 400) wheel = 0;
+        if (now - wheelAt > 400) {
+          wheel = 0;
+          wheelArmed = (end.top ? 1 : 0) | (end.bottom ? 2 : 0);
+        }
         wheelAt = now;
+        var want = e.deltaY > 0 ? 2 : 1;          // down needs the bottom, up the top
+        if (!(wheelArmed & want)) { wheel = 0; return; }
         if ((e.deltaY > 0 && end.bottom) || (e.deltaY < 0 && end.top)) wheel += e.deltaY;
         else wheel = 0;
         if (Math.abs(wheel) > threshold()) {
@@ -704,6 +867,12 @@
        * progress, and decline to re-anchor — leaving the column pointing at a step
        * the reader is not on, which is the bug this all exists to prevent. */
       if (pending < 0) lastScrollAt = Date.now();
+      /* Track the rail with the column rather than with the transport. The rail was
+         only ever redrawn from scrollToPos/commitTo, so a reader dragging through
+         band steps saw it move on the 110ms settle behind them. A continuous fill
+         creeping late is invisible; a tick lighting late is a beat out of time with
+         the thumb, and the tick is the whole point of segmenting it. */
+      drawRail(indexAt());
       if (settleTimer) clearTimeout(settleTimer);
       settleTimer = setTimeout(settle, 110);
     }, { passive: true });
@@ -755,20 +924,84 @@
      * on. Everything else the doc lists (sticky titles, a contents sheet) is earned
      * per deck and none of the decks that exist today earn it. */
     function drawRail(k) {
-      if (!rail || pos.length < 2) return;
-      rail.style.transform = 'scaleX(' + ((k + 1) / pos.length) + ')';
+      /* Any move off the first step is the reader having found the gesture, so the
+         nudge has done its job. Hooked HERE rather than on a scroll listener
+         because every path that changes the step — a thumb settling, a commit, a
+         bar press, a panel timer — passes through this one function. */
+      if (k > 0) cueDone();
+      if (pos.length < 2) return;
+      if (ticks) {
+        for (var i = 0; i < ticks.length; i++) {
+          ticks[i].classList.toggle('on', i <= k);
+        }
+        return;
+      }
+      if (rail) rail.style.transform = 'scaleX(' + ((k + 1) / pos.length) + ')';
+    }
+
+    /* The nudge is over: fade it out and remember, for this page, that it was shown
+     * (see `cueShown`). Idempotent — every step change calls it. */
+    function cueDone() {
+      if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+      if (!cue) return;
+      cueShown = true;
+      var el = cue;
+      cue = null;
+      el.classList.remove('on');
+      // Removed rather than left faded: it is fixed over the column for the rest of
+      // the deck, and an invisible box running a keyframe animation forever is a
+      // compositing layer bought for nothing on the device with least to spare.
+      setTimeout(function () {
+        if (el.parentNode) el.parentNode.removeChild(el);
+        var at = chromeEls.indexOf(el);
+        if (at >= 0) chromeEls.splice(at, 1);
+      }, 700);
+    }
+
+    function buildCue() {
+      // Nothing to scroll to, or the reader has already been told once.
+      if (pos.length < 2 || cueShown) return;
+      var c = document.createElement('div');
+      c.id = 'wcc-pcue';
+      c.setAttribute('aria-hidden', 'true');
+      c.innerHTML = CUE_ICON;
+      document.body.appendChild(c);
+      cue = c;
+      chromeEls.push(c);
+      // Late enough that it is not competing with the first card painting, and gone
+      // on its own if the reader simply sits there: a hint that never leaves stops
+      // being a hint.
+      cueTimer = setTimeout(function () {
+        cueTimer = null;
+        if (cue === c) {
+          c.classList.add('on');
+          cueTimer = setTimeout(cueDone, 9000);
+        }
+      }, 1400);
     }
 
     function buildChrome() {
       if (pos.length > 1) {
         var r = document.createElement('div');
         r.id = 'wcc-prail';
-        rail = document.createElement('i');
-        r.appendChild(rail);
+        // Segmented while the count still reads; a fill beyond that. See TICK_MAX.
+        if (pos.length <= TICK_MAX) {
+          ticks = [];
+          for (var t = 0; t < pos.length; t++) {
+            var seg = document.createElement('i');
+            r.appendChild(seg);
+            ticks.push(seg);
+          }
+        } else {
+          r.className = 'cont';
+          rail = document.createElement('i');
+          r.appendChild(rail);
+        }
         document.body.appendChild(r);
         chromeEls.push(r);
         drawRail(indexAt());
       }
+      buildCue();
       // Share, where the browser has it. The URL is the canonical one the link
       // preview was baked against (og:url), not location.href — which may carry the
       // ?deck= / ?k= query that got us here and is nobody else's business.
@@ -854,6 +1087,7 @@
         detach: function () {
           dead = true;
           if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+          if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
           clearPending();
           window.removeEventListener('resize', fit);
           window.removeEventListener('orientationchange', fit);
@@ -863,10 +1097,14 @@
           }
           chromeEls = [];
           rail = null;
+          ticks = null;
+          cue = null;
           document.body.classList.remove('wcc-portrait');
+          themeColor(null);   // the site's declared colour is the landscape one
           var root = document.documentElement.style;
           root.removeProperty('--pdock-h');
           root.removeProperty('--pstep-h');
+          root.removeProperty('--pshift');
           root.removeProperty('--pfit');
         },
         // The player's gesture layer stands down; this file takes the tap.

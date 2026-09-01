@@ -115,6 +115,17 @@
       'border-top:1px solid rgba(212,175,55,0.28);background:#08152c;' +
       'backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;' +
       'transform:none;padding:0.7vmax 0.6vmax calc(0.7vmax + var(--sa-b,0px));}' +
+      /* THE ONLY PLACEMENT WITH A px FLOOR ON ITS TARGETS, and the reason is the
+         same one that put a floored scale in the portrait fragments: the other
+         placements are read across a room, where a target sized off the viewport is
+         the right kind of constant, and this one is pressed with a thumb, where
+         44pt is 44pt on every phone. `4.7vmax` resolves against the LONGER edge,
+         which in portrait is the height — about 40px on a 390x844 iPhone, under the
+         floor and noticeably so in a tab, where Safari's own toolbar sits directly
+         beneath and a missed press hits that instead. The glyph stays in `vmax`: it
+         is the target that was too small, not the drawing. `max()` rather than a
+         flat px so an iPad in portrait still scales up. */
+      '#wcc-bar.place-portrait button{width:max(48px,4.7vmax);height:max(48px,4.7vmax);}' +
       // Inside the slide (near-16:9, no usable band): vertical column pinned to the
       // slide's top-right safe corner (top/right set inline from geometry) and
       // collapsible so it never permanently obstructs slide content.
