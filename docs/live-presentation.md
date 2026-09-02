@@ -128,6 +128,28 @@ button and reports the press). Three rules hold it together:
 players never build a control bar, so they can never be pinned and keep the
 automatic behaviour above untouched. `setLiveToggle` is a no-op without one.
 
+**Default-on needs no further defence, because the token is the opt-in.** Live
+chrome only exists where `LIVE_ON` holds, which needs a deliberately provisioned
+device — a handful of cricketers, never a casual visitor and never someone we sent
+a link to. There is no audience for a default-off to protect. The button is for the
+few who have a key and are looking at something else right now.
+
+### On the phone: the ticker, and only the ticker
+
+Designed in `docs/portrait-decks.md` ("Live on the phone"), summarised here because
+it decides the shape of both surfaces:
+
+- **The scoreboard is a deck, not chrome** — one step per match, reached from the
+  home page and walked like any other slideshow. Presentation C's tiles and this
+  panel are both served by it.
+- **So Presentation C does not come to portrait.** The strip answers an *ambient*
+  question and earns its band by being read at a glance from across a room; a phone
+  is not that room, and its tile grammar needs vertical space a dock will not give.
+- **The ticker docks above the control bar, event-first**, and is a **link** — the
+  whole band, to the live deck, because a rotating band is a bad per-segment tap
+  target. Per-segment routing waits for addressable per-match steps and will need
+  rotation-pause-on-touch with it.
+
 ## Presentation C — the live strip (left band)
 
 The vertical partner of the ticker footer: the same player-owned chrome, showing

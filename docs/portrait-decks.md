@@ -574,6 +574,83 @@ with. **So portrait has a fourth placement, `portrait`, and it is a DOCK rather 
 a float** (built): a full-width toolbar along the bottom edge, opaque and square,
 with the safe-area inset inside its own padding.
 
+### Live on the phone
+
+*Designed, not built. Supersedes the overlay sheet, which is withdrawn unbuilt.*
+
+The wall shows live as an **L**: ticker along the bottom, standings strip up the
+side, both in the band a retracting 16:9 slide layer uncovers. The phone gets
+**the ticker and nothing else**, and the reason is that the board changed shape
+underneath the question.
+
+**The scoreboard is a deck, not chrome.** One panel per match, reader-switched —
+which is what a run of steps already is. The reader picks a Today / Live Scores
+slideshow off the home page and walks it exactly like any other deck: no second
+transport, no overlay, no gesture arbitration, and the board gets the whole width
+it wants. (Whether that same deck is what the *wall* shows on a match day collides
+with Today's Match and is deliberately out of scope here.)
+
+Once the board is navigable, the three live roles sort themselves and one of them
+turns out to be redundant:
+
+- **Ticker (chrome)** — events. What just happened, in any match.
+- **Live deck (navigable)** — state *and* detail. Both of the strip's jobs, and the
+  panel's.
+
+**So the strip does not come to the phone.** It answers "where is the day leaving
+the league table", which is an *ambient* question: it earns its band by being
+readable without being read, by someone walking past a television. The reader
+holding a phone is not walking past, and if they want standings they navigate to
+them. Its grammar — equal tiles, fill height as certainty — also needs vertical
+room it will not get above a dock, and squeezed to phone width it becomes
+decoration. One band, one job.
+
+**The ticker is event-first, score-as-filler.** The landscape ticker leads with
+ambient scores because a wall is ambient. A phone band is not: it is worth its
+viewport only when it is telling you something, so a wicket outranks a score and
+the scores are what it falls back to when nothing has happened.
+
+**And it is a link — the first interactive chrome we have.** Both live frames are
+`pointer-events: none` today, deliberately ("never intercepts input"), so this is a
+change of category rather than a feature. Three rules keep it honest:
+
+- **The WHOLE BAND is the tap target, and it goes to the live deck.** Not the
+  segment. A rotating ticker is a bad tap target by construction — the thing under
+  your thumb changes every `CYCLE_MS`, so a per-segment link races the rotation and
+  lands you somewhere you did not aim. The rotating content is *advertising*; the
+  tap means "take me to live". Per-segment routing is the refinement once the live
+  deck has addressable per-match steps, and it will need the rotation to pause on
+  touch when it comes.
+- **It has to say it is tappable** — a chevron at the trailing edge and a pressed
+  state. Chrome that silently does something is worse than chrome that does nothing.
+- **Back is the browser's back button.** Following the link abandons the reader's
+  place in the deck they were in. That is a stated cost, not a thing to engineer
+  around: inventing a return path for one link would cost more than it saves, and
+  a deck restores to its first step.
+
+**On by default, for the session.** Same as landscape, and for a reason particular
+to this feature: **the access token IS the opt-in.** Live chrome only exists on a
+device someone deliberately provisioned (`LIVE_ON` — see the key model in
+`docs/live-presentation.md`), which in practice is a handful of cricketers and no
+casual visitor at all. A hirer opening the pavilion deck we sent them has no key
+and therefore no band, so there is nothing here for a default-on to leak onto. The
+button is not consent; it is for the few people who have a key and are looking at
+something else right now.
+
+**Two consequences for what is already built:**
+
+- **The live button returns in portrait.** It is withdrawn there today because the
+  chrome does not exist; once the ticker does, `_livePortrait` stops meaning "no
+  button" and the button's contract stays exactly what it is — *is the live chrome
+  up* — toggling a different chrome on each surface. That is tidier than the
+  special case currently shipped.
+- **The ticker must be measured WITH the dock.** `placeBar` reports
+  `bar.getBoundingClientRect().height` to `stage.chrome(h)` and the column shortens
+  by that much; a ticker docked above the bar has to be inside that number or it
+  will sit over the reading. The dock becomes two rows — ticker over bar — measured
+  as one wrapper, which is a change in `placeBar` rather than a second channel into
+  the column.
+
 The part that matters is not how it looks but what it costs: **the column shortens
 its scroller by the bar's measured height**, so a step is the space *above* the dock
 and nothing ever scrolls behind it. The other three placements can float because
@@ -924,13 +1001,9 @@ player's now, and the two that draw a line have one rule between them.
   the six days a week with no cricket on it — which matters on the bar the
   ~390px note below is about, since this makes it eight buttons.
 
-  **What is left is the shape**, and the sketch to argue with is that portrait's
-  live chrome should not be a band at all but an **overlay sheet** the same button
-  raises over the column — ticker full-width above the dock, strip tiles above
-  that — so nothing is permanently carved out of a step and `stage.chrome(h)` never
-  has to negotiate with it. Note the strip is already a vertical tile column and so
-  suits portrait better than it suits landscape; the ticker is the awkward one.
-  Still live work, still not a portrait decision to take alone.
+  **The shape is now settled — see "Live on the phone" below.** The overlay sheet
+  this entry used to propose is withdrawn unbuilt: the scoreboard it was to hold is
+  a *deck*, not chrome, so the sheet had nothing left to carry that a band could not.
 
 ### Content (design, with one leak)
 
@@ -1216,8 +1289,10 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
 
   The note that used to close this bullet — "this does not contradict the rejection
   of horizontal-as-step-axis below" — is void: that rejection is itself reversed.
-- **No live chrome.** The ticker and strip live in the L a retracting 16:9 slide
-  layer uncovers, and there is no such band here.
+- **No live chrome** — as built. The ticker and strip live in the L a retracting
+  16:9 slide layer uncovers, and there is no such band here. Superseded by design
+  but not yet by code: see "Live on the phone", where portrait gets the ticker (and
+  only the ticker) docked above the bar.
 - **Chrome is the progress rail and share**, and nothing else, as designed.
 
 Deliberately *not* done here, and still open below: portrait fragments and their
