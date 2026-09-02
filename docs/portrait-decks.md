@@ -576,7 +576,9 @@ with the safe-area inset inside its own padding.
 
 ### Live on the phone
 
-*Designed, not built. Supersedes the overlay sheet, which is withdrawn unbuilt.*
+*Built (`ensurePortraitDock` in `templates/player.html`, `?portrait` in
+`templates/live-ticker.html`, `setDockChrome` in `player-core.js`). Supersedes the
+overlay sheet, which is withdrawn unbuilt.*
 
 The wall shows live as an **L**: ticker along the bottom, standings strip up the
 side, both in the band a retracting 16:9 slide layer uncovers. The phone gets
@@ -637,19 +639,44 @@ and therefore no band, so there is nothing here for a default-on to leak onto. T
 button is not consent; it is for the few people who have a key and are looking at
 something else right now.
 
-**Two consequences for what is already built:**
+**Two consequences for what was already built, both now done:**
 
-- **The live button returns in portrait.** It is withdrawn there today because the
-  chrome does not exist; once the ticker does, `_livePortrait` stops meaning "no
-  button" and the button's contract stays exactly what it is — *is the live chrome
-  up* — toggling a different chrome on each surface. That is tidier than the
-  special case currently shipped.
-- **The ticker must be measured WITH the dock.** `placeBar` reports
-  `bar.getBoundingClientRect().height` to `stage.chrome(h)` and the column shortens
-  by that much; a ticker docked above the bar has to be inside that number or it
-  will sit over the reading. The dock becomes two rows — ticker over bar — measured
-  as one wrapper, which is a change in `placeBar` rather than a second channel into
-  the column.
+- **The live button is back in portrait.** It used to be withdrawn there because the
+  chrome did not exist; now that it does, `_livePortrait` survives only to say WHICH
+  chrome to build, and the button's contract is unchanged on either stage — *is the
+  live chrome up*. It throws one class and each stage answers with its own shape.
+- **The ticker is measured WITH the dock.** `placeBar` reports one number to
+  `stage.chrome(h)` and the column shortens by exactly that much, so the row has to
+  be inside it or it sits over the reading. `setDockChrome` hands the player an
+  element it positions (`bottom` = the bar's *measured* height, after the fit, which
+  can change it) and adds to that one number. Deliberately not a second channel into
+  the column: two numbers that have to agree is a bug waiting to happen.
+
+**And the band grows to its contents**, which nothing in the chain could do at
+first. Three things had to change together: the segments wrapped nowhere, both were
+`position:absolute` so neither had an intrinsic height, and **an iframe never sizes
+to its own content**. So the active segment is in flow and drives the height, the
+outgoing one goes absolute beneath it to keep the crossfade in place, and the ticker
+measures itself and posts `wcc-ticker-height` out for the dock to take — the only
+way the number can travel, since nothing outside the frame can know it. The CSS
+height became a floor for the two rows plus a `38vh` cap, so a runaway segment
+cannot eat the deck. `?tickerdemo` appends a prose segment for looking at it.
+
+**Two unit traps, both worth naming**, because each is what you get by reasonably
+following the convention next to it:
+
+- **`vw` is wrong on a phone.** The wall's ticker is tokenised in `vw` and reads
+  perfectly at 1920; in a ~390px band `2vw` is under 8px. This is the same failure
+  `--u`'s px floor exists to prevent (see "The scale"), one document over.
+- **`vh` inside an iframe is worse, in the other direction.** It resolves against
+  *the iframe's* height — about 64px here — so `3vh` of left padding came out at
+  under 2px, which is why the text sat flush against the edge. The first portrait
+  pass replaced the `vw` scale with a `vh` one and swapped one trap for another.
+
+The fix for both is that the portrait ticker borrows **the fragments' own scale**
+(`--u: clamp(3.4px, 1vw, 6px)`, redeclared in the ticker document): the segment is
+`.pf-body` exactly — same family, weight and size as a showcase card's body copy —
+so the band reads as part of the phone surface rather than as a shrunken wall.
 
 The part that matters is not how it looks but what it costs: **the column shortens
 its scroller by the bar's measured height**, so a step is the space *above* the dock
@@ -982,28 +1009,34 @@ player's now, and the two that draw a line have one rule between them.
   `aria-hidden` `<svg>` and nothing else, no `aria-label` anywhere in
   `player-core.js`. Labelled now, and play/pause and fullscreen relabel when they
   reglyph.
-- **Live chrome is landscape-only** (`ensureLiveChrome`) — the largest gap in the
-  list. On a match day a phone held portrait shows no ticker and no live strip at
-  all; turned sideways, both appear. The band they live in is a property of the
-  16:9 stage, so this is structural rather than an oversight, but it means the
-  live feature currently has no phone surface. Sized and scheduled with the live
-  work, not here.
+- ~~**Live chrome is landscape-only**~~ (`ensureLiveChrome`) — was the largest gap
+  in the list. On a match day a phone held portrait showed no ticker and no live
+  strip at all; turned sideways, both appeared. The band they live in is a property
+  of the 16:9 stage, so it was structural rather than an oversight — but it meant
+  the live feature had no phone surface at all.
 
-  **Half-closed: the *control* now exists, the portrait *form* does not.** The bar
+  **CLOSED, in two passes. First the *control*:** the bar
   carries a live button (`WccPlayer.setLiveToggle`, `syncLiveToggle` in
   `player.html`), because the wall's automatic latch is not a neutral default in a
   hand — its stickiness was written so an *unattended* screen would not reflow on an
   innings break, and taking `--live-band` of someone's slide for a ticker they did
   not ask for is that rule making a decision on their behalf. So the latch became
   the default and the press became the override, pinned for the session and never
-  persisted. The button is withdrawn in portrait rather than shown doing nothing,
-  and it is offered only once the feed has content, so it is not a dead control on
-  the six days a week with no cricket on it — which matters on the bar the
-  ~390px note below is about, since this makes it eight buttons.
+  persisted. It is offered only once the feed has content, so it is not a dead
+  control on the six days a week with no cricket on it — which matters on the bar
+  the ~390px note below is about, since this makes it eight buttons. (It was also
+  withdrawn in portrait at that point, rather than shown doing nothing — the second
+  pass gave it something to do and took that special case back out.)
 
-  **The shape is now settled — see "Live on the phone" below.** The overlay sheet
-  this entry used to propose is withdrawn unbuilt: the scoreboard it was to hold is
-  a *deck*, not chrome, so the sheet had nothing left to carry that a band could not.
+  **Then the *form*:** the phone got its own live chrome — the ticker, docked above
+  the control bar, wrapped in a link to the Match Day deck, and no strip. Designed
+  and built in "Live on the phone" above; the button's contract survived it
+  unchanged, which is the sign the first pass drew the line in the right place.
+
+  **CLOSED — see "Live on the phone" above.** The overlay sheet this entry used to
+  propose is withdrawn unbuilt: the scoreboard it was to hold is a *deck*, not
+  chrome, so the sheet had nothing left to carry that a band could not. What shipped
+  instead is a docked ticker, a link, and no strip.
 
 ### Content (design, with one leak)
 
@@ -1289,10 +1322,9 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
 
   The note that used to close this bullet — "this does not contradict the rejection
   of horizontal-as-step-axis below" — is void: that rejection is itself reversed.
-- **No live chrome** — as built. The ticker and strip live in the L a retracting
-  16:9 slide layer uncovers, and there is no such band here. Superseded by design
-  but not yet by code: see "Live on the phone", where portrait gets the ticker (and
-  only the ticker) docked above the bar.
+- ~~**No live chrome.**~~ — **CLOSED.** Portrait has the ticker (and only the
+  ticker) docked above the bar, wrapped in a link to the Match Day deck. The strip
+  does not come to the phone and is not an omission: see "Live on the phone".
 - **Chrome is the progress rail and share**, and nothing else, as designed.
 
 Deliberately *not* done here, and still open below: portrait fragments and their
