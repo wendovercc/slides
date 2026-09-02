@@ -261,7 +261,7 @@
       '.pstep>.pfrag{min-height:100%;}' +
 
       /* The progress rail USED to live here, and it does not any more: it is one of
-         the player's two deck instruments now (`#wcc-prog-top` in player-core), so
+         the player's deck instrument now (`#wcc-prog-top` in player-core), so
          landscape has one too and both surfaces count the same atoms in the same
          place. Nothing portrait-specific was lost in the move — the rail was always
          welded to the viewport's top edge, which is exactly the rule the shared

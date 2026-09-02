@@ -160,59 +160,52 @@
       // Outlined glyphs: corner brackets, the grip, and the share nodes are all
       // drawn rather than filled — filled, share becomes three dots and a smear.
       '#wcc-bar button.fs svg,#wcc-bar button.share svg{fill:none;}' +
-      /* ---- THE TWO DECK INSTRUMENTS ----------------------------------------
-         Two gold hairlines, and ONE rule for where they go on every surface and in
-         every orientation:
+      /* ---- THE DECK INSTRUMENT ---------------------------------------------
+         ONE line, on the top edge of the reading area, on both surfaces and in
+         every orientation. One tick per atom; the tick you are ON fills over its
+         dwell while the deck plays.
 
-             TOP edge    = where you are in the DECK, counted in atoms.
-             BOTTOM edge = time left on the atom you are ON.
+         It was two lines — position on the top edge, the atom countdown on the
+         bottom — and they were welded there to stop the countdown travelling with
+         the control bar, which is what it did before that (the bar's bottom edge in
+         `below`, its side as a vertical strip in `right`/`inside`, the dock's top
+         edge in portrait: one instrument, four positions, two grow axes). Two
+         welded lines were already right. This is better, because the two facts are
+         really one fact: "time left" only ever means "time left ON THIS STEP, of
+         these steps", and a sweep anchored to its own tick says both in one shape.
+         It is also the vocabulary every phone reader already has from stories,
+         which matters most for the reader this surface exists for — someone opening
+         a forwarded link who has never seen this interface before.
 
-         Welded to the viewport, not to the control bar and not to the letterbox.
-         The countdown used to be a child of `#wcc-bar`, which meant it moved every
-         time the bar's placement changed — the bar's BOTTOM edge in `below`, a
-         vertical strip on its side in `right`/`inside`, the dock's TOP edge in
-         portrait — and it had to grow along a different axis in each. Same
-         instrument, four positions and two axes, so a reader who learned it in one
-         orientation had to learn it again in the other. Welding it to the screen
-         costs nothing and deletes the axis entirely: the fill is always `scaleX`,
-         which is why there is no `progressAxis` here any more.
+         THREE STATES, and the third is the one worth getting right:
+           - BEHIND you: filled, dimmed. Read.
+           - AHEAD of you: empty track.
+           - HERE: filled at FULL strength — sweeping while playing, solid while
+             paused. Solid rather than empty because the common case for a forwarded
+             deck is a reader who never presses play, and an empty "here" reads as
+             the one place you have NOT got to. Dimming the ticks behind is what
+             keeps "here" legible once it is solid: without it, paused, everything
+             up to you is the same gold and the position is gone.
 
-         The one thing the rule yields to is CHROME THAT DOCKS AGAINST AN EDGE — the
-         portrait toolbar, and the live ticker and its matte strip. A line under the
-         dock is invisible and half of it is under the home indicator; a line across
-         the ticker is a gold hairline drawn over the ticker's own gold. So the lines
-         bound the READING AREA: the viewport, less anything actually sitting on an
-         edge. A letterbox band is not chrome — it is nothing — so the lines ignore
-         it and run to the glass. `layoutInstruments()` measures the insets.
-
-         Distinguished by FORM as well as position, because both are gold (the
-         brand's sole accent): the position rail is SEGMENTED — one tick per atom,
-         filled up to where you are — and the countdown is a continuous sweep. Ticks
-         answer "how many", which is the question a first screen raises; a sweep
-         answers "how long", which is the question a playing deck raises. Long decks
-         lose the ticks (see `TICK_MAX`): eighty-nine of them is a dotted line, not
-         a count. */
-      '#wcc-prog-top,#wcc-prog-bot{position:fixed;z-index:59;pointer-events:none;' +
-      'box-sizing:border-box;height:max(3px,0.4vmax);overflow:hidden;}' +
-      // Position: one flex tick per atom, hairline gaps, unfilled ticks in neutral.
-      '#wcc-prog-top{top:var(--sa-t,0px);left:0;right:0;display:flex;gap:2px;padding:0 2px;}' +
-      '#wcc-prog-top i{display:block;flex:1 1 0;height:100%;' +
-      'background:rgba(255,255,255,0.18);transition:background 0.3s ease;}' +
-      '#wcc-prog-top i.on{background:#d4af37;}' +
-      // The continuous fallback: one child, scaled, on a track of its own.
-      '#wcc-prog-top.cont{gap:0;padding:0;background:rgba(255,255,255,0.14);}' +
-      '#wcc-prog-top.cont i{background:#d4af37;transition:transform 0.35s ease;' +
-      'transform-origin:left;transform:scaleX(0);}' +
-      /* Countdown: HIDDEN WHILE PAUSED. It is a time instrument, and paused there is
-         no time passing — welded to the bar an empty track read as part of the bar,
-         but alone on the screen's bottom edge it is a conspicuous gold line that
-         never means anything to the many readers who never press play. The position
-         rail above stays up always: where you are is true either way. */
-      '#wcc-prog-bot{bottom:0;left:0;right:0;background:rgba(212,175,55,0.16);' +
-      'opacity:0;transition:opacity 0.3s ease;}' +
-      '#wcc-prog-bot.on{opacity:1;}' +
-      '#wcc-prog-bot i{display:block;width:100%;height:100%;background:#d4af37;' +
-      'transform-origin:left;transform:scaleX(0);}';
+         The countdown is lost in two places, deliberately. Above `TICK_MAX` the
+         rail is one continuous fill with no tick to sweep; and a REEL is one tick
+         by construction, so its clips step across it discretely (`railClip`) rather
+         than refilling the same tick 29 times. Both are decks being browsed rather
+         than waited on, and the long ones that really are played end to end are
+         wall decks, which have no bar and no instrument at all. */
+      '#wcc-prog-top{position:fixed;z-index:59;pointer-events:none;box-sizing:border-box;' +
+      'top:var(--sa-t,0px);left:0;right:0;height:max(3px,0.4vmax);' +
+      'display:flex;gap:2px;padding:0 2px;overflow:hidden;}' +
+      // The tick is the empty track; the <b> inside it is the fill.
+      '#wcc-prog-top i{display:block;flex:1 1 0;height:100%;overflow:hidden;' +
+      'background:rgba(255,255,255,0.18);}' +
+      '#wcc-prog-top b{display:block;width:100%;height:100%;background:#d4af37;' +
+      'transform-origin:left;transform:scaleX(0);transition:opacity 0.3s ease;}' +
+      '#wcc-prog-top i.past b{opacity:0.45;}' +
+      // Long decks: one tick spanning the rail, filled to how far through you are.
+      // Same element structure, so everything below drives it without a special case.
+      '#wcc-prog-top.cont{gap:0;padding:0;}' +
+      '#wcc-prog-top.cont b{transition:transform 0.35s ease;}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
@@ -641,7 +634,10 @@
       current = i;
       shownAt = Date.now();
       applyTapThrough();
-      railUpdate();
+      // The rail is NOT redrawn here. `panelIndex` still belongs to the slide we are
+      // leaving at this point, so a redraw would land on the wrong tick for a frame;
+      // `applyState` follows immediately on the only path that has a rail, and
+      // `stageAtom` redraws it once the panel has settled.
       onShow(i);
     }
     /* Tell the stage which STEP the transport is on. `activate` reveals the slide;
@@ -725,11 +721,10 @@
       else kioskShow(current);
     }
 
-    /* The bottom instrument: time left on the current atom. Mirrors the interactive
-     * per-panel timer — fills over the dwell while playing, freezes where it is on
-     * pause, empties on nav. Always `scaleX`: the line is welded to the viewport's
-     * bottom edge and no longer rotates with the control bar (see injectStyles).
-     * All no-ops until the instruments exist, so kiosk (the wall) shows nothing. */
+    /* The atom countdown. `progressFill` is whatever element currently carries it:
+     * the CURRENT TICK of the rail in interactive (re-pointed by `railUpdate` every
+     * time the atom changes), or the record HUD's own bar in record mode. Always
+     * `scaleX`. All no-ops until one exists, so kiosk (the wall) shows nothing. */
     function progressScale(v) { return 'scaleX(' + v + ')'; }
     function progressRun(ms) {
       if (!progressFill) return;
@@ -751,31 +746,37 @@
       progressFill.style.transform = (t && t !== 'none') ? t : progressScale(0);
     }
 
-    /* ---- the two deck instruments -----------------------------------------
-     * Built once, owned by the player, and welded to the reading area's top and
-     * bottom edges on BOTH surfaces — see the long note in injectStyles for the
-     * rule and why the countdown stopped being a child of the control bar.
+    /* ---- the deck instrument ----------------------------------------------
+     * One rail, owned by the player, welded to the reading area's top edge on both
+     * surfaces — see the long note in injectStyles for the rule and the three tick
+     * states.
      *
-     * Interactive only, and gated exactly as the bar is (`!record && !hosted`).
-     * The wall has never had a countdown and does not grow one here; record mode
-     * carries its own in the HUD, and a second one would compete with it.
+     * Interactive only, and gated exactly as the bar is (`!record && !hosted`). The
+     * wall has never had a countdown and does not grow one here; record mode has its
+     * own in the HUD and points `progressFill` at it, which is why everything below
+     * checks `progTop` before touching anything.
      */
-    var railTicks = [], progTop = null, progBot = null;
+    var railTicks = [], progTop = null, railCont = false;
     var railFirst = [], railTotal = 0;
 
     /* Above this many atoms the rail stops counting and goes back to a fill: the
      * ticks have to be wide enough to read as separate marks, and `teams` is 89
      * positions. Sized off the narrowest phone we care about (390px), where 24
-     * ticks are ~14px each. Shared with the portrait column by construction now
-     * that there is only one rail. */
+     * ticks are ~14px each. */
     var TICK_MAX = 24;
+
+    /* Does the rail own the atom countdown? It does when it has ticks to sweep — so
+     * not in record/hosted (no rail at all; the HUD owns the fill) and not in the
+     * continuous fallback (no tick to sweep). Everywhere it does not, the older
+     * behaviour stands and `startProgress` drives whatever fill exists. */
+    function railSweeps() { return !!progTop && !railCont; }
 
     /* How many atoms a slide contributes to the rail. Deliberately the BUILD's atom
      * list rather than `counts` (what the slide reported over the bridge): the rail
      * is a map of the deck and must have its full length on the first frame, before
-     * any slide has answered. A reel counts as one — its clips are finer than the
-     * deck's grain and would swamp the count — which is the same rule the portrait
-     * column's step table uses, so the two surfaces measure the same thing. */
+     * any slide has answered. A reel counts as ONE — its clips are finer than the
+     * deck's grain and 29 of them would swamp the count — which is the same rule the
+     * portrait column's step table uses, so the two surfaces measure the same deck. */
     function railSteps(i) {
       var it = items[i] || {};
       if (it.video) return 1;
@@ -786,46 +787,61 @@
       railFirst = []; railTotal = 0;
       for (var i = 0; i < n; i++) { railFirst.push(railTotal); railTotal += railSteps(i); }
     }
-    function railUpdate() {
+    function railFill(k) { return railTicks[k] && railTicks[k].firstChild; }
+    /* The rail index of a panel on the current slide. `p` lets a caller name the
+     * panel it is moving TO, before the slide has echoed it back. */
+    function railAt(p) {
+      var pi = p == null ? (panelIndex || 0) : p;
+      return (railFirst[current] || 0) + Math.min(Math.max(0, pi), railSteps(current) - 1);
+    }
+    function railSet(el, v, ms) {
+      if (!el) return;
+      el.style.transition = ms ? 'transform ' + ms + 'ms linear' : 'none';
+      el.style.transform = 'scaleX(' + v + ')';
+    }
+
+    /* A REEL's tick. The reel is one tick but its countdown runs per CLIP, so a time
+     * sweep would fill and empty the same tick once per clip and read as a broken
+     * instrument. Step across it by clip index instead — which is also the only
+     * honest measure available, since a reel's `panel_duration` is a padded advance
+     * backstop (whole reel + 30s) rather than its real length. */
+    function railClip() {
+      if (!railSweeps()) return;
+      var total = counts[current] || 1;
+      railSet(railFill(railAt()), Math.min(1, ((panelIndex || 0) + 1) / total), 350);
+    }
+
+    /* The rail, redrawn — everything EXCEPT the current tick's sweep, which belongs
+     * to whoever is driving it (`progressRun` while playing). That split is what
+     * lets this be called freely, on every arrival and every echo, without
+     * restarting an animation in flight. */
+    function railUpdate(p) {
       if (!progTop || !railTotal) return;
-      var k = (railFirst[current] || 0) +
-              Math.min(panelIndex || 0, railSteps(current) - 1);
-      if (progTop.classList.contains('cont')) {
-        if (railTicks[0]) railTicks[0].style.transform = 'scaleX(' + ((k + 1) / railTotal) + ')';
-        return;
+      var k = railAt(p);
+      if (railCont) { railSet(railFill(0), (k + 1) / railTotal); return; }
+      for (var t = 0; t < railTicks.length; t++) {
+        railTicks[t].classList.toggle('past', t < k);
+        if (t !== k) railSet(railFill(t), t < k ? 1 : 0);
       }
-      for (var t = 0; t < railTicks.length; t++) railTicks[t].classList.toggle('on', t <= k);
+      progressFill = railFill(k);   // the countdown fills the tick you are on
+      if ((items[current] || {}).video) railClip();
+      else if (!playing) railSet(progressFill, 1);   // paused: "here", solid
     }
 
-    /* The countdown appears with playback and goes with it. */
-    function progressVisible() {
-      if (progBot) progBot.classList.toggle('on', !!playing);
-    }
-
-    /* Where the reading area's edges actually are. The viewport, less any chrome
-     * that DOCKS against an edge:
-     *   - the portrait toolbar, which owns the bottom edge outright;
-     *   - the live ticker (bottom) and matte strip (left), which sit in the L a
-     *     retracting slide layer uncovers — measured off `#stage` the same way the
-     *     record chrome is, and for the same reason (`#stage` is transformed, so it
-     *     is a stacking context and these are positioned, not parented).
-     * A letterbox band is NOT chrome. It is nothing, and the lines run over it to
-     * the glass — which is the whole point of welding them to the viewport. */
+    /* Where the rail's left edge is. The viewport, except that the live matte strip
+     * docks against it — measured off `#stage` the same way the record chrome is,
+     * and for the same reason (`#stage` is transformed, so it is a stacking context
+     * and these are positioned, not parented). A letterbox band is NOT chrome: it is
+     * nothing, and the rail runs over it to the glass, which is the whole point of
+     * welding it to the viewport rather than to the slide. */
     function layoutInstruments() {
       if (!progTop) return;
-      var b = 0, l = 0;
-      if (stage && stage.barDock && bar) {
-        b = bar.getBoundingClientRect().height;
-      } else if (document.body.classList.contains('live-chrome')) {
+      var l = 0;
+      if (!(stage && stage.barDock) && document.body.classList.contains('live-chrome')) {
         var el = stageEl(), r = el && el.getBoundingClientRect();
-        if (r && r.height) {
-          b = Math.max(0, window.innerHeight - r.bottom) + r.height * BAND;
-          l = Math.max(0, r.left) + r.width * BAND;
-        }
+        if (r && r.width) l = Math.max(0, r.left) + r.width * BAND;
       }
-      progTop.style.left = progBot.style.left = l + 'px';
-      progTop.style.right = progBot.style.right = '0px';
-      progBot.style.bottom = b + 'px';
+      progTop.style.left = l + 'px';
     }
 
     function buildInstruments() {
@@ -834,38 +850,27 @@
       progTop.setAttribute('aria-hidden', 'true');
       railTable();
       railTicks = [];
-      if (railTotal > 1 && railTotal <= TICK_MAX) {
-        for (var t = 0; t < railTotal; t++) {
-          var i2 = document.createElement('i');
-          railTicks.push(i2);
-          progTop.appendChild(i2);
-        }
-      } else {
-        progTop.classList.add('cont');
-        var f = document.createElement('i');
-        railTicks.push(f);
-        progTop.appendChild(f);
+      railCont = railTotal > TICK_MAX;
+      if (railCont) progTop.classList.add('cont');
+      for (var t = 0; t < (railCont ? 1 : railTotal); t++) {
+        var tick = document.createElement('i');
+        tick.appendChild(document.createElement('b'));
+        progTop.appendChild(tick);
+        railTicks.push(tick);
       }
-      // A one-atom deck has no position to report; the track would be a solid line
-      // saying nothing. The countdown still applies.
-      if (railTotal > 1) document.body.appendChild(progTop);
-
-      progBot = document.createElement('div');
-      progBot.id = 'wcc-prog-bot';
-      progBot.setAttribute('aria-hidden', 'true');
-      progressFill = document.createElement('i');
-      progBot.appendChild(progressFill);
-      document.body.appendChild(progBot);
+      // A one-atom deck has no position to report and its single tick says nothing
+      // about where you are — but it still has a dwell worth showing, so the rail
+      // stays and simply has one tick.
+      document.body.appendChild(progTop);
 
       // The live chrome arrives and leaves at runtime (a match starts, a match
-      // ends), and it changes where the bottom edge is. `body.live-chrome` is the
+      // ends), and it changes where the left edge is. `body.live-chrome` is the
       // page's own signal for it, so watch that rather than adding a second one.
       if (window.MutationObserver) {
         new MutationObserver(layoutInstruments).observe(document.body,
           { attributes: true, attributeFilter: ['class'] });
       }
       railUpdate();
-      progressVisible();
       layoutInstruments();
     }
 
@@ -942,11 +947,18 @@
     }
     function panelTimer(panel) {
       var ms = atomMs(panel);
+      // Re-point the rail FIRST. `progressFill` is the current tick, and the caller
+      // may know the panel we are moving to before the slide has echoed it back
+      // (`next()` passes panelIndex + 1); without this the sweep would run on the
+      // tick we are leaving and be snapped away when the echo lands.
+      railUpdate(panel);
       // A video reel drives its own clips; its panel_duration is a long backstop
-      // (whole reel + 30s), so filling the bar over that would creep across the
-      // entire reel. Leave the bar to the per-clip driver (the wcc-panel handler)
-      // and keep this timer only as the slide-advance backstop.
-      if (items[current].video) progressReset(); else startProgress(ms);
+      // (whole reel + 30s), so filling over that would creep across the entire reel.
+      // Where the rail owns the countdown its tick steps by clip instead — railUpdate
+      // has just done it — and otherwise the per-clip driver in the wcc-panel handler
+      // fills the bar, leaving this timer as the advance backstop only.
+      if (items[current].video) { if (!railSweeps()) progressReset(); }
+      else startProgress(ms);
       armAdvanceTimer(ms);
     }
     // Resume a video slide's per-clip countdown after a pause: continue the frozen
@@ -955,7 +967,9 @@
     // would vanish. Non-video slides keep panelTimer's fresh-full-panel behaviour.
     function resumeVideoProgress() {
       armAdvanceTimer(atomMs());
-      if (!progressFill) return;
+      // A reel's tick steps by clip rather than by time, so there is no frozen sweep
+      // to continue — railUpdate already has it where it belongs.
+      if (!progressFill || railSweeps()) return;
       if (pausedAt) { panelStart += (Date.now() - pausedAt); pausedAt = 0; }
       var remaining = panelMs - (Date.now() - panelStart);
       if (remaining > 0) {
@@ -1054,7 +1068,11 @@
       } else {
         clearTimer(); send(current, 'pause'); progressFreeze(); pausedAt = Date.now(); drainFlash();
       }
-      progressVisible();
+      // Paused, the tick you are on goes solid: "here". The freeze above still runs,
+      // because record mode's HUD wants it — and nothing is lost by overriding a
+      // frozen sweep with the position it was reporting, since a non-video atom
+      // restarts its full dwell on resume anyway (the play branch above).
+      railUpdate();
       // A pause inside a media beat is a freeze, not a cue: it holds what is already
       // on screen. Captured here rather than in the tap handler so the bar's own
       // play/pause button records one too.
@@ -1080,7 +1098,8 @@
       clearTimer();
       if (!atLastAtom()) {
         send(current, 'next-panel');
-        if (playing) panelTimer(panelIndex + 1); else progressReset();
+        // Paused, claim the tick straight away rather than waiting for the echo.
+        if (playing) panelTimer(panelIndex + 1); else railUpdate(panelIndex + 1);
       } else {
         fwdSlide();
       }
@@ -1094,7 +1113,7 @@
       clearTimer();
       if (!atFirstAtom()) {
         send(current, 'prev-panel');
-        if (playing) panelTimer(panelIndex - 1); else progressReset();
+        if (playing) panelTimer(panelIndex - 1); else railUpdate(panelIndex - 1);
       } else {
         backSlide();
       }
@@ -2299,7 +2318,10 @@
         // Restart the countdown for the clip now playing, so the bar tracks the
         // current clip rather than the whole reel. Only while playing — a paused reel
         // leaves the bar reset until it resumes.
-        if (d.dur > 0) startProgress(d.dur * 1000);
+        // Not where the rail owns the countdown: a reel is ONE tick there and its
+        // clips step across it (railClip, off the wcc-panel move above), because
+        // sweeping the same tick once per clip reads as a broken instrument.
+        if (d.dur > 0 && !railSweeps()) startProgress(d.dur * 1000);
       }
     });
 

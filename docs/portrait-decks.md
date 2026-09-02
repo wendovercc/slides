@@ -554,8 +554,9 @@ it necessary.
   jump most viewers will not make, and only helps *within* one slide — a 30-step
   match deck wants an index just as much and would not get one.
 - ~~**A thin progress rail**~~ — built, and **not portrait chrome at all in the
-  end**: it is one of the player's two deck instruments, on both surfaces. See
-  "Chrome — mostly fixed" under the drift audit for the rule the two lines share.
+  end**: it is the player's one deck instrument, on both surfaces, and it carries
+  the atom countdown in its current tick. See "Chrome — mostly fixed" under the
+  drift audit.
 - ~~**Share**~~ — built, and likewise a player control rather than a portrait one.
   `navigator.share()` with the canonical URL the `_og.html` preview was baked
   against.
@@ -583,10 +584,9 @@ difference between a phone app and a slideshow with something on top of it.
 That makes it a two-way seam, which is why it is on the stage rather than in
 `placeBar`'s aspect arithmetic: the stage asks for the dock (`barDock`), and the bar
 reports its height back (`stage.chrome(h)`), re-measured on every placement so a
-rotation or a safe-area change stays right. The height is now read twice over: the
-column shortens its scroller by it, and `layoutInstruments()` uses it as the inset
-the countdown sits above — which is the one place the "welded to the viewport" rule
-yields, because a line under an opaque dock is a line nobody sees.
+rotation or a safe-area change stays right. The column shortens its scroller by it,
+and nothing else needs it: the deck instrument is a single rail on the TOP edge, so
+the dock has no line to get in the way of.
 
 The share button moved into the dock with it — beside the transport, where a phone
 app puts it, and where it costs no content. It floated in the top-left corner while
@@ -705,9 +705,9 @@ The rule the audit applies:
 > **The surfaces are allowed to differ in GEOMETRY. Anywhere they differ in what
 > a control MEANS, one of them is wrong.**
 
-*Status: the divergent verbs, the pinch-zoom guard, share, the position rail and
-the bar's geometry are fixed; the keyboard gap, the deck-end difference and live
-chrome are open. Each is marked below.*
+*Status: the divergent verbs, the pinch-zoom guard, share, deck position and the
+bar's geometry are fixed; the keyboard gap, the deck-end difference and live chrome
+are open. Each is marked below.*
 
 ### Divergent verbs — ~~unintended~~ *fixed*
 
@@ -761,9 +761,9 @@ the stage, it stops having a placement problem at all.** Share, the rail and the
 countdown were all built by whichever surface happened to be up; all three are the
 player's now, and the two that draw a line have one rule between them.
 
-> **TOP edge of the reading area = where you are in the DECK.
-> BOTTOM edge = time left on the ATOM you are on.**
-> Both surfaces, both orientations, whatever the control bar is doing.
+> **ONE rail on the top edge of the reading area. One tick per atom, and the
+> tick you are ON fills over its dwell.** Both surfaces, both orientations,
+> whatever the control bar is doing.
 
 - ~~**Share exists only in portrait**~~ — **fixed.** It is a bar control now
   (`buildControls`), built wherever `navigator.share` exists, and a rotation cannot
@@ -773,28 +773,39 @@ player's now, and the two that draw a line have one rule between them.
   with a reel as one, which is the rule the portrait step table already used, so
   the two surfaces measure the same deck. Segmented up to `TICK_MAX` (24), a
   continuous fill beyond it.
-- **The countdown stopped travelling with the bar.** It was a child of `#wcc-bar`,
-  which put it on the bar's bottom edge in `below`, on its side as a vertical strip
-  in `right`/`inside`, and on the dock's top edge in portrait — one instrument, four
-  positions, two grow axes. It is `#wcc-prog-bot` now, welded to the bottom edge,
-  and `progressAxis` / `progressRelayout` / the `scaleY` variants are deleted: the
-  fill is always `scaleX`.
-  - **The lines yield to chrome, not to the letterbox.** A letterbox band is not
-    chrome — it is nothing — so the lines run over it to the glass. What they DO
-    inset for is anything docked against an edge: the portrait toolbar (measured
-    off the bar), and the live ticker and matte strip (measured off `#stage` × 
-    `--live-band`, the same way the record chrome measures itself, and re-measured
-    when `body.live-chrome` changes). `layoutInstruments()` is the whole of it.
-  - **The countdown is hidden while paused.** It is a time instrument and paused
-    there is no time passing. Welded to the bar an empty track read as part of the
-    bar; alone on the bottom edge it was a gold line that never meant anything to
-    the many readers who never press play. The rail stays up always — where you are
-    is true either way.
-  - **Distinguished by form, not only by edge.** Both are gold, because gold is the
-    brand's sole accent and neither instrument is the one to spend a second colour
-    on. Ticks answer "how many", a sweep answers "how long". That also retires the
-    old rail note's worry about two gold hairlines being confusable: they are a
-    viewport apart AND drawn differently.
+- **The countdown stopped travelling with the bar, and then stopped being a
+  separate instrument at all.** It was a child of `#wcc-bar`, which put it on the
+  bar's bottom edge in `below`, on its side as a vertical strip in `right`/`inside`,
+  and on the dock's top edge in portrait — one instrument, four positions, two grow
+  axes. Welding it to the viewport's bottom edge fixed that and deleted the axis
+  (`progressAxis`, `progressRelayout` and the `scaleY` variants all went; the fill
+  is always `scaleX`). **Then it was folded into the rail**, because the two facts
+  are really one fact: "time left" only ever means "time left *on this step, of
+  these steps*", and a sweep anchored to its own tick says both in one shape. It is
+  also the stories idiom, which every phone reader already knows — worth a great
+  deal for someone opening a forwarded link cold.
+  - **Three tick states.** Behind you: filled, dimmed. Ahead: empty track. **Here:
+    filled at full strength — sweeping while playing, solid while paused.** Solid
+    rather than empty because the common case for a forwarded deck is a reader who
+    never presses play, and an empty "here" reads as the one place you have *not*
+    got to. Dimming the ticks behind is what keeps "here" legible once it is solid.
+  - **A reel steps its tick by clip, not by time.** A reel is one tick by
+    construction (`railSteps`), but its countdown runs per *clip* — so a time sweep
+    would fill and empty the same tick 29 times and read as broken. `railClip()`
+    walks it by clip index instead, which is also the only honest measure available:
+    a reel's `panel_duration` is a padded advance backstop (whole reel + 30s), not
+    its length.
+  - **The countdown is lost above `TICK_MAX`, deliberately.** Past 24 atoms the rail
+    is one continuous fill and there is no tick to sweep. A deck that long opened on
+    a phone is being browsed, not waited on; the ones that really are played end to
+    end (`teams` at 89, the match package at 38) are wall decks, and the wall has no
+    bar and no instrument at all.
+  - **The rail yields to chrome, not to the letterbox.** A letterbox band is not
+    chrome — it is nothing — so the rail runs over it to the glass. The one thing it
+    insets for is the live matte strip, measured off `#stage` × `--live-band` the
+    same way the record chrome measures itself, and re-measured when
+    `body.live-chrome` changes. Folding the countdown into the rail retired the
+    bottom inset entirely, so `layoutInstruments()` is now a single left edge.
 - **The scroll cue** is portrait-only and correctly so — it teaches a gesture that
   exists on one surface. **Currently OFF** (`CUE_ENABLED = false`), and the code is
   kept: what was wrong is the badge, not the idea. The ring was chosen to borrow the
