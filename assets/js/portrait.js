@@ -77,10 +77,11 @@
  * call the control bar makes, so a swipe and a bar press are one event:
  *
  *   fragment step → armCommit, past the end of its own interior
- *   matte         → armMatte, a drag beside the band
- *   band          → slide-bridge posts `wcc-swipe` with `axis:'y'`, since the touch
- *                   never leaves the iframe and there is no parent scroller to
- *                   chain into any more
+ *   anything else → armDeck, a drag on the column — matte AND band alike, because
+ *                   a band's iframe is `pointer-events:none` so the touch reaches
+ *                   this document instead of dying inside another one
+ *   a `data-taps` slide → keeps its pointer events, so it reports its own swipes
+ *                   through slide-bridge (`wcc-swipe`) as it always did
  *
  * A slide with several panels is ONE row whose content changes under a stationary
  * frame, which is what the sticky band used to buy with a travel calculation and
@@ -205,9 +206,24 @@
          visibility/opacity are stated because the wall's stack hides every
          inactive frame; here every live frame is on screen in its own step and
          only the windowing (player-core) decides which exist at all. */
+      /* AND IT DOES NOT TAKE THE TOUCH. A band is an iframe, so a thumb landing on
+         it is inside another document and the column never learns the gesture
+         happened — the slide has to notice and post it out, which is a long chain
+         for the part of the screen a reader is most likely to touch, and it is not
+         the chain the matte and the fragment steps use. Making the band
+         transparent to hit-testing puts every gesture in ONE place (`armDeck`),
+         whichever surface the thumb lands on, and brings the wheel with it: a
+         trackpad over a photograph reaches the deck now, where before it went into
+         the iframe and died, since slide-bridge reports touch only.
+
+         What it gives up is the slide's own links, and today that costs nothing:
+         `data-taps` is declared by `showcase-card` alone, which always renders as a
+         portrait FRAGMENT rather than a band. `stage.taps()` hands the events back
+         for any slide that does declare them, so the exception exists before it is
+         needed rather than after. */
       '.pband>iframe{position:absolute;top:0;left:0;width:1920px;height:1080px;' +
       'border:0;transform-origin:top left;transform:scale(var(--pfit,1));' +
-      'visibility:visible;opacity:1;}' +
+      'visibility:visible;opacity:1;pointer-events:none;}' +
 
       /* A step that is a portrait FRAGMENT (phase 1): our own DOM rather than a
          letterboxed document, so it is full-bleed and it SCROLLS.
@@ -705,7 +721,7 @@
           wheelArmed = (end.top ? 1 : 0) | (end.bottom ? 2 : 0);
         }
         wheelAt = now;
-        // One stream is one step — see the note in armMatte. Without this the
+        // One stream is one step — see the note in armDeck. Without this the
         // momentum tail of a single flick keeps crossing the threshold.
         if (wheelDone) return;
         var want = e.deltaY > 0 ? 2 : 1;          // down needs the bottom, up the top
@@ -830,34 +846,54 @@
       for (var z = Math.abs(n); z > 0; z--) f();
     }
 
-    /* ---- a drag on the matte -------------------------------------------------
-     * A band does not fill its step: there is matte above and below it, and that
-     * matte is this document. A drag there is the same instruction as a drag on the
-     * band (which arrives from inside the iframe, via slide-bridge) or on a fragment
-     * (armCommit) — so it gets the same answer.
+    /* ---- gestures on the column ----------------------------------------------
+     * ONE handler for both axes and for every kind of step, because the band no
+     * longer swallows touches (see `.pband>iframe`). Whether the thumb lands on a
+     * photograph, on the matte beside it or on a reel, the event arrives here.
+     *
+     *   VERTICAL   → stepBy(±1), the step axis
+     *   HORIZONTAL → api.next()/prev(), the atom move — what a sideways swipe means
+     *                on the landscape player, so a reel walks its clips and a
+     *                carousel its panels
      *
      * Gestures that start inside a `.pstep` are left alone: that scroller has its
      * own interior to move first, and armCommit decides when a pull has become a
      * step change.
+     *
+     * Thresholds are fractions of the DECK, which is this document and therefore in
+     * real px — unlike slide-bridge, which measures inside a 1920x1080 design box
+     * and has to correct for the difference.
      */
-    function armMatte() {
+    function armDeck() {
       var y0 = 0, x0 = 0, live = false, fired = false;
+      var EDGE = 0.05;        // of width — iOS's back-swipe strip, left to iOS
+      var DOM = 1.3;          // how much more one axis than the other
+
       deck.addEventListener('touchstart', function (e) {
         live = false; fired = false;
         if (e.touches.length !== 1) return;
         if (e.target && e.target.closest && e.target.closest('.pstep')) return;
-        y0 = e.touches[0].clientY; x0 = e.touches[0].clientX;
+        var t = e.touches[0], w = deck.clientWidth || 1;
+        // iOS Safari's left-edge swipe is browser-back and cannot be prevented; we
+        // can at least decline to ALSO navigate, so one gesture does one thing. The
+        // right edge is dead for symmetry.
+        if (t.clientX < w * EDGE || t.clientX > w * (1 - EDGE)) return;
+        y0 = t.clientY; x0 = t.clientX;
         live = true;
       }, { passive: true });
       deck.addEventListener('touchmove', function (e) {
         if (!live || fired || e.touches.length > 1) return;
         var dy = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
-        // Vertical only, and clearly so: a diagonal drag on the matte beside a reel
-        // should not step the deck while the reader is aiming sideways.
-        if (Math.abs(dy) < Math.abs(dx) * 1.2) return;
-        var t = deck.clientHeight * 0.08;
-        if (dy < -t) { fired = true; stepBy(1); }
-        else if (dy > t) { fired = true; stepBy(-1); }
+        var ay = Math.abs(dy), ax = Math.abs(dx);
+        // One axis or the other, never both: the dominance test is what stops a
+        // lazy diagonal from counting as whichever way it happened to go furthest.
+        if (ay > deck.clientHeight * 0.08 && ay > ax * DOM) {
+          fired = true;
+          stepBy(dy < 0 ? 1 : -1);
+        } else if (api && ax > deck.clientWidth * 0.12 && ax > ay * DOM) {
+          fired = true;
+          if (dx < 0) api.next(); else api.prev();
+        }
       }, { passive: true });
       deck.addEventListener('touchcancel', function () { live = false; });
 
@@ -888,7 +924,7 @@
         }
       }, { passive: true });
     }
-    armMatte();
+    armDeck();
 
 
     /* ---- input --------------------------------------------------------------
@@ -1140,6 +1176,16 @@
         },
         show: show,
         showAtom: showAtom,
+        /* Hand the touches back to a slide that has live links in it (`data-taps`).
+         * Bands are transparent to hit-testing by default so the column can read
+         * every gesture itself; a slide the reader is meant to be able to press has
+         * to be an exception, and then it reports its own swipes through
+         * slide-bridge as it always did. Called by player-core's applyTapThrough on
+         * arrival and again when the slide's handshake answers. */
+        taps: function (i, on) {
+          var b = bands[i], f = b && b.firstChild;
+          if (f && f.tagName === 'IFRAME') f.style.pointerEvents = on ? 'auto' : '';
+        },
         /* A vertical swipe that happened INSIDE a slide's iframe, forwarded by
          * player-core from slide-bridge. The matte and fragment steps reach `stepBy`
          * directly; a band cannot, because the touch never leaves the iframe. Same

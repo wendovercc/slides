@@ -240,26 +240,42 @@ kinds of surface on it and a drag on each must mean the same thing:
 | Where the thumb is | How it arrives |
 |---|---|
 | A **fragment** step | `armCommit`, past the end of the step's own interior |
-| The **matte** beside a band | `armMatte`, a drag on the column itself |
-| The **band** (an iframe) | `slide-bridge.js` posts `wcc-swipe` with `axis: 'y'` |
+| Anywhere else — **matte or band** | `armDeck`, a drag on the column itself |
+| A band that declares `data-taps` | `slide-bridge.js` posts `wcc-swipe` |
 
-**All three fire mid-drag, on `touchmove`.** The band route did not at first — it
-reported at `touchend` inside a 700ms window, which is a flick detector — and the
-result was that a deliberate drag on a photograph did nothing at all, on the part
-of the screen a reader is most likely to touch. Horizontal stays a touchend flick:
-it is the atom move, shared with the landscape player, and firing it mid-drag would
-let a diagonal on its way to becoming a vertical drag change a clip first.
+**Bands are transparent to hit-testing** (`pointer-events: none` on the iframe),
+and that is what collapsed three routes into two. A band is another document, so a
+thumb landing on it was invisible to the column and the slide had to notice and
+post the gesture out — a long chain, for the part of the screen a reader is most
+likely to touch, and not the chain the matte and fragment steps use. It did not
+work on a phone. Making the band transparent puts every gesture in one handler
+whichever surface the thumb lands on, and brings the **wheel** with it: a trackpad
+over a photograph reaches the deck now, where before it went into the iframe and
+died, since `slide-bridge` reports touch only.
+
+What it gives up is the slide's own links, and today that costs nothing —
+`data-taps` is declared by `showcase-card` alone, which always renders as a
+fragment rather than a band. `stage.taps()` hands the events back to any slide that
+does declare them, driven by the same `tapThrough` flag `applyTapThrough` already
+maintained for the landscape tap layer, in the opposite direction. So the exception
+exists before it is needed rather than after.
+
+This revises phase 0's "no tap layer, and tap-through comes free". Tap-through was
+free, but it was not free of *the gesture* — leaving the slide exposed to touch
+meant leaving the column blind to it.
+
+**Every route fires mid-drag, on `touchmove`** — except horizontal in
+`slide-bridge`, which stays a touchend flick because it is the atom move shared
+with the landscape player, and firing it mid-drag would let a diagonal on its way
+to becoming a vertical drag change a clip first.
 
 **A threshold in design px is not a threshold on screen, and only one axis is
-safe.** A band is fitted to the screen's *width*, so a fraction of 1920 design px
-is that same fraction of the screen. Height is not: the band is 1080 design px tall
-but only `screenWidth × 9/16` real px, so the same fraction is about 2.5× less
-travel. The vertical slop is 0.25 where the horizontal one is 0.10, which lands a
-band drag on the same real distance as a matte drag.
-
-The third route is not optional: with no deck scroller there is no parent for a
-band's vertical drag to chain into, so the only place that gesture can be noticed is
-inside the slide.
+safe.** This applies to `slide-bridge` and not to `armDeck`, which measures the
+deck and is therefore already in real px. A band is fitted to the screen's *width*,
+so a fraction of 1920 design px is that same fraction of the screen. Height is not:
+the band is 1080 design px tall but only `screenWidth × 9/16` real px, so the same
+fraction is about 2.5× less travel — hence `V_SLOP` of 0.25 against a horizontal
+0.10.
 
 **One wheel stream is one step.** A trackpad flick is a hundred events over a
 second or more of momentum, so an accumulator that only resets after firing crosses
@@ -805,7 +821,9 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
   phone is turned (`ensureLiveChrome`, and `WccPlayer.setFlashFrame` for the
   overlay the player raises). The ticker and strip live in a band a retracting
   16:9 slide layer uncovers, and the column has no such band.
-- **No tap layer, and tap-through comes free.** The player's `#wcc-tap` is a
+- **No tap layer, and tap-through comes free** — *half revised; see "One
+  authority". The tap layer is still absent, but bands are now
+  `pointer-events: none`, because tap-through cost the column the GESTURE.* The player's `#wcc-tap` is a
   fixed full-viewport overlay, which over a scroller swallows the scroll. Without
   it a tap on the slide stays in the slide — so a slide's own links work with no
   `data-taps` machinery — and a tap on the matte toggles transport. An overlay

@@ -500,6 +500,11 @@
     var tapThrough = {};
     function applyTapThrough() {
       if (tapEl) tapEl.style.pointerEvents = tapThrough[current] ? 'none' : '';
+      /* The portrait column has no tap layer to stand down; it has the opposite
+       * problem. Its bands are transparent to hit-testing so the column can read
+       * every gesture in its own document, and a slide with live links is the
+       * exception that gets its events back. Same flag, opposite direction. */
+      if (stage && stage.taps) stage.taps(current, !!tapThrough[current]);
     }
     function effRadius() { return winRadius === null ? null : (zoomed ? 0 : winRadius); }
 
