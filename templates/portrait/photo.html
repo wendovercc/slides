@@ -1,0 +1,98 @@
+{#- portrait/photo.html — the phone rendering of templates/slides/photo.html.
+
+    docs/portrait-decks.md, phase 1, the half that was still open: "until it lands
+    the pavilion's photographs are eight letterboxed steps". A FRAGMENT, not a
+    document — no doctype, no <head>, no styles of its own; everything it needs is
+    in assets/css/portrait.css under `.pfrag-photo`.
+
+    Same `slide` dict as the wall template. What differs is the whole reason this
+    file exists:
+
+    - THE PHOTOGRAPH STAYS WIDE. The doc's cropping rule — crop-to-fill works for
+      people and action, wide interiors stay wide — and the pavilion is squarely
+      the second: cropping a room shot to a phone's 9:19.5 throws away the room.
+      So the shot keeps its native 16:9 and the step spends its remaining height on
+      the words instead of on the picture.
+    - AN AMBIENT GROUND. A 16:9 shot at full phone width is about a quarter of the
+      screen, and the wall's answer to the rest — black — is what the letterbox
+      band already gave. Here the same photograph, blurred and veiled, is the
+      ground it sits on, so the step is lit by its own picture rather than being a
+      band floating in a void.
+    - THE CAPTION IS TYPE, NOT AN OVERLAY. On the wall it is a scrim over the
+      photograph's bottom third, because a slide has one screen. A column has room
+      below the print, where a caption can be read at phone type sizes instead of
+      at whatever `--pfit` scaled the band's `vw` down to.
+
+    `data-atom` is the structural requirement: an atom is an addressable position
+    on the portrait surface exactly as it is a beat on the wall, and play mode
+    (phase 5) traverses these. A photograph is one atom.
+-#}
+<article class="pfrag pfrag-photo" data-atom="{{ slug }}#0">
+    {%- if slide.image is defined %}
+    {#- The ground: the picture's own colour and light, out of focus and tinted back
+        towards the brand navy. Same src as the print, so it is one download. Hidden
+        from assistive tech — it carries no information the print does not.
+
+        THE WRAPPER IS LOAD-BEARING, and its absence was a bug: the backdrop is
+        scaled up so the blur has something to sample past its own edges, and a
+        transformed box contributes to its scroll container's SCROLLABLE OVERFLOW.
+        With the step (`.pstep`) being that container, every photograph offered a
+        short scroll down to a seam — the ground's own bottom edge, about a control
+        bar tall, which is simply 6% of a step. Clipping the ground in a box of its
+        own keeps the scroll honest: the step scrolls when the CONTENT is too tall
+        for it, and never because of a decoration. #}
+    <div class="pf-ground">
+        <img class="pf-backdrop" src="/{{ slide.image }}" alt="" aria-hidden="true" decoding="async">
+        <div class="pf-veil"></div>
+    </div>
+    {%- endif %}
+    <div class="pf-flow">
+        {#- One <figure>: the print and the words about it are one thing, and a
+            <figcaption> is only valid inside one. #}
+        <figure class="pf-main">
+            {#- Whose room this is, above the print. The deck's own opening line —
+                the intro card's eyebrow and title — repeated over each photograph,
+                so a reader who arrives mid-set (or forwards one screenshot on) is
+                never more than a glance from the name of the place.
+
+                It belongs to the BLOCK, not to the step: it sits directly on the
+                print's top edge and travels with it, rather than floating at the
+                top of the screen. That is the correction to the strapline running
+                head, which was pinned to the step and read as a banner stuck onto
+                the picture.
+
+                A field on the SLIDE, because a fragment is published per slide and
+                is deck-agnostic by construction: `/slide/<slug>/portrait.html`
+                cannot reach the deck's intro card for it. `slide.title` is already
+                spoken for here (it is the caption), so this is its own object. The
+                wall's photo.html ignores it. #}
+            {%- if slide.header is defined %}
+            <header class="pf-set">
+                {%- if slide.header.eyebrow is defined %}<div class="pf-eyebrow">{{ slide.header.eyebrow }}</div>{% endif %}
+                {%- if slide.header.title is defined %}<div class="pf-set-title">{{ slide.header.title }}</div>{% endif %}
+            </header>
+            {%- endif %}
+            <div class="pf-shot">
+                {%- if slide.image is defined %}
+                <img class="pf-photo" src="/{{ slide.image }}" decoding="async"
+                     alt="{{ slide.alt | default(slide.caption | default(slide.title)) }}">
+                {%- else %}
+                <div class="pf-photo pf-empty">{{ slide.title }}</div>
+                {%- endif %}
+            </div>
+            {%- if slide.caption is defined or slide.credit is defined %}
+            <figcaption class="pf-cap">
+                {%- if slide.caption is defined %}
+                <div class="pf-rule"></div>
+                <div class="pf-caption">{{ slide.caption }}</div>
+                {%- endif %}
+                {#- The credit rides on every photograph, as it does on the wall: it
+                    is what the photographer is paid in. #}
+                {%- if slide.credit is defined %}
+                <div class="pf-credit">{{ slide.credit }}</div>
+                {%- endif %}
+            </figcaption>
+            {%- endif %}
+        </figure>
+    </div>
+</article>

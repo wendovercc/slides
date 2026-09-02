@@ -1,9 +1,13 @@
 {
   "template": "photo",
-  "title": "A fully fitted bar",
+  "title": "A well equipped bar",
   "image": "assets/images/pavilion/bar.jpg",
-  "caption": "A fully fitted bar",
+  "caption": "A well equipped bar",
   "alt": "The bar, lit from beneath, with optics and fridges behind and an oak door either side.",
   "credit": "Photo · Sarah Greer Photography",
+  "header": {
+    "eyebrow": "Available to hire",
+    "title": "The Seabrook Pavilion"
+  },
   "panel_duration": 8
 }

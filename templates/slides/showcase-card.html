@@ -31,6 +31,13 @@
             --accent: var(--gold);
             --safe-x: 5vw;
             --safe-y: 5vh;
+            /* A deeper margin at the BOTTOM than the other three edges. The wall's
+               5% overscan is the whole reason --safe-y exists, and it is enough for
+               overscan — but on the interactive surface the player's controls can
+               come down over this edge, and a credit line or a strapline sitting at
+               exactly 5vh is what they land on. Everything anchored to the bottom
+               uses this instead. */
+            --safe-b: 6.5vh;
             /* Canonical _base.html values — keep in step with it. Do not scale the
                whole block for one slide's fit: these are the wall's reading sizes,
                calibrated for 10ft, and a slide that will not fit at them wants
@@ -75,7 +82,7 @@
         }
         .card {
             position: absolute; inset: 0;
-            padding: var(--safe-y) var(--safe-x);
+            padding: var(--safe-y) var(--safe-x) var(--safe-b);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -90,6 +97,18 @@
             color: var(--accent);
             margin-bottom: 1.6vh;
         }
+        /* A PLAIN card (no `sections`) is one message on a whole slide, and it was
+           sized as though it had to share. The three rules below step its type up a
+           rung each and open the space around it — the title was already right, so
+           it is untouched and everything else moves towards it.
+           Scoped `.card > …` rather than applied to the classes at large: in a
+           sections card the same classes sit inside `.sec-main`, where an eyebrow
+           labels a block and a body shares the slide with a second one. Those are
+           different jobs at a different size. */
+        .card > .eyebrow {
+            font-size: var(--t-ms);
+            margin-bottom: 2vh;
+        }
         .title {
             font-size: var(--t-xl);
             font-weight: 900;
@@ -101,6 +120,12 @@
             color: var(--accent);
             margin-top: 1.2vh;
             letter-spacing: 0.04em;
+        }
+        /* Where the room IS, under its name — a rung up, and far enough below the
+           title to be a second line rather than a subheading crowding it. */
+        .card > .subtitle {
+            font-size: var(--t-lg);
+            margin-top: 1.8vh;
         }
         .rule {
             width: 12vw;
@@ -115,6 +140,18 @@
             max-width: 62vw;
         }
         .body p + p { margin-top: 1.6vh; }
+        /* The pitch itself, at the deck's reading size rather than a rung under it:
+           on a plain card this is the only prose on the slide, and --t-ms is the
+           size for prose that has something else beside it. The measure comes in as
+           the type grows so the line length stays inside a comfortable sweep. */
+        .card > .body {
+            font-size: var(--t-md);
+            max-width: 58vw;
+        }
+        .card > .body p + p { margin-top: 2vh; }
+        /* More air either side of the gold rule, in proportion to the type it now
+           separates. */
+        .card > .rule { margin: 4vh 0; }
         /* Strapline: what the room is FOR, as a short gold line under the pitch.
            Authored as a list rather than one string with dots baked in, so the
            separator is styled here (spacing, weight, dimming) instead of being a
@@ -136,6 +173,10 @@
                a fourth sentence. */
             margin-top: 5.5vh;
         }
+        /* Wider still on a plain card: the body above it is now full reading size,
+           so the old gap read as a fourth paragraph set in gold rather than as the
+           summary line the strapline is. */
+        .card > .strapline { margin-top: 8vh; }
         .strap-item + .strap-item::before {
             content: '·';
             opacity: 0.55;
@@ -198,7 +239,7 @@
            `credit`. */
         .footnote {
             position: absolute;
-            left: var(--safe-x); right: var(--safe-x); bottom: var(--safe-y);
+            left: var(--safe-x); right: var(--safe-x); bottom: var(--safe-b);
             font-size: var(--t-sm);
             letter-spacing: 0.1em;
             text-transform: uppercase;
@@ -249,8 +290,32 @@
             text-align: center;
         }
         .sec.centred .sec-main { width: 100%; }
-        .sec.centred .sec-title { font-size: var(--t-lg); }
-        .sec.centred .body { max-width: 62vw; margin: 1.6vh auto 0; }
+        /* The deck's two bookends now shout at the same volume: --t-xl is the plain
+           card's title size, and the closing card's title is the other half of that
+           pair rather than a heading inside a busier slide. It can afford it — the
+           strapline's reserved band gave back the height this costs. */
+        .sec.centred .sec-title { font-size: var(--t-xl); }
+        /* Same step up the plain card got (`.card > …` above), and for the same
+           reason: this section is the deck's call to action and it was sized as
+           though it shared the slide with the credit — it does, but not for
+           attention. The eyebrow and the body each move a rung; the title is left
+           at --t-lg because the credit beneath it is what it has to stay louder
+           than, and it already is.
+           Scoped to `.sec.centred`, so the credit section (`.sec.credit`) keeps
+           every size it has — it reads correctly and is not part of this change.
+           Safe against the surface switch: neither rule touches the QR panel or the
+           links row, so the wall's taller variant (QR + printed URL) and the
+           phone's shorter one (a button) both keep the room they had. */
+        .sec.centred .eyebrow {
+            font-size: var(--t-ms);
+            margin-bottom: 2vh;
+        }
+        .sec.centred .body {
+            font-size: var(--t-md);
+            /* Measure comes in as the type grows, as on the plain card. */
+            max-width: 58vw;
+            margin: 2vh auto 0;
+        }
 
         /* Footnote: text left, small QR right. Left-aligned because centred text
            beside a QR has no shared edge to line up on. */
@@ -265,6 +330,11 @@
         }
         .sec.credit .sec-main { flex: 1; }
         .sec.credit .sec-title { font-size: var(--t-md); }
+        /* The credit takes a little more space too: its gold line and its two
+           buttons each move a rung. The PROSE is deliberately left at --t-ms — it is
+           the longest text on the slide and so the cheapest thing to overflow with,
+           and --t-ms is already the reading size for a block sharing a slide. */
+        .sec.credit .eyebrow { font-size: var(--t-ms); }
         /* The credit's one gold line IS an eyebrow, and deliberately the same one
            the call to action uses: it labels the block rather than titling it, so
            it inherits `.eyebrow` untouched (gold, uppercase, --t-ms) and the
@@ -287,7 +357,7 @@
         .sec.credit .qr-image { width: 15vh; }
         .sec.credit .scan-to, .sec.credit .qr-url { font-size: var(--t-sm); }
         .sec.credit .links { margin-top: 2vh; }
-        .sec.credit .link { font-size: var(--t-sm); padding: 1.1vh 2vw; }
+        .sec.credit .link { font-size: var(--t-ms); padding: 1.3vh 2.4vw; }
 
         .sec-title { font-weight: 900; line-height: 1.15; text-shadow: var(--title-shadow); }
         /* Side by side, not stacked: on the interactive surface the aside is gone,
@@ -300,6 +370,19 @@
             margin-top: 2.4vh;
         }
         .sec.centred .links { justify-content: center; }
+        /* The call to action's button is the phone's half of the surface switch, so
+           it stands off the body exactly as far as the wall's QR panel does (6vh) —
+           the two surfaces open the same gap in the same place, and the slide reads
+           the same whichever one you are on.
+           At the body's own size rather than a rung under it: this is the thing the
+           whole card is asking the reader to press, and it was the smallest type in
+           the section. Padding grows with it so the chip keeps its proportions and
+           its thumb target. */
+        .sec.centred .links { margin-top: 6vh; }
+        .sec.centred .link {
+            font-size: var(--t-md);
+            padding: 1.8vh 3.4vw;
+        }
         .sec.credit .links { justify-content: center; }
         /* The arrow says "press me", which is a lie on a wall. Drop it there and
            the same chip reads as a label carrying a URL. */
@@ -311,6 +394,27 @@
            none }`, which is the safe default for anything the wall must not show. */
         .links.always { display: flex; }
         .sections .qr-panel { margin-top: 3vh; }
+        /* The call to action's QR stands further off its body than that. It is a
+           big pale object rather than a line of type, so the gap that reads as
+           "next paragraph" between text blocks reads as "stuck to it" here — and
+           the body above it has just grown a rung, which closed the gap further.
+           Only the centred section: the credit's QR slot keeps its own margin
+           (zero, set below), and the plain card's is a different layout again. */
+        .sec.centred .qr-panel { margin-top: 6vh; }
+        /* The scan-to line is the WALL'S HALF OF THE SURFACE SWITCH: on a phone the
+           reader gets a button that says where it goes, and without this the wall
+           gets a bare code over a domain and no verb at all. So it is a sentence
+           here, not a label — sized with the section's other type rather than held
+           at the small print size, and in sentence case for the reason the credit
+           section already gives: uppercase at wide tracking reads as shouting in
+           small print. It only appears when the slide authors `cta`, which is why
+           the fix is a field on the slide as much as it is these three lines. */
+        .sec.centred .scan-to {
+            font-size: var(--t-ms);
+            text-transform: none;
+            letter-spacing: 0.04em;
+            opacity: 0.85;
+        }
         /* The printed URL is the fallback for anyone who cannot scan, so it has to
            read at 10ft — but a rung below the body, which is the thing being read. */
         .sections .qr-url { font-size: var(--t-sm); }
@@ -332,12 +436,24 @@
            row, which is what read as "tight". */
         .sec.centred {
             position: relative;
-            padding-bottom: 8.5vh;
+            /* The strapline is out of flow (below), so this padding is what reserves
+               its band and keeps the centred stack off it — the content centres in
+               the space actually available rather than in the whole row.
+               THIS TRACKS THE STRAPLINE'S HEIGHT and is not a free spacing knob: go
+               under it and the strapline overlaps the stack it is reserving space
+               against. 6vh is the band for a one-line strapline at --t-md (about
+               5vh tall). It went to 8.5vh briefly while the strapline was --t-lg,
+               and came back down with it. */
+            padding-bottom: 6vh;
         }
         .sec.centred .strapline {
             position: absolute;
             left: 0; right: 0; bottom: 0;
             margin-top: 0;
+            /* --t-md, the same size the front card's strapline is. It was tried a
+               rung up at --t-lg and wrapped to two lines, which turns a summary
+               line into a block — four items and three separators do not fit a
+               measure at 2.8vw, whatever the arithmetic said. */
         }
 
         /* ── The two surfaces ─────────────────────────────────────────────

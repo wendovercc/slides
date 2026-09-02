@@ -4,10 +4,10 @@
   "sections": [
     {
       "layout": "centred",
-      "eyebrow": "Enquiries",
-      "title": "Hire the pavilion",
+      "eyebrow": "Available to hire",
+      "title": "Booking Enquiries",
       "body": [
-        "We would love to hear from you. Ask us anything."
+        "We'd love to hear what you have in mind."
       ],
       "strapline": [
         "Clubs & Classes",
@@ -16,6 +16,7 @@
         "Special Events"
       ],
       "qr_url": "https://www.wendovercc.org/bookings",
+      "cta": "booking details",
       "qr_label": "wendovercc.org/bookings",
       "links": [
         {
@@ -28,7 +29,7 @@
       "layout": "credit",
       "eyebrow": "Sarah Greer Photography",
       "body": [
-        "Thank you to Sarah Greer for all of the photographs in this showcase. Sarah is a photographer based in Wendover who has photographed hundreds of local families and small businesses. Take a look at her work."
+        "Thank you to Sarah Greer for all of the photos in this showcase. Sarah is a photographer based in Wendover who has photographed hundreds of local families and small businesses. Take a look at her work."
       ],
       "links": [
         {

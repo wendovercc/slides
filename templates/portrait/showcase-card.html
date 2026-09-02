@@ -44,9 +44,13 @@
             {%- if sec.body is defined %}
             <div class="pf-body">{% for para in sec.body %}<p>{{ para }}</p>{% endfor %}</div>
             {%- endif %}
-            {%- if sec.strapline is defined %}
-            <div class="pf-strapline">{% for item in sec.strapline %}<span class="pf-strap">{{ item }}</span>{% endfor %}</div>
-            {%- endif %}
+            {#- THE BUTTON COMES BEFORE THE STRAPLINE HERE, and the wall's order is
+                the other way round. Not an inconsistency: on the wall the strapline
+                is pinned to the foot of the section and the QR sits in the centred
+                stack above it, so it already reads code-then-strapline. In a column
+                everything is in flow, and the ask has to come before the summary
+                line or the reader meets four gold words between the invitation and
+                the thing that acts on it. #}
             {%- if sec.links is defined %}
             <div class="pf-links">
                 {%- for link in sec.links %}
@@ -54,6 +58,9 @@
                    href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
                 {%- endfor %}
             </div>
+            {%- endif %}
+            {%- if sec.strapline is defined %}
+            <div class="pf-strapline">{% for item in sec.strapline %}{{ " " if not loop.first }}<span class="pf-strap">{{ item }}</span>{% endfor %}</div>
             {%- endif %}
         </section>
         {%- endfor %}
@@ -67,7 +74,7 @@
             <div class="pf-body">{% for para in slide.body %}<p>{{ para }}</p>{% endfor %}</div>
             {%- endif %}
             {%- if slide.strapline is defined %}
-            <div class="pf-strapline">{% for item in slide.strapline %}<span class="pf-strap">{{ item }}</span>{% endfor %}</div>
+            <div class="pf-strapline">{% for item in slide.strapline %}{{ " " if not loop.first }}<span class="pf-strap">{{ item }}</span>{% endfor %}</div>
             {%- endif %}
             {%- if slide.note is defined %}<div class="pf-note">{{ slide.note }}</div>{% endif %}
             {%- if slide.links is defined %}

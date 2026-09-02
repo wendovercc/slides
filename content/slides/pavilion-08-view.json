@@ -1,9 +1,13 @@
 {
   "template": "photo",
-  "title": "Views over the ground and countryside",
+  "title": "Sunset views over the ground and countryside",
   "image": "assets/images/pavilion/view.jpg",
-  "caption": "Views over the ground and countryside",
+  "caption": "Sunset views over the ground and countryside",
   "alt": "Looking out from inside through the open doors to the terrace, the ground and the sunset beyond.",
   "credit": "Photo · Sarah Greer Photography",
+  "header": {
+    "eyebrow": "Available to hire",
+    "title": "The Seabrook Pavilion"
+  },
   "panel_duration": 8
 }

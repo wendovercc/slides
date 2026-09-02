@@ -159,20 +159,49 @@
    four items wrap to two, so the separator is a rule between wrapped rows rather
    than a dot that would strand itself at a line end. */
 .pfrag .pf-strapline {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 0.35em 0.9em;
-    font-size: var(--t-sm);
+    /* NOT a flex row, and the reason is the four-item orphan. Wrapping is greedy:
+       a flex line fills until the next item will not fit, so four items of unequal
+       length oscillate between 3+1 and 2+2 as the viewport narrows, and 3+1 leaves
+       one word alone on a line. `text-wrap: balance` asks the browser to even the
+       lines instead of filling them, which on four items means 2+2 at almost every
+       phone width. It needs a BLOCK container with inline children, hence no flex.
+       Where it is unsupported (Safari before 17.5) this degrades to exactly the
+       greedy wrap it has today — no worse, and the separator fix below still
+       applies. */
+    display: block;
+    text-align: center;
+    text-wrap: balance;
+    line-height: 1.5;
+    /* The body's own size. It was --t-sm, which read as small print beside the
+       body above it, and a half-rung was tried in between; on a phone the four
+       items carry as much of the pitch as the sentence does, and at anything less
+       they read as a footnote to it. The gold and the wrapping keep it from
+       competing — it does not need to be quieter as well.
+       Both cards' straplines come from this one rule, so the opening and closing
+       cards cannot drift apart. */
+    font-size: var(--t-md);
     font-weight: 700;
     letter-spacing: 0.06em;
     color: var(--accent);
-    text-transform: uppercase;
+    /* NOT uppercased, deliberately — the wall's `.strapline` sets no transform
+       either, so both surfaces show the case the slide authored ("Clubs &
+       Classes"). It WAS uppercase here, which was drift rather than a decision:
+       the eyebrow, footnote and credit around it in this file are all
+       uppercase-and-tracked, and this picked it up by proximity. The others are
+       labels; a strapline is a sentence of sorts, and it is the same sentence on
+       both surfaces. */
 }
-.pfrag .pf-strap + .pf-strap::before {
-    content: '·';
+/* Each item is unbreakable, AND ITS SEPARATOR TRAVELS WITH IT: the dot is glued to
+   the end of the item before it by a non-breaking space, inside that item's own
+   nowrap box. So a wrap can never put a dot at the start of a line or leave one
+   stranded at the end of one — the only place the line may break is the real space
+   the template renders between the spans, which is also what gives `balance`
+   something to work with. (It was a `::before` on the FOLLOWING item, which is
+   precisely the arrangement that walks the dot onto the next line.) */
+.pfrag .pf-strap { white-space: nowrap; }
+.pfrag .pf-strap:not(:last-child)::after {
+    content: '\00a0·';
     opacity: 0.55;
-    margin-right: 0.9em;
 }
 
 /* Links. THE ONE PLACE PORTRAIT DIFFERS FROM THE INTERACTIVE WALL SURFACE BY
@@ -273,10 +302,18 @@
     text-align: center;
     gap: calc(3.4 * var(--u));
 }
+/* The strapline stands off the button above it by more than the section's own
+   gap: the button is a solid gold slab, and a line of gold type immediately under
+   it reads as a caption belonging to it rather than as the summary line of the
+   whole card. */
+.pfrag-showcase .pf-sec.centred .pf-strapline { margin-top: calc(2.6 * var(--u)); }
+/* …and sits closer to the credit below than it did. The rule under it is a
+   section break, and once the strapline has its own space above, the old 9u to the
+   rule left it floating between the two blocks belonging to neither. */
 .pfrag-showcase .pf-sec + .pf-sec {
     border-top: var(--hair) solid rgba(255,255,255,0.18);
-    padding-top: calc(7 * var(--u));
-    margin-top: calc(2 * var(--u));
+    padding-top: calc(5 * var(--u));
+    margin-top: 0;
 }
 /* The credit is quieter than the call to action above it through its type and its
    secondary buttons — the same relationship the wall's `credit` layout draws, said
@@ -290,4 +327,163 @@
     line-height: 1.15;
 }
 .pfrag-showcase .pf-links { width: 100%; }
+/* The call to action's button reads at the body's size, not a rung under it: it is
+   the thing the card is asking the reader to press, and on a phone it is also the
+   whole of the surface switch — there is no QR here to carry the URL if the button
+   is quiet. Matches the same move on the wall's closing card.
+   Scoped to the centred section: the credit's two secondary links stay smaller,
+   which is how that block stays quieter than the ask above it. */
+.pfrag-showcase .pf-sec.centred .pf-link { font-size: var(--t-md); }
 .pfrag-showcase .pf-tail { flex: none; text-align: center; }
+
+/* ══ photo ═════════════════════════════════════════════════════════════════
+   A photograph from a showcase set: one of the pavilion's eight, swiped through
+   as an album. The rules it obeys are all in docs/portrait-decks.md:
+
+   - THE SHOT STAYS WIDE (the cropping rule). A room shot cropped to a phone's
+     9:19.5 throws away the room, so the print keeps its native 16:9 and the step
+     spends its remaining height on the caption instead.
+   - THE GROUND IS THE PICTURE. A 16:9 print at full width is about a quarter of a
+     phone screen, and the letterbox band already showed what the other three
+     quarters look like in black. Blurring the same photograph behind it lights the
+     step with its own picture — and costs one extra download of nothing, since it
+     is the same URL the print already fetched.
+   - THE CAPTION IS TYPE. On the wall it is a scrim over the photograph because a
+     slide has one screen; here it reads beneath the print at a phone's type sizes.
+
+   Nothing here scrolls in the ordinary case: the step is a print plus two short
+   blocks, centred. It is still a scroller (every fragment step is), which is what
+   catches a long caption on a short step — an iPad in portrait, say — rather than
+   letting it push the print off the top. */
+.pfrag-photo {
+    /* The ground is a photograph, not the brand gradient, so the base colour
+       underneath it only ever shows for the moment before it decodes. Flat and
+       dark rather than gradient: a gradient behind a blurred image is a second
+       light source. */
+    background: #08152c;
+}
+/* Out of focus, not erased. The first cut blurred by `6 * --u` (about 23px on a
+   phone), dimmed to 0.62 and then laid a half-opaque navy sheet over it, and the
+   three together left nothing on screen but the photograph's average colour —
+   eight steps that differed only in hue. Each of them was defensible alone and
+   they multiply, which is the trap: what is wanted is a shot someone has taken
+   their eye off, where the shapes of the room are still legible as shapes.
+   So: a softer blur, most of the brightness back, and the veil pulled down to a
+   tint (below). The print stays the brighter thing on the step by having a border
+   and a shadow — it does not need the ground pushed into the dark to win.
+   Pushed out beyond its own edges so the blur has something to sample there
+   instead of fading to nothing. */
+/* The ground's own box, and it is not decoration: the backdrop below is SCALED, and
+   a transformed box contributes to its scroll container's scrollable overflow. The
+   step (`.pstep`) is that container, so without this clip every photograph offered
+   a short scroll down to the ground's bottom edge — about a control bar tall,
+   being 6% of a step. A step must scroll only when its CONTENT is too tall for it.
+   `overflow: hidden` and nothing else; the layers inside keep their own inset. */
+.pfrag-photo .pf-ground {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+.pfrag-photo .pf-backdrop {
+    transform: scale(1.12);
+    filter: blur(calc(3.2 * var(--u))) saturate(1.2) brightness(0.86);
+    /* The blur is a compositing layer; keeping it off the main thread's paint is
+       worth the layer on a phone that is also moving a track sideways. */
+    will-change: transform;
+}
+/* A TINT towards the brand navy, not a curtain: enough to keep eight different
+   photographs on one deck's palette, little enough that the room behind is still a
+   room. It carries the legibility only where type actually sits — the foot, under
+   the caption — which is where the old flat 0.52 was paying for a problem the top
+   half does not have. */
+.pfrag-photo .pf-veil {
+    background: linear-gradient(180deg,
+                rgba(10,28,58,0.26) 0%,
+                rgba(10,28,58,0.30) 42%,
+                rgba(8,21,44,0.72) 100%);
+}
+
+/* Print and caption centred in the step as ONE block, by auto margins rather than
+   `justify-content` — the same device the showcase card uses, and for the same
+   reason: auto margins collapse the moment the content fills the box, so a step
+   too short for its caption scrolls from the top instead of having the print
+   pushed out of reach. */
+.pfrag-photo .pf-main {
+    margin: auto 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: calc(5 * var(--u));
+}
+
+/* The set header: the deck's own opening line, above the print. Left-aligned on
+   the same gutter as the caption below, and separated from the print by the same
+   gap — it reads as the top half of the words the picture sits between, which is
+   what the withdrawn running head did not: that one was pinned to the top of the
+   STEP, floating clear of the picture, and looked like a banner stuck on it.
+   Its own shadow because it sits on the ambient ground where the veil is a tint,
+   and one of the eight photographs is a bright sky. */
+.pfrag-photo .pf-set {
+    display: flex;
+    flex-direction: column;
+    gap: calc(1.4 * var(--u));
+    text-shadow: 0 calc(0.4 * var(--u)) calc(1.2 * var(--u)) rgba(0,0,0,0.6);
+}
+.pfrag-photo .pf-set-title {
+    font-size: var(--t-lg);
+    font-weight: 900;
+    line-height: 1.1;
+}
+
+/* The print. Bled to the step's edges — the gutter is for words, and a photograph
+   this wide has none to spare — then given a hairline and a shadow so it reads as
+   a print laid on the ground rather than as a hole cut in it.
+   `aspect-ratio` with `cover` is a guard, not a crop: the sources are natively
+   16:9, and this only holds the frame steady if one ever isn't. */
+.pfrag-photo .pf-shot {
+    margin-left: calc(-1 * var(--pf-x));
+    margin-right: calc(-1 * var(--pf-x));
+    position: relative;
+    box-shadow: 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(0,0,0,0.45);
+}
+.pfrag-photo .pf-photo {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border-top: var(--hair) solid rgba(255,255,255,0.14);
+    border-bottom: var(--hair) solid rgba(255,255,255,0.14);
+}
+.pfrag-photo .pf-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--pf-x);
+    text-align: center;
+    font-size: var(--t-md);
+    color: rgba(255,255,255,0.5);
+    background: linear-gradient(165deg, var(--navy-1) 0%, var(--navy-2) 100%);
+}
+
+.pfrag-photo .pf-cap {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3 * var(--u));
+}
+/* Between the wall's `--t-md` and `--t-lg`: this is the sentence the photograph is
+   making, so it is the loudest type on the step, but it runs to two lines on a
+   phone and hero sizing would give it four. */
+.pfrag-photo .pf-caption {
+    font-size: calc(5 * var(--u));
+    font-weight: 700;
+    line-height: 1.28;
+    text-shadow: 0 calc(0.4 * var(--u)) calc(1 * var(--u)) rgba(0,0,0,0.45);
+}
+/* Quiet, uppercase, out of the picture's way — the wall's credit treatment, said
+   in type that a hand-held reader can actually resolve. */
+.pfrag-photo .pf-credit {
+    font-size: var(--t-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.7);
+}

@@ -6,9 +6,9 @@
 > layout where its template has one (`templates/portrait/<template>.html`,
 >
 > published per slide, fetched and inserted as DOM), or its 16:9 self in a band
-> where it does not. `showcase-card` is the first template with a fragment, which
-> makes the pavilion deck's opening and closing cards a real phone layout with
-> eight letterboxed photographs between them. The model below is settled through
+> where it does not. `showcase-card` and `photo` both have fragments, which makes
+> the **whole pavilion deck** — title card, eight photographs, credit card — a real
+> phone layout with no letterboxing left in it. The model below is settled through
 > three worked examples; the open questions at the end are genuinely open.
 >
 > **The column stopped being a scroller** after testing on a real iPhone — see
@@ -1109,7 +1109,7 @@ verbs above break, and the reason they are worth fixing rather than documenting.
 - ~~Windowing for fallback iframes~~ (`windowRadius` now follows the surface) and
   `<video>` only.
 
-**`templates/`** — portrait fragments for ~~`showcase-card`~~, `photo` first; then
+**`templates/`** — portrait fragments for ~~`showcase-card`, `photo`~~ first; then
 `video`, `sponsors`, `match-intro`, `scorecard`, `match-result`, `match-league`,
 `fantasy-league`. Everything else takes the fallback until it doesn't.
 
@@ -1337,8 +1337,9 @@ was removed, so a band's vertical drag is reported explicitly by `slide-bridge.j
 as `axis: 'y'` instead. The feared fix (an overlay confined to the band, costing
 the slide's own links and pinch-zoom) was never needed in either world.
 
-**Phase 1 — the first portrait fragments, targeting the pavilion.** *(partly built:
-the cards are done, the photographs are not)*
+**Phase 1 — the first portrait fragments, targeting the pavilion.** *(built: the
+cards and the photographs, so the pavilion deck has no letterboxed step left in
+it. What remains of the phase is the inlining optimisation.)*
 
 Built:
 - ~~The portrait token scale and the shared portrait stylesheet~~ —
@@ -1366,6 +1367,53 @@ Built:
   front of a television; this reader is holding the phone it exists to reach, so
   the links are unconditional), and the brand lockup is centred at the top rather
   than in the corner the share button floats in.
+- ~~A portrait fragment for `photo`~~ — the pavilion's eight photographs, which
+  until it landed were eight letterboxed steps. Three decisions, all of them the
+  doc's rules arriving in the smallest case:
+  **the print stays wide** (the cropping rule — a room shot cropped to 9:19.5
+  throws the room away, so it keeps its native 16:9 and bleeds to the step's side
+  edges); **the ground is the picture** (a 16:9 print at full phone width is about
+  a quarter of the screen, and black for the other three quarters is precisely what
+  the band already gave, so the same photograph, blurred and veiled back towards
+  the navy, is what the print sits on — one download, since it is the same URL);
+  and **the caption is type, not an overlay** (on the wall it is a scrim over the
+  photograph's bottom third because a slide has one screen; a column has room
+  beneath the print, where the words read at a phone's sizes instead of at whatever
+  `--pfit` scaled the band's `vw` down to). No "view larger" and no `focus` crop —
+  both are still the deferrals listed below.
+
+  Then a fourth: **a set header** — the intro card's own opening line (*Available
+  to hire · The Seabrook Pavilion*) above the print, so a reader who arrives
+  mid-set, or is forwarded one screenshot, is never a swipe away from the name of
+  the place. It is a field on the SLIDE (`header: {eyebrow, title}`) because **a
+  fragment is published per slide and is deck-agnostic by construction** —
+  `/slide/<slug>/portrait.html` cannot reach the deck's intro card for it — and it
+  is its own object because `title` on a photo slide is already the caption. The
+  wall's `photo.html` ignores it.
+
+  **Where it sits is the whole lesson.** The first attempt put the deck's
+  *strapline* at the top of the STEP, as a running head floating clear of the
+  picture, and it read as a banner stuck onto the photograph rather than as
+  furniture. The header belongs to the BLOCK: the print and its words are one
+  object, so the header sits on the print's top edge, left-aligned on the caption's
+  gutter, and moves with it. Content next to the band, not pinned to the screen.
+
+  **One bug, worth recording because the cause is not obvious**: the ambient
+  backdrop is scaled up so the blur has something to sample past its own edges, and
+  a transformed box contributes to its scroll container's *scrollable overflow*.
+  The step is that container, so every photograph offered a short scroll down — a
+  seam about a control bar tall, which is just 6% of a step. The ground now lives
+  in its own `overflow: hidden` box (`.pf-ground`). A step scrolls when its content
+  is too tall for it, never because of a decoration.
+
+  **The tuning is a note to whoever writes the next ambient ground**: the first cut
+  blurred by 23px, dimmed to 0.62 and laid a 0.52-alpha navy sheet over it. Each
+  was defensible alone; multiplied, they left nothing on screen but the
+  photograph's average colour, and eight steps differed only in hue. The ground is
+  now blur ~12px, brightness 0.86, and a veil that is a 0.26 tint at the top
+  carrying its legibility work only at the foot, where the caption sits. The print
+  wins on contrast through its border and shadow rather than by the ground being
+  pushed into the dark.
 - ~~Chrome: progress rail and share~~ (phase 0), **re-placed around the dock.** Both
   the rail and the bar used to float over a letterboxed slide, where floating costs
   nothing; a fragment step is full-bleed, and over full-bleed content a float is
@@ -1384,13 +1432,9 @@ Built:
   rotation hands a slide to a stage that renders it itself.
 
 Still open in this phase:
-- **The axis swap** — horizontal as the step axis (see "One axis navigates"), which
-  deletes `armCommit`, turns the track's travel onto X, and makes the history
-  sentinel the answer to the edge swipe.
-- Portrait fragment for `photo`. **Until it lands the pavilion's photographs are
-  eight letterboxed steps** — which is the phase-0 behaviour, is exactly the point
-  of having taken the fallback first, and is now also the right STRUCTURE: eight
-  steps is what the swap says they should be, so only their rendering is missing.
+- ~~**The axis swap**~~ — **built**: horizontal is the step axis (see "One axis
+  navigates"), `armCommit` is deleted, the track travels on X (`translate3d`), and
+  the history sentinel answers the edge swipe.
 - Inlining the fragments into the pavilion's own page (first paint).
 
 A limit worth knowing, enforced in `fragUrl`: **a fragment serves a single-step

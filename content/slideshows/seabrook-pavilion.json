@@ -5,12 +5,10 @@
   "og_image": "assets/images/pavilion/view.jpg",
   "og_image_alt": "The club room at the Seabrook Pavilion, doors open onto the terrace at sunset with the cricket ground beyond.",
   "refresh_interval_seconds": 3600,
+  "_note": "`pavilion-01-exterior` is deliberately not in this deck: the exterior shot we have is not a strong opener. The slide is still in content/slides — put its entry back at the top of the list when there is a better wide photograph of the outside.",
   "slides": [
     {
       "slug": "pavilion-intro"
-    },
-    {
-      "slug": "pavilion-01-exterior"
     },
     {
       "slug": "pavilion-02-club-room"
