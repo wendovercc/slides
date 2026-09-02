@@ -449,6 +449,15 @@
      * while playing, fire at the next slide boundary (clean cut; clips are already
      * minutes old so a few more seconds is free); while paused, fire immediately. */
     var flashItem = opts.flash || null;          // { frame } | null
+    /* An extra row the PORTRAIT dock carries above the bar — today the live ticker
+     * (see ensurePortraitDock in player.html). The player does not own it or know
+     * what is in it; it owns the geometry, because the dock is one object as far as
+     * the column is concerned: `stage.chrome(h)` is a single number and the column
+     * shortens itself by exactly that much. A second channel into the column would
+     * be two numbers that have to agree.
+     * Taken from the options because the page builds it BEFORE start() runs, and
+     * setDockChrome does not exist until start() defines it. */
+    var dockChrome = opts.dockChrome || null;
     var flashQueue = [];
     var flashing = false;
     var flashCont = null;                          // what to do after the current flash
@@ -1234,6 +1243,12 @@
       // scale left over from the last layout would make it measure a bar that no
       // longer exists (and so could never grow back when the viewport does).
       bar.style.setProperty('--bs', '1');
+      /* The dock's extra row is the PORTRAIT DOCK'S ONLY. The other three placements
+         float in a letterbox band over nothing, and the landscape live chrome has
+         its own frames on the stage. Hidden inline here so the portrait branch can
+         hand the decision back to CSS with an empty string — which is what lets
+         `body.live-chrome` stay the one switch for whether the row is up at all. */
+      if (dockChrome) dockChrome.style.display = 'none';
       /* A STAGE MAY OWN THE PLACEMENT. The three placements below all answer the same
        * question — which letterbox band can hold the bar — and a portrait deck has no
        * band to answer it with: the slide fills the width of its step. So the portrait
@@ -1247,7 +1262,18 @@
         // Before chrome(): the fit changes the height the column shortens itself by.
         // The dock spans the full width, so the insets are the only thing off limits.
         fitBar('x', window.innerWidth - saInset('--sa-l') - saInset('--sa-r'));
-        if (stage.chrome) stage.chrome(bar.getBoundingClientRect().height);
+        var dockH = bar.getBoundingClientRect().height;
+        /* The extra row rides directly on top of the bar, both anchored to the
+           bottom, so its offset IS the bar's height — measured after the fit, which
+           can have changed it. Restoring `display` to '' rather than a value hands
+           the decision back to the stylesheet: a row whose state class is off is
+           still `none`, measures zero, and the column shortens by the bar alone. */
+        if (dockChrome) {
+          dockChrome.style.display = '';
+          dockChrome.style.bottom = dockH + 'px';
+          dockH += dockChrome.getBoundingClientRect().height;
+        }
+        if (stage.chrome) stage.chrome(dockH);
         layoutInstruments();
         return;
       }
@@ -1364,6 +1390,10 @@
     // is a class, not a rebuild.
     var liveBtn = null;
     var liveOn = false, liveHandler = null;
+    /* The portrait dock's extra row is declared UP WITH THE OPTIONS, not here: boot
+     * hands it in through `start`, and a `var` re-declaration at this point in the
+     * function would hoist and then null it out again on the way past. See
+     * `opts.dockChrome` above and setDockChrome below. */
     function reglyph(b, name) {
       if (!b) return;
       b.innerHTML = icon(name);
@@ -2535,6 +2565,37 @@
       // both measured off what it shows, so neither survives the change untouched.
       schedulePlace();
     };
+
+    /* The portrait dock's extra row, handed over the same way the flash frame and
+     * the live toggle are: the page owns the element and what is in it, the player
+     * owns where it goes and how much of the column it costs.
+     *
+     * Positioned and measured in placeBar's portrait branch, hidden everywhere else.
+     * Whether it is VISIBLE is not this function's business — that is a class on
+     * `body`, so the reader's live toggle keeps working through exactly one switch.
+     *
+     * Boot passes the element through `start` instead, for the same reason the flash
+     * frame does: this seam is DEFINED BY start, so anything built before it exists
+     * cannot use it. A dock handed over that way never gets positioned, and a
+     * `position:fixed` element with `top` and `bottom` both auto falls back to its
+     * static position — the top of the page, which is the wrong end of the phone. */
+    window.WccPlayer.setDockChrome = function (el) {
+      /* HIDE WHAT WE ARE LETTING GO OF. placeBar hides the row it currently holds,
+         so releasing the reference first orphans the element in whatever state it
+         was last in — which, on a phone turned back to landscape, is visible. The
+         row would then sit over a 16:9 deck with nothing left pointing at it to take
+         it down again. */
+      if (dockChrome && dockChrome !== el) dockChrome.style.display = 'none';
+      dockChrome = el || null;
+      schedulePlace();
+    };
+
+    /* "Something I own changed size — measure the dock again."
+     *
+     * Needed because the dock's height is now a function of state the PAGE holds
+     * (whether the live row is up), not just of the viewport. Every other trigger
+     * for a re-place is a resize or a rotation, which the player sees for itself. */
+    window.WccPlayer.relayout = function () { schedulePlace(); };
 
     /* Hand a stage the transport it drives.
      *

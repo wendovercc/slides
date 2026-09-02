@@ -96,7 +96,123 @@
         .tick-seg .lbl { color: var(--muted); font-size: var(--t-sm); text-transform: uppercase; letter-spacing: 0.06em; }
         /* Provisional-result note — matches today.html's .prov (muted, not uppercase). */
         .tick-seg .prov { color: var(--muted); font-weight: 400; }
+        /* A whole-segment sentence rather than a row of data parts. On the wall it
+           behaves like any other segment (one clipped line); in portrait it wraps
+           and the band grows to it. */
+        .tick-seg .prose { font-weight: 400; color: var(--text); }
         .tick-seg .sep { color: var(--muted); opacity: 0.5; margin: 0 0.3vw; }
+
+        /* ---- PORTRAIT (?portrait) — the phone's docked row -------------------
+           Everything above is sized in `vw`, which assumes the wide viewport of a
+           wall: in a ~390px-wide dock `2vw` resolves to under 8px. So portrait
+           re-tokenises off `vh` instead — this iframe is a single-line bar whose
+           HEIGHT is the constraint and whose width is whatever the phone is, which
+           is exactly the axis the type should track.
+
+           The flag also stops being a fixed 8vw band. That width was pinned to the
+           strip standing above it so the two read as one L; there is no strip here
+           (docs/portrait-decks.md, "Live on the phone"), so the flag is free to be
+           an auto-width tag, one line, no division subtitle. */
+        /* THE PHONE'S OWN SCALE, borrowed wholesale from the portrait fragments
+           (`.pfrag` in assets/css/portrait.css) so the ticker reads as part of the
+           same surface rather than as a shrunken wall. `--t-md` here IS `.pf-body`
+           — the body copy of a portrait showcase card — and the segment takes it at
+           body weight.
+
+           It replaces a `vh` scale that was wrong for a reason worth recording: in
+           an IFRAME, `vh` is the iframe's own height, and this one is about 64px
+           tall. `3vh` of left padding came out at under 2px, which is why the text
+           sat flush against the edge. The wall's `vw` tokens have the mirror problem
+           in the other direction. `--u` is floored in px and so is immune to both. */
+        html.portrait {
+            --u: clamp(3.4px, 1vw, 6px);
+            --t-md: calc(4.4 * var(--u));
+            --t-sm: calc(3.4 * var(--u));
+            --t-xs: calc(2.9 * var(--u));
+            --pad-x: calc(3.2 * var(--u));
+        }
+        /* STACKED, NOT SIDE BY SIDE. On the wall the flag is a full-height tile
+           because there is width to spare and a strip standing on top of it; on a
+           phone that tile ate most of the line the ticker had to say anything in.
+           So the flag becomes a small badge on the first row and the segment gets
+           the whole width of the second.
+           The matte and the gold rule are the DOCK's out here (see #live-dock in
+           player.html) — a border drawn in this document stops where the iframe
+           stops, which is short of the screen edge by the chevron's width. */
+        html.portrait .ticker-bar {
+            flex-direction: column; align-items: stretch; justify-content: center;
+            gap: calc(0.5 * var(--u)); padding: 0;
+            background: transparent; border-top: none; }
+        /* An auto-width square badge on its own row, not a full-height column, and
+           DOCKED TO THE EDGE: the gutter belongs to the running text, not to a block
+           of colour. A gold tile inset from the screen edge reads as a floating chip;
+           run into the corner it reads as a tab on the band, which is what it is. */
+        html.portrait .tick-live {
+            flex-direction: row; align-items: center; align-self: flex-start;
+            width: auto; padding: 0.4em 0.75em; gap: 0.6em; border-radius: 0; }
+        /* THE BADGE IS THE AFFORDANCE. It was a separate chevron out in the player's
+           document, beside the frame; here it rides inside the gold tile, which
+           makes the tile itself read as the thing you press. Deliberately the same
+           arrow the portrait fragments use for a link (`.pf-link::after` in
+           assets/css/portrait.css): gold ground, navy text, an arrow at 400 and 0.85
+           — so a link on the phone looks like a link wherever it turns up. The badge
+           already had that ground and that colour; it only needed the arrow. */
+        html.portrait .tick-live::after {
+            content: '\2192'; font-size: var(--t-xs); font-weight: 400; opacity: 0.85; }
+        html.portrait .tick-live-sub { display: none; }
+        html.portrait .tick-live-label,
+        html.portrait .tick-live.is-long .tick-live-label {
+            -webkit-line-clamp: 1; white-space: nowrap; letter-spacing: 0.08em;
+            font-size: var(--t-xs); }
+        html.portrait .tick-live i {
+            width: 0.62em; height: 0.62em; margin-right: 0.55em; }
+        /* GROWS TO ITS CONTENTS. On the wall the ticker is one line in a fixed band
+           and anything longer is clipped; on a phone the band is the only live
+           surface there is, so the text sets the height and the dock follows it
+           (reportHeight below → #live-dock in player.html). Nothing else in the
+           chain can do this: an iframe never sizes to its own content, so the height
+           has to be measured in here and sent out.
+           The ACTIVE segment is in flow and drives the height; the outgoing one goes
+           absolute underneath it so the two still crossfade in place. */
+        html.portrait, html.portrait body { height: auto; overflow: visible; }
+        html.portrait .ticker-bar { position: relative; inset: auto; }
+        html.portrait .tick-body { flex: 1 1 auto; min-height: 0; overflow: visible; }
+        html.portrait .tick-seg {
+            position: relative; inset: auto;
+            flex-wrap: wrap; align-items: baseline;
+            white-space: normal; overflow: visible; text-overflow: clip; }
+        html.portrait .tick-seg:not(.on) { position: absolute; inset: 0; }
+        /* Wrap BETWEEN the parts, never inside one — but the parts, not everything.
+           A score, an overs figure or a batter's "68 (93)*" is a single token to a
+           reader even when it contains spaces, so those are named and pinned. PROSE
+           is the opposite case and gets its own class: a paragraph of match
+           narrative has to break wherever it likes, and a blanket `> span` rule made
+           the whole paragraph one unbreakable token — which is exactly the shape
+           these segments are expected to take as they stop being scorelines. */
+        html.portrait .tick-seg > span { white-space: normal; }
+        html.portrait .tick-seg .team,
+        html.portrait .tick-seg .score,
+        html.portrait .tick-seg .ov,
+        html.portrait .tick-seg .bat,
+        html.portrait .tick-seg .num,
+        html.portrait .tick-seg .lbl { white-space: nowrap; }
+        html.portrait .tick-seg .prose { white-space: normal; }
+        /* Body copy, not display type: same family, weight and size as `.pf-body`.
+           The wall's emphasis spans (team/score at 900, batter at 700) come back to
+           400 with it, so the line reads as one sentence rather than a scoreboard. */
+        html.portrait .tick-seg {
+            font-size: var(--t-md); font-weight: 400; line-height: 1.65;
+            gap: 0.5em; padding: 0 var(--pad-x); }
+        html.portrait .tick-seg .team,
+        html.portrait .tick-seg .score,
+        html.portrait .tick-seg .bat { font-weight: 400; }
+        html.portrait .tick-seg .sep { margin: 0 0.15em; }
+        @keyframes tick-pulse-p {
+            0% { box-shadow: 0 0 0 0 rgba(179,38,30,0.6); }
+            70% { box-shadow: 0 0 0 0.5em rgba(179,38,30,0); }
+            100% { box-shadow: 0 0 0 0 rgba(179,38,30,0); }
+        }
+        html.portrait .tick-live.is-live i { animation: tick-pulse-p 1.8s infinite; }
     </style>
 </head>
 <body>
@@ -119,6 +235,22 @@
     var liveSub = document.getElementById('tick-live-sub');
     var segs = [document.getElementById('seg-a'), document.getElementById('seg-b')];
     var CYCLE_MS = 9000;
+    /* The phone's docked row. Two differences from the wall, both from
+       docs/portrait-decks.md ("Live on the phone"): a type scale that tracks the
+       bar's height rather than a wall's width (see the stylesheet), and EVENT-FIRST
+       segment order below. */
+    var PORTRAIT = /(^|[?&])portrait($|[=&])/.test(location.search);
+    if (PORTRAIT) document.documentElement.classList.add('portrait');
+    /* `?tickerdemo` — a long prose segment appended to the cycle, for looking at how
+       the band behaves when the text outgrows one line. Passed through from the
+       page's own URL by ensurePortraitDock, so it is reachable on any deck without
+       editing anything. Deliberately prose rather than a scoreline: the segments are
+       expected to become paragraphs of match narrative, and this is what that will
+       look like. Never on without the flag, so prod is untouched. */
+    var DEMO = /(^|[?&])tickerdemo($|[=&])/.test(location.search);
+    var DEMO_TEXT = 'Wendover need 47 from the last eight overs with six wickets ' +
+        'standing, after Harrington and Jackson put on 82 for the fourth wicket to ' +
+        'drag the chase back from 61 for 3.';
 
     var segments = [];    // current list of {label, html, live} segments
     var idx = 0;          // which segment is showing
@@ -203,7 +335,8 @@
             var flag = team || (isBreak ? 'Break' : 'Live');
             var inn = currentInnings(m);
             var oc = '';
-            // 1) Score + at-crease batsmen, together in one segment (dot-separated).
+            var score = null, wicket = null;
+            // Score + at-crease batsmen, together in one segment (dot-separated).
             if (inn) {
                 // The batting side's club name straight from the feed — no guessing
                 // which club a team name belongs to. Both sides read white (no gold
@@ -213,27 +346,57 @@
                     '<span class="score' + oc + '">' + inn.runs + '/' + inn.wickets + '</span>' +
                     '<span class="ov">(' + esc(inn.overs) + ' ov)</span>'];
                 (inn.at_crease || []).forEach(function (b) { parts.push(batHtml(b, false)); });
-                out.push({ label: flag, live: !isBreak, pc: m.pc_id, html: parts.join('<span class="sep">·</span>') });
+                score = { label: flag, live: !isBreak, pc: m.pc_id, html: parts.join('<span class="sep">·</span>') };
             } else if (m.score_text) {
-                out.push({ label: flag, live: !isBreak, pc: m.pc_id, html: '<span class="team">' + esc(m.score_text) + '</span>' });
+                score = { label: flag, live: !isBreak, pc: m.pc_id, html: '<span class="team">' + esc(m.score_text) + '</span>' };
             }
-            // 2) Last wicket — player name styled like the at-crease batters (.bat),
+            // Last wicket — player name styled like the at-crease batters (.bat),
             // the runs/dismissal muted, for a consistent read across segments.
             var w = inn && inn.last_wicket;
-            if (w) out.push({ label: flag, live: !isBreak, pc: m.pc_id,
+            if (w) wicket = { label: flag, live: !isBreak, pc: m.pc_id,
                 html: '<span class="lbl">Last wkt</span><span class="bat' + oc + '">' + esc(w.name) + '</span>' +
-                    '<span class="num">' + (w.runs != null ? ' ' + w.runs : '') + (w.how ? ' — ' + esc(expandHow(w.how)) : '') + '</span>' });
-            // 3) Break, if any.
+                    '<span class="num">' + (w.runs != null ? ' ' + w.runs : '') + (w.how ? ' — ' + esc(expandHow(w.how)) : '') + '</span>' };
+            /* EVENT-FIRST ON THE PHONE, score-first on the wall. A wall is ambient
+               and the standing score is what someone glancing up wants; a phone band
+               costs viewport on every step and is only worth it when it is telling
+               you something, so the last wicket leads and the score is what it falls
+               back to. Same segments either way — only the order differs, so nothing
+               is hidden from either surface. */
+            if (PORTRAIT) { if (wicket) out.push(wicket); if (score) out.push(score); }
+            else          { if (score) out.push(score); if (wicket) out.push(wicket); }
+            // Break, if any.
             if (isBreak && m.break_desc) out.push({ label: flag, live: false, pc: m.pc_id, html: '<span class="lbl">' + esc(m.break_desc) + '</span>' });
         });
         // The flag's subtitle, tagged on here rather than read at show time so a
         // config that lands after the first feed still changes the render key and
         // repaints (see render()).
         out.forEach(function (s) { s.div = s.pc != null ? (PC_DIV[String(s.pc)] || '') : ''; });
+        if (DEMO && out.length) {
+            var d = out[0];
+            out.push({ label: d.label, div: d.div, live: d.live, pc: d.pc,
+                       html: '<span class="prose">' + esc(DEMO_TEXT) + '</span>' });
+        }
         return { segments: out, anyLive: anyLive };
     }
 
     function stop() { if (timer) { clearInterval(timer); timer = null; } }
+
+    /* Tell the player how tall we came out. An iframe does not size to its content,
+       so the dock's height is OUR measurement, sent out — see #live-dock. Sent after
+       a frame so the browser has laid the new segment out, and only when the number
+       actually changes: the dock re-places the control bar and re-measures the
+       column on every one of these. */
+    var lastH = 0;
+    function reportHeight() {
+        if (!PORTRAIT) return;
+        requestAnimationFrame(function () {
+            var h = Math.ceil(bar.getBoundingClientRect().height);
+            if (!h || h === lastH) return;
+            lastH = h;
+            try { window.parent.postMessage({ type: 'wcc-ticker-height', height: h }, '*'); } catch (e) {}
+        });
+    }
+    window.addEventListener('resize', function () { lastH = 0; reportHeight(); });
 
     // Does this label need the smaller flag type? Two ways to be too big for the
     // band: too many characters overall, or a single word too long to break —
@@ -266,6 +429,9 @@
             lastFeatured = seg.pc;
             try { window.parent.postMessage({ type: 'wcc-featured', pc_id: seg.pc }, '*'); } catch (e) {}
         }
+        // Segments differ in length, so the band's height is a property of the one
+        // on show, not of the feed.
+        reportHeight();
     }
 
     function render(feed) {

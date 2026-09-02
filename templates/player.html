@@ -172,6 +172,54 @@
             z-index: 1; pointer-events: none; background: transparent;
         }
 
+        /* ---- The portrait dock's live row ------------------------------------
+           The phone's whole live surface: a ticker docked directly above the control
+           bar, and a LINK. Not the wall's L — the standings strip does not come to
+           the phone (docs/portrait-decks.md, "Live on the phone").
+
+           An <a> WRAPPING an inert iframe. The ticker page stays exactly what it is
+           on the wall — `pointer-events:none`, no navigation of its own — and the
+           tap lands on the anchor in this document instead. That keeps one ticker
+           for both surfaces and means a cross-origin-ish frame boundary never has to
+           be reached across for a click.
+
+           THE WHOLE BAND IS THE TARGET, not the segment under the thumb: the segment
+           rotates every few seconds, so a per-segment link races the rotation and
+           lands the reader somewhere they did not aim. The rotating content
+           advertises; the tap means "take me to live".
+
+           Placement is the player's (`WccPlayer.setDockChrome` sets `bottom` to the
+           bar's measured height); visibility is `body.live-chrome`, the same one
+           switch the reader's live button throws. */
+        #live-dock {
+            position: fixed; left: 0; right: 0; z-index: 60;
+            display: none; align-items: stretch;
+            /* Two rows: the team badge, and the ticker line under it — but only as
+               a FLOOR. The real height is whatever the ticker measures itself at and
+               posts out (an iframe never sizes to its content), set inline; the cap
+               stops a runaway segment eating the deck. */
+            min-height: clamp(54px, 8vh, 80px);
+            max-height: 38vh;
+            background: #08152c; text-decoration: none;
+            /* THE GOLD RULE IS THE ANCHOR'S, not the ticker's. The chevron is a
+               sibling of the iframe, so a border drawn inside the ticker document
+               stops where the iframe stops — short of the screen edge by the width
+               of the chevron. Drawn out here it spans the dock. */
+            border-top: 1px solid rgba(212,175,55,0.55);
+            -webkit-tap-highlight-color: transparent;
+        }
+        body.live-chrome #live-dock { display: flex; }
+        #live-dock:active { background: #0d1f3d; }
+        #live-dock iframe {
+            flex: 1; min-width: 0; height: 100%; border: none;
+            background: transparent; pointer-events: none;
+        }
+        /* The "this is tappable" affordance lives INSIDE the ticker now, as an arrow
+           in the gold badge (`.tick-live::after` in live-ticker.html) — the same
+           arrow a portrait fragment puts on a link. It was a chevron out here,
+           beside the frame, which made the band look like a band with a chevron next
+           to it rather than like something you press. */
+
         /* Preview (50%-scale debug view): scale the whole stage from the top-right, so
            slides, ticker and flash scale together and the live shrink still composes. */
         body.preview #stage {
@@ -533,6 +581,10 @@ function applyLiveChrome(on) {
     _chromeShown = on;
     document.body.classList.toggle('live-chrome', on);
     syncLiveToggle();
+    // On the phone this class is what makes the docked ticker row exist or not, and
+    // the column shortens itself by the dock's measured height — so the dock has to
+    // be re-measured, which is not something a resize will tell the player about.
+    if (window.WccPlayer && WccPlayer.relayout) WccPlayer.relayout();
 }
 function onLiveState(feed) {
     const content = liveHasContent(feed);
@@ -559,15 +611,16 @@ function onLiveState(feed) {
     }
     if (content) offerLiveToggle();
 }
-/* Offer (or withdraw) the bar's live button.
-   WITHDRAWN IN PORTRAIT, because the thing it toggles is not there: the ticker and
-   strip live in the band a retracting 16:9 slide layer uncovers, and the column has
-   no such band (see ensureLiveChrome). A button that visibly does nothing is worse
-   than no button. The pin survives the rotation either way — it is the reader's
-   choice, not the stage's — so a phone turned back finds the chrome as they left it.
-   `_livePortrait` is kept here rather than read off the boot-time PORTRAIT const
-   because that one lives inside the boot scope and does not follow the rotation;
-   armRotation is the other writer. */
+/* Offer the bar's live button.
+   ON BOTH SURFACES NOW. It used to be withdrawn in portrait because the thing it
+   toggled did not exist there; the phone has its own live chrome now (a docked
+   ticker, no strip — see ensurePortraitDock), so the contract is the same on either
+   stage: *is the live chrome up*. It throws one class and each stage answers with
+   its own shape, and the pin survives a rotation — it is the reader's choice, not
+   the stage's.
+   `_livePortrait` survives only to say WHICH chrome to build. It is kept here rather
+   than read off the boot-time PORTRAIT const because that one lives inside the boot
+   scope and does not follow the rotation; armRotation is the other writer. */
 // 'none' rather than '' because that IS the starting state — no button — and
 // seeding it truthfully saves a pointless withdraw-and-re-place at boot.
 let _liveOffered = false, _livePortrait = false, _liveSynced = 'none';
@@ -577,7 +630,7 @@ function syncLiveToggle() {
     // page must survive a player that has never heard of a live toggle (see the same
     // reasoning on setStage in armRotation).
     if (!window.WccPlayer || !WccPlayer.setLiveToggle) return;
-    const avail = _liveOffered && !_livePortrait;
+    const avail = _liveOffered;
     // Called from every state change AND from every poll, so it has to be cheap when
     // nothing moved: `setLiveToggle` re-places the control bar, and re-measuring the
     // bar on a 20-second poll for a state it already holds is churn under the
@@ -1006,8 +1059,68 @@ async function init() {
             WccPlayer.setFlashFrame(document.getElementById('flash-frame'));
         }
     }
-    if (!PORTRAIT) ensureLiveChrome();
-    // The toggle follows the stage the chrome belongs to, not the boot geometry.
+
+    /* The phone's live surface: the ticker, docked above the control bar, wrapped in
+       a link to the Match Day deck. No strip and no flash — the strip answers an
+       ambient question a phone is not asked, and the flash is a full-bleed 16:9
+       takeover with no 16:9 to take over.
+
+       `?portrait` re-tokenises the ticker off its own height instead of a wall's
+       width, and puts the last wicket ahead of the score (see live-ticker.html).
+
+       The link target is the ONE well-known live URL, which is why the deck was
+       given a stable slug — a chrome link cannot point at a scratch deck. */
+    const LIVE_DECK_URL = '/slideshow/live/';
+    let _liveDockSized = false;
+    function ensurePortraitDock() {
+        if (!LIVE_FEED_ON) return;
+        let a = document.getElementById('live-dock');
+        if (!a) {
+            a = document.createElement('a');
+            a.id = 'live-dock';
+            a.href = LIVE_DECK_URL;
+            a.setAttribute('aria-label', 'Live scores — open the Match Day deck');
+            const f = document.createElement('iframe');
+            // `?tickerdemo` on the page URL rides through to the ticker, which adds
+            // a long prose segment to the cycle — how the band behaves when the text
+            // outgrows one line. A debug flag, off unless asked for.
+            f.src = '/live-ticker/?portrait' +
+                (params.has('tickerdemo') ? '&tickerdemo' : '');
+            f.title = 'Live scores';
+            // Inert by design: the tap belongs to the anchor around it. Set here as
+            // well as in CSS so a frame that paints before the stylesheet applies can
+            // never swallow the first press.
+            f.style.pointerEvents = 'none';
+            a.append(f);
+            document.body.appendChild(a);
+        }
+        /* HEIGHT COMES FROM THE TICKER, which is the only thing that can know it:
+           an iframe does not size to its own content, so the band measures itself in
+           there and posts the number out. Each one re-places the control bar and
+           re-measures the column, so a column always clears a band that has just
+           changed size under it. */
+        if (!_liveDockSized) {
+            _liveDockSized = true;
+            window.addEventListener('message', (e) => {
+                const d = e.data;
+                if (!d || d.type !== 'wcc-ticker-height' || !d.height) return;
+                const dock = document.getElementById('live-dock');
+                if (!dock) return;
+                dock.style.height = d.height + 'px';
+                if (window.WccPlayer && WccPlayer.relayout) WccPlayer.relayout();
+            });
+        }
+        /* The player owns where it sits and what it costs the column. At BOOT this
+           seam does not exist yet (start() defines it), and the element goes in
+           through start's options instead — see the call below. This call is what
+           carries a rotation back into portrait. */
+        if (window.WccPlayer && WccPlayer.setDockChrome) WccPlayer.setDockChrome(a);
+    }
+    /* One live surface per stage, and they are not the same shape. Landscape gets
+       the L (ticker band + strip + flash); portrait gets a docked ticker and no
+       strip. Each is built on demand and torn down by neither — both are idempotent,
+       because a phone can be turned more than once. */
+    if (PORTRAIT) ensurePortraitDock(); else ensureLiveChrome();
     _livePortrait = PORTRAIT;
     {% endif %}
     applyDebugScale();
@@ -1159,16 +1272,23 @@ async function init() {
             if (want) {
                 WccPlayer.setStage(
                     WccPortrait.create({ slides: portraitSlides(finalSlides) }).stage);
+                {% if live_enabled %}ensurePortraitDock();{% endif %}
             } else {
                 // Back to the crossfade stack. The column takes itself apart
                 // (stage.detach) and any slide it was rendering itself gets its
                 // iframe back — see setStage.
                 WccPlayer.setStage(null);
-                {% if live_enabled %}ensureLiveChrome();{% endif %}
+                {% if live_enabled %}
+                ensureLiveChrome();
+                // The docked row is the portrait dock's, and placeBar will not be in
+                // that branch any more — hand it back so nothing measures or shows a
+                // row the landscape stage has no place for.
+                if (WccPlayer.setDockChrome) WccPlayer.setDockChrome(null);
+                {% endif %}
             }
             {% if live_enabled %}
-            // The button goes with the chrome: away when the column takes the stage,
-            // back (in whatever state the reader last left it) when landscape returns.
+            // The button stays on both stages; only the chrome behind it changes
+            // shape, and the reader's pin carries across the turn untouched.
             _livePortrait = want;
             syncLiveToggle();
             {% endif %}
@@ -1263,6 +1383,13 @@ async function init() {
             // portrait there is no stage to raise it over (the chrome above is not
             // built). Withheld rather than left dangling on a null frame.
             flash: PORTRAIT ? null : { frame: document.getElementById('flash-frame') },
+            {% if live_enabled %}
+            // The portrait dock's live row, built above. Handed in HERE rather than
+            // through setDockChrome, which start() has not defined yet — an
+            // unpositioned fixed row falls back to its static position, i.e. the top
+            // of the page, which is the wrong end of the phone entirely.
+            dockChrome: document.getElementById('live-dock'),
+            {% endif %}
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
