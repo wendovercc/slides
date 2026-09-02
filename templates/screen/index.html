@@ -236,6 +236,8 @@
                 <div class="card-ctx" data-loc-id="{{ c.loc_id }}"></div>
                 {% elif c.type == 'youtube' %}
                 <div class="card-ctx" data-yt></div>
+                {% elif c.get('ctx') == 'live' and live_enabled %}
+                <div class="card-ctx" data-live></div>
                 {% elif c.get('description') %}
                 <span class="card-desc">{{ c.description }}</span>
                 {% endif %}
@@ -260,6 +262,9 @@
         </div>
     </div>
     <script src="/assets/js/live-key.js?v={{ asset_version }}"></script>
+    <!-- The poll window, so the Match Day card gates its one request exactly as
+         every other live client does rather than reimplementing the rule. -->
+    <script src="/assets/js/live-window.js?v={{ asset_version }}"></script>
     <script>
         (function () {
             var cog = document.getElementById('settingsCog'),
@@ -292,7 +297,10 @@
     <script>
         const TEAM_NAMES = {{ team_names | tojson }};
         const YT_DATA = {{ youtube | tojson }};
-        const TYPE_LABELS = { match: 'Match', training: 'Training', idle: 'Quiet', hire: 'Hire', club_event: 'Event', section_event: 'Event', live: 'Live', scheduled: 'Scheduled', offair: 'Off air' };
+        const TYPE_LABELS = { match: 'Match', training: 'Training', idle: 'Quiet', hire: 'Hire', club_event: 'Event', section_event: 'Event', live: 'Live', scheduled: 'Scheduled', offair: 'Off air',
+            // Match Day card states. All three fall through badge()'s class map to
+            // the muted `idle` pill except `live`, which is the pulsing red one.
+            nokey: 'Fixtures only', nomatch: 'No matches today', matchday: 'Match today' };
         const MATCH_PHASE_LABELS = { warm_up: 'Match warm up', main: 'Match play', wind_down: 'Match wind down' };
         const SECTION_LABELS = { senior: 'Seniors', junior: 'Juniors' };
 
@@ -324,7 +332,10 @@
             if (diff === 1) return `Tomorrow ${t}`;
             return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }) + ` ${t}`;
         }
-        const NOT_LIVE = new Set(['idle', 'offair']);
+        // Types that are 'now' without being LIVE: they take the muted pill, keep
+        // their time, and must not pulse. The Match Day card's three non-live
+        // states belong here for exactly the reason 'offair' does.
+        const NOT_LIVE = new Set(['idle', 'offair', 'nokey', 'nomatch', 'matchday']);
         function ctxItem(type, phase, meta, time, kind) {
             const live = kind === 'now' && !NOT_LIVE.has(type);
             const cls = 'ctx-item' + (live ? ' ctx-live' : '') + (kind === 'next' ? ' ctx-next' : '');
@@ -403,6 +414,71 @@
             el.innerHTML = html;
         }
         renderYT();
+
+{% if live_enabled %}
+        /* The Match Day card's state line — three answers to "will this deck show me
+           live scores right now?", because the card title cannot say and the
+           description was promising more than most readers get.
+
+             Fixtures only    — no access key on this device. The deck is the
+                                fixtures board and nothing else, which is what the
+                                badge says rather than teasing a feature the reader
+                                cannot reach. The cog in the header is how they'd
+                                fix it, so the meta line names the key.
+             No matches today — provisioned, but the day has nothing to poll (or the
+                                window has shut). Costs no network: live-config.json
+                                is same-origin and baked by the nightly build.
+             Match today      — something is on but not in play yet, with the first
+                                start time. Also the honest FALLBACK whenever the
+                                feed can't be reached: never claim live on a failure.
+             Live             — the feed says a match is actually under way, with its
+                                score. The one state that costs a request.
+
+           ONE fetch, on load, and only inside the poll window — this is a launcher
+           page, not a scoreboard. Whoever opens the deck gets the real poller. */
+        function renderLive() {
+            const el = document.querySelector('[data-live]');
+            if (!el) return;
+            const set = (type, meta, time, kind) =>
+                el.innerHTML = ctxItem(type, null, meta ? `<span class="ctx-meta">${meta}</span>` : '',
+                                       time, kind || 'now');
+            const key = window.WccLiveKey && WccLiveKey.get();
+            if (!key) return set('nokey', 'Live scores need a device key');
+
+            fetch('/live-config.json', { cache: 'no-store' }).then(r => r.json()).then(cfg => {
+                const ms = cfg.matches || [];
+                const win = window.WccLiveWindow && WccLiveWindow.parse(cfg);
+                const st = win ? WccLiveWindow.state(win) : 'open';
+                if (!ms.length || st === 'closed') return set('nomatch', '');
+                // Teams playing today, and when the first of them starts.
+                const teams = ms.map(m => m.team_name).filter(Boolean);
+                const first = ms.map(m => m.time).filter(Boolean).sort()[0] || null;
+                const pending = () => set('matchday', teams.join(' · '), first);
+                if (st !== 'open') return pending();
+
+                const url = 'https://live.wendovercc.org/state.json?' +
+                    ms.map(m => 'pc=' + encodeURIComponent(m.pc_id)).join('&');
+                fetch(url, { headers: { 'Authorization': 'Bearer ' + key } })
+                    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+                    .then(feed => {
+                        const byId = Object.fromEntries(ms.map(m => [String(m.pc_id), m]));
+                        // In PLAY, not merely present: a finished match is the day's
+                        // result, not a reason to pulse a red dot at someone.
+                        const on = (feed.matches || []).filter(
+                            m => !m.complete && (m.phase === 'live' || m.phase === 'break'));
+                        if (!on.length) return pending();
+                        set('live', on.map(m => {
+                            const c = byId[String(m.pc_id)] || {};
+                            return [c.team_name, m.score_text].filter(Boolean).join(' ');
+                        }).join(' · '));
+                    })
+                    // 403, offline, a Worker blip: we know a match is on and nothing
+                    // more, so say exactly that.
+                    .catch(() => pending());
+            }).catch(() => {});
+        }
+        renderLive();
+{% endif %}
     </script>
 </body>
 </html>

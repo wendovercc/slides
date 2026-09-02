@@ -4822,6 +4822,10 @@ def build_slideshows(env, slide_meta, sets=None):
                 "title": show["title"],
                 "rank": show["homepage_rank"],
                 "description": show.get("description"),
+                # Which live context strip (if any) the card carries instead of its
+                # description — the deck declares it rather than the build matching
+                # on a slug, so "which deck is the live one" stays in content.
+                "homepage_ctx": show.get("homepage_ctx"),
             })
 
     # ── Auto-decks ────────────────────────────────────────────────────────────
@@ -4924,6 +4928,7 @@ def build_screen_locations(env, homepage_shows=None):
             # surface() in player-core.js), and this URL is one people copy.
             "href": f"/slideshow/{show['slug']}/",
             "description": show.get("description"),
+            "ctx": show.get("homepage_ctx"),
         })
     youtube_data = None
     for c in config.get("homepage_cards", []):

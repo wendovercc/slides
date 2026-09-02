@@ -1,7 +1,8 @@
 {
   "title": "Match Day",
-  "description": "Today's fixtures, and the live scoreboard for every Wendover match in progress",
+  "description": "Today's cricket: fixtures, and live scores where the feed is available",
   "homepage_rank": 0,
+  "homepage_ctx": "live",
   "refresh_interval_seconds": 300,
   "slides": [
     {
