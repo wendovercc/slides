@@ -1,0 +1,65 @@
+{
+  "title": "Match Day",
+  "description": "Today's fixtures, and the live scoreboard for every Wendover match in progress",
+  "homepage_rank": 0,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "today"
+    },
+    {
+      "slug": "live-match-1st-xi"
+    },
+    {
+      "slug": "live-match-2nd-xi"
+    },
+    {
+      "slug": "live-match-friendly-xi"
+    },
+    {
+      "slug": "live-match-u9"
+    },
+    {
+      "slug": "live-match-u10-lightning"
+    },
+    {
+      "slug": "live-match-u10-thunder"
+    },
+    {
+      "slug": "live-match-u11-incredibles"
+    },
+    {
+      "slug": "live-match-u11-invincibles"
+    },
+    {
+      "slug": "live-match-u12-hurricanes"
+    },
+    {
+      "slug": "live-match-u12-spitfires"
+    },
+    {
+      "slug": "live-match-u13-hurricanes"
+    },
+    {
+      "slug": "live-match-u13-spitfires"
+    },
+    {
+      "slug": "live-match-u14-hurricanes"
+    },
+    {
+      "slug": "live-match-u15-hurricanes"
+    },
+    {
+      "slug": "live-match-u15-spitfires"
+    },
+    {
+      "slug": "live-match-u17-spitfires"
+    },
+    {
+      "slug": "live-match-u11-girls"
+    },
+    {
+      "slug": "live-match-u13-girls"
+    }
+  ]
+}
