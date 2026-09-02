@@ -663,35 +663,37 @@
       return (first[atSlide] != null) ? first[atSlide] + atPanel : 0;
     }
 
-    /* Which way the transport travelled to reach slide i. The player passes only the
-     * outgoing index, and the deck WRAPS — advancing off the last slide arrives at
-     * the first, which is a forward move with `from > i`. So direction is the shorter
-     * way round the ring, not a comparison of two indices. */
-    function goingBack(i, from) {
-      if (typeof from !== 'number' || from === i || !list.length) return false;
-      var fwd = ((i - from) % list.length + list.length) % list.length;
-      return fwd * 2 > list.length;
-    }
-
-    /* Put a fragment step's interior where an arrival should find it. Forward, that
-     * is its top — the doc's forgiving commit: you never see the tail of one step
-     * sharing a screen with the head of the next. BACKWARD, it is its bottom, which
-     * is not a special case so much as the same rule read the other way: someone
-     * going back is continuing to read, and landing them at the top of the previous
-     * card would skip everything they were reaching for. */
-    function placeAt(i, back) {
+    /* Put a fragment step's interior where an arrival should find it: THE TOP, from
+     * every direction and by every route.
+     *
+     * It used to depend on which way you had travelled — forward to the top,
+     * backward to the BOTTOM, on the reading that someone going back is continuing
+     * to read and would otherwise have to scroll down through what they were
+     * reaching for. That rule was written while the deck was one tall scroller,
+     * where "back" really did mean carrying on upwards. On the swapped axes it
+     * describes nothing a reader does: horizontal is a page turn, and a page turn
+     * that lands on the bottom of the page reads as a fault.
+     *
+     * And it could not be told the truth about direction anyway. The deck WRAPS, so
+     * the only available answer was the shorter way round the ring — which made the
+     * HOME button land at the bottom of the title card whenever it was pressed from
+     * the back half of the deck, and at the top from the front half. One button,
+     * two behaviours, depending where you pressed it. Going always to the top is
+     * what makes home mean home. */
+    function placeAt(i) {
       var el = steps[i];
-      if (!el) return;
-      el.scrollTop = back ? Math.max(0, el.scrollHeight - el.clientHeight) : 0;
+      if (el) el.scrollTop = 0;
     }
 
     // The player arrived at a slide. Its panel is not settled yet (applyState runs
     // next and answers with showAtom), so this goes to the slide's FIRST step.
-    function show(i, from) {
+    // The player also passes the outgoing index; nothing here reads it any more
+    // (see placeAt), and the deck's own travel is `d` below.
+    function show(i) {
       if (first[i] == null) return;
       var d = Math.abs(i - atSlide);
       atSlide = i; atPanel = 0;
-      placeAt(i, goingBack(i, from));
+      placeAt(i);
       warm(i);
       onStep(stepIndex());
       /* Travel for a neighbour, CUT for anything further. The glide is what says

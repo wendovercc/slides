@@ -129,8 +129,17 @@
       // non-safe bottom strip (never past the safe zone — placeBar guarantees it).
       '#wcc-bar.place-below{flex-direction:row;left:50vw;bottom:0.6vmax;' +
       'transform:translateX(-50%);}' +
-      // Right of the slide: vertical column, right-anchored, centred vertically.
-      '#wcc-bar.place-right{flex-direction:column;right:0.6vmax;top:50vh;' +
+      /* Right of the slide: vertical column, right-anchored, centred vertically —
+         and the centring is the ONE thing this rule does not get to say, because
+         `vh` cannot say it on a phone. A fixed element's containing block in mobile
+         Safari is the LARGE viewport (the toolbar-retracted height), so `top:50vh`
+         centres the bar in a box taller than the one the reader can see, while
+         `placeBar` shrink-fits it against `window.innerHeight`, which is the visible
+         one. The bar therefore fitted by its own arithmetic and still hung below the
+         middle with its bottom edge clipped under Safari's chrome. `placeBar` sets
+         `top` in px from the same `ih` it measures with — see the `right` branch.
+         (templates/player.html hit this on the stage and answered it with `dvh`.) */
+      '#wcc-bar.place-right{flex-direction:column;right:0.6vmax;' +
       'transform:translateY(-50%);}' +
       /* DOCKED: the portrait column's own placement, and the only one that is not a
          float. The bar spans the bottom edge as a toolbar and the stage shortens its
@@ -585,6 +594,29 @@
      * here reverses on pinch-out. */
     var zoomed = false;
     var ZOOM_IN = 1.05;
+    /* PINCH IS NOT SCALE, and reading it as scale disabled every gesture on the
+     * surface for anyone with a Safari page zoom set.
+     *
+     * `visualViewport.scale` is the total magnification, and on iOS that includes
+     * the per-site zoom from the AA menu (Settings > Safari > Page Zoom). A reader
+     * with that at 115% — a common accessibility setting, and one the site never
+     * hears about — booted the deck at scale 1.15, which read as "pinched in" and
+     * stayed that way forever: swipe dead, tap dead, the frame window pinned to the
+     * visible slide. The control bar still worked, which is what made it look like a
+     * gesture bug rather than a zoom one.
+     *
+     * What the guard actually wants to know is whether the reader is looking at LESS
+     * than the page has laid out — which is what a pinch does and page zoom does not.
+     * Page zoom RE-LAYS-OUT: the layout viewport narrows with the magnification, so
+     * the two viewports still measure the same. A pinch leaves the layout alone and
+     * shrinks the visual one. So compare the two rather than trusting the scale, and
+     * the same test then covers a page zoom CHANGED mid-session, which any
+     * scale-against-a-boot-baseline version would have got wrong. */
+    function pinchedIn() {
+      var vv = window.visualViewport, de = document.documentElement;
+      if (!vv || !de || !de.clientWidth) return false;
+      return vv.width < de.clientWidth / ZOOM_IN;
+    }
     var cancelGesture = function () {};   // set by buildControls (interactive only)
     /* Tap-through.
      *
@@ -617,8 +649,7 @@
       // nothing to give there — and a desktop page-zoom on a kiosk preview must
       // never be able to clear the rotation timer and stall the deck.
       if (!interactive) return;
-      var vv = window.visualViewport;
-      var z = !!(vv && vv.scale > ZOOM_IN);
+      var z = pinchedIn();
       if (z === zoomed) return;
       zoomed = z;
       // Kill the crossfade while zoomed: a fade holds the outgoing AND incoming
@@ -1342,6 +1373,10 @@
         place = 'inside';
       }
       setPlaceClass(place);
+      // Centred on the VISIBLE viewport, in px, because the CSS cannot be trusted to
+      // do it — see the note on `.place-right`. Same `ih` the fit above measured
+      // against, so the bar is sized and centred by one number.
+      if (place === 'right') bar.style.top = (ih / 2) + 'px';
       // Inside is a column whatever sent it there, so a bar that was fitted as a row
       // (the taller-viewport branch) has to be fitted again on the axis it now grows
       // along. Re-fitting an already-vertical bar is a no-op it measures its way to.
@@ -1548,15 +1583,38 @@
       playBtn = button('pause', 'primary', function () { setPlaying(!playing); });
       bar.appendChild(playBtn);
       bar.appendChild(button('next', '', next));
-      /* SHARE, where the browser has it — and on BOTH surfaces. It was the portrait
-       * stage's button, which meant the deck whose entire distribution model is
-       * being forwarded lost its forward button when the phone was turned: `detach()`
-       * took it away on rotation. The button is about the deck, not about the shape
-       * of the screen, so it belongs to the bar like every other control.
-       * The URL is the canonical one the link preview was baked against (og:url),
-       * not `location.href` — which may carry the ?deck= / ?k= query that got us
-       * here and is nobody else's business. */
-      if (!record && navigator.share) {
+      /* SHARE, on a STANDALONE DECK ONLY — and then on both surfaces.
+       *
+       * Two decisions, and only the first was ever actually taken. Where it
+       * lives is settled: it is a bar control, not portrait chrome. It used to be
+       * built by the portrait stage, which meant the deck whose entire distribution
+       * model is being forwarded lost its forward button the moment the phone was
+       * turned, because `detach()` took it away on rotation. The button is about the
+       * deck, not about the shape of the screen.
+       *
+       * WHETHER it exists is the newer question, and the honest answer is: rarely.
+       * Every browser that has `navigator.share` also has a share control of its own
+       * a thumb's reach away, so on nearly every deck ours is a second button doing
+       * the first one's job — on a bar that is already the widest thing on a
+       * landscape phone. The argument that used to save it was the URL (we share the
+       * canonical `og:url`, the browser shares `location.href` with whatever query
+       * got the reader here) and it no longer holds: `live-key.js` strips `?k=` and
+       * `deck.js` strips `?match=` by `replaceState` at boot, so by the time anyone
+       * can press either button the address bar is already canonical.
+       *
+       * What is left is the case the button was built for. A STANDALONE deck
+       * (`standalone: true` in content/slideshows/<slug>.json) is one that exists
+       * only to be handed to someone as a link — the pavilion showcase — and passing
+       * it on is not an incidental browser affordance there, it is the thing the
+       * deck is for. It is also the deck most likely to be read with no browser
+       * chrome at all: added to a home screen, or opened in the in-app browser of
+       * whatever forwarded it. Same flag that already decides what HOME means, and
+       * for the same reason.
+       *
+       * `navigator.share` is still required, or the button is a control that does
+       * nothing. The URL stays `og:url` — the one the link preview was baked
+       * against — because that is simply the correct thing to send. */
+      if (!record && standalone && navigator.share) {
         var og = document.querySelector('meta[property="og:url"]');
         var shareUrl = (og && og.content) || location.origin + location.pathname;
         bar.appendChild(button('share', 'share', function () {

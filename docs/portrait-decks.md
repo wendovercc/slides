@@ -673,7 +673,20 @@ following the convention next to it:
   under 2px, which is why the text sat flush against the edge. The first portrait
   pass replaced the `vw` scale with a `vh` one and swapped one trap for another.
 
-The fix for both is that the portrait ticker borrows **the fragments' own scale**
+A third, found later and on the LANDSCAPE bar, belongs beside them because it is the
+same shape of mistake: **`vh` does not centre anything on a phone.** A fixed
+element's containing block in mobile Safari is the *large* viewport — the height
+with the toolbars retracted — so `place-right`'s `top: 50vh` centred the control bar
+in a box taller than the one the reader can see, while `placeBar` shrink-fitted it
+against `window.innerHeight`, which is the visible one. The bar therefore *fitted*
+by its own arithmetic and still hung below the middle with its bottom edge clipped
+under Safari's chrome, on exactly the phone-in-landscape case the shrink-to-fit was
+built for. `placeBar` now sets `top` in px from the same `ih` it measures with, so
+the bar is sized and centred by one number. (`templates/player.html` met this on the
+stage and answered it with `dvh`; either works, but one authority for the number is
+better than two units that agree.)
+
+The fix for the two ticker traps is that the portrait ticker borrows **the fragments' own scale**
 (`--u: clamp(3.4px, 1vw, 6px)`, redeclared in the ticker document): the segment is
 `.pf-body` exactly — same family, weight and size as a showcase card's body copy —
 so the band reads as part of the phone surface rather than as a shrunken wall.
@@ -886,7 +899,7 @@ previous slide's last atom and pauses (`back` passes `'last'`).
 |---|---|---|---|
 | **End of the deck** | ▶ wraps to the first slide (`fwdSlide`) | `stepBy` refuses to wrap | **Left standing, deliberately.** A swipe is a gesture and gestures stop; a button press is a command and continues. Now that both live on the same axis it is the one difference a reader could meet, so it is stated rather than fixed: if it reads wrong on a device, the change is to stop the deck wrapping on the interactive surface at all, which touches landscape and is not a portrait decision |
 | ~~**Forward onto a reel**~~ | arrives `playing \|\| video` — stepping onto a reel is a request to watch it, even from paused | ~~arrives `playing` — the reel parks~~ | **Fixed.** Both cross on `fwd` |
-| ~~**Back across a slide**~~ | the previous slide's LAST atom, paused | ~~its FIRST atom, still playing~~ | **Fixed.** Both cross on `back`, which also restores the point of `placeAt(i, back)`: a returning reader lands at the bottom of the previous step AND on the atom they left |
+| ~~**Back across a slide**~~ | the previous slide's LAST atom, paused | ~~its FIRST atom, still playing~~ | **Fixed.** Both cross on `back`, so a returning reader lands on the atom they left. (The other half of this — landing at the *bottom* of the previous step — has since been withdrawn; see "A step arrives at its top".) |
 | **Keyboard** | arrows are the atom move | the same | **Narrowed by the axis swap, not fixed.** Arrows now agree with the bar's ◀ ▶ on the axis a swipe uses, and step and atom are the same thing on every slide except a reel — where the arrows walk clips and a swipe leaves. That is the interim reading until the reel gets its player overlay, and it is defensible; it is listed because a narrow desktop window gets the column, where it is the only input a reader has |
 
 Wheel is the reverse case and is harmless: the column steps on a trackpad flick
@@ -909,6 +922,92 @@ readings of one condition is how the surfaces drifted in the first place. A stag
 arriving mid-session is seeded with it too, so a rotation while zoomed does not
 navigate once on the way in.
 
+### Page zoom is not a pinch — *fixed*
+
+Found on a real iPhone, and it had disabled **every gesture on both surfaces** for
+an entire class of reader: swipe dead, tap-to-pause dead, the frame window pinned
+to the visible slide. The control bar still worked, which is what made it read as a
+gesture bug rather than a zoom one.
+
+`onZoomChange` asked `visualViewport.scale > 1.05`. On iOS that scale is the TOTAL
+magnification, and it includes the per-site zoom from Safari's **AA** menu
+(Settings → Safari → Page Zoom). A reader with that set to 115% — an accessibility
+setting the site never hears about and cannot see — booted the deck at scale 1.15,
+which read as "pinched in" and stayed that way for the whole session, because
+nothing would ever bring it back under the threshold.
+
+**The guard was asking the wrong question.** What suspends the gestures is the
+reader looking at LESS than the page has laid out, and that is what tells a pinch
+from a zoom:
+
+> **Page zoom RE-LAYS-OUT** — the layout viewport narrows as the magnification
+> grows, so the two viewports still measure the same. **A pinch does not** — it
+> leaves the layout alone and shrinks the visual viewport over it.
+
+So `pinchedIn()` compares `visualViewport.width` against
+`documentElement.clientWidth` instead of trusting the scale. It costs nothing, and
+it also handles a page zoom CHANGED mid-session — which any version measuring scale
+against a baseline captured at boot would have got wrong.
+
+*The lesson is the same one "One authority" teaches one level down: the number the
+platform hands you is not always the number your condition is about.*
+
+### Share is for decks we hand out
+
+Moving share onto the bar settled *where* it lives and never asked whether it should
+exist. It should, on one kind of deck.
+
+Every browser that has `navigator.share` also has a share control of its own a
+thumb's reach away, so on nearly every deck ours is a second button doing the first
+one's job — on a bar that is already the widest thing on a landscape phone. The
+argument that used to save it was the URL: we share the canonical `og:url`, the
+browser shares `location.href` with whatever query got the reader here, and `?k=` is
+an access token. **That argument is dead in this codebase** — `live-key.js` strips
+`?k=` and `deck.js` strips `?match=` by `replaceState` at boot, so by the time
+anyone can press either button the address bar is already canonical. The browser's
+own share is correct.
+
+> **The button is built when the deck declares `standalone`, and not otherwise.**
+
+A standalone deck (`standalone: true` in `content/slideshows/<slug>.json`) is one
+that exists only to be handed to someone as a link — which is the pavilion showcase
+and the reason this whole surface was built. Passing it on is not an incidental
+browser affordance there, it is what the deck is FOR. It is also the deck most
+likely to be read with no browser chrome to fall back on: added to a home screen, or
+opened inside whatever app forwarded it. Same flag that already decides what HOME
+means, and for the same reason.
+
+`navigator.share` is still required, or it is a control that does nothing.
+
+*Rejected as too clever: gating on `display-mode: standalone` or on fullscreen —
+i.e. detecting the absence of the browser's own button. It answers a narrower
+question than the one that matters (is this deck for forwarding?), and it makes a
+control appear and disappear depending on how the reader happened to open the page.*
+
+### A step arrives at its top
+
+Both routes, every direction, and this replaces the direction-dependent landing
+`placeAt(i, back)` performed.
+
+The old rule put a forward arrival at the top of its step and a BACKWARD one at the
+**bottom**, on the reading that someone going back is continuing to read and would
+otherwise have to scroll down through what they were reaching for. That was written
+while the deck was one tall scroller, where "back" genuinely did mean carrying on
+upwards. On the swapped axes it describes nothing a reader does: horizontal is a
+page turn, and a page turn that lands on the bottom of the page reads as a fault.
+
+It could not be told the truth about direction anyway. **The deck wraps**, so the
+only answer available to `goingBack()` was the shorter way round the ring — which
+made the HOME button land at the bottom of the title card whenever it was pressed
+from the back half of the deck, and at the top from the front half. One button, two
+behaviours, decided by where it was pressed. Going always to the top is what makes
+home mean home, and `goingBack` is deleted rather than repaired.
+
+*Remembering each step's scroll position was the third option and is rejected: it
+is state per step, indistinguishable from "top" on a deck whose steps are one screen
+each, and on the long steps where it would differ it is worse — returning a reader
+to the middle of a card with no animation to explain it.*
+
 ### Chrome — ~~design, mostly~~ *mostly fixed*
 
 The audit said share and deck position were "not a property of geometry" and
@@ -923,8 +1022,9 @@ player's now, and the two that draw a line have one rule between them.
 > whatever the control bar is doing.
 
 - ~~**Share exists only in portrait**~~ — **fixed.** It is a bar control now
-  (`buildControls`), built wherever `navigator.share` exists, and a rotation cannot
-  take it away because `detach()` no longer owns it.
+  (`buildControls`), and a rotation cannot take it away because `detach()` no longer
+  owns it. *Built wherever `navigator.share` exists* was the first cut and has since
+  been narrowed to standalone decks — see "Share is for decks we hand out".
 - ~~**Deck position exists only in portrait**~~ — **fixed.** The rail is
   `#wcc-prog-top`, on both surfaces, counting the same table: one tick per atom
   with a reel as one, which is the rule the portrait step table already used, so

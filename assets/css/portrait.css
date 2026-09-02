@@ -387,9 +387,18 @@
 .pfrag-photo .pf-backdrop {
     transform: scale(1.12);
     filter: blur(calc(3.2 * var(--u))) saturate(1.2) brightness(0.86);
-    /* The blur is a compositing layer; keeping it off the main thread's paint is
-       worth the layer on a phone that is also moving a track sideways. */
-    will-change: transform;
+    /* NO `will-change`, and its removal is a bug fix rather than a tidy-up. It was
+       here on the reasoning that the blur is a compositing layer anyway, so hinting
+       it is free — but the hint is not what makes the layer (the `filter` already
+       does), and what it adds is a layer held PERMANENTLY, on every photograph in
+       the deck at once, on the surface the iOS jetsam work exists to protect.
+       The symptom was the arrival: stepping onto a photograph on an iPhone showed
+       the veiled ground alone for a beat before the print and the words appeared,
+       and the track's glide went with it. The ground is the promoted layer and
+       rasterises early and cheap (a blur is rasterised downscaled); everything else
+       is the step's ordinary paint, which was arriving after the transform had
+       finished. Neither reproduces in a desktop emulator, which splits the layers
+       differently and has the memory to be wrong for free. */
 }
 /* A TINT towards the brand navy, not a curtain: enough to keep eight different
    photographs on one deck's palette, little enough that the room behind is still a
