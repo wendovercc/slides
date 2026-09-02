@@ -1,8 +1,12 @@
 /* portrait.js — the phone surface.
  *
  * docs/portrait-decks.md, phases 0 and 1. A deck opened in portrait on a phone
- * becomes a COLUMN of full-height steps that snap, instead of a 16:9 rectangle
- * floating in the middle of the screen. Vertical is forward.
+ * becomes a RUN of full-screen steps paged sideways, instead of a 16:9 rectangle
+ * floating in the middle of the screen.
+ *
+ * ONE AXIS NAVIGATES, THE OTHER READS. Horizontal is the whole of the deck's
+ * forward motion — steps, panels, photographs. Vertical belongs to the interior of
+ * a step and to nothing else.
  *
  * A step is rendered one of two ways, and the difference is one line of authoring
  * (whether the slide's template has a portrait fragment):
@@ -43,8 +47,8 @@
  *   video reel      → ONE step, all clips  (a 20-clip innings is not 20 screens)
  *   everything else → one step
  *
- * So the column is a flat list of steps and scrolling always means the same thing:
- * forward, by one step. Getting this wrong is what made a phone visitor's `teams`
+ * So the deck is a flat list of steps and a sideways swipe always means the same
+ * thing: forward, by one step. Getting this wrong is what made a phone visitor's `teams`
  * deck a single screen that would not scroll, with five of its six panels behind a
  * timer. A reel stays one step deliberately: its clips are an authored sequence
  * with their own time, and the doc rejects the vertical-feed reading of them.
@@ -69,19 +73,21 @@
  * So the seam between steps is a transform and the position is a number we own.
  * Native scrolling stays exactly where it earns its keep — INSIDE a fragment step,
  * which is its own scroller with momentum, rubber-band and `overscroll-behavior:
- * contain`. What that costs is one gesture, because a scroller that contains its
- * overscroll can never chain out of itself: see armCommit.
+ * contain`. It costs nothing now: a scroller that contains its overscroll can
+ * never chain out of itself, and it is no longer supposed to.
  *
- * ---- one verb, three routes ----
+ * ---- one verb, two routes ----
  * A step change is always `stepBy(±1)`, which asks the PLAYER to move — the same
  * call the control bar makes, so a swipe and a bar press are one event:
  *
- *   fragment step → armCommit, past the end of its own interior
- *   anything else → armDeck, a drag on the column — matte AND band alike, because
- *                   a band's iframe is `pointer-events:none` so the touch reaches
- *                   this document instead of dying inside another one
+ *   the column → armDeck, a horizontal drag anywhere on it: matte, band AND
+ *                fragment alike, because a band's iframe is `pointer-events:none`
+ *                so the touch reaches this document instead of dying in another one
  *   a `data-taps` slide → keeps its pointer events, so it reports its own swipes
- *                   through slide-bridge (`wcc-swipe`) as it always did
+ *                through slide-bridge (`wcc-swipe`) as it always did
+ *
+ * There was a third — `armCommit`, a fragment step's overscroll commit — and the
+ * axis swap deleted it outright. See the note where it used to be.
  *
  * A slide with several panels is ONE row whose content changes under a stationary
  * frame, which is what the sticky band used to buy with a travel calculation and
@@ -163,7 +169,15 @@
          step, because a slide with several panels is one band whose CONTENT changes
          under a stationary frame — which is what the sticky band used to buy with a
          travel calculation, and now falls out of doing nothing. */
-      '#wcc-ptrack{position:absolute;top:0;left:0;right:0;' +
+      /* The track TRAVELS SIDEWAYS. Height is the number iOS rewrites on its own
+         when Safari's chrome collapses — the reason `--pstep-h` has to be measured
+         rather than left as `100dvh`, and the reason a scroll-derived position could
+         drift with nobody touching anything. Width it does not touch. So putting the
+         deck's travel on X is "One authority" applied one level down: the number the
+         position is made of is one the platform cannot change behind us.
+         `max-content` so the row is as wide as its slides rather than as wide as the
+         deck it overflows. */
+      '#wcc-ptrack{position:absolute;top:0;left:0;display:flex;width:max-content;' +
       'transition:transform 0.34s cubic-bezier(0.22,0.61,0.36,1);}' +
       /* Honour a reader who has asked the OS for less motion: the step still
          changes, it just arrives rather than travels. */
@@ -174,26 +188,25 @@
          `--pstep-h` is measured in JS, NOT `100dvh`: iOS resolves a fixed element's
          box and `dvh` against different viewports while the browser chrome
          collapses, and the row has to match the box the deck actually occupies. */
-      '.pslide{position:relative;height:var(--pstep-h,100dvh);overflow:hidden;}' +
+      '.pslide{position:relative;flex:0 0 auto;width:var(--pstep-w,100vw);' +
+      'height:var(--pstep-h,100dvh);overflow:hidden;}' +
 
-      /* A band slide centres its band, biased UP by `--pshift` — an affordance
-         rather than a taste: a screen whose composition is symmetric reads as a
-         finished one, so a deck of centred bands gives a first-time reader nothing
-         that says the column continues. Deeper matte below than above is the oldest
-         cue there is for "there is more this way". Uniform across every step; a bias
-         that switched off on the last one would make the bands jump. */
-      '.pslide.band{box-sizing:border-box;padding-bottom:var(--pshift,0px);' +
+      /* A band slide centres its band, and now simply centres it. The old up-bias
+         (`--pshift`) said "the column continues BELOW", which was the affordance a
+         vertical deck needed and is a lie on a horizontal one. What says "there is
+         more" here is the rail, the cue, and the fact that the deck moves sideways
+         under a thumb. */
+      '.pslide.band{box-sizing:border-box;' +
       'display:flex;align-items:center;justify-content:center;}' +
 
       /* The band. Full-bleed width in portrait; capped by height so that a rotated
          phone (or an iPad) gets a band that fits rather than one that overflows. */
-      /* The height cap subtracts `--pshift` for the same reason the padding adds it:
-         the band has to fit the space that is left, or a rotated phone (or an iPad,
-         where height rather than width is the binding constraint) overflows its
-         step by exactly the bias. This formula and `fit()`'s `--pfit` are the same
-         arithmetic and must stay that way. */
+      /* Capped by height so an iPad (where height, not width, is the binding
+         constraint) gets a band that fits rather than one that overflows its step.
+         This formula and `fit()`'s `--pfit` are the same arithmetic and must stay
+         that way. */
       '.pband{position:relative;' +
-      'width:min(100%, calc((var(--pstep-h,100dvh) - var(--pshift,0px)) * 16 / 9));' +
+      'width:min(100%, calc(var(--pstep-h,100dvh) * 16 / 9));' +
       'aspect-ratio:16/9;overflow:hidden;background:#000;}' +
 
       /* The slide, laid out at the wall's fixed 1920x1080 design box and scaled
@@ -232,8 +245,9 @@
          rewrite above removed was the DECK-level scroller, never this one: the seam
          between steps became a transform, the interior stayed native.
          `overscroll-behavior: contain` gives the bounce at the end for free and
-         stops the pull becoming the browser's; it also means a thumb can never
-         leave the step on its own, which is what armCommit is for. */
+         stops the pull becoming the browser's. It also means a thumb can never leave
+         the step on its own — which used to need a commit gesture and now needs
+         nothing, because leaving a step is horizontal. */
       '.pstep{position:absolute;top:0;left:0;right:0;bottom:0;overflow-y:auto;' +
       'overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;' +
       'scrollbar-width:none;}' +
@@ -288,13 +302,18 @@
          seen this vocabulary before and it says "control" without being one.
          Solid ground rather than a blur: it is over content for a few seconds and a
          backdrop filter is a compositing layer bought for that. */
-      '#wcc-pcue{position:fixed;left:50%;z-index:57;pointer-events:none;' +
-      'bottom:calc(var(--pdock-h,0px) + 2.2vmax);transform:translateX(-50%);' +
+      /* Sits at the RIGHT edge, vertically centred in the space above the dock —
+         on the axis it is teaching and pointing the way the deck moves. It used to
+         bob at the bottom centre, which was the right place for a gesture that went
+         up and is a wrong instruction now. */
+      '#wcc-pcue{position:fixed;z-index:57;pointer-events:none;' +
+      'right:calc(var(--sa-r,0px) + 1.6vmax);' +
+      'top:calc((100% - var(--pdock-h,0px)) / 2);transform:translateY(-50%);' +
       'opacity:0;transition:opacity 0.6s ease;}' +
       '#wcc-pcue.on{opacity:1;}' +
-      /* The positioner keeps `translateX`, the badge takes `translateY`: one element
+      /* The positioner keeps `translateY`, the badge takes `translateX`: one element
          cannot hold a centring transform and an animated one at the same time — the
-         keyframe would overwrite the centring and shunt the cue half its width right. */
+         keyframe would overwrite the centring and shunt the cue half its height down. */
       '#wcc-pcue i{display:flex;align-items:center;justify-content:center;' +
       'width:max(40px,4.7vmax);height:max(40px,4.7vmax);border-radius:50%;' +
       'background:rgba(10,28,58,0.9);border:1px solid rgba(212,175,55,0.45);' +
@@ -304,8 +323,8 @@
       'stroke:#fff;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}' +
       /* Travel only. An opacity pulse on a bordered badge reads as a flicker, where
          on a bare glyph it was half of what made it look alive. */
-      '@keyframes wcc-pcue-bob{0%,100%{transform:translateY(-0.55vmax);}' +
-      '50%{transform:translateY(0.55vmax);}}' +
+      '@keyframes wcc-pcue-bob{0%,100%{transform:translateX(0.55vmax);}' +
+      '50%{transform:translateX(-0.55vmax);}}' +
 
 
       /* Share. The deck's distribution model IS being forwarded, and until now it
@@ -348,7 +367,7 @@
    * it. A glyph moving within a fixed ring reads as a loose part; the whole control
    * moving reads as a nudge. */
   var CUE_ICON = '<i><svg viewBox="0 0 24 24" aria-hidden="true">' +
-    '<polyline points="6 9 12 15 18 9" /></svg></i>';
+    '<polyline points="9 6 15 12 9 18" /></svg></i>';
 
   /* Shown once per PAGE, and this module scope is exactly the right lifetime for
    * that — it outlives any one stage, so a rotation (which tears this stage down
@@ -497,7 +516,6 @@
           el.appendChild(step);
           track.appendChild(el);
           steps[i] = step;
-          armCommit(step, el);
           continue;
         }
         /* A BAND slide is one row whatever its panel count. The sticky box, the
@@ -532,9 +550,19 @@
      * the first slide. */
     var dead = false;
     var atSlide = 0, atPanel = 0;   // where the PLAYER says it is
+    var histOn = false;             // we are holding the back-sentinel (see histSync)
+    /* The reader is pinched in, and the surface is theirs until they pinch out.
+     * Owned by player-core (`onZoomChange`, which is the single arbiter and also
+     * stops the timer and collapses the window) and pushed here through
+     * `stage.zoom`, rather than read off visualViewport a second time — two
+     * readings of one condition is how the surfaces drift. */
+    var zoomed = false;
 
-    /* ---- geometry ---- */
-    function stepH() { return deck.clientHeight || 1; }
+    /* ---- geometry ----
+     * `stepW` is the travel: one step is exactly the deck's width, and width is the
+     * dimension iOS does not rewrite when Safari's chrome collapses. Height is
+     * layout only now. */
+    function stepW() { return deck.clientWidth || 1; }
 
     /* Layout only, now. It writes the three custom properties the CSS is built on
      * and re-lands the track on the current slide at the new height — and that is
@@ -550,26 +578,21 @@
      * now: a resize is a resize. */
     function fit() {
       if (dead) return;
-      var h = deck.clientHeight;
-      if (!h) return;
+      var h = deck.clientHeight, dw = deck.clientWidth;
+      if (!h || !dw) return;
       var root = document.documentElement.style;
-      // One step is exactly the deck's box, so a row's height and the distance the
-      // track travels per slide are the same number by construction.
+      // One step is exactly the deck's box, so a row's size and the distance the
+      // track travels per slide are the same numbers by construction.
+      root.setProperty('--pstep-w', dw + 'px');
       root.setProperty('--pstep-h', h + 'px');
-      /* How far off centre a band sits (see `.pslide.band`). A fraction of the step
-         so it holds its proportion on every screen, and capped so a landscape phone
-         — where the band already fills most of the step — is not shoved into its own
-         bottom edge. */
-      var shift = Math.round(Math.min(h * 0.07, Math.max(0, (h - deck.clientWidth * 9 / 16) / 3)));
-      root.setProperty('--pshift', shift + 'px');
       // The band's width, derived rather than measured off a band: a deck may have
       // none in it at all (both of the pavilion's cards are fragments), and this is
-      // the same width the CSS gives one — full bleed, capped by height so a rotated
-      // phone gets a band that fits rather than one that overflows. The `- shift` is
-      // the bias above; this and `.pband`'s width must agree exactly.
-      var w = Math.min(deck.clientWidth, (h - shift) * 16 / 9);
+      // the same width the CSS gives one — full bleed, capped by height so an iPad
+      // gets a band that fits rather than one that overflows. This and `.pband`'s
+      // width must agree exactly.
+      var w = Math.min(dw, h * 16 / 9);
       if (w) root.setProperty('--pfit', w / 1920);
-      // The rows just changed height, so the track's offset for the same slide has
+      // The rows just changed size, so the track's offset for the same slide has
       // changed with them. No animation: this is a relayout, not a move.
       place(false);
     }
@@ -627,114 +650,22 @@
       }
     }
 
-    /* ---- the commit gesture --------------------------------------------------
-     * The one piece of scrolling this file writes by hand, and it is owed entirely
-     * to fragment steps: a band step is one screen, so the column's own snap does
-     * all of it. A fragment step is its own scroller with `overscroll-behavior:
-     * contain`, which deliberately refuses to chain — that is what gives the bounce
-     * at the end, and it is also what means a thumb can never leave the step on its
-     * own. So: scroll to the end, feel the bounce, and a further pull commits to the
-     * next step, which arrives at its top.
+    /* ---- the commit gesture: DELETED --------------------------------------
+     * There was ~90 lines here, and it is worth a paragraph saying why there is not
+     * any more. A fragment step is its own scroller with `overscroll-behavior:
+     * contain`, so a thumb could never leave it by scrolling — and while VERTICAL was
+     * the step axis, it had to be able to. That bought: an arming rule (a drag can
+     * only commit past an end it was already at when the finger went down), an anchor
+     * re-taken on every move through the middle, two thresholds depending on whether
+     * the step had an interior at all, and a wheel accumulator with its own expiry.
+     * Every one of them existed to tell "the reader is scrolling" apart from "the
+     * reader is leaving", on one axis.
      *
-     * The anchor is re-taken on every move while the scroller is in its middle, so
-     * the pull is measured from the moment the content ran out — not from the start
-     * of a long flick, which would commit the instant a fast scroll reached the end.
-     * A step whose content fits the screen is at both ends at once, and then this
-     * reads as a plain swipe to the next step, which is right.
-     *
-     * That re-anchoring is necessary and was not sufficient: see the arming rule
-     * below, which is what makes the commit a SEPARATE gesture from the scroll that
-     * reached the end.
+     * Splitting the axes removes the question. Vertical is the scroller's and only
+     * the scroller's; leaving a step is horizontal, which is not a scroll on any
+     * step, so it goes through `armDeck` like every other drag. See docs/
+     * portrait-decks.md, "One axis navigates".
      */
-    function armCommit(el, slideEl) {
-      var y0 = 0, fired = false, wheel = 0, wheelAt = 0;
-      // Which ends the CURRENT gesture began at. See the arming rule below.
-      var fromTop = false, fromBottom = false, wheelArmed = 0, wheelDone = false;
-      function scrolls() { return el.scrollHeight > el.clientHeight + 2; }
-      /* Two thresholds, one rule. Past the end of a step that HAS an interior, the
-       * commit should take a deliberate second pull — the reader has just been
-       * scrolling, and a light one is how you nudge the last line into view. A step
-       * whose content fits the screen was never scrolling at all, so the same
-       * gesture is just a swipe to the next step and should feel like one. */
-      function threshold() { return el.clientHeight * (scrolls() ? 0.18 : 0.06); }
-      function ends() {
-        return {
-          top: el.scrollTop <= 2,
-          bottom: el.scrollTop >= el.scrollHeight - el.clientHeight - 2
-        };
-      }
-      /* Ask the transport to move, exactly as the matte drag and the control bar
-       * do. Guarded on this being the slide actually on screen: only one row of the
-       * track is visible, so a stale listener on a neighbour must not navigate. The
-       * index is read at gesture time because `keep()` renumbers the column. */
-      function go(d) {
-        if (Number(slideEl.dataset.slide) === atSlide) stepBy(d);
-      }
-
-      /* THE ARMING RULE, and the thing that makes the commit a second gesture
-       * rather than the tail of the first: a drag can only commit past an end it
-       * was ALREADY at when the finger went down.
-       *
-       * Without it, one continuous pull that runs a step's interior out and keeps
-       * going commits on the spot — you reach for the last two lines of a card and
-       * the deck takes you to the next step. The anchor re-taken mid-scroll below
-       * limits how much of that pull counts, but it cannot stop it: past the end
-       * there is nothing left to re-anchor on, so the remainder of the same drag
-       * accumulates straight through the threshold.
-       *
-       * So the end of the content ends the gesture. You scroll down, the step
-       * bounces and holds; lift, pull again, and THAT one crosses. Which is the
-       * doc's forgiving commit read strictly — "a further strong swipe" is a
-       * further swipe, not a longer one.
-       *
-       * A step whose content fits the screen starts at both ends at once, so it is
-       * armed both ways from the first touch and stays a plain swipe. */
-      el.addEventListener('touchstart', function (e) {
-        y0 = e.touches[0].clientY;
-        fired = false;
-        var e0 = ends();
-        fromTop = e0.top;
-        fromBottom = e0.bottom;
-      }, { passive: true });
-      el.addEventListener('touchmove', function (e) {
-        // A pinch is two fingers moving apart, which reads as a large vertical drag
-        // on whichever one is first. Zoom is the reader's, not a navigation.
-        if (fired || e.touches.length > 1) return;
-        var y = e.touches[0].clientY, dy = y - y0, end = ends();
-        if (!end.top && !end.bottom) { y0 = y; return; }
-        if (dy < -threshold() && end.bottom && fromBottom) { fired = true; go(1); }
-        else if (dy > threshold() && end.top && fromTop) { fired = true; go(-1); }
-      }, { passive: true });
-
-      /* A trackpad or a mouse wheel in a narrow desktop window. Same rule, but the
-       * gesture has no touchstart to anchor on, so the deltas are accumulated and
-       * expire — otherwise two unrelated flicks a minute apart would add up. A gap
-       * of 400ms is what stands in for lifting a finger, and it is where the arming
-       * above is applied: a stream that BEGAN mid-content cannot commit however far
-       * it runs, exactly as a drag cannot. */
-      el.addEventListener('wheel', function (e) {
-        var end = ends();
-        var now = Date.now();
-        if (now - wheelAt > 400) {
-          wheel = 0;
-          wheelDone = false;
-          wheelArmed = (end.top ? 1 : 0) | (end.bottom ? 2 : 0);
-        }
-        wheelAt = now;
-        // One stream is one step — see the note in armDeck. Without this the
-        // momentum tail of a single flick keeps crossing the threshold.
-        if (wheelDone) return;
-        var want = e.deltaY > 0 ? 2 : 1;          // down needs the bottom, up the top
-        if (!(wheelArmed & want)) { wheel = 0; return; }
-        if ((e.deltaY > 0 && end.bottom) || (e.deltaY < 0 && end.top)) wheel += e.deltaY;
-        else wheel = 0;
-        if (Math.abs(wheel) > threshold()) {
-          wheel = 0;
-          wheelDone = true;
-          go(e.deltaY > 0 ? 1 : -1);
-        }
-      }, { passive: true });
-    }
 
     /* ---- position ------------------------------------------------------------
      * ONE authority: the transport. `atSlide`/`atPanel` are what the player says,
@@ -750,17 +681,17 @@
      * achieve, minus the arithmetic.
      */
     function place(animate) {
-      var y = atSlide * stepH();
+      var x = atSlide * stepW();
       if (!animate) {
         track.style.transition = 'none';
-        track.style.transform = 'translate3d(0,' + (-y) + 'px,0)';
+        track.style.transform = 'translate3d(' + (-x) + 'px,0,0)';
         // Flush, so the transition coming back on cannot animate the jump we just
         // made. Reading a layout property is what forces the style to be applied.
-        void track.offsetHeight;
+        void track.offsetWidth;
         track.style.transition = '';
         return;
       }
-      track.style.transform = 'translate3d(0,' + (-y) + 'px,0)';
+      track.style.transform = 'translate3d(' + (-x) + 'px,0,0)';
     }
 
     /* Which step of the deck we are on — for the rail, and as the origin of a
@@ -840,25 +771,39 @@
       if (k < 0 || k >= pos.length) return;
       var t = pos[k];
       if (!t) return;
-      if (t.slide !== atSlide) { api.goTo(t.slide); return; }
+      /* Crossing a slide: the SAME verbs the control bar crosses on, so a swipe and
+         a bar press cannot disagree. `goTo` used to be here, and it is the wrong
+         verb for a step — it lands on the first atom, carries `playing` and starts
+         nothing, so swiping onto a reel parked it and swiping back skipped to the
+         top of a slide the reader was returning to the bottom of.
+         Neither can wrap from here: the guard above has already established that
+         step `k` exists, so `t.slide` is the immediate neighbour either way. */
+      if (t.slide !== atSlide) { (d > 0 ? api.fwd : api.back)(); return; }
       var n = t.panel - atPanel;
       var f = n > 0 ? api.next : api.prev;
       for (var z = Math.abs(n); z > 0; z--) f();
     }
 
     /* ---- gestures on the column ----------------------------------------------
-     * ONE handler for both axes and for every kind of step, because the band no
-     * longer swallows touches (see `.pband>iframe`). Whether the thumb lands on a
-     * photograph, on the matte beside it or on a reel, the event arrives here.
+     * ONE handler, one axis, every kind of step — because the band no longer
+     * swallows touches (see `.pband>iframe`). Whether the thumb lands on a
+     * photograph, on the matte beside it, on a reel or on a fragment card, the event
+     * arrives here.
      *
-     *   VERTICAL   → stepBy(±1), the step axis
-     *   HORIZONTAL → api.next()/prev(), the atom move — what a sideways swipe means
-     *                on the landscape player, so a reel walks its clips and a
-     *                carousel its panels
+     *   HORIZONTAL → stepBy(±1). The whole of the deck's forward motion.
+     *   VERTICAL   → nothing. It belongs to the step's own scroller, and a band has
+     *                no scroller, so on a band it is deliberately dead.
      *
-     * Gestures that start inside a `.pstep` are left alone: that scroller has its
-     * own interior to move first, and armCommit decides when a pull has become a
-     * step change.
+     * That second line is the axis swap, and it is why this file got shorter rather
+     * than longer. While vertical navigated it also had to scroll, which is what
+     * `armCommit` (deleted above) existed to disambiguate. One job per axis needs no
+     * disambiguation at all.
+     *
+     * Gestures inside a `.pstep` are NOT declined any more. They used to be, because
+     * that scroller had its own commit gesture to run first; now a horizontal drag
+     * over a fragment is not a scroll by any reading, so it belongs here like every
+     * other one. The listeners stay passive and never preventDefault, so a vertical
+     * drag scrolls the fragment natively while this watches it not be horizontal.
      *
      * Thresholds are fractions of the DECK, which is this document and therefore in
      * real px — unlike slide-bridge, which measures inside a 1920x1080 design box
@@ -871,12 +816,16 @@
 
       deck.addEventListener('touchstart', function (e) {
         live = false; fired = false;
-        if (e.touches.length !== 1) return;
-        if (e.target && e.target.closest && e.target.closest('.pstep')) return;
+        // Pinched in: a one-finger drag is the reader panning a magnified slide, not
+        // a step. Same rule the landscape tap layer applies.
+        if (zoomed || e.touches.length !== 1) return;
         var t = e.touches[0], w = deck.clientWidth || 1;
-        // iOS Safari's left-edge swipe is browser-back and cannot be prevented; we
-        // can at least decline to ALSO navigate, so one gesture does one thing. The
-        // right edge is dead for symmetry.
+        /* iOS Safari's left-edge swipe is browser-back and cannot be prevented while
+           `touch-action` stays `auto` — which it must, or pinch-zoom goes with it. So
+           we decline the outer strip and one gesture does one thing.
+           This matters more than it did: the edge is now on the NAV axis. The other
+           two answers are in the doc — only the left edge is back (so `next` never
+           collides), and the history sentinel below makes a back press MEAN prev. */
         if (t.clientX < w * EDGE || t.clientX > w * (1 - EDGE)) return;
         y0 = t.clientY; x0 = t.clientX;
         live = true;
@@ -885,14 +834,12 @@
         if (!live || fired || e.touches.length > 1) return;
         var dy = e.touches[0].clientY - y0, dx = e.touches[0].clientX - x0;
         var ay = Math.abs(dy), ax = Math.abs(dx);
-        // One axis or the other, never both: the dominance test is what stops a
-        // lazy diagonal from counting as whichever way it happened to go furthest.
-        if (ay > deck.clientHeight * 0.08 && ay > ax * DOM) {
+        // The dominance test is what stops a lazy diagonal — someone scrolling a
+        // card with a slight sideways drift — from stepping the deck out from under
+        // what they are reading.
+        if (ax > deck.clientWidth * 0.12 && ax > ay * DOM) {
           fired = true;
-          stepBy(dy < 0 ? 1 : -1);
-        } else if (api && ax > deck.clientWidth * 0.12 && ax > ay * DOM) {
-          fired = true;
-          if (dx < 0) api.next(); else api.prev();
+          stepBy(dx < 0 ? 1 : -1);
         }
       }, { passive: true });
       deck.addEventListener('touchcancel', function () { live = false; });
@@ -906,21 +853,32 @@
        * resets after firing crosses the threshold again immediately and walks the
        * deck several slides on a single gesture. `locked` is the equivalent of
        * lifting a finger: nothing more moves until the stream actually stops. Which
-       * is also what the touch path does — `fired` there, released at touchstart. */
+       * is also what the touch path does — `fired` there, released at touchstart.
+       *
+       * THE ONE PLACE STRICTNESS IS RELAXED, deliberately. Over a band or the matte
+       * a wheel steps whichever way it is pointed: a desktop reader in a narrow
+       * window scrolls vertically out of habit, and there is nothing else for a wheel
+       * to do there. Inside a fragment step the rule is exact again — vertical is the
+       * scroller's, horizontal steps — because there a vertical wheel has a real job.
+       */
       var acc = 0, at = 0, locked = false;
       var GAP_MS = 250;   // no wheel event for this long = the gesture ended
       deck.addEventListener('wheel', function (e) {
-        if (e.target && e.target.closest && e.target.closest('.pstep')) return;
+        if (zoomed) return;    // ctrl+wheel is a desktop pinch; the view is theirs
+        var inStep = !!(e.target && e.target.closest && e.target.closest('.pstep'));
+        var ax = Math.abs(e.deltaX), ay = Math.abs(e.deltaY);
+        if (inStep && ay >= ax) return;          // the fragment's own scroll
+        var d = inStep ? e.deltaX : (ax > ay ? e.deltaX : e.deltaY);
         var now = Date.now();
         if (now - at > GAP_MS) { acc = 0; locked = false; }
         at = now;
         if (locked) return;
-        acc += e.deltaY;
-        if (Math.abs(acc) > deck.clientHeight * 0.08) {
+        acc += d;
+        if (Math.abs(acc) > deck.clientWidth * 0.08) {
           locked = true;
-          var d = acc > 0 ? 1 : -1;
+          var dir = acc > 0 ? 1 : -1;
           acc = 0;
-          stepBy(d);
+          stepBy(dir);
         }
       }, { passive: true });
     }
@@ -946,10 +904,13 @@
     var gp = null, lastTapAt = 0;
     var TAP_SLOP = 10, TAP_MAX_MS = 500, DBLTAP_MS = 300;
     deck.addEventListener('pointerdown', function (e) {
-      gp = { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
+      // Not while zoomed — see armDeck. A tap that lands mid-pinch is part of the
+      // zoom gesture, and toggling the transport under it is the deck moving when
+      // the reader asked the picture to.
+      gp = zoomed ? null : { x: e.clientX, y: e.clientY, t: Date.now(), id: e.pointerId };
     });
     deck.addEventListener('pointerup', function (e) {
-      if (!gp || e.pointerId !== gp.id) return;
+      if (!gp || e.pointerId !== gp.id || zoomed) return;
       var dx = Math.abs(e.clientX - gp.x), dy = Math.abs(e.clientY - gp.y);
       var dt = Date.now() - gp.t;
       gp = null;
@@ -979,6 +940,7 @@
          because every path that changes the step — a thumb settling, a commit, a
          bar press, a panel timer — passes through this one function. */
       if (k > 0) cueDone();
+      histSync(k);
       if (pos.length < 2) return;
       if (ticks) {
         for (var i = 0; i < ticks.length; i++) {
@@ -988,6 +950,44 @@
       }
       if (rail) rail.style.transform = 'scaleX(' + ((k + 1) / pos.length) + ')';
     }
+
+    /* ---- back means previous step --------------------------------------------
+     * The third answer to the edge swipe, and the one that stops us fighting the
+     * platform. iOS Safari's left-edge swipe is browser-back and cannot be
+     * prevented; now that horizontal is the step axis, that is a gesture pointing at
+     * the deck's own `prev`. So give it one: while the reader is off the first step
+     * the deck holds a single history entry, and a back press spends it on a step
+     * rather than on the page.
+     *
+     * ONE sentinel, replaced rather than accumulated. A deck of thirty steps must
+     * not cost thirty presses to escape — the entry is re-pushed after each back, so
+     * back walks the deck and back from the FIRST step leaves, which is what a
+     * reader means by it.
+     *
+     * The URL is `location.href`: the entry exists to be popped, not to address
+     * anything, and a deck's canonical URL is what every link already sent points at.
+     *
+     * The one loose end, accepted rather than engineered away: a reader who returns
+     * to step 0 by SWIPING leaves the sentinel behind (we cannot drop a history entry
+     * without navigating, and calling `history.back()` ourselves would race a real
+     * one). Their next back press is then absorbed doing nothing, and the one after
+     * leaves. A rotation is the same story — `detach` takes the listener off and the
+     * entry outlives it. One dead press in a corner, against a self-pop that could
+     * navigate a reader off the page if anything else ever pushes an entry.
+     */
+    function histSync(k) {
+      if (dead || k <= 0 || histOn) return;
+      histOn = true;
+      try { history.pushState({ wccp: 1 }, '', location.href); } catch (e) { /* no-op */ }
+    }
+    function onPop() {
+      if (dead) return;
+      histOn = false;              // the browser has spent it either way
+      if (stepIndex() <= 0) return;
+      stepBy(-1);
+      histSync(stepIndex());       // still off the first step: hold another
+    }
+    window.addEventListener('popstate', onPop);
 
     /* The nudge is over: fade it out and remember, for this page, that it was shown
      * (see `cueShown`). Idempotent — every step change calls it. */
@@ -1111,8 +1111,9 @@
           if (wanted[i]) {
             keptList.push(list[i]); keptBands.push(bands[i]); keptSteps.push(steps[i]);
             keptFetched.push(fetched[i]); keptEls.push(slideEls[i]);
-            // Read back by armCommit to tell whether it is the slide on screen, so
-            // it must be renumbered here with everything else.
+            // Not read by anything since armCommit went; kept because a column of
+            // anonymous divs is unreadable in the inspector, and renumbered here so
+            // it never lies about which slide it is.
             slideEls[i].dataset.slide = String(keptEls.length - 1);
           } else if (slideEls[i] && slideEls[i].parentNode) {
             slideEls[i].parentNode.removeChild(slideEls[i]);
@@ -1141,6 +1142,7 @@
         detach: function () {
           dead = true;
           if (cueTimer) { clearTimeout(cueTimer); cueTimer = null; }
+          window.removeEventListener('popstate', onPop);
           window.removeEventListener('resize', fit);
           window.removeEventListener('orientationchange', fit);
           if (deck.parentNode) deck.parentNode.removeChild(deck);
@@ -1155,12 +1157,21 @@
           themeColor(null);   // the site's declared colour is the landscape one
           var root = document.documentElement.style;
           root.removeProperty('--pdock-h');
+          root.removeProperty('--pstep-w');
           root.removeProperty('--pstep-h');
-          root.removeProperty('--pshift');
           root.removeProperty('--pfit');
         },
         // The player's gesture layer stands down; this file takes the tap.
         ownsInput: true,
+        /* ...which means this file also has to be told when to stand ITS gestures
+         * down. `onZoomChange` in player-core owns the condition; a stage that owns
+         * input gets it pushed here, because `cancelGesture` only reaches the
+         * landscape tap layer. */
+        zoom: function (on) {
+          zoomed = !!on;
+          // Any drag or tap in flight belongs to the pinch now.
+          gp = null;
+        },
         /* Dock the control bar to the bottom edge instead of floating it in a
          * letterbox band — there is no band here (see placeBar). */
         barDock: true,
@@ -1186,10 +1197,11 @@
           var b = bands[i], f = b && b.firstChild;
           if (f && f.tagName === 'IFRAME') f.style.pointerEvents = on ? 'auto' : '';
         },
-        /* A vertical swipe that happened INSIDE a slide's iframe, forwarded by
-         * player-core from slide-bridge. The matte and fragment steps reach `stepBy`
-         * directly; a band cannot, because the touch never leaves the iframe. Same
-         * verb either way, so all three routes are one gesture. */
+        /* A horizontal swipe that happened INSIDE a slide's iframe, forwarded by
+         * player-core from slide-bridge. Every other surface reaches `stepBy`
+         * directly, because a band's iframe is transparent to touch; a slide that
+         * declared `data-taps` kept its pointer events and so has to report its own.
+         * Same verb either way, so both routes are one gesture. */
         step: stepBy,
         attach: function (transport) { api = transport; buildChrome(); },
         // Where frame i belongs, or null if this stage renders the slide itself

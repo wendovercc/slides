@@ -522,6 +522,13 @@
       // there is no headroom for. Without the transition the swap is instant and
       // only one frame is ever visible.
       if (document.body) document.body.classList.toggle('wcc-zoomed', zoomed);
+      /* A stage that owns input has its own gestures to stand down — `cancelGesture`
+       * only reaches the landscape tap layer. Without this the portrait surface went
+       * on navigating while the reader was pinched in: a one-finger pan over a
+       * magnified scorecard stepped the deck out from under them, and a tap toggled
+       * playback. The two halves that were already shared (the timer stops, the
+       * window collapses to the visible slide) are below. */
+      if (stage && stage.zoom) stage.zoom(zoomed);
       if (zoomed) {
         cancelGesture();
         clearTimer();          // don't auto-advance under the user while they're reading
@@ -2010,14 +2017,18 @@
        */
       if (d.type === 'wcc-swipe' && idx === current) {
         if (!interactive || hosted || zoomed) return;
-        /* VERTICAL is the step axis, and only a stage that has one can answer it —
-         * the portrait column, which stopped being a scroller and so no longer
-         * receives a band's vertical drags by scroll chaining. The landscape stack
-         * has no vertical axis and simply ignores it. */
-        if (d.axis === 'y') {
-          if (stage && stage.step) stage.step(d.dir === 'next' ? 1 : -1);
-          return;
-        }
+        /* VERTICAL is nobody's, here. It belongs to a step's own scroller, and a
+         * slide reporting out of an iframe is a BAND — which has no scroller. The
+         * landscape stack has no vertical axis either. Reported so it can be
+         * recognised in order to be ignored (and so the doc's permissive variant of
+         * the rule would be a change here rather than in the bridge). */
+        if (d.axis === 'y') return;
+        /* HORIZONTAL is the step axis on a stage that has steps — the portrait
+         * surface, whose bands are transparent to touch, so this only arrives from a
+         * slide that kept its pointer events by declaring `data-taps`. Everywhere
+         * else it is the atom move, which is what it has always meant on the
+         * landscape player. */
+        if (stage && stage.step) { stage.step(d.dir === 'next' ? 1 : -1); return; }
         if (d.dir === 'next') next(); else prev();
         return;
       }
@@ -2133,15 +2144,29 @@
       flashItem = f ? { frame: f } : null;
     };
 
-    /* Hand a stage the transport it drives. `goTo` is the viewer reaching a slide by
-     * hand — scrolling to it — and goes through arrive() like every other arrival, so
-     * a scrolled-to slide is reset, timed and tracked exactly as a stepped-to one is.
-     * Deliberately carries `playing`: scrolling is navigation, not a transport
-     * command. */
+    /* Hand a stage the transport it drives.
+     *
+     * `fwd` and `back` are THE verbs for crossing a slide boundary, and a stage must
+     * use them rather than `goTo` for a step that lands on the next or previous
+     * slide. They are what the control bar crosses on, and they carry the meaning a
+     * jump does not:
+     *
+     *   fwd  — keeps `playing` across the boundary AND starts a reel, because
+     *          stepping forward onto one is a request to watch it
+     *   back — lands on the previous slide's LAST atom, and pauses, because someone
+     *          going backwards is looking for what they just left
+     *
+     * `goTo` is the viewer reaching a slide *by name* — a contents sheet, an index —
+     * and is deliberately none of that: slide's first atom, `playing` carried, no
+     * media started. Using it for a step is what made a swipe and a bar press
+     * disagree about reels, about which atom you land on going back, and about
+     * whether the deck is still playing (docs/portrait-decks.md, "Drift"). */
     function attachStage(s) {
       if (!s || !s.attach) return;
       s.attach({
         goTo: function (i) { if (i !== current) arrive(i, 0, playing); },
+        fwd: fwdSlide,
+        back: backSlide,
         toggle: onTap,
         next: next,
         prev: prev
@@ -2234,6 +2259,10 @@
         document.body.appendChild(tapEl);
       }
       attachStage(s);
+      // A stage arriving mid-session inherits the zoom state rather than assuming
+      // the reader is pinched out: rotating while zoomed in is rare, and a surface
+      // that guessed would navigate under them once.
+      if (s && s.zoom) s.zoom(zoomed);
       schedulePlace();                // the bar's letterbox bands just changed shape
       // Arrive where we already are: the current frame has just reloaded and needs
       // its panel state back, and the new stage needs to reveal it.

@@ -18,6 +18,19 @@
 > decision and the "hand-built transform step-stack" rejection are both reversed
 > there, with the reasoning.
 >
+> **The axes have been swapped, and it is the largest simplification in the
+> surface's history** — HORIZONTAL now navigates and VERTICAL only reads. See "The
+> grammar" and "One axis navigates". The old rule made vertical do both jobs, which
+> was forced while the deck was a scroller and was merely inherited after it stopped
+> being one; splitting them deletes `armCommit` outright, withdraws the media strip
+> unbuilt, and puts the deck's travel on the one dimension iOS does not rewrite.
+>
+> **What a reader actually gets on each surface has been audited** — see "Drift
+> between the surfaces". Four transport differences turn out to be one leak (the
+> column crosses a slide boundary through the wrong verb), pinch-zoom suspends
+> navigation on one surface only, and share and the position rail are on the phone
+> when they belong to the deck.
+>
 > **The build order was deliberately inverted** — see "Phase 0" under Phasing.
 > The doc originally deferred the fallback as speculative and started with the
 > pavilion's fragments; taking the fallback first gave every deck we already build
@@ -52,76 +65,137 @@ looked at. The wall is not to be solved twice, and **must not change**.
 
 ## The grammar
 
-Three rules cover every deck:
+Two rules cover every deck, and they are one idea:
 
-> 1. **Vertical is always forward.** A step scrolls if it has an interior; the
->    seam between steps always snaps.
-> 2. **Media swipes sideways.** Photo sets and video reels are a horizontal axis
->    inside a step, never a run of steps.
-> 3. **A step is a phase**, which already exists in the data.
+> 1. **One axis navigates, the other reads.** HORIZONTAL is the whole of the
+>    deck's forward motion — steps, panels, photographs. VERTICAL is the interior
+>    of a step and nothing else.
+> 2. **A step is a phase**, which already exists in the data.
 
 Everything below is consequence.
 
-### 1. Scroll within, snap between
+**This reverses the doc's first grammar**, which made vertical the step axis and
+left horizontal for media inside a step. That was right while the deck was one tall
+scroller — vertical had to be both axes because there was only one — and it was
+inherited rather than re-argued when the deck stopped being a scroller and became a
+transformed track ("One authority"). Splitting the jobs is what that change was
+always pointing at. The reasoning, and the cost, are under "One axis navigates" and
+in the reversal note in "Rejected, with reasons".
 
-The wall paginates because it has no vertical axis: the only way it can show
-Batting *then* Bowling is over time. The phone has scroll, so it stacks them.
+### 1. One axis navigates, the other reads
 
-- A step is **its own scroll container**. Interior scrolling is entirely native —
-  momentum, rubber-band, scrollbars, accessibility — and `overscroll-behavior:
-  contain` gives the bounce at the end for free.
-- **Forgiving commit** (decided): you scroll to the bottom of a step, it bounces,
-  and a further strong swipe up moves to the next step, which arrives at its top.
-  You never see the tail of one step sharing a screen with the head of the next.
-  "A further strong swipe" means a *further* swipe: reaching the end of the
-  interior ends the gesture, and the commit has to begin at the end it crosses.
-- **The seam between steps is NOT a scroll.** Interior scrolling is native; moving
-  between steps is the transport being asked to move, and the column renders where
-  it lands. See "One authority" below — this is the correction that made the
-  surface work on a phone at all.
+The wall paginates because it has no second axis: the only way it can show Batting
+*then* Bowling is over time. The phone has scroll, so a step stacks them — and the
+DECK still paginates, because a deck is a sequence of authored screens and always
+was. What changed is only which direction that pagination runs.
+
+- A step is **its own scroll container**, and vertical is entirely its. Native
+  momentum, rubber-band, accessibility, and `overscroll-behavior: contain` so a
+  pull at the end bounces rather than becoming the browser's. **There is no commit
+  gesture**: a thumb never leaves a step by scrolling, because scrolling is not how
+  you leave a step.
+- **Horizontal is the transport being asked to move** — the same call the ◀ ▶ on
+  the control bar make. One verb, three ways to reach it, and no second nav model.
+- **Vertical never navigates.** Strictly: a band step has no interior, so a
+  vertical drag on a letterboxed photograph does nothing at all. That is the price
+  of one meaning per axis, and the band is the transitional rendering anyway. (The
+  permissive variant — *scroll if there is something to scroll, advance if there is
+  not* — is unambiguous too, since the ambiguity only exists where an interior
+  exists. Held in reserve if a dead-feeling band tests badly.)
+
+**What this deletes**, and it is the reason to do it at all:
+
+> The **forgiving commit** and everything holding it up — the arming rule, the
+> anchor re-taken mid-scroll, two thresholds, a separate wheel accumulator with its
+> own expiry. All of it was the cost of one axis doing two jobs. `armCommit` was the
+> most delicate code on this surface and it is now no code at all.
+
+And a second, quieter win: the track travels by the deck's WIDTH. Height is the
+number iOS changes on its own when Safari's chrome collapses — the reason
+`--pstep-h` has to be measured in JS rather than left as `100dvh`, and the reason a
+scroll-derived position could drift with nobody touching anything. Putting the
+deck's travel on the axis the platform does not rewrite is "One authority" applied
+one level down.
 
 **Steps may be much longer than a screen, and that is a feature.** The wall lists
 `top_rows: 12` fantasy players because that is what reads at ten feet. The phone
 can list 25 and be *better*. See "The phone wants more content".
 
-*Why not `scroll-snap`:* `mandatory` snap on sections taller than the viewport is
-trappy — it can strand a reader mid-section. `proximity` lets the scroll run
-smoothly *through* the seam, which is the thing we are avoiding. Neither gives the
-bounce-then-commit feel. Per-step scrollers plus one gesture does.
+*Why not `scroll-snap`:* it was never the interior that wanted snapping, it was the
+seam — and the seam is not a scroll. See "One authority" for why deriving the
+deck's position from a scroll position could not be made to work.
 
-Phase 0 read that as "safe for a one-screen fallback step" and used `mandatory` on
-the deck anyway. That was wrong for a reason the doc had not identified — not the
-stranding trap, but *who owns the scroll position*. See below.
+**The edge-swipe objection, which is what kept horizontal off the step axis until
+now.** iOS Safari's left-edge swipe is browser-back, unpreventable while
+`touch-action` stays `auto` (and it must, or pinch-zoom goes with it —
+`project_touch_pinch_zoom`). Three answers, in order of how much they carry:
 
-### 2. Media is a sideways axis
+1. **Only the left edge is back.** The right edge is forward, and a freshly-opened
+   link has no forward entry. The gesture that carries a deck — *next* — never
+   collides. Only *previous* does.
+2. **The outer strip is already declined.** `armDeck` ignores gestures starting in
+   the outer 5% either side, so one gesture does one thing. Swipes from mid-screen,
+   which is nearly all of them, are ours.
+3. **And then stop fighting it: back IS previous.** The deck keeps a single history
+   entry while it is off its first step, so the edge swipe means "previous step" and
+   the platform does our job instead of undoing it. One sentinel, replaced rather
+   than accumulated — back walks the deck backwards, and back from the first step
+   leaves. This is the machinery "Back closes overlays" already asks for, and it did
+   not exist when the objection was written.
 
-A reel of thirty clips is **not** thirty steps. The vertical-feed idiom (Reels,
-TikTok) works because each item is an independent full-screen *portrait* video.
-Ours are 16:9 bands with Frogbox graphics baked into the frame and our own
-overlays positioned as percentages of it (`--reel-narr-bottom: 9.83%`, the reel
-tag, the `pre`/`post` cards) — they cannot be cropped to portrait, and a reel is an
-authored sequence with its own running order and its own time. That is what a
-player is for.
+The residual unknown is not iOS Safari but the in-app browsers a forwarded link
+actually opens in — WhatsApp's especially. A device test, not an argument.
 
-The same applies to a photo set: eight wide interior shots are one browsable thing,
-not eight screens.
+### 2. Media is steps, not a strip
 
-**Video and photos differ in one respect only — whether a poster frame gates them:**
+**This is the rule the axis swap withdrew**, and withdrawing it is most of what
+made the swap attractive rather than merely tidy.
+
+The original rule said photo sets and video reels are a horizontal axis *inside* a
+step — a strip — because a run of them as steps meant a vertical feed, and the
+vertical-feed idiom (Reels, TikTok) works only for independent full-screen
+*portrait* video. Ours are 16:9 bands with Frogbox graphics baked into the frame
+and our own overlays positioned as percentages of it (`--reel-narr-bottom:
+9.83%`, the reel tag, the `pre`/`post` cards): they cannot be cropped to portrait.
+
+That reasoning was about **vertical**, and it survives intact — as an argument
+against a vertical feed, which is not on offer any more. Horizontally paged
+full-bleed photographs are not a feed at all. They are a photo album, which is the
+native idiom for exactly this content and the reading the strip was trying to
+reconstruct inside a step.
+
+So:
+
+> **A photo set is a run of steps.** The eight pavilion photographs are eight
+> steps, swiped sideways. No strip, no collapse rule, no second addressing scheme
+> inside a step.
+
+> **A reel is still ONE step**, whatever its clip count — the `/deck` rule,
+> unchanged. Horizontal leaves the reel; clip-by-clip nav lives *inside* the phase-2
+> player overlay, where there is a real transport and an indicator for how many
+> clips there are. That is strictly better than the strip it replaces, which walked
+> twenty clips with nothing on screen to say so.
+
+What this deletes: the media strip, its driven mode, the "one step, N atoms" case
+in play-mode anchor traversal, and grouping rule 2 below. The timing is the
+argument — none of it is built, and it would have been expensive to withdraw once
+it was.
+
+**Video and photos still differ in one respect — whether a poster frame gates
+them:**
 
 | | Gate (interactive) | Why |
 |---|---|---|
-| **Video reel** | Poster frame → tap → native player | A clip costs bandwidth and 30s of commitment; a poster is a fair ask. And inside a *scrolling* step nothing has focus, so autoplay is meaningless. |
-| **Photo set** | None — swipe in place | Already loaded, instant, costs nothing to look at. Gating it puts a tap in front of the only thing the deck exists to show. |
+| **Video reel** | Poster frame → tap → player | A clip costs bandwidth and 30s of commitment; a poster is a fair ask. |
+| **Photo set** | None | Already loaded, instant, costs nothing to look at. Gating it puts a tap in front of the only thing the deck exists to show. |
 
 **The gate is an interactive-mode affordance only.** In play mode (below) the
 driver confers focus, so there is nothing for a gate to resolve: the reel plays
-*inline in its band* and the photo strip advances sideways on its own. Same
-principle applied in both directions — a poster exists because free scrolling has
-no focus, and disappears when something else supplies it. Every media component
-therefore needs **a driven mode and a user mode from the start**; this is designed
-in, not bolted on.
+*inline in its band*. Same principle in both directions — a poster exists because
+free browsing has no focus, and disappears when something else supplies it. Media
+therefore needs **a driven mode and a user mode from the start**.
 
-This asymmetry is forced by the platform, not chosen:
+A photograph gets no fullscreen, and that is forced by the platform:
 
 > **We cannot give photographs landscape the way we can give video landscape.**
 > iPhone Safari's *video* fullscreen is native and rotates the device itself —
@@ -163,16 +237,15 @@ Verified against the real build (`site/slideshow/last-match-1st-xi/data.json`:
 Fantasy League's four tabs *are* four phases → four steps (Team of the Week, Top
 Players, Top Managers, Teams).
 
-**Grouping is two rules, applied in order**, and the pavilion needs both:
+**Grouping is ONE rule now**: group consecutive atoms by phase. The second rule —
+collapse a run of media atoms into one strip — went with the axis swap (see rule 2
+above), and its going is a simplification rather than a loss: a run of photographs
+is a run of steps, which is what a sideways deck already is.
 
-1. **Group consecutive atoms by phase.**
-2. **Collapse a consecutive run of media atoms into one strip** — a photo run, or
-   a reel's clips.
-
-The pavilion's slides carry no phase, so rule 1 leaves ten steps; rule 2 collapses
-the eight photographs into one strip, giving **three steps: Title · Photographs ·
-Credit**. In the match package rule 1 does the work and rule 2 turns each innings'
-clips into its poster.
+The pavilion's slides carry no phase, so it is **ten steps: Title · eight
+photographs · Credit** — swiped through as an album. In the match package the
+phase rule does all the work, and a reel stays one step by the `/deck` rule rather
+than by a collapse.
 
 **The invariant that replaces "step = atom":**
 
@@ -232,26 +305,30 @@ rubber-band and `overscroll-behavior: contain`. The rewrite removed the *deck*
 scroller; it never touched the interior one, which is the thing the "no hand-built
 step-stack" rejection was actually protecting.
 
-### The three routes into one verb
+### Two routes into one verb
 
-A step change reaches `stepBy` from three places, because a phone screen has three
-kinds of surface on it and a drag on each must mean the same thing:
+A step change reaches `stepBy` from two places, because there are two kinds of
+surface a thumb can land on and a drag on each must mean the same thing:
 
 | Where the thumb is | How it arrives |
 |---|---|
-| A **fragment** step | `armCommit`, past the end of the step's own interior |
-| Anywhere else — **matte or band** | `armDeck`, a drag on the column itself |
+| Anywhere on the column — **matte, band or fragment** | `armDeck`, a horizontal drag on the column itself |
 | A band that declares `data-taps` | `slide-bridge.js` posts `wcc-swipe` |
 
+**There used to be three**, and the third was `armCommit` — a fragment step's
+overscroll commit, which existed only because vertical was both the interior axis
+and the step axis. With the axes split it is gone entirely: a horizontal drag over
+a fragment is not a scroll, so it reaches `armDeck` like every other drag, and a
+vertical one is the scroller's and nothing else's.
+
 **Bands are transparent to hit-testing** (`pointer-events: none` on the iframe),
-and that is what collapsed three routes into two. A band is another document, so a
+which is what put every gesture in one handler. A band is another document, so a
 thumb landing on it was invisible to the column and the slide had to notice and
 post the gesture out — a long chain, for the part of the screen a reader is most
 likely to touch, and not the chain the matte and fragment steps use. It did not
-work on a phone. Making the band transparent puts every gesture in one handler
-whichever surface the thumb lands on, and brings the **wheel** with it: a trackpad
-over a photograph reaches the deck now, where before it went into the iframe and
-died, since `slide-bridge` reports touch only.
+work on a phone. Transparency also brings the **wheel**: a trackpad over a
+photograph reaches the deck now, where before it went into the iframe and died,
+since `slide-bridge` reports touch only.
 
 What it gives up is the slide's own links, and today that costs nothing —
 `data-taps` is declared by `showcase-card` alone, which always renders as a
@@ -264,36 +341,38 @@ This revises phase 0's "no tap layer, and tap-through comes free". Tap-through w
 free, but it was not free of *the gesture* — leaving the slide exposed to touch
 meant leaving the column blind to it.
 
-**Every route fires mid-drag, on `touchmove`** — except horizontal in
-`slide-bridge`, which stays a touchend flick because it is the atom move shared
-with the landscape player, and firing it mid-drag would let a diagonal on its way
-to becoming a vertical drag change a clip first.
+**`armDeck` fires mid-drag, on `touchmove`; `slide-bridge` stays a touchend
+flick.** The difference is which document is measuring: the column knows the drag
+is horizontal as soon as one axis dominates, where a slide reporting out has to be
+sure the gesture finished as the thing it looked like.
 
-**A threshold in design px is not a threshold on screen, and only one axis is
-safe.** This applies to `slide-bridge` and not to `armDeck`, which measures the
-deck and is therefore already in real px. A band is fitted to the screen's *width*,
-so a fraction of 1920 design px is that same fraction of the screen. Height is not:
-the band is 1080 design px tall but only `screenWidth × 9/16` real px, so the same
-fraction is about 2.5× less travel — hence `V_SLOP` of 0.25 against a horizontal
-0.10.
+**A threshold in design px is not a threshold on screen.** This applies to
+`slide-bridge` and not to `armDeck`, which measures the deck and is therefore
+already in real px. A band is fitted to the screen's *width*, so a fraction of 1920
+design px is that same fraction of the screen — which is the nav axis, and the easy
+case. Height is not: the band is 1080 design px tall but only `screenWidth × 9/16`
+real px, so the same fraction is about 2.5× less travel. That correction (`V_SLOP`)
+now guards a reported axis nothing acts on, and stays only because a vertical drag
+must still be *recognised* as vertical in order to be ignored.
 
 **One wheel stream is one step.** A trackpad flick is a hundred events over a
 second or more of momentum, so an accumulator that only resets after firing crosses
 its threshold again immediately and walks the deck several slides on one gesture.
-Both wheel paths latch until the stream actually stops (250ms of silence), which is
-the equivalent of lifting a finger. `slide-bridge` already reported horizontal swipes for the same
-reason (the column deliberately has no gesture overlay); it now reports both axes
-and the player routes them — **vertical to the stage's step axis, horizontal to
-`next()`/`prev()`**, the atom move. Which is the pairing this doc already named: a
-reel is one step, so a vertical swipe leaves it and a horizontal one walks its
-clips.
+The wheel path latches until the stream actually stops (250ms of silence), which is
+the equivalent of lifting a finger.
+
+A wheel is the one input where strictness is relaxed, and deliberately: **on the
+column, a wheel steps whichever way it is pointed.** A desktop reader in a narrow
+window scrolls vertically out of habit and there is nothing else for a wheel to do
+over a band. Inside a fragment step the rule is exact again — vertical scrolls the
+interior natively, horizontal steps — because there a vertical wheel has a real job.
 
 ### What it cost
 
-Momentum-flicking through several steps at once, and the native scrollbar. Neither
-is wanted: the design already says a step change is a deliberate, one-at-a-time act
-(that is what "forgiving commit" means), and the segmented progress rail is a
-better position indicator than a scrollbar on a deck of ten.
+Momentum-flicking through several steps at once, and the native scrollbar on the
+deck. Neither is wanted: a step change is a deliberate, one-at-a-time act, and the
+segmented progress rail is a better position indicator than a scrollbar on a deck
+of ten. The scrollbar inside a step is a separate thing and still there.
 
 ---
 
@@ -452,12 +531,15 @@ portrait = interactive && !record && deckHasPortrait && (innerWidth / innerHeigh
 
 iOS Safari's left-edge swipe is browser-back, and a full-bleed horizontal carousel
 sits on top of it. **Every overlay — video player, view-larger, contents sheet —
-pushes a history entry so back dismisses it** rather than leaving the deck. Insetting
-the in-flow media strip slightly from the screen edges also keeps a stray edge-swipe
-out of it.
+pushes a history entry so back dismisses it** rather than leaving the deck. `armDeck` also declines a gesture starting in the outer 5%, so
+one edge swipe does one thing.
 
-This is also why horizontal is **not** the step axis: an edge swipe would carry a
-reader out of a forwarded link entirely.
+**And the deck itself keeps one entry**, so back means *previous step* while the
+reader is off the first one. That is the third answer to the edge-swipe problem
+under rule 1: an edge swipe that would once have carried a reader out of a
+forwarded link now walks the deck backwards, and only leaves from the first step.
+One sentinel, replaced rather than accumulated — a deck of thirty steps must not
+cost thirty presses to escape.
 
 ---
 
@@ -554,11 +636,12 @@ the wall's "atom is a beat":
 > sequence of *(position, dwell)*. Browsing it is reaching the same positions by
 > hand.
 
-A position is reached on whichever axis its step uses — **vertical scroll for a
-section, strip index for a media atom**. That matters: the pavilion's eight
-photographs are eight atoms inside *one* step, so play mode advances the strip
-sideways there and scrolls elsewhere. An implementation that assumes "anchor =
-scrollIntoView" will silently skip every photograph and every clip.
+A position is reached one of two ways — **a step change, or a vertical scroll
+within a step** — and that is now the whole of it. The strip index is gone with the
+strip: the pavilion's eight photographs are eight steps, so play mode steps to
+each. What remains is that a long fragment step has several anchors inside it and
+play must scroll between them, so "anchor = the next step" is as wrong as
+"anchor = scrollIntoView" would have been.
 
 Both modes traverse one structure. Nothing about play mode is a second document,
 a second ordering, or a second addressing scheme — which is exactly what the
@@ -604,6 +687,119 @@ section that is not one.**
 
 ---
 
+## Drift between the surfaces
+
+What a reader actually experiences differently on the two surfaces of the *same*
+deck — read off the built code rather than off this document. Most of it is
+design and stays; the list exists so the part that is not design can be told
+apart from the part that is.
+
+The rule the audit applies:
+
+> **The surfaces are allowed to differ in GEOMETRY. Anywhere they differ in what
+> a control MEANS, one of them is wrong.**
+
+*Status: the divergent verbs and the pinch-zoom guard are fixed; the keyboard gap,
+the deck-end difference, share, the position rail and live chrome are open. Each is
+marked below.*
+
+### Divergent verbs — ~~unintended~~ *fixed*
+
+Four of these were one leak, not four decisions. The column crossed a slide
+boundary through `api.goTo` — `arrive(i, 0, playing)`, the verb for *reaching a
+slide by name* — where the control bar crossed through `fwdSlide` / `backSlide`.
+
+**The stage is handed `fwd` and `back` now, and uses them.** `goTo` stays on the
+transport for what it is actually for: a contents sheet or an index, where the
+reader names a slide rather than steps to one. Neither can wrap from `stepBy`,
+because by the time it crosses it has already established that the next step
+exists, so the neighbour is the immediate one either way.
+
+What that fixed, in the order the table lists it: stepping forward onto a reel
+starts it (`fwd` carries `playing || video`), and stepping back lands on the
+previous slide's last atom and pauses (`back` passes `'last'`).
+
+| | Landscape | Portrait | |
+|---|---|---|---|
+| **End of the deck** | ▶ wraps to the first slide (`fwdSlide`) | `stepBy` refuses to wrap | **Left standing, deliberately.** A swipe is a gesture and gestures stop; a button press is a command and continues. Now that both live on the same axis it is the one difference a reader could meet, so it is stated rather than fixed: if it reads wrong on a device, the change is to stop the deck wrapping on the interactive surface at all, which touches landscape and is not a portrait decision |
+| ~~**Forward onto a reel**~~ | arrives `playing \|\| video` — stepping onto a reel is a request to watch it, even from paused | ~~arrives `playing` — the reel parks~~ | **Fixed.** Both cross on `fwd` |
+| ~~**Back across a slide**~~ | the previous slide's LAST atom, paused | ~~its FIRST atom, still playing~~ | **Fixed.** Both cross on `back`, which also restores the point of `placeAt(i, back)`: a returning reader lands at the bottom of the previous step AND on the atom they left |
+| **Keyboard** | arrows are the atom move | the same | **Narrowed by the axis swap, not fixed.** Arrows now agree with the bar's ◀ ▶ on the axis a swipe uses, and step and atom are the same thing on every slide except a reel — where the arrows walk clips and a swipe leaves. That is the interim reading until the reel gets its player overlay, and it is defensible; it is listed because a narrow desktop window gets the column, where it is the only input a reader has |
+
+Wheel is the reverse case and is harmless: the column steps on a trackpad flick
+and the landscape stack ignores the wheel entirely.
+
+### Pinch-zoom — ~~unintended~~ *fixed*
+
+Landscape stands its gestures down completely while the viewer is pinched in —
+`zoomed` guards both the tap layer and the bridge's swipes. None of the column's
+input paths consulted it, so on a zoomed portrait deck a one-finger pan navigated
+and a tap toggled playback: the reader could not examine a scorecard without moving
+it. The shared halves of the response (the timer stops, the window collapses to the
+visible slide) were already right on both surfaces; only the gesture suspension was
+landscape-only.
+
+**`onZoomChange` stays the single arbiter and now pushes the state to the stage**
+(`stage.zoom`), because `cancelGesture` only ever reached the landscape tap layer.
+Deliberately pushed rather than read off `visualViewport` a second time — two
+readings of one condition is how the surfaces drifted in the first place. A stage
+arriving mid-session is seeded with it too, so a rotation while zoomed does not
+navigate once on the way in.
+
+### Chrome (design, mostly)
+
+- **Share exists only in portrait**, and `detach()` removes it on rotation — so
+  the deck whose entire distribution model is being forwarded loses its forward
+  button when the phone is turned. The button is about the deck, not the shape of
+  the screen. **Promote it to landscape rather than defend the asymmetry.**
+- **Deck position exists only in portrait.** The rail counts steps; landscape
+  shows only the per-atom countdown, so a viewer there cannot tell how long a deck
+  is or where in it they are. Same argument as share: not a property of geometry.
+- **The scroll cue** is portrait-only and correctly so — it teaches a gesture that
+  exists on one surface.
+- **The bar** carries the same five controls both ways. Landscape floats it and
+  can collapse it to a grip in `inside` placement; the dock never collapses and
+  shortens the content instead. That difference IS geometry, and stays.
+- **Live chrome is landscape-only** (`ensureLiveChrome`) — the largest gap in the
+  list. On a match day a phone held portrait shows no ticker and no live strip at
+  all; turned sideways, both appear. The band they live in is a property of the
+  16:9 stage, so this is structural rather than an oversight, but it means the
+  live feature currently has no phone surface. Sized and scheduled with the live
+  work, not here.
+
+### Content (design, with one leak)
+
+- **Fragment against band** is the intended split and is currently stark: in the
+  pavilion deck the two cards are a phone layout and the eight photographs are
+  postage stamps in a tall matte. That is phase 1's remaining work, not drift.
+- **The `showcase-card` fragment silently drops `cta`**, at slide and section
+  level, which the landscape template renders. The pavilion does not use it, so
+  it is latent — but it is the failure mode a fragment has by construction, since
+  a fragment is a *re-layout* that can quietly omit a field rather than a
+  restyling that cannot. **A portrait fragment must account for every field its
+  landscape template renders**, deliberately dropping what it drops (the QR is the
+  worked example, and landscape-interactive already hides that behind links, so
+  the two agree). Worth a build-time check once there are more than two fragments.
+- **In-slide interactivity inverts.** Landscape blocks touch inside a slide unless
+  it declares `data-taps`; portrait blocks bands identically, but a fragment is
+  live DOM in the player's own document, so every link and button in it is always
+  pressable. `showcase-card` agrees by luck — it declares taps. Any later fragment
+  gets interactivity its landscape twin does not have.
+- **A multi-panel slide cannot be a fragment yet** (`fragUrl` requires a
+  single-step slide), so scorecards and carousels letterbox even once their
+  template has a portrait layout. Stated in phase 1; repeated here because it is a
+  reader-visible limit, not only an implementation one.
+
+### Already one thing, and to be kept that way
+
+Transport, panel timers, holds, atom pacing, video, windowing, and tap-to-toggle
+with its centre-screen feedback are one implementation driven through the stage
+seam. That is the part of the design working as intended: **the surfaces differ in
+geometry and in nothing else by intent** — which is the sentence the divergent
+verbs above break, and the reason they are worth fixing rather than documenting.
+
+---
+
 ## What changes
 
 **`scripts/build.py`** — *struck through = built.*
@@ -612,7 +808,9 @@ section that is not one.**
 - ~~Portrait fragments per template~~ (a Jinja template under `templates/portrait/`
   fed the same `slide` dict; `_portrait` rides in `slide_meta` into every deck's
   `data.json`), every atom carrying its anchor id.
-- Media collapse: consecutive photo slides → one strip; a reel → one poster.
+- ~~Media collapse~~ — WITHDRAWN with the axis swap: a photo run is a run of
+  steps and a reel is one step by the `/deck` rule, so there is nothing to collapse.
+  A reel still wants its poster (phase 2).
 - The longer-list mechanism for capped tables (phase 3).
 - Optional `focus` on photo slides (phase 3 — wide interiors do not crop).
 - Sponsors closing step (below, phase 4).
@@ -625,17 +823,18 @@ section that is not one.**
   `stage.chrome(h)` seam it reports its height back through, and ~~frameless items~~
   (an item whose stage renders it, so it has no iframe to load, post to or tear
   down).
-- ~~Per-step scrollers + the overscroll commit gesture~~ (owed to scrolling
-  fragment steps, not to bands) — and the commit now asks the TRANSPORT to move
-  (`stepBy`) rather than scrolling the column itself. See "One authority".
+- ~~Per-step scrollers~~ (owed to scrolling fragment steps, not to bands). The
+  overscroll commit gesture that went with them is **deleted, not amended**: with
+  horizontal as the step axis a scroller has no navigating to do. See "One axis
+  navigates".
 - ~~Assemble a deck from fragments~~ (any runtime deck, including `/deck`'s) — the
   column fetches each fragment near the reader, so any deck resolved at runtime is
   first-class without the build knowing it exists.
 - The driven path: anchor traversal, auto-scroll, interruptible scroll-to-anchor.
-- Media strip (horizontal swipe) and the reel poster → player overlay, each with
-  a driven mode alongside its user mode.
-- ~~Progress rail and share~~; history-backed overlays and the contents sheet
-  when a deck earns them.
+- The reel poster → player overlay, with a driven mode alongside its user mode.
+  (The media strip is withdrawn — see rule 2.)
+- ~~Progress rail and share~~; the history sentinel that makes back mean previous
+  step; history-backed overlays and the contents sheet when a deck earns them.
 - ~~Windowing for fallback iframes~~ (`windowRadius` now follows the surface) and
   `<video>` only.
 
@@ -646,10 +845,12 @@ section that is not one.**
 **`docs/design-conventions.md`** — ~~portrait token scale, the scoped `px`
 exception~~ (both written in), cards-vs-table, crop-to-fill.
 
-**`assets/js/slide-bridge.js`** — reports swipes on BOTH axes (`axis: 'x' | 'y'`),
-since a band's vertical drag has nowhere else to be noticed once the deck is not a
-scroller. Inert on the wall and in record mode, where `#wcc-tap` sits above the
-iframe and these events never arrive.
+**`assets/js/slide-bridge.js`** — reports swipes on both axes (`axis: 'x' | 'y'`).
+Only `x` is acted on now (it is the step axis); `y` stays reported so a vertical
+drag can be recognised in order to be ignored, and so the permissive variant of
+rule 1 is a routing change rather than a bridge change. Inert on the wall and in
+record mode, where `#wcc-tap` sits above the iframe and these events never
+arrive.
 
 **Not changed:** the wall. No `vw` layout, no base template, no `--fit` behaviour,
 no `/screen/` path. No new URLs; no second catalogue; no extra precache entries.
@@ -829,11 +1030,14 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
   `data-taps` machinery — and a tap on the matte toggles transport. An overlay
   confined to the band would have cost the links *and*, being a non-`auto`
   touch-action, WebKit's pinch-zoom with it.
-- **Two axes, and the second one earns its place.** VERTICAL is the step axis;
-  HORIZONTAL is the axis *inside* a step, and means what it means on the landscape
-  player — `next()`/`prev()`, the atom move. The pairing pays off on a reel, which
-  is one step by the `/deck` rule: swiping down leaves the reel entirely, which
-  nothing could do before, while swiping sideways steps through its clips.
+- ~~**Two axes, and the second one earns its place.**~~ — **SUPERSEDED by the axis
+  swap.** Phase 0 made VERTICAL the step axis and HORIZONTAL the atom move inside a
+  step, and defended the pairing on a reel: swipe down to leave it, sideways to walk
+  its clips. What that reading cost is set out under "One axis navigates" — one axis
+  doing two jobs, and `armCommit` to disambiguate it. **Horizontal is the step axis
+  now, and vertical only reads.** The reel keeps the good half of the pairing: it is
+  still one step, and its clips are walked inside its player rather than on the
+  deck's axis.
 
   Reported by `slide-bridge.js` rather than read off a gesture layer, since
   portrait deliberately has none (above). No flag distinguishes the surfaces —
@@ -845,15 +1049,14 @@ for every deck at once: `assets/js/portrait.js` plus a `stage` seam in
   real ones. A gesture starting in the edge strip is declined so that iOS's
   unpreventable edge-back-swipe does one thing rather than two.
 
-  This does **not** contradict the rejection of horizontal-as-step-axis below: the
-  step axis is still vertical, and a swipe that reaches the end of a slide's atoms
-  crosses to the next slide exactly as the control bar does.
+  The note that used to close this bullet — "this does not contradict the rejection
+  of horizontal-as-step-axis below" — is void: that rejection is itself reversed.
 - **No live chrome.** The ticker and strip live in the L a retracting 16:9 slide
   layer uncovers, and there is no such band here.
 - **Chrome is the progress rail and share**, and nothing else, as designed.
 
 Deliberately *not* done here, and still open below: portrait fragments and their
-token scale, phase grouping, the media strip, overlays, longer lists.
+token scale, phase grouping, overlays, longer lists.
 
 ~~**Untested on a device, and it matters:** whether a *vertical* drag starting on
 the band scrolls the column.~~ **Settled, and then made moot.** Chaining from the
@@ -879,12 +1082,12 @@ Built:
   iframe, so an off-screen step is not a render surface. *Inlining into the
   pavilion page is NOT done* — it is the optimisation the doc always said it was
   (first paint with no round trip), and the canonical path had to come first.
-- ~~Per-step scrollers and the overscroll commit gesture~~ — a fragment step is one
-  scrollport in the column and scrolls *inside* itself, which is what lets uniform
-  step heights (and therefore `scrollTop / stepHeight`, and therefore mandatory
-  snap) survive contact with a step that is three screens long. The gesture is owed
-  entirely to `overscroll-behavior: contain`: it gives the bounce for free and, by
-  the same token, means a thumb can never leave the step on its own.
+- ~~Per-step scrollers~~ — a fragment step is one scrollport in the column and
+  scrolls *inside* itself, with `overscroll-behavior: contain` so a pull at the end
+  bounces rather than becoming the browser's. The overscroll COMMIT gesture that
+  shared this bullet is gone: it was the cost of vertical doing two jobs, and the
+  axis swap removed the second one. A thumb still cannot leave a step by scrolling
+  — it is no longer supposed to.
 - ~~A portrait fragment for `showcase-card`~~ — the pavilion's opening title card
   and its closing hire/credit card. Two things differ from the wall's interactive
   variant, both by design: **no QR code** (a QR passes a URL to someone standing in
@@ -909,12 +1112,14 @@ Built:
   rotation hands a slide to a stage that renders it itself.
 
 Still open in this phase:
-- Portrait fragment for `photo`, and the media strip (horizontal swipe, inset from
-  the screen edges) that collapses the eight photographs into one. **Until that
-  lands the pavilion's photographs are eight letterboxed steps**, which is the
-  phase-0 behaviour and is exactly the point of having taken the fallback first.
+- **The axis swap** — horizontal as the step axis (see "One axis navigates"), which
+  deletes `armCommit`, turns the track's travel onto X, and makes the history
+  sentinel the answer to the edge swipe.
+- Portrait fragment for `photo`. **Until it lands the pavilion's photographs are
+  eight letterboxed steps** — which is the phase-0 behaviour, is exactly the point
+  of having taken the fallback first, and is now also the right STRUCTURE: eight
+  steps is what the swap says they should be, so only their rendering is missing.
 - Inlining the fragments into the pavilion's own page (first paint).
-- A driven mode alongside the user mode on the photo strip.
 
 A limit worth knowing, enforced in `fragUrl`: **a fragment serves a single-step
 slide only.** A slide the column gives several steps to (a carousel, one per panel)
@@ -926,17 +1131,19 @@ multi-panel fragment would swallow every panel after the first.
 Structural, and **not deferrable** even though the transport ships in phase 5 —
 these cost little now and are a rewrite later:
 - Per-slide fragments as the canonical artefact, so a runtime deck is first-class.
-- Atom positions with stable ids, addressable on *both* axes.
-- A driven mode alongside the user mode on the photo strip.
+- Atom positions with stable ids, addressable as a step or as a scroll offset
+  within one.
 
 **Explicitly not in phase 1** — all deferred as speculative until a deck needs
-them: any overlay at all (so no history/back machinery either — the pavilion needs no "view larger", since on an
-iPhone it opens the photograph at the width it already had); the sticky title; the
-contents sheet; the `focus` crop field, which wide interiors do not use.
+them: any overlay at all (the pavilion needs no "view larger", since on an iPhone it
+opens the photograph at the width it already had); the sticky title; the contents
+sheet; the `focus` crop field, which wide interiors do not use. The history
+machinery is no longer on this list: the axis swap gives it a job before any overlay
+does.
 
 Ship criterion: **the Seabrook Pavilion deck is a first-class phone experience end
-to end — Title · Photographs · Credit — and no other deck or the wall has
-regressed.** Decks without portrait fragments keep today's behaviour untouched.
+to end — a title card, eight photographs and a credit card, swiped through — and no
+other deck or the wall has regressed.** Decks without portrait fragments keep today's behaviour untouched.
 
 **Phase 2 — the reel, and the letterbox fallback.** Poster frame → full-screen
 player running the whole innings reel in order with narrative captions, card
@@ -1019,17 +1226,36 @@ Recorded so they are not relitigated from scratch.
   a deck is.
 - **Fixed 1080×1920 design box scaled by `--fit`** — leaves ~18% of a modern phone
   screen empty, and portrait aspects span too wide a range for any one box.
-- **Step = atom** — the phone has a vertical axis and should stack what the wall
-  had to paginate. Thirty clips would have been thirty steps.
+- **Step = atom** — a step stacks what the wall had to paginate, so a scorecard's
+  batting and bowling are one step and not two. Thirty clips would have been thirty
+  steps; a reel is one, by the `/deck` rule.
 - **Thirty clips as a vertical feed** — works for independent full-screen portrait
-  video; ours are uncroppable 16:9 with baked graphics inside an authored
-  sequence.
+  video; ours are uncroppable 16:9 with baked graphics inside an authored sequence.
+  Still rejected, and note what it does NOT reject: the objection is to the feed, not
+  to sideways paging. A reel remains one step whose clips are walked inside its
+  player.
+- ~~**A photo set as a run of steps**~~ — **reversed.** It was rejected as the
+  vertical-feed reading of a photo run, and became right the moment the deck paged
+  sideways: eight full-bleed photographs swiped left is a photo album, which is the
+  idiom the media strip was reconstructing inside a step at the cost of a second
+  addressing scheme. See rule 2.
+- **A media strip inside one step** — one step holding N media atoms needs its own
+  index, its own driven mode and its own case in play-mode anchor traversal, to
+  produce the gesture the deck already performs. Withdrawn unbuilt with the axis
+  swap.
 - **Tap-to-play gating the photographs** — on iPhone the "fullscreen" it opens is
-  the same width as the in-flow strip, so the tap buys nothing.
+  the same width as the photograph already had, so the tap buys nothing.
 - **Photo set as a scroll of thumbnails** — destroys the authored order and the
   full-frame reading of each photograph; turns a showcase into a property listing.
-- **Horizontal swipe as the step axis** — collides with iOS Safari's edge
-  back-swipe, which would carry a reader out of a forwarded link.
+- ~~**Horizontal swipe as the step axis**~~ — **reversed; it is the step axis
+  now.** The stated reason was iOS Safari's edge back-swipe carrying a reader out of
+  a forwarded link, which is real and is answered three ways under rule 1: only the
+  LEFT edge is back (so *next* never collides), `armDeck` already declines the outer
+  5%, and a history sentinel makes back MEAN previous step. The third answer did not
+  exist when the rejection was written — "Back closes overlays" was still speculative
+  phase-3 work. What actually decided it was not the mitigation but the cost of the
+  alternative: vertical doing both jobs bought `armCommit`, the arming rule and two
+  thresholds, and put the deck's travel on the one dimension iOS rewrites on its own.
 - **Persistent tab strip in portrait** — standing viewport cost for a jump most
   viewers will not make, and it does not generalise past one slide. Contents sheet
   instead.
