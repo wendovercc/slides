@@ -553,12 +553,12 @@ it necessary.
 - **No persistent tab strip**, ever. It costs viewport on every step to serve a
   jump most viewers will not make, and only helps *within* one slide — a 30-step
   match deck wants an index just as much and would not get one.
-- **A thin progress rail** — where you are in the deck. *(Phase 1: earned by any
-  deck.)*
-- **Share.** A deck whose distribution model is being forwarded currently has no
-  forward button. `navigator.share()` with the canonical URL `_og.html` already
-  bakes. Small, and it changes what the feature is for. *(Phase 1 — the pavilion
-  is exactly the deck this exists for.)*
+- ~~**A thin progress rail**~~ — built, and **not portrait chrome at all in the
+  end**: it is one of the player's two deck instruments, on both surfaces. See
+  "Chrome — mostly fixed" under the drift audit for the rule the two lines share.
+- ~~**Share**~~ — built, and likewise a player control rather than a portrait one.
+  `navigator.share()` with the canonical URL the `_og.html` preview was baked
+  against.
 - **Sticky step title.** Earned once a step runs several screens (1st Innings is a
   poster, eleven batting rows and six bowling rows). `position: sticky`, one line.
   *(Phase 3.)* The pavilion's steps are one screen each and a title bar over the
@@ -583,10 +583,16 @@ difference between a phone app and a slideshow with something on top of it.
 That makes it a two-way seam, which is why it is on the stage rather than in
 `placeBar`'s aspect arithmetic: the stage asks for the dock (`barDock`), and the bar
 reports its height back (`stage.chrome(h)`), re-measured on every placement so a
-rotation or a safe-area change stays right. The share button moved into the dock
-with it — beside the transport, where a phone app puts it, and where it costs no
-content. It floated in the top-left corner while the bar was a pill over a
-letterboxed slide; that is a corner a full-bleed layout wants back.
+rotation or a safe-area change stays right. The height is now read twice over: the
+column shortens its scroller by it, and `layoutInstruments()` uses it as the inset
+the countdown sits above — which is the one place the "welded to the viewport" rule
+yields, because a line under an opaque dock is a line nobody sees.
+
+The share button moved into the dock with it — beside the transport, where a phone
+app puts it, and where it costs no content. It floated in the top-left corner while
+the bar was a pill over a letterboxed slide; that is a corner a full-bleed layout
+wants back. It is built by `buildControls` rather than by this stage, so landscape
+has it too and a rotation cannot take it away.
 
 ---
 
@@ -699,9 +705,9 @@ The rule the audit applies:
 > **The surfaces are allowed to differ in GEOMETRY. Anywhere they differ in what
 > a control MEANS, one of them is wrong.**
 
-*Status: the divergent verbs and the pinch-zoom guard are fixed; the keyboard gap,
-the deck-end difference, share, the position rail and live chrome are open. Each is
-marked below.*
+*Status: the divergent verbs, the pinch-zoom guard, share, the position rail and
+the bar's geometry are fixed; the keyboard gap, the deck-end difference and live
+chrome are open. Each is marked below.*
 
 ### Divergent verbs — ~~unintended~~ *fixed*
 
@@ -746,20 +752,71 @@ readings of one condition is how the surfaces drifted in the first place. A stag
 arriving mid-session is seeded with it too, so a rotation while zoomed does not
 navigate once on the way in.
 
-### Chrome (design, mostly)
+### Chrome — ~~design, mostly~~ *mostly fixed*
 
-- **Share exists only in portrait**, and `detach()` removes it on rotation — so
-  the deck whose entire distribution model is being forwarded loses its forward
-  button when the phone is turned. The button is about the deck, not the shape of
-  the screen. **Promote it to landscape rather than defend the asymmetry.**
-- **Deck position exists only in portrait.** The rail counts steps; landscape
-  shows only the per-atom countdown, so a viewer there cannot tell how long a deck
-  is or where in it they are. Same argument as share: not a property of geometry.
+The audit said share and deck position were "not a property of geometry" and
+should be promoted rather than defended. Doing that turned out to settle a fifth
+thing nobody had listed: **once an instrument belongs to the deck rather than to
+the stage, it stops having a placement problem at all.** Share, the rail and the
+countdown were all built by whichever surface happened to be up; all three are the
+player's now, and the two that draw a line have one rule between them.
+
+> **TOP edge of the reading area = where you are in the DECK.
+> BOTTOM edge = time left on the ATOM you are on.**
+> Both surfaces, both orientations, whatever the control bar is doing.
+
+- ~~**Share exists only in portrait**~~ — **fixed.** It is a bar control now
+  (`buildControls`), built wherever `navigator.share` exists, and a rotation cannot
+  take it away because `detach()` no longer owns it.
+- ~~**Deck position exists only in portrait**~~ — **fixed.** The rail is
+  `#wcc-prog-top`, on both surfaces, counting the same table: one tick per atom
+  with a reel as one, which is the rule the portrait step table already used, so
+  the two surfaces measure the same deck. Segmented up to `TICK_MAX` (24), a
+  continuous fill beyond it.
+- **The countdown stopped travelling with the bar.** It was a child of `#wcc-bar`,
+  which put it on the bar's bottom edge in `below`, on its side as a vertical strip
+  in `right`/`inside`, and on the dock's top edge in portrait — one instrument, four
+  positions, two grow axes. It is `#wcc-prog-bot` now, welded to the bottom edge,
+  and `progressAxis` / `progressRelayout` / the `scaleY` variants are deleted: the
+  fill is always `scaleX`.
+  - **The lines yield to chrome, not to the letterbox.** A letterbox band is not
+    chrome — it is nothing — so the lines run over it to the glass. What they DO
+    inset for is anything docked against an edge: the portrait toolbar (measured
+    off the bar), and the live ticker and matte strip (measured off `#stage` × 
+    `--live-band`, the same way the record chrome measures itself, and re-measured
+    when `body.live-chrome` changes). `layoutInstruments()` is the whole of it.
+  - **The countdown is hidden while paused.** It is a time instrument and paused
+    there is no time passing. Welded to the bar an empty track read as part of the
+    bar; alone on the bottom edge it was a gold line that never meant anything to
+    the many readers who never press play. The rail stays up always — where you are
+    is true either way.
+  - **Distinguished by form, not only by edge.** Both are gold, because gold is the
+    brand's sole accent and neither instrument is the one to spend a second colour
+    on. Ticks answer "how many", a sweep answers "how long". That also retires the
+    old rail note's worry about two gold hairlines being confusable: they are a
+    viewport apart AND drawn differently.
 - **The scroll cue** is portrait-only and correctly so — it teaches a gesture that
-  exists on one surface.
-- **The bar** carries the same five controls both ways. Landscape floats it and
-  can collapse it to a grip in `inside` placement; the dock never collapses and
-  shortens the content instead. That difference IS geometry, and stays.
+  exists on one surface. **Currently OFF** (`CUE_ENABLED = false`), and the code is
+  kept: what was wrong is the badge, not the idea. The ring was chosen to borrow the
+  floating share button's vocabulary so it would read as "control" — then share
+  moved into the dock and dropped its border, leaving the cue as the only ringed
+  circle on screen and the only one that is not pressable. It taught "button" before
+  it taught "swipe". Revisit with a treatment that cannot be mistaken for a target;
+  the likely answer is no badge at all and a peeling edge of the next step instead.
+- **The bar** carries the same controls both ways, and now at the same SIZE both
+  ways. The 44pt floor was on `place-portrait` alone, which quietly made the same
+  phone fail when it was turned: `4.7vmax` resolves against the longer edge, so it
+  is ~40px on a 390×844 iPhone held *either* way — floored in portrait, unfloored
+  in landscape, where the bar lands in `inside` placement and nothing caught it.
+  The floor is on `#wcc-bar button` now, with the gap, the padding and the glyph
+  floored alongside it so the bar does not close up around bigger targets.
+  Landscape still floats the bar and can collapse it to a grip in `inside`; the
+  dock never collapses and shortens the content instead. That difference IS
+  geometry, and stays.
+- **The controls had no accessible names.** Six glyph buttons, `icon()` renders an
+  `aria-hidden` `<svg>` and nothing else, no `aria-label` anywhere in
+  `player-core.js`. Labelled now, and play/pause and fullscreen relabel when they
+  reglyph.
 - **Live chrome is landscape-only** (`ensureLiveChrome`) — the largest gap in the
   list. On a match day a phone held portrait shows no ticker and no live strip at
   all; turned sideways, both appear. The band they live in is a property of the

@@ -39,7 +39,12 @@
     expand: '<path d="M8 3H5a2 2 0 0 0-2 2v3" /><path d="M16 3h3a2 2 0 0 1 2 2v3" /><path d="M8 21H5a2 2 0 0 1-2-2v-3" /><path d="M16 21h3a2 2 0 0 0 2-2v-3" />',
     compress: '<path d="M8 3v3a2 2 0 0 1-2 2H3" /><path d="M21 8h-3a2 2 0 0 1-2-2V3" /><path d="M3 16h3a2 2 0 0 1 2 2v3" /><path d="M16 21v-3a2 2 0 0 1 2-2h3" />',
     // Stroke-only "controls" grip for the collapse toggle (inside-placement only).
-    grip: '<line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />'
+    grip: '<line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />',
+    // Stroke-only three-node share glyph (fill:none via the .share button class):
+    // filled, the circles and their connecting lines become three dots and a smear.
+    share: '<circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" />' +
+           '<circle cx="18" cy="19" r="3" /><line x1="8.6" y1="10.5" x2="15.4" y2="6.5" />' +
+           '<line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />'
   };
 
   function icon(name) {
@@ -85,7 +90,8 @@
       // each layout via a place-* class (see below). Targets are sized in vmax (the
       // longer viewport edge) so they stay the same physical size in portrait and
       // landscape. Base styling only here — geometry lives on the place-* classes.
-      '#wcc-bar{position:fixed;z-index:60;display:flex;gap:0.6vmax;padding:0.7vmax 0.6vmax;' +
+      '#wcc-bar{position:fixed;z-index:60;display:flex;' +
+      'gap:max(6px,0.6vmax);padding:max(7px,0.7vmax) max(6px,0.6vmax);' +
       'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);' +
       'border-radius:0.6vmax;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
       'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);overflow:hidden;' +
@@ -114,18 +120,8 @@
       'left:0;right:0;bottom:0;border-radius:0;border:none;' +
       'border-top:1px solid rgba(212,175,55,0.28);background:#08152c;' +
       'backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;' +
-      'transform:none;padding:0.7vmax 0.6vmax calc(0.7vmax + var(--sa-b,0px));}' +
-      /* THE ONLY PLACEMENT WITH A px FLOOR ON ITS TARGETS, and the reason is the
-         same one that put a floored scale in the portrait fragments: the other
-         placements are read across a room, where a target sized off the viewport is
-         the right kind of constant, and this one is pressed with a thumb, where
-         44pt is 44pt on every phone. `4.7vmax` resolves against the LONGER edge,
-         which in portrait is the height — about 40px on a 390x844 iPhone, under the
-         floor and noticeably so in a tab, where Safari's own toolbar sits directly
-         beneath and a missed press hits that instead. The glyph stays in `vmax`: it
-         is the target that was too small, not the drawing. `max()` rather than a
-         flat px so an iPad in portrait still scales up. */
-      '#wcc-bar.place-portrait button{width:max(48px,4.7vmax);height:max(48px,4.7vmax);}' +
+      'transform:none;padding:max(7px,0.7vmax) max(6px,0.6vmax) ' +
+      'calc(max(7px,0.7vmax) + var(--sa-b,0px));}' +
       // Inside the slide (near-16:9, no usable band): vertical column pinned to the
       // slide's top-right safe corner (top/right set inline from geometry) and
       // collapsible so it never permanently obstructs slide content.
@@ -137,31 +133,86 @@
       '#wcc-bar button.collapse{display:none;}' +
       '#wcc-bar.place-inside button.collapse{display:flex;}' +
       '#wcc-bar.place-inside button.collapse svg{fill:none;}' +
-      '#wcc-bar button{width:4.7vmax;height:4.7vmax;border:none;border-radius:50%;background:transparent;' +
+      /* ONE SIZE SCALE, AND IT APPLIES IN EVERY PLACEMENT. `vmax` is the right unit
+         for a control read across a room — it holds its apparent size as the wall
+         changes — and it is the wrong one on its own for a control pressed with a
+         thumb, where 44pt is 44pt on every phone whatever the screen measures. So
+         both: `vmax` above the floor, the floor below it.
+         The floor used to be on `place-portrait` alone, which quietly made the SAME
+         PHONE fail when it was turned. `4.7vmax` resolves against the LONGER edge,
+         so on a 390x844 iPhone it is ~40px held either way — under the floor in
+         portrait (where Safari's own toolbar sits directly beneath, and a missed
+         press hits that instead) and equally under it in landscape, where the bar
+         lands in `inside` placement and nothing was catching it at all.
+         The gap and the padding are floored with it, or the buttons grow and the
+         bar closes up around them. The glyph is floored too but at a gentler ratio:
+         it is drawn INSIDE the target, and a 48px circle wants a ~22px glyph. */
+      '#wcc-bar button{width:max(48px,4.7vmax);height:max(48px,4.7vmax);' +
+      'border:none;border-radius:50%;background:transparent;' +
       'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;' +
       '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
       '#wcc-bar button:active{background:rgba(255,255,255,0.12);}' +
       '#wcc-bar button.primary{background:rgba(212,175,55,0.18);}' +
       '#wcc-bar button.primary:active{background:rgba(212,175,55,0.32);}' +
-      '#wcc-bar svg{width:2.35vmax;height:2.35vmax;fill:#fff;stroke:#fff;stroke-width:2;' +
-      'stroke-linejoin:round;stroke-linecap:round;}' +
+      '#wcc-bar svg{width:max(22px,2.35vmax);height:max(22px,2.35vmax);' +
+      'fill:#fff;stroke:#fff;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}' +
       '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}' +
-      // Fullscreen glyph is drawn as outlined corner brackets, not a filled shape.
-      '#wcc-bar button.fs svg{fill:none;}' +
-      // Countdown for the current panel/slide. Runs along the bar's long edge:
-      // bottom strip when the bar is a row, left strip when it is a column.
-      '#wcc-bar-progress{position:absolute;background:rgba(212,175,55,0.16);}' +
-      '#wcc-bar.place-below #wcc-bar-progress{left:0;right:0;bottom:0;height:0.35vmax;}' +
-      // Docked: along the bar's TOP edge, which is the seam with the content — the
-      // bottom edge is under the home indicator and half of it would be invisible.
-      '#wcc-bar.place-portrait #wcc-bar-progress{left:0;right:0;top:0;height:0.35vmax;}' +
-      '#wcc-bar.place-right #wcc-bar-progress,#wcc-bar.place-inside #wcc-bar-progress{' +
-      'top:0;bottom:0;right:0;width:0.35vmax;}' +
-      '#wcc-bar-progress i{display:block;width:100%;height:100%;background:#d4af37;}' +
-      '#wcc-bar.place-below #wcc-bar-progress i,' +
-      '#wcc-bar.place-portrait #wcc-bar-progress i{transform-origin:left;transform:scaleX(0);}' +
-      '#wcc-bar.place-right #wcc-bar-progress i,#wcc-bar.place-inside #wcc-bar-progress i{' +
-      'transform-origin:top;transform:scaleY(0);}';
+      // Outlined glyphs: corner brackets, the grip, and the share nodes are all
+      // drawn rather than filled — filled, share becomes three dots and a smear.
+      '#wcc-bar button.fs svg,#wcc-bar button.share svg{fill:none;}' +
+      /* ---- THE TWO DECK INSTRUMENTS ----------------------------------------
+         Two gold hairlines, and ONE rule for where they go on every surface and in
+         every orientation:
+
+             TOP edge    = where you are in the DECK, counted in atoms.
+             BOTTOM edge = time left on the atom you are ON.
+
+         Welded to the viewport, not to the control bar and not to the letterbox.
+         The countdown used to be a child of `#wcc-bar`, which meant it moved every
+         time the bar's placement changed — the bar's BOTTOM edge in `below`, a
+         vertical strip on its side in `right`/`inside`, the dock's TOP edge in
+         portrait — and it had to grow along a different axis in each. Same
+         instrument, four positions and two axes, so a reader who learned it in one
+         orientation had to learn it again in the other. Welding it to the screen
+         costs nothing and deletes the axis entirely: the fill is always `scaleX`,
+         which is why there is no `progressAxis` here any more.
+
+         The one thing the rule yields to is CHROME THAT DOCKS AGAINST AN EDGE — the
+         portrait toolbar, and the live ticker and its matte strip. A line under the
+         dock is invisible and half of it is under the home indicator; a line across
+         the ticker is a gold hairline drawn over the ticker's own gold. So the lines
+         bound the READING AREA: the viewport, less anything actually sitting on an
+         edge. A letterbox band is not chrome — it is nothing — so the lines ignore
+         it and run to the glass. `layoutInstruments()` measures the insets.
+
+         Distinguished by FORM as well as position, because both are gold (the
+         brand's sole accent): the position rail is SEGMENTED — one tick per atom,
+         filled up to where you are — and the countdown is a continuous sweep. Ticks
+         answer "how many", which is the question a first screen raises; a sweep
+         answers "how long", which is the question a playing deck raises. Long decks
+         lose the ticks (see `TICK_MAX`): eighty-nine of them is a dotted line, not
+         a count. */
+      '#wcc-prog-top,#wcc-prog-bot{position:fixed;z-index:59;pointer-events:none;' +
+      'box-sizing:border-box;height:max(3px,0.4vmax);overflow:hidden;}' +
+      // Position: one flex tick per atom, hairline gaps, unfilled ticks in neutral.
+      '#wcc-prog-top{top:var(--sa-t,0px);left:0;right:0;display:flex;gap:2px;padding:0 2px;}' +
+      '#wcc-prog-top i{display:block;flex:1 1 0;height:100%;' +
+      'background:rgba(255,255,255,0.18);transition:background 0.3s ease;}' +
+      '#wcc-prog-top i.on{background:#d4af37;}' +
+      // The continuous fallback: one child, scaled, on a track of its own.
+      '#wcc-prog-top.cont{gap:0;padding:0;background:rgba(255,255,255,0.14);}' +
+      '#wcc-prog-top.cont i{background:#d4af37;transition:transform 0.35s ease;' +
+      'transform-origin:left;transform:scaleX(0);}' +
+      /* Countdown: HIDDEN WHILE PAUSED. It is a time instrument, and paused there is
+         no time passing — welded to the bar an empty track read as part of the bar,
+         but alone on the screen's bottom edge it is a conspicuous gold line that
+         never means anything to the many readers who never press play. The position
+         rail above stays up always: where you are is true either way. */
+      '#wcc-prog-bot{bottom:0;left:0;right:0;background:rgba(212,175,55,0.16);' +
+      'opacity:0;transition:opacity 0.3s ease;}' +
+      '#wcc-prog-bot.on{opacity:1;}' +
+      '#wcc-prog-bot i{display:block;width:100%;height:100%;background:#d4af37;' +
+      'transform-origin:left;transform:scaleX(0);}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
@@ -357,7 +408,6 @@
     var panelMs = 0;         // the current panel countdown's full duration (ms)
     var pausedAt = 0;        // when the current pause began (ms epoch), 0 = not paused
     var progressFill = null; // control-bar countdown fill (interactive only)
-    var progressAxis = 'x';  // fill grows along x (row bar) or y (column bar)
     var bar = null;          // control bar (interactive only)
 
     /* ---- live highlight news-flash (player-owned interrupt overlay) ----
@@ -591,6 +641,7 @@
       current = i;
       shownAt = Date.now();
       applyTapThrough();
+      railUpdate();
       onShow(i);
     }
     /* Tell the stage which STEP the transport is on. `activate` reveals the slide;
@@ -601,6 +652,7 @@
      * showAtom and this is a no-op. */
     function stageAtom() {
       if (stage && stage.showAtom) stage.showAtom(current, panelIndex);
+      railUpdate();
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
 
@@ -673,11 +725,12 @@
       else kioskShow(current);
     }
 
-    /* Control-bar countdown. Mirrors the interactive per-panel timer: fills over
-     * the dwell while playing, freezes where it is on pause, empties on nav. The
-     * grow axis follows the bar orientation (x for a row, y for a column). All
-     * no-ops until the bar exists, so kiosk (the wall) shows nothing. */
-    function progressScale(v) { return (progressAxis === 'y' ? 'scaleY(' : 'scaleX(') + v + ')'; }
+    /* The bottom instrument: time left on the current atom. Mirrors the interactive
+     * per-panel timer — fills over the dwell while playing, freezes where it is on
+     * pause, empties on nav. Always `scaleX`: the line is welded to the viewport's
+     * bottom edge and no longer rotates with the control bar (see injectStyles).
+     * All no-ops until the instruments exist, so kiosk (the wall) shows nothing. */
+    function progressScale(v) { return 'scaleX(' + v + ')'; }
     function progressRun(ms) {
       if (!progressFill) return;
       progressFill.style.transition = 'none';
@@ -697,14 +750,123 @@
       progressFill.style.transition = 'none';
       progressFill.style.transform = (t && t !== 'none') ? t : progressScale(0);
     }
-    // Re-drive the fill after a placement change so it uses the new axis. Only the
-    // playing case matters (rearm for the panel's remaining time); a paused fill is
-    // left frozen — a rare rotate-while-paused may nudge it, which self-heals on
-    // the next nav.
-    function progressRelayout() {
-      if (!progressFill || !playing) return;
-      var remaining = panelMs - (Date.now() - panelStart);
-      if (remaining > 0) progressRun(remaining); else progressReset();
+
+    /* ---- the two deck instruments -----------------------------------------
+     * Built once, owned by the player, and welded to the reading area's top and
+     * bottom edges on BOTH surfaces — see the long note in injectStyles for the
+     * rule and why the countdown stopped being a child of the control bar.
+     *
+     * Interactive only, and gated exactly as the bar is (`!record && !hosted`).
+     * The wall has never had a countdown and does not grow one here; record mode
+     * carries its own in the HUD, and a second one would compete with it.
+     */
+    var railTicks = [], progTop = null, progBot = null;
+    var railFirst = [], railTotal = 0;
+
+    /* Above this many atoms the rail stops counting and goes back to a fill: the
+     * ticks have to be wide enough to read as separate marks, and `teams` is 89
+     * positions. Sized off the narrowest phone we care about (390px), where 24
+     * ticks are ~14px each. Shared with the portrait column by construction now
+     * that there is only one rail. */
+    var TICK_MAX = 24;
+
+    /* How many atoms a slide contributes to the rail. Deliberately the BUILD's atom
+     * list rather than `counts` (what the slide reported over the bridge): the rail
+     * is a map of the deck and must have its full length on the first frame, before
+     * any slide has answered. A reel counts as one — its clips are finer than the
+     * deck's grain and would swamp the count — which is the same rule the portrait
+     * column's step table uses, so the two surfaces measure the same thing. */
+    function railSteps(i) {
+      var it = items[i] || {};
+      if (it.video) return 1;
+      var a = (it.atoms && it.atoms.length) || 1;
+      return a > 1 ? a : 1;
+    }
+    function railTable() {
+      railFirst = []; railTotal = 0;
+      for (var i = 0; i < n; i++) { railFirst.push(railTotal); railTotal += railSteps(i); }
+    }
+    function railUpdate() {
+      if (!progTop || !railTotal) return;
+      var k = (railFirst[current] || 0) +
+              Math.min(panelIndex || 0, railSteps(current) - 1);
+      if (progTop.classList.contains('cont')) {
+        if (railTicks[0]) railTicks[0].style.transform = 'scaleX(' + ((k + 1) / railTotal) + ')';
+        return;
+      }
+      for (var t = 0; t < railTicks.length; t++) railTicks[t].classList.toggle('on', t <= k);
+    }
+
+    /* The countdown appears with playback and goes with it. */
+    function progressVisible() {
+      if (progBot) progBot.classList.toggle('on', !!playing);
+    }
+
+    /* Where the reading area's edges actually are. The viewport, less any chrome
+     * that DOCKS against an edge:
+     *   - the portrait toolbar, which owns the bottom edge outright;
+     *   - the live ticker (bottom) and matte strip (left), which sit in the L a
+     *     retracting slide layer uncovers — measured off `#stage` the same way the
+     *     record chrome is, and for the same reason (`#stage` is transformed, so it
+     *     is a stacking context and these are positioned, not parented).
+     * A letterbox band is NOT chrome. It is nothing, and the lines run over it to
+     * the glass — which is the whole point of welding them to the viewport. */
+    function layoutInstruments() {
+      if (!progTop) return;
+      var b = 0, l = 0;
+      if (stage && stage.barDock && bar) {
+        b = bar.getBoundingClientRect().height;
+      } else if (document.body.classList.contains('live-chrome')) {
+        var el = stageEl(), r = el && el.getBoundingClientRect();
+        if (r && r.height) {
+          b = Math.max(0, window.innerHeight - r.bottom) + r.height * BAND;
+          l = Math.max(0, r.left) + r.width * BAND;
+        }
+      }
+      progTop.style.left = progBot.style.left = l + 'px';
+      progTop.style.right = progBot.style.right = '0px';
+      progBot.style.bottom = b + 'px';
+    }
+
+    function buildInstruments() {
+      progTop = document.createElement('div');
+      progTop.id = 'wcc-prog-top';
+      progTop.setAttribute('aria-hidden', 'true');
+      railTable();
+      railTicks = [];
+      if (railTotal > 1 && railTotal <= TICK_MAX) {
+        for (var t = 0; t < railTotal; t++) {
+          var i2 = document.createElement('i');
+          railTicks.push(i2);
+          progTop.appendChild(i2);
+        }
+      } else {
+        progTop.classList.add('cont');
+        var f = document.createElement('i');
+        railTicks.push(f);
+        progTop.appendChild(f);
+      }
+      // A one-atom deck has no position to report; the track would be a solid line
+      // saying nothing. The countdown still applies.
+      if (railTotal > 1) document.body.appendChild(progTop);
+
+      progBot = document.createElement('div');
+      progBot.id = 'wcc-prog-bot';
+      progBot.setAttribute('aria-hidden', 'true');
+      progressFill = document.createElement('i');
+      progBot.appendChild(progressFill);
+      document.body.appendChild(progBot);
+
+      // The live chrome arrives and leaves at runtime (a match starts, a match
+      // ends), and it changes where the bottom edge is. `body.live-chrome` is the
+      // page's own signal for it, so watch that rather than adding a second one.
+      if (window.MutationObserver) {
+        new MutationObserver(layoutInstruments).observe(document.body,
+          { attributes: true, attributeFilter: ['class'] });
+      }
+      railUpdate();
+      progressVisible();
+      layoutInstruments();
     }
 
     /* ---- kiosk: whole-slide rotation, slides auto-rotate their own panels ----
@@ -892,6 +1054,7 @@
       } else {
         clearTimer(); send(current, 'pause'); progressFreeze(); pausedAt = Date.now(); drainFlash();
       }
+      progressVisible();
       // A pause inside a media beat is a freeze, not a cue: it holds what is already
       // on screen. Captured here rather than in the tap handler so the bar's own
       // play/pause button records one too.
@@ -964,9 +1127,8 @@
       if (stage && stage.barDock) {
         setPlaceClass('portrait');
         bar.classList.remove('collapsed');   // the dock is never in the way, so never hides
-        progressAxis = 'x';
         if (stage.chrome) stage.chrome(bar.getBoundingClientRect().height);
-        progressRelayout();
+        layoutInstruments();
         return;
       }
       var iw = window.innerWidth, ih = window.innerHeight;
@@ -998,7 +1160,6 @@
         bar.style.top = edge + 'px';
         bar.style.right = edge + 'px';
       }
-      progressAxis = place === 'below' ? 'x' : 'y';
       // Collapse belongs to inside only — the one placement that overlaps the slide.
       // It starts OPEN, and only the grip toggles it; there's no auto-hide.
       //
@@ -1014,7 +1175,7 @@
       // whatever the user last set. Elsewhere: always open.
       if (place === 'inside') { if (!wasInside) bar.classList.remove('collapsed'); }
       else { bar.classList.remove('collapsed'); }
-      progressRelayout();
+      layoutInstruments();
     }
     var placeRaf = null;
     function schedulePlace() {
@@ -1058,15 +1219,26 @@
     /* ---- control bar ---- */
     var playBtn = null;
     var fsBtn = null;
-    function updatePlayBtn() {
-      if (playBtn) playBtn.innerHTML = icon(playing ? 'pause' : 'play');
+    function reglyph(b, name) {
+      if (!b) return;
+      b.innerHTML = icon(name);
+      if (LABEL[name]) b.setAttribute('aria-label', LABEL[name]);
     }
-    function updateFsBtn() {
-      if (fsBtn) fsBtn.innerHTML = icon(fsElement() ? 'compress' : 'expand');
-    }
+    function updatePlayBtn() { reglyph(playBtn, playing ? 'pause' : 'play'); }
+    function updateFsBtn() { reglyph(fsBtn, fsElement() ? 'compress' : 'expand'); }
+    /* Every control is a glyph, so the accessible name has to be said out loud —
+     * `icon()` renders an `aria-hidden` <svg> and nothing else, which left the bar
+     * as a row of unnamed buttons to anything not looking at it. */
+    var LABEL = {
+      home: 'Home', prev: 'Previous', next: 'Next', play: 'Play', pause: 'Pause',
+      expand: 'Full screen', compress: 'Exit full screen', grip: 'Show or hide controls',
+      share: 'Share'
+    };
     function button(name, cls, handler) {
       var b = document.createElement('button');
+      b.type = 'button';
       if (cls) b.className = cls;
+      if (LABEL[name]) b.setAttribute('aria-label', LABEL[name]);
       b.innerHTML = icon(name);
       b.addEventListener('click', function (e) { e.stopPropagation(); handler(); });
       return b;
@@ -1151,6 +1323,22 @@
       playBtn = button('pause', 'primary', function () { setPlaying(!playing); });
       bar.appendChild(playBtn);
       bar.appendChild(button('next', '', next));
+      /* SHARE, where the browser has it — and on BOTH surfaces. It was the portrait
+       * stage's button, which meant the deck whose entire distribution model is
+       * being forwarded lost its forward button when the phone was turned: `detach()`
+       * took it away on rotation. The button is about the deck, not about the shape
+       * of the screen, so it belongs to the bar like every other control.
+       * The URL is the canonical one the link preview was baked against (og:url),
+       * not `location.href` — which may carry the ?deck= / ?k= query that got us
+       * here and is nobody else's business. */
+      if (!record && navigator.share) {
+        var og = document.querySelector('meta[property="og:url"]');
+        var shareUrl = (og && og.content) || location.origin + location.pathname;
+        bar.appendChild(button('share', 'share', function () {
+          try { navigator.share({ title: document.title, url: shareUrl }).catch(function () {}); }
+          catch (err) { /* cancelled, or share refused — nothing to recover */ }
+        }));
+      }
       var docEl = document.documentElement;
       if (!record && (docEl.requestFullscreen || docEl.webkitRequestFullscreen)) {
         fsBtn = button('expand', 'fs', function () { toggleFullscreen(); });
@@ -1158,12 +1346,11 @@
         document.addEventListener('fullscreenchange', updateFsBtn);
         document.addEventListener('webkitfullscreenchange', updateFsBtn);
       }
-      var prog = document.createElement('div');
-      prog.id = 'wcc-bar-progress';
-      progressFill = document.createElement('i');
-      prog.appendChild(progressFill);
-      bar.appendChild(prog);
       document.body.appendChild(bar);
+      // The countdown and the position rail are NOT children of the bar — they are
+      // welded to the reading area's edges. Built after it because the dock's
+      // measured height is one of the insets.
+      buildInstruments();
 
       updatePlayBtn();
       placeBar();
@@ -2196,8 +2383,10 @@
      *     no frame; the stack wants one for every slide, so a frameless item gets
      *     its document back from `opts.newFrame`. Done first, so the outgoing stage
      *     is empty by the time it is dismantled.
-     *   - THE OUTGOING STAGE'S OWN CHROME — its column, its rail, its share button.
-     *     Only it knows what it built, so it is asked to `detach()`.
+     *   - THE OUTGOING STAGE'S OWN CHROME — its column, its share button. Only it
+     *     knows what it built, so it is asked to `detach()`. The two progress
+     *     instruments are the player's and stay put across the swap; only their
+     *     insets change, which `schedulePlace()` below re-measures.
      *   - THE GESTURE LAYER, which is the player's and follows the stage: a stage
      *     that owns input has none, and one that does not gets it back.
      */

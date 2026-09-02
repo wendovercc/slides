@@ -103,9 +103,13 @@
  * viewer expressed.
  *
  * So this stage has to be able to take itself apart: everything it built is torn
- * down in `detach()`, which player-core calls on the way out. Column, rail, share
- * button, body class, the custom properties and the listeners — if it is not in
- * there, it survives a rotation and lands on the wrong surface.
+ * down in `detach()`, which player-core calls on the way out. Column, share button,
+ * body class, the custom properties and the listeners — if it is not in there, it
+ * survives a rotation and lands on the wrong surface.
+ *
+ * The two progress instruments are deliberately NOT in that list: they belong to
+ * the player, sit on both surfaces, and a rotation is not supposed to interrupt
+ * them. They read the deck's position off the transport either way.
  */
 (function () {
   var styled = false;
@@ -256,34 +260,14 @@
          inner height for `min-height:100%` to resolve against. */
       '.pstep>.pfrag{min-height:100%;}' +
 
-      /* Progress rail — where you are in the DECK, counted in steps. A full-width
-         hairline on the top edge, inside the safe area.
-         Deliberately the opposite edge from the dock: the bar carries its own gold
-         fill along its top, and that is the countdown within ONE step. Two gold
-         hairlines a few pixels apart, measuring different things, would read as one
-         confused instrument.
-         It used to float in the matte under the band, which was fine while every
-         step WAS a band; a fragment step is full-bleed, so that position is now the
-         middle of somebody's reading. The top edge is the one line no surface
-         claims — the share button sits below it and the control bar takes the
-         bottom (placeBar's `below`, pinned to the viewport).
-
-         SEGMENTED by default: one tick per step, filled up to where you are. A
-         continuous fill answers "how far through", which a reader who does not yet
-         know the deck HAS a length cannot use; ticks answer "how many", which is
-         the question a first screen actually raises. It costs no viewport — it is
-         the same hairline, cut. Long decks fall back to the continuous fill (see
-         `TICK_MAX`): eighty-nine ticks on a phone is a dotted line, not a count. */
-      '#wcc-prail{position:fixed;top:var(--sa-t,0px);left:0;z-index:58;' +
-      'box-sizing:border-box;width:100%;height:max(3px,0.4vmax);' +
-      'display:flex;gap:2px;padding:0 2px;overflow:hidden;pointer-events:none;}' +
-      '#wcc-prail i{display:block;flex:1 1 0;height:100%;' +
-      'background:rgba(255,255,255,0.18);transition:background 0.3s ease;}' +
-      '#wcc-prail i.on{background:#d4af37;}' +
-      // The continuous fallback: one child, scaled, on a track of its own.
-      '#wcc-prail.cont{gap:0;padding:0;background:rgba(255,255,255,0.14);}' +
-      '#wcc-prail.cont i{background:#d4af37;transition:transform 0.35s ease;' +
-      'transform-origin:left;transform:scaleX(0);}' +
+      /* The progress rail USED to live here, and it does not any more: it is one of
+         the player's two deck instruments now (`#wcc-prog-top` in player-core), so
+         landscape has one too and both surfaces count the same atoms in the same
+         place. Nothing portrait-specific was lost in the move — the rail was always
+         welded to the viewport's top edge, which is exactly the rule the shared
+         version generalises. The dock's only remaining business with them is the
+         height it reports through `stage.chrome`, which is the inset the countdown
+         sits above. */
 
       /* The nudge. Motion is the only thing that reliably says "this scrolls" — a
          static hint says "there is more page", which is a different sentence and
@@ -324,44 +308,30 @@
       /* Travel only. An opacity pulse on a bordered badge reads as a flicker, where
          on a bare glyph it was half of what made it look alive. */
       '@keyframes wcc-pcue-bob{0%,100%{transform:translateX(0.55vmax);}' +
-      '50%{transform:translateX(-0.55vmax);}}' +
-
-
-      /* Share. The deck's distribution model IS being forwarded, and until now it
-         had no forward button. Top matte, and top-LEFT deliberately: the control
-         bar takes the bottom band in portrait and the top-RIGHT corner when it has
-         no band to sit in (placeBar's `inside`), which is where a rotated phone
-         puts it. Left is the corner neither placement ever claims. */
-      '#wcc-pshare{position:fixed;z-index:58;top:calc(var(--sa-t,0px) + 1.4vmax);' +
-      'left:calc(var(--sa-l,0px) + 1.4vmax);width:4.7vmax;height:4.7vmax;' +
-      'border:1px solid rgba(212,175,55,0.45);border-radius:50%;' +
-      'background:rgba(10,28,58,0.82);color:#fff;cursor:pointer;display:flex;' +
-      'align-items:center;justify-content:center;padding:0;' +
-      '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
-      '#wcc-pshare:active{background:rgba(212,175,55,0.32);}' +
-      /* In the dock it is one of the bar's own controls, so it drops the float and
-         takes their geometry. Sized off `#wcc-bar button` rather than restated, and
-         only the things that differ (no border, transparent ground) are said here. */
-      '#wcc-bar>#wcc-pshare{position:static;top:auto;left:auto;border:none;' +
-      'background:transparent;flex:none;}' +
-      '#wcc-bar>#wcc-pshare:active{background:rgba(255,255,255,0.12);}' +
-      /* Pinned rather than left to cascade order: `#wcc-bar svg` (injected later, by
-         player-core) fills its glyphs, and this one is drawn as outlined circles and
-         connecting lines — filled, it becomes three dots and a smear. Outline puts it
-         in the same family as the fullscreen and grip glyphs, which are also fill:none. */
-      '#wcc-bar>#wcc-pshare svg{fill:none;}' +
-      '#wcc-pshare svg{width:2.2vmax;height:2.2vmax;fill:none;stroke:#fff;' +
-      'stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}';
+      /* Share USED to be built here too, floating in the top-left matte and then
+         moving into the dock. It is one of the player's bar controls now, for the
+         same reason the rail is one of its instruments: it is about the deck, not
+         about the shape of the screen, and as a stage's property `detach()` took it
+         away every time the phone was turned. */
+      '50%{transform:translateX(-0.55vmax);}}';
     var s = document.createElement('style');
     s.textContent = css;
     document.head.appendChild(s);
   }
 
-  /* Above this many steps the rail stops counting and goes back to a fill: the
-   * ticks have to be wide enough to read as separate marks, and `teams` is 89
-   * positions. Sized off the narrowest phone we care about (390px), where 24 ticks
-   * are ~14px each. */
-  var TICK_MAX = 24;
+  /* OFF for now, and the code is kept rather than deleted because the gap it was
+   * built for is still real — nothing else advertises that the deck moves sideways.
+   * What is wrong is the badge, not the idea. The ring was chosen (see the CSS) to
+   * borrow the floating share button's vocabulary — navy ground, gold hairline,
+   * white glyph — so a reader would already have read it as "control". Share then
+   * moved into the dock and dropped its border, which left the cue as the only
+   * ringed circle on screen AND the only one that is not pressable: it now teaches
+   * "button" first and "swipe" second, which is the opposite of its job.
+   * Turn this back on with a treatment that cannot be mistaken for a target — the
+   * likely answer is no badge at all, and a peeling edge of the next step instead.
+   * Everything below (build, once-per-page flag, teardown) stays wired; this is the
+   * only gate. */
+  var CUE_ENABLED = false;
 
   /* The badge is the outer <i>, and it is what bobs — the chevron sits still inside
    * it. A glyph moving within a fixed ring reads as a loose part; the whole control
@@ -409,11 +379,6 @@
     if (themeWas == null) themeWas = themeMeta.getAttribute('content') || '';
     themeMeta.setAttribute('content', to);
   }
-
-  var SHARE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true">' +
-    '<circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" />' +
-    '<circle cx="18" cy="19" r="3" /><line x1="8.6" y1="10.5" x2="15.4" y2="6.5" />' +
-    '<line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /></svg>';
 
   /* How many steps a slide is worth. THE definition, and deliberately the same one
    * `childrenOf()` applies in deck.js — a row there is a step here, so a deck the
@@ -537,8 +502,6 @@
     warm(0);   // the opening card, and its neighbours, before anything is shown
 
     var api = null;                 // the transport, handed over by attach()
-    var rail = null;                // the fill inside the rail (continuous mode)
-    var ticks = null;               // one <i> per step (segmented mode), or null
     var cue = null;                 // the scroll nudge, once per session
     var cueTimer = null;
     var chromeEls = [];             // everything this stage added outside the column
@@ -730,7 +693,7 @@
       atSlide = i; atPanel = 0;
       placeAt(i, goingBack(i, from));
       warm(i);
-      drawRail(stepIndex());
+      onStep(stepIndex());
       /* Travel for a neighbour, CUT for anything further. The glide is what says
          "the next one, just below"; sliding it across nine rows because the deck
          wrapped from the last slide to the first — or because a rotation restored a
@@ -741,14 +704,15 @@
     }
 
     // The player is on a definite panel — an arrival settling, a bar press, a timer,
-    // or the slide's own echo. Only the rail moves: the band is already on screen
-    // and its panels change inside it.
+    // or the slide's own echo. Within one slide there is nothing for the column to
+    // do: the band is already on screen and its panels change inside it. (The
+    // player's own rail advances from `stageAtom`, which calls this.)
     function showAtom(i, p) {
       if (first[i] == null) return;
       var d = Math.abs(i - atSlide);
       atSlide = i;
       atPanel = Math.max(0, Math.min(stepsFor(list[i]) - 1, p || 0));
-      drawRail(stepIndex());
+      onStep(stepIndex());
       if (d) place(d === 1);
     }
 
@@ -934,21 +898,17 @@
      * Two things only, both earned by any deck: where you are, and a way to pass it
      * on. Everything else the doc lists (sticky titles, a contents sheet) is earned
      * per deck and none of the decks that exist today earn it. */
-    function drawRail(k) {
-      /* Any move off the first step is the reader having found the gesture, so the
-         nudge has done its job. Hooked HERE rather than on a scroll listener
-         because every path that changes the step — a thumb settling, a commit, a
-         bar press, a panel timer — passes through this one function. */
+    /* Every path that changes the step — a thumb settling, a bar press, a panel
+       timer — passes through here. It drew the rail until the rail became the
+       player's; what is left is the two things that were always riding along with
+       it, and they are the reason this is still one function rather than two calls
+       at six sites. The player's own rail is driven from the transport (`stageAtom`),
+       not from here, because landscape has no step axis to hang it off. */
+    function onStep(k) {
+      // Any move off the first step is the reader having found the gesture, so the
+      // nudge has done its job.
       if (k > 0) cueDone();
       histSync(k);
-      if (pos.length < 2) return;
-      if (ticks) {
-        for (var i = 0; i < ticks.length; i++) {
-          ticks[i].classList.toggle('on', i <= k);
-        }
-        return;
-      }
-      if (rail) rail.style.transform = 'scaleX(' + ((k + 1) / pos.length) + ')';
     }
 
     /* ---- back means previous step --------------------------------------------
@@ -1010,7 +970,7 @@
 
     function buildCue() {
       // Nothing to scroll to, or the reader has already been told once.
-      if (pos.length < 2 || cueShown) return;
+      if (!CUE_ENABLED || pos.length < 2 || cueShown) return;
       var c = document.createElement('div');
       c.id = 'wcc-pcue';
       c.setAttribute('aria-hidden', 'true');
@@ -1030,56 +990,12 @@
       }, 1400);
     }
 
+    /* What is left of the stage's own chrome: the cue, and nothing else. The rail
+       and the share button both moved to the player — see the notes where each used
+       to be built. */
     function buildChrome() {
-      if (pos.length > 1) {
-        var r = document.createElement('div');
-        r.id = 'wcc-prail';
-        // Segmented while the count still reads; a fill beyond that. See TICK_MAX.
-        if (pos.length <= TICK_MAX) {
-          ticks = [];
-          for (var t = 0; t < pos.length; t++) {
-            var seg = document.createElement('i');
-            r.appendChild(seg);
-            ticks.push(seg);
-          }
-        } else {
-          r.className = 'cont';
-          rail = document.createElement('i');
-          r.appendChild(rail);
-        }
-        document.body.appendChild(r);
-        chromeEls.push(r);
-        drawRail(stepIndex());
-      }
+      onStep(stepIndex());
       buildCue();
-      // Share, where the browser has it. The URL is the canonical one the link
-      // preview was baked against (og:url), not location.href — which may carry the
-      // ?deck= / ?k= query that got us here and is nobody else's business.
-      if (!navigator.share) return;
-      var og = document.querySelector('meta[property="og:url"]');
-      var url = (og && og.content) || location.origin + location.pathname;
-      var b = document.createElement('button');
-      b.id = 'wcc-pshare';
-      b.type = 'button';
-      b.setAttribute('aria-label', 'Share');
-      b.innerHTML = SHARE_ICON;
-      b.addEventListener('click', function (e) {
-        e.stopPropagation();
-        try { navigator.share({ title: document.title, url: url }).catch(function () {}); }
-        catch (err) { /* user cancelled, or share refused — nothing to recover */ }
-      });
-      /* Into the DOCK, beside the transport, where a phone app puts it — and where it
-       * costs no content. It floated in the top-left corner while the bar was a pill
-       * over a letterboxed slide, which is a corner a full-bleed portrait layout
-       * wants back. The bar is built before the stage is attached (buildControls, then
-       * attachStage), so it is there; the float stays as the fallback for the case it
-       * is not — a hosted or record surface, neither of which is this one. */
-      var into = document.getElementById('wcc-bar') || document.body;
-      into.appendChild(b);
-      // Tracked for `detach`: it lives in the player's bar, which OUTLIVES this
-      // stage. Left behind, a rotation to landscape would keep a portrait control
-      // in the landscape bar.
-      chromeEls.push(b);
     }
 
     return {
@@ -1150,8 +1066,6 @@
             if (chromeEls[k].parentNode) chromeEls[k].parentNode.removeChild(chromeEls[k]);
           }
           chromeEls = [];
-          rail = null;
-          ticks = null;
           cue = null;
           document.body.classList.remove('wcc-portrait');
           themeColor(null);   // the site's declared colour is the landscape one
