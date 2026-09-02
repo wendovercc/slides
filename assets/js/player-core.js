@@ -57,7 +57,7 @@
     return '<svg viewBox="0 0 24 24" aria-hidden="true">' + SVG[name] + '</svg>';
   }
 
-  function injectStyles() {
+  function injectStyles(keepSlowFade) {
     var css =
       // Interactive mode is touch/pointer-driven: keep the cursor visible
       // (overrides the kiosk `cursor:none` on both player and slide bases).
@@ -78,11 +78,25 @@
       // scrollable at 1x (html,body are overflow:hidden + overscroll-behavior:none), so
       // a single-finger drag still reaches the swipe handler.
       '#wcc-tap{position:fixed;inset:0;z-index:50;cursor:default;touch-action:auto;}' +
+      /* THE CROSSFADE IS A WALL'S, AND THIS IS NOT A WALL. The template dissolves
+         one slide into the next over 0.8s, which is right at a 20s dwell and far too
+         slow under a thumb: a press is answered by a slide that is still half the
+         previous one 400ms later. Shortened here rather than in the template because
+         these styles exist ONLY in interactive mode (injectStyles is called from
+         buildControls, and a kiosk never builds controls), so the wall keeps its
+         dissolve untouched. Same specificity as the template's rule and later in the
+         cascade, which is what lets it win. CROSSFADE_MS below must match. */
+      (keepSlowFade ? '' :
+        '#slide-layer iframe{transition:opacity 0.25s ease,visibility 0.25s ease;}') +
       // Zoomed: no crossfade. The fade is what puts two full-size slide surfaces on
       // screen at once, which is the allocation the phone can't absorb at page scale
       // (see the pressure valve in start()). Instant swap instead, so exactly one
       // slide frame is ever visible while pinched in.
       'body.wcc-zoomed #slide-layer iframe{transition:none!important;}' +
+      // Interrupted: no crossfade either. A second press while the first fade is
+      // still running would otherwise dissolve three slides into each other and the
+      // middle one would never be seen — see the cut in activate().
+      'body.wcc-cut #slide-layer iframe{transition:none!important;}' +
       // Centre-screen play/pause feedback flashed on tap / Space. Above the tap
       // surface, below the bar; never intercepts input.
       '#wcc-fb{position:fixed;inset:0;z-index:55;display:flex;align-items:center;' +
@@ -668,9 +682,31 @@
       if (winRadius !== null && !loaded[i]) { pendingCmds[i].push(msg); return; }
       post(i, msg);
     }
+    /* A STEP THAT INTERRUPTS A CROSSFADE CUTS INSTEAD.
+     *
+     * The stack dissolves one slide into the next over 0.8s, which is right for a
+     * wall on a 20s dwell and wrong the moment a person is pressing ▶ ▶. Measured on
+     * two presses 200ms apart: the middle slide peaked at 0.41 opacity and was gone
+     * again before it reached the top, with three frames on screen at once — so the
+     * deck moved two steps and showed one, which reads exactly as "it skipped one".
+     *
+     * So an arrival inside the previous arrival's fade window swaps hard: the
+     * outgoing frames drop, the incoming one is simply there, and every press the
+     * reader makes puts a slide in front of them. An unhurried press still fades.
+     *
+     * The class has to be ON for the style recalculation that would otherwise start
+     * the transition, and may come off immediately after — hence the forced reflow
+     * between the two, the same flush portrait.js uses when it re-anchors its track.
+     * `shownAt` is the previous reveal, which is what makes this "still fading".
+     *
+     * Landscape only: a stage crossfades nothing (the column travels, and a step
+     * that flies past is still a step you saw move). */
+    var CROSSFADE_MS = hosted ? 800 : 250;   // mirrors the crossfade injectStyles left in force
     function activate(i) {
       if (i !== current) { edgeFirst = edgeLast = null; slideHold = false; }   // stale the moment we leave
       reconcileWindow(i);   // before .active — a cold frame needs its src first
+      var cut = !stage && !!shownAt && (Date.now() - shownAt) < CROSSFADE_MS && !!document.body;
+      if (cut) document.body.classList.add('wcc-cut');
       // Reveal it. On the wall that is a crossfade between stacked frames; on the
       // portrait surface the frames are already all on screen in a scroller and
       // revealing means scrolling to the right one. `current` is still the
@@ -678,6 +714,7 @@
       // travelling.
       if (stage) stage.show(i, current);
       else items.forEach(function (it, j) { if (it.frame) it.frame.classList.toggle('active', j === i); });
+      if (cut) { void document.body.offsetWidth; document.body.classList.remove('wcc-cut'); }
       current = i;
       shownAt = Date.now();
       applyTapThrough();
@@ -1429,7 +1466,10 @@
       return b;
     }
     function buildControls() {
-      injectStyles();
+      // A hosted player is a review against a take, and the render it is standing in
+      // for crossfades at the compositor's pace (compose.py --fade). It keeps the
+      // template's slow dissolve; every other interactive surface has a hand on it.
+      injectStyles(hosted);
       // In record mode the control bar is not built at all. It floats OVER the slide,
       // and putting the narrator's instruments beside the deck rather than on top of
       // it is the whole point of the record chrome — which carries the transport and
