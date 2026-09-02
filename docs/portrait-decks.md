@@ -877,6 +877,30 @@ player's now, and the two that draw a line have one rule between them.
   Landscape still floats the bar and can collapse it to a grip in `inside`; the
   dock never collapses and shortens the content instead. That difference IS
   geometry, and stays.
+
+  **And the floor now bends, once.** Flooring every target made the bar longer than
+  the axis it grows along in the case the floor was meant to help: a phone held
+  sideways is ~390px of viewport height less browser chrome, against a seven-button
+  `inside` column wanting 48px each plus gaps. Overrun, the last targets are off the
+  screen — a 44pt button you cannot reach is worth less than a 36pt one you can. So
+  the bar carries a shrink factor `--bs` that every dimension of it is a multiple of
+  (target, gap, padding, glyph), and `fitBar(axis, available)` sets it to
+  `available / extent` when the line is too long, floored at `0.6`. Because the bar
+  is linear in `--bs`, one measurement finds the fit. It applies in **every**
+  placement, dock included — the same rule both ways up, which is the whole point.
+  `placeBar` fits along the grow axis *before* asking the band whether the bar fits
+  across it, so a bar shrunk to clear a short viewport can earn a `right` float it
+  would have been denied at full size, rather than being pushed onto the slide.
+
+  The fit measures the **content**, not the box, and the dock is why: it spans the
+  bottom edge (`left:0;right:0`), so its rect is the viewport width whatever is
+  inside it — the buttons overflowed past the ends and were cut off by
+  `overflow:hidden` while the test read a perfect fit. `barExtent` sums the visible
+  children, the gaps between them and the bar's own padding, which is the length the
+  line actually wants in a stretched placement and a content-sized one alike. On a
+  narrow phone that is the difference between a working fit and a bar that silently
+  loses its last button. The dock's budget is the viewport width less the horizontal
+  safe-area insets; the floats already stand `edge` off both sides.
 - **The controls had no accessible names.** Six glyph buttons, `icon()` renders an
   `aria-hidden` `<svg>` and nothing else, no `aria-label` anywhere in
   `player-core.js`. Labelled now, and play/pause and fullscreen relabel when they

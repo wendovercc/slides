@@ -91,7 +91,15 @@
       // longer viewport edge) so they stay the same physical size in portrait and
       // landscape. Base styling only here — geometry lives on the place-* classes.
       '#wcc-bar{position:fixed;z-index:60;display:flex;' +
-      'gap:max(6px,0.6vmax);padding:max(7px,0.7vmax) max(6px,0.6vmax);' +
+      /* --bs is the shrink-to-fit factor (see fitBar); 1 unless the bar would
+         otherwise run off the end of its own axis. Every dimension of the bar is
+         a multiple of it, so the whole thing scales as one object and the
+         measured extent is exactly linear in --bs — one pass finds the fit. */
+      '--bs:1;--bar-t:calc(max(48px,4.7vmax) * var(--bs));' +
+      '--bar-g:calc(max(6px,0.6vmax) * var(--bs));' +
+      '--bar-p:calc(max(7px,0.7vmax) * var(--bs));' +
+      '--bar-i:calc(max(22px,2.35vmax) * var(--bs));' +
+      'gap:var(--bar-g);padding:var(--bar-p) var(--bar-g);' +
       'background:rgba(10,28,58,0.82);border:1px solid rgba(212,175,55,0.45);' +
       'border-radius:0.6vmax;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);' +
       'box-shadow:0 0.6vh 2.4vh rgba(0,0,0,0.45);overflow:hidden;' +
@@ -120,8 +128,8 @@
       'left:0;right:0;bottom:0;border-radius:0;border:none;' +
       'border-top:1px solid rgba(212,175,55,0.28);background:#08152c;' +
       'backdrop-filter:none;-webkit-backdrop-filter:none;box-shadow:none;' +
-      'transform:none;padding:max(7px,0.7vmax) max(6px,0.6vmax) ' +
-      'calc(max(7px,0.7vmax) + var(--sa-b,0px));}' +
+      'transform:none;padding:var(--bar-p) var(--bar-g) ' +
+      'calc(var(--bar-p) + var(--sa-b,0px));}' +
       // Inside the slide (near-16:9, no usable band): vertical column pinned to the
       // slide's top-right safe corner (top/right set inline from geometry) and
       // collapsible so it never permanently obstructs slide content.
@@ -146,15 +154,21 @@
          lands in `inside` placement and nothing was catching it at all.
          The gap and the padding are floored with it, or the buttons grow and the
          bar closes up around them. The glyph is floored too but at a gentler ratio:
-         it is drawn INSIDE the target, and a 48px circle wants a ~22px glyph. */
-      '#wcc-bar button{width:max(48px,4.7vmax);height:max(48px,4.7vmax);' +
+         it is drawn INSIDE the target, and a 48px circle wants a ~22px glyph.
+
+         AND THE FLOOR BENDS, in exactly one case: when the whole bar does not fit
+         its own axis (see fitBar). A 44pt target the reader cannot reach because
+         it is off the bottom of a short landscape viewport is worth less than a
+         36pt one they can, so `--bs` scales the bar down as a single object rather
+         than letting it overrun or wrap. */
+      '#wcc-bar button{width:var(--bar-t);height:var(--bar-t);' +
       'border:none;border-radius:50%;background:transparent;' +
       'color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:none;' +
       '-webkit-tap-highlight-color:transparent;touch-action:manipulation;}' +
       '#wcc-bar button:active{background:rgba(255,255,255,0.12);}' +
       '#wcc-bar button.primary{background:rgba(212,175,55,0.18);}' +
       '#wcc-bar button.primary:active{background:rgba(212,175,55,0.32);}' +
-      '#wcc-bar svg{width:max(22px,2.35vmax);height:max(22px,2.35vmax);' +
+      '#wcc-bar svg{width:var(--bar-i);height:var(--bar-i);' +
       'fill:#fff;stroke:#fff;stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}' +
       '#wcc-bar button.primary svg{fill:#d4af37;stroke:#d4af37;}' +
       // Outlined glyphs: corner brackets, the grip, and the share nodes are all
@@ -1128,6 +1142,62 @@
       bar.classList.remove('place-below', 'place-right', 'place-inside', 'place-portrait');
       bar.classList.add('place-' + p);
     }
+
+    /* SHRINK TO FIT. Every placement puts the buttons in a line, and a line has an
+     * end: the dock and `below` grow across the viewport, `right` and `inside` grow
+     * down it. Where that line is longer than the viewport edge it runs along, the
+     * bar has to give — and the 44pt floor is what it gives, because a target that
+     * is off the screen is not a target at all. The case that forced it is a phone
+     * held sideways: ~390px of viewport height (less browser chrome) against a
+     * seven-button column that wants 48px each plus gaps.
+     *
+     * ONE MEASUREMENT, because the bar is linear in `--bs`: buttons, gap and padding
+     * are all multiples of it, so an extent of E at 1 is E*s at s, and the s that
+     * fits is available/E. (The 1px border and the safe-area inset are not scaled,
+     * which leaves a pixel or two of slack — in our favour.)
+     *
+     * MIN is a real floor, not a courtesy: below about 0.6 the glyphs stop reading
+     * and the press stops landing, and a viewport that short is one where something
+     * else has already gone wrong. Overrun there rather than shrink into illegibility.
+     */
+    var BAR_MIN_SCALE = 0.6;
+    /* MEASURE THE CONTENT, NOT THE BOX — the portrait dock is why. It spans the
+     * bottom edge (`left:0;right:0`), so its rect is the viewport width no matter
+     * what is inside it: the buttons simply overflowed past the ends and were cut
+     * off by `overflow:hidden`, while the fit test read a perfect fit and never
+     * shrank anything. Summing the visible children (plus the gaps between them and
+     * the bar's own padding) gives the length the line actually wants, in a stretched
+     * placement and a content-sized one alike. Children hidden by `collapsed` have no
+     * box and take no gap, so they drop out of both sums on their own.
+     * The 1px border is left out; on the column placements that is a couple of pixels
+     * of slack, in our favour. */
+    function saInset(name) {
+      var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+      return parseFloat(v) || 0;
+    }
+    function barExtent(axis) {
+      var cs = getComputedStyle(bar), sum = 0, n = 0, i, r;
+      for (i = 0; i < bar.children.length; i++) {
+        r = bar.children[i].getBoundingClientRect();
+        if (!r.width && !r.height) continue;
+        sum += axis === 'y' ? r.height : r.width;
+        n++;
+      }
+      if (!n) return 0;
+      var gap = parseFloat(axis === 'y' ? cs.rowGap : cs.columnGap) || 0;
+      var pad = axis === 'y'
+        ? (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
+        : (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      return sum + gap * (n - 1) + pad;
+    }
+    function fitBar(axis, available) {
+      bar.style.setProperty('--bs', '1');
+      var extent = barExtent(axis);
+      if (!extent || extent <= available) return 1;
+      var s = Math.max(BAR_MIN_SCALE, available / extent);
+      bar.style.setProperty('--bs', s.toFixed(3));
+      return s;
+    }
     function placeBar() {
       if (!bar) return;
       var wasInside = bar.classList.contains('place-inside'); // capture before measuring
@@ -1136,6 +1206,10 @@
       // placement would otherwise stretch the bar and corrupt the fit measurement
       // below (so it could never switch back out into a newly-opened letterbox).
       bar.style.top = bar.style.right = bar.style.left = bar.style.bottom = bar.style.transform = '';
+      // Same reset for the shrink factor: every branch below measures the bar, and a
+      // scale left over from the last layout would make it measure a bar that no
+      // longer exists (and so could never grow back when the viewport does).
+      bar.style.setProperty('--bs', '1');
       /* A STAGE MAY OWN THE PLACEMENT. The three placements below all answer the same
        * question — which letterbox band can hold the bar — and a portrait deck has no
        * band to answer it with: the slide fills the width of its step. So the portrait
@@ -1146,6 +1220,9 @@
       if (stage && stage.barDock) {
         setPlaceClass('portrait');
         bar.classList.remove('collapsed');   // the dock is never in the way, so never hides
+        // Before chrome(): the fit changes the height the column shortens itself by.
+        // The dock spans the full width, so the insets are the only thing off limits.
+        fitBar('x', window.innerWidth - saInset('--sa-l') - saInset('--sa-r'));
         if (stage.chrome) stage.chrome(bar.getBoundingClientRect().height);
         layoutInstruments();
         return;
@@ -1161,16 +1238,27 @@
       // viewport edge, which pushes its inner edge that much further in — so the
       // budget is band + non-safe strip − edge, keeping the inner edge from crossing
       // into the slide's safe zone.
+      // Fit along the GROW axis first, then ask the band whether the (possibly
+      // shrunken) bar fits ACROSS it. That order matters: a bar scaled down to clear
+      // a short viewport is also narrower, so it can earn a band placement it would
+      // have been denied at full size — and a float in the band always beats a column
+      // sat on top of the slide.
       if (aspect < 16 / 9 - EPS) {          // taller viewport → top/bottom bands
         setPlaceClass('below');
+        fitBar('x', iw - 2 * edge);
         place = bar.getBoundingClientRect().height <= bandBelow + safeY - edge ? 'below' : 'inside';
       } else if (aspect > 16 / 9 + EPS) {   // wider viewport → left/right bands
         setPlaceClass('right');
+        fitBar('y', ih - 2 * edge);
         place = bar.getBoundingClientRect().width <= bandRight + safeX - edge ? 'right' : 'inside';
       } else {                              // ~16:9 → no usable band
         place = 'inside';
       }
       setPlaceClass(place);
+      // Inside is a column whatever sent it there, so a bar that was fitted as a row
+      // (the taller-viewport branch) has to be fitted again on the axis it now grows
+      // along. Re-fitting an already-vertical bar is a no-op it measures its way to.
+      if (place === 'inside') fitBar('y', ih - 2 * edge);
       // Inside is pinned inline to the viewport's top-right corner (below/right are
       // positioned entirely by their class). The far corner clears most slide content
       // — titles/hero sit top-left or centre — so a column here is the least
@@ -1205,7 +1293,15 @@
     /* ---- collapse: inside placement only. The grip toggles the column open/shut;
      * there's no auto-hide (it holds whatever the user last set). A no-op in
      * below/right, where the bar is always fully visible. ---- */
-    function toggleCollapse() { if (bar) bar.classList.toggle('collapsed'); }
+    function toggleCollapse() {
+      if (!bar) return;
+      bar.classList.toggle('collapsed');
+      // Re-place: the shrink factor is measured from what the bar currently shows,
+      // so an expand has to be re-fitted against the viewport it is opening into
+      // (a resize while collapsed would otherwise leave a full-size column to
+      // unfold off the bottom of the screen). placeBar keeps the collapsed state.
+      schedulePlace();
+    }
 
     /* Gestures (identical in watch and the future record mode): a tap toggles
      * play/pause with centre-screen feedback; a horizontal swipe steps slides. */
