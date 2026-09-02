@@ -594,6 +594,59 @@ the bar was a pill over a letterboxed slide; that is a corner a full-bleed layou
 wants back. It is built by `buildControls` rather than by this stage, so landscape
 has it too and a rotation cannot take it away.
 
+### What the matte says — *proposed, not built*
+
+A band step has two mattes, above the letterbox and below it, and today both say
+nothing. That is worth fixing before it is worth defending: dead navy immediately
+above and below shrunken content reads as *unfinished* rather than as *deliberate
+letterboxing*, and the reader has no way to tell which it is.
+
+The proposal is **a rotate mark and the words "Try rotating" in the matte below
+the band.** The case for it is the mirror of the one the surface rule already
+makes in the other direction — *a landscape screen showing a portrait column is a
+screen showing the wrong thing, and a rotation is the clearest instruction a phone
+can give about the shape it now is.* A band step is that sentence reversed: a
+slide authored for 16:9, shrunk to a postage stamp, on a screen that could show it
+properly if it were turned. It is the one true thing that space has to say.
+
+It can only be said because rotation **swaps in place and keeps position, both
+ways** (see "The surface rule"). A mark that offered a bigger view and then cost
+the reader their place in the deck would be worse than silence.
+
+Four decisions come with it.
+
+- **This is the matte's DEFAULT content, not a cue.** Every band step shows it,
+  for as long as the step is a band. The once-per-page discipline belongs to
+  motion, which teaches a gesture and then owes the reader nothing further; a
+  standing label states an option that is still true on step five, where a reader
+  who has just decided they want a closer look has no other way to learn that one
+  exists. Nothing about it animates, and that is what keeps it from nagging.
+- **No badge, no ring, no plate.** The scroll nudge is off precisely because its
+  ringed disc taught "button" before it taught "swipe" (`CUE_ENABLED`, and the
+  comment above it). The asymmetry that rescues the rotate mark is that the cue
+  floated over a fragment's own content and needed a ground to survive it — the
+  matte mark never does. The matte *is* the ground. Glyph and word, drawn straight
+  on, at low contrast, taking no pointer events and never eating the matte tap
+  that toggles transport.
+- **The label earns itself even though the rest of the chrome is glyph-only.** A
+  circular-arrow rotate glyph is genuinely confusable with reload. Alone it is
+  ambiguous; with the word it is not.
+- **"Try rotating", not "Rotate".** Orientation lock is the real risk here: a
+  meaningful share of phone readers have it on, it cannot be feature-detected, and
+  an instruction the device will not obey is the worst thing chrome can do. An
+  offer that goes unaccepted is still an offer; an imperative that fails is a bug.
+  The wording carries the whole mitigation, so it is not a stylistic choice.
+
+**Below the band is the default, not a reservation.** This is what the fallback
+presentation says when nothing better is available for that step. A particular
+step is free to spend either matte on something worth more — a caption under a
+photograph is the obvious one, and is content where this is chrome.
+
+**And it is explicitly temporary.** This is chrome that advertises a limitation,
+and every portrait fragment built deletes one more place it can appear. A band
+that says "Try rotating" is a band admitting it does not have a phone layout yet,
+which makes it a bridge to phase 1's remaining work and not a substitute for it.
+
 ---
 
 ## Tables, cards, and more content
