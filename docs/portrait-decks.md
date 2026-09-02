@@ -912,6 +912,26 @@ player's now, and the two that draw a line have one rule between them.
   live feature currently has no phone surface. Sized and scheduled with the live
   work, not here.
 
+  **Half-closed: the *control* now exists, the portrait *form* does not.** The bar
+  carries a live button (`WccPlayer.setLiveToggle`, `syncLiveToggle` in
+  `player.html`), because the wall's automatic latch is not a neutral default in a
+  hand — its stickiness was written so an *unattended* screen would not reflow on an
+  innings break, and taking `--live-band` of someone's slide for a ticker they did
+  not ask for is that rule making a decision on their behalf. So the latch became
+  the default and the press became the override, pinned for the session and never
+  persisted. The button is withdrawn in portrait rather than shown doing nothing,
+  and it is offered only once the feed has content, so it is not a dead control on
+  the six days a week with no cricket on it — which matters on the bar the
+  ~390px note below is about, since this makes it eight buttons.
+
+  **What is left is the shape**, and the sketch to argue with is that portrait's
+  live chrome should not be a band at all but an **overlay sheet** the same button
+  raises over the column — ticker full-width above the dock, strip tiles above
+  that — so nothing is permanently carved out of a step and `stage.chrome(h)` never
+  has to negotiate with it. Note the strip is already a vertical tile column and so
+  suits portrait better than it suits landscape; the ticker is the awkward one.
+  Still live work, still not a portrait decision to take alone.
+
 ### Content (design, with one leak)
 
 - **Fragment against band** is the intended split and is currently stark: in the

@@ -101,6 +101,33 @@ enforce a minimum gap so two matches don't fight over the screen.
 - Same interrupt engine for the clip takeover — the ticker is the ambient state, the
   clip is the takeover.
 
+### Who decides it is up — the wall and the hand differ
+
+The chrome grows itself on first live content and holds for a 12-minute quiet
+debounce (`onLiveState` in `templates/player.html`). That stickiness is a property
+of an **unattended** screen: nobody is standing at a wall to ask, and a television
+that reflows at every innings break is worse than one that never does.
+
+**In a hand the reasoning inverts.** The reader is there, and taking `--live-band`
+of their slide for a ticker they did not ask for is a rule written for a wall making
+a decision on their behalf. So on an interactive surface the latch is only the
+**default**, and the control bar carries a live button that overrides it
+(`WccPlayer.setLiveToggle` — the player learns nothing about live; it offers a
+button and reports the press). Three rules hold it together:
+
+- **A press pins for the session** (`_livePinned`). The latch keeps running and
+  stops steering.
+- **Never persisted.** A stale "live: off" carried into a match day by localStorage
+  is a worse failure than pressing a button twice — the reader could not tell the
+  feature from a broken one. The daily reload is the reset.
+- **The button appears only once the feed has content**, so it is not a dead control
+  on the six days a week with no cricket on it, and it is withdrawn in portrait,
+  where the chrome it toggles does not exist (see `docs/portrait-decks.md`).
+
+**The wall is protected structurally, not by a flag**: kiosk, record and hosted
+players never build a control bar, so they can never be pinned and keep the
+automatic behaviour above untouched. `setLiveToggle` is a no-op without one.
+
 ## Presentation C — the live strip (left band)
 
 The vertical partner of the ticker footer: the same player-owned chrome, showing

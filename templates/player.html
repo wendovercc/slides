@@ -502,22 +502,100 @@ window.addEventListener('resize', applyDebugScale);
 // blip or an innings break never reflows the wall. The daily rebuild/reload is the
 // real teardown. Grow/shrink is a single composited transform (the CSS on
 // #slide-layer keyed off body.live-chrome).
+//
+// ALL OF THAT IS THE DEFAULT, NOT THE STATE, on a surface someone is holding: an
+// interactive player offers a live button on the bar, and a press pins the choice
+// for the session (`_livePinned` below). A wall builds no bar, so it can never be
+// pinned and keeps exactly the behaviour described above.
 const LIVE_HIDE_DEBOUNCE_MS = 12 * 60 * 1000;
 let _chromeShown = false, _chromeHideTimer = null;
+/* The reader's own answer, once they have given one: null until a press, then true
+   or false for the rest of the session. It is what makes the latch below a DEFAULT
+   rather than the state — see WccPlayer.setLiveToggle for why an unattended screen
+   and a screen in a hand want opposite things here.
+
+   SESSION ONLY, never persisted. A stale "live: off" carried into a match day by
+   localStorage is a worse failure than pressing a button twice: the reader would
+   have no way to tell the feature from a broken one. The daily reload clears it. */
+let _livePinned = null;
 function liveHasContent(feed) {
     return !!(feed && feed.matches && feed.matches.some(m =>
         m.phase === 'live' || m.phase === 'break' || m.complete));
 }
+/* THE ONE WRITER of the chrome's visible state, and the reason it is a function
+   rather than two lines: the bar's live button has to agree with it. Every path that
+   grows or shrinks the chrome — the latch, the debounce, a press — goes through
+   here, and re-syncing the button from here means the two can never drift. That is
+   the bug this replaced: the toggle was registered *before* the latch applied the
+   chrome, so it read `_chromeShown` while still false and came up grey over a
+   ticker that was already there. */
+function applyLiveChrome(on) {
+    _chromeShown = on;
+    document.body.classList.toggle('live-chrome', on);
+    syncLiveToggle();
+}
 function onLiveState(feed) {
-    if (liveHasContent(feed)) {
-        if (_chromeHideTimer) { clearTimeout(_chromeHideTimer); _chromeHideTimer = null; }
-        if (!_chromeShown) { _chromeShown = true; document.body.classList.add('live-chrome'); }
-    } else if (_chromeShown && !_chromeHideTimer) {
-        _chromeHideTimer = setTimeout(() => {
-            _chromeHideTimer = null; _chromeShown = false;
-            document.body.classList.remove('live-chrome');
-        }, LIVE_HIDE_DEBOUNCE_MS);
+    const content = liveHasContent(feed);
+    // The button's EXISTENCE is the day's signal, so it is offered on first content
+    // and never withdrawn by a quiet spell — only by the portrait swap (below).
+    // Gating it on the feed rather than on LIVE_FEED_ON keeps a dead control off the
+    // bar on the six days a week with no cricket on it, which matters on a bar that
+    // is already the widest thing on a landscape phone.
+    // AFTER the latch below, not before: the button is offered with the state it is
+    // meant to be showing, which on a fresh load is a chrome that is going up in the
+    // same tick.
+    // A press takes the wheel. The latch keeps running (so the button stays truthful
+    // about a debounce that expires), it just stops driving.
+    if (_livePinned === null) {
+        if (content) {
+            if (_chromeHideTimer) { clearTimeout(_chromeHideTimer); _chromeHideTimer = null; }
+            if (!_chromeShown) applyLiveChrome(true);
+        } else if (_chromeShown && !_chromeHideTimer) {
+            _chromeHideTimer = setTimeout(() => {
+                _chromeHideTimer = null;
+                applyLiveChrome(false);
+            }, LIVE_HIDE_DEBOUNCE_MS);
+        }
     }
+    if (content) offerLiveToggle();
+}
+/* Offer (or withdraw) the bar's live button.
+   WITHDRAWN IN PORTRAIT, because the thing it toggles is not there: the ticker and
+   strip live in the band a retracting 16:9 slide layer uncovers, and the column has
+   no such band (see ensureLiveChrome). A button that visibly does nothing is worse
+   than no button. The pin survives the rotation either way — it is the reader's
+   choice, not the stage's — so a phone turned back finds the chrome as they left it.
+   `_livePortrait` is kept here rather than read off the boot-time PORTRAIT const
+   because that one lives inside the boot scope and does not follow the rotation;
+   armRotation is the other writer. */
+// 'none' rather than '' because that IS the starting state — no button — and
+// seeding it truthfully saves a pointless withdraw-and-re-place at boot.
+let _liveOffered = false, _livePortrait = false, _liveSynced = 'none';
+function offerLiveToggle() { _liveOffered = true; syncLiveToggle(); }
+function syncLiveToggle() {
+    // Checked, not assumed: Pages can pair fresh HTML with older /assets JS, so this
+    // page must survive a player that has never heard of a live toggle (see the same
+    // reasoning on setStage in armRotation).
+    if (!window.WccPlayer || !WccPlayer.setLiveToggle) return;
+    const avail = _liveOffered && !_livePortrait;
+    // Called from every state change AND from every poll, so it has to be cheap when
+    // nothing moved: `setLiveToggle` re-places the control bar, and re-measuring the
+    // bar on a 20-second poll for a state it already holds is churn under the
+    // reader's thumb.
+    const key = avail ? (_chromeShown ? 'on' : 'off') : 'none';
+    if (key === _liveSynced) return;
+    _liveSynced = key;
+    WccPlayer.setLiveToggle(avail ? {
+        on: _chromeShown,
+        onToggle: (want) => {
+            _livePinned = want;
+            if (_chromeHideTimer) { clearTimeout(_chromeHideTimer); _chromeHideTimer = null; }
+            // The player has already flipped its own button; this keeps `_liveSynced`
+            // honest so a later poll doesn't think it has work to do.
+            _liveSynced = want ? 'on' : 'off';
+            applyLiveChrome(want);
+        }
+    } : null);
 }
 
 function fmtCountdown(ms) {
@@ -929,6 +1007,8 @@ async function init() {
         }
     }
     if (!PORTRAIT) ensureLiveChrome();
+    // The toggle follows the stage the chrome belongs to, not the boot geometry.
+    _livePortrait = PORTRAIT;
     {% endif %}
     applyDebugScale();
 
@@ -1086,6 +1166,12 @@ async function init() {
                 WccPlayer.setStage(null);
                 {% if live_enabled %}ensureLiveChrome();{% endif %}
             }
+            {% if live_enabled %}
+            // The button goes with the chrome: away when the column takes the stage,
+            // back (in whatever state the reader last left it) when landscape returns.
+            _livePortrait = want;
+            syncLiveToggle();
+            {% endif %}
             // The 16:9 stage was display:none until a moment ago, so the fit it
             // measured during the rotation's own resize was of a zero-width box.
             fitLayer();

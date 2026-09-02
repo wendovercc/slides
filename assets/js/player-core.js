@@ -44,7 +44,13 @@
     // filled, the circles and their connecting lines become three dots and a smear.
     share: '<circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" />' +
            '<circle cx="18" cy="19" r="3" /><line x1="8.6" y1="10.5" x2="15.4" y2="6.5" />' +
-           '<line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />'
+           '<line x1="8.6" y1="13.5" x2="15.4" y2="17.5" />',
+    // Broadcast: a dot with two pairs of arcs radiating from it. Drawn rather than
+    // filled apart from the dot, which is the live indicator itself and takes the
+    // ticker's own red when the chrome is up (see injectStyles).
+    live: '<circle cx="12" cy="12" r="2.6" />' +
+          '<path d="M7.8 7.8a5.9 5.9 0 0 0 0 8.4" /><path d="M16.2 7.8a5.9 5.9 0 0 1 0 8.4" /> ' +
+          '<path d="M4.9 4.9a9.9 9.9 0 0 0 0 14.2" /><path d="M19.1 4.9a9.9 9.9 0 0 1 0 14.2" />'
   };
 
   function icon(name) {
@@ -174,6 +180,24 @@
       // Outlined glyphs: corner brackets, the grip, and the share nodes are all
       // drawn rather than filled — filled, share becomes three dots and a smear.
       '#wcc-bar button.fs svg,#wcc-bar button.share svg{fill:none;}' +
+      /* The live toggle. Hidden until the day gives it something to toggle — see
+         setLiveToggle — because on every other day it would be a dead control on a
+         bar that is already the widest thing on a landscape phone. Same display
+         idiom as the collapse grip above: a class on the BAR reveals it, since the
+         `display:flex` on `#wcc-bar button` overrides the [hidden] attribute.
+         State is the dot, not the glyph: the button never reglyphs, it just takes
+         the ticker's own live red (#b3261e) when the chrome is up and sits back at
+         half-strength white when it is down. */
+      '#wcc-bar button.live{display:none;}' +
+      // `:not(.collapsed)` is load-bearing, not decoration: the collapse rule that
+      // hides everything but the grip is `#wcc-bar.place-inside.collapsed>*`, which
+      // this selector would otherwise OUT-SPECIFY — leaving a collapsed bar as a
+      // grip and a stray live dot.
+      '#wcc-bar.live-avail:not(.collapsed) button.live{display:flex;}' +
+      '#wcc-bar button.live svg{fill:none;opacity:0.5;}' +
+      '#wcc-bar button.live svg circle{fill:#fff;}' +
+      '#wcc-bar button.live.on svg{opacity:1;stroke:#b3261e;}' +
+      '#wcc-bar button.live.on svg circle{fill:#b3261e;stroke:#b3261e;}' +
       /* ---- THE DECK INSTRUMENT ---------------------------------------------
          ONE line, on the top edge of the reading area, on both surfaces and in
          every orientation. One tick per atom; the tick you are ON fills over its
@@ -1334,6 +1358,12 @@
     /* ---- control bar ---- */
     var playBtn = null;
     var fsBtn = null;
+    // The live toggle, and the handler the page registers through setLiveToggle.
+    // Null handler = no live today (or no live on this device), and the button stays
+    // hidden — it is built once with the rest of the bar so that revealing it later
+    // is a class, not a rebuild.
+    var liveBtn = null;
+    var liveOn = false, liveHandler = null;
     function reglyph(b, name) {
       if (!b) return;
       b.innerHTML = icon(name);
@@ -1341,13 +1371,23 @@
     }
     function updatePlayBtn() { reglyph(playBtn, playing ? 'pause' : 'play'); }
     function updateFsBtn() { reglyph(fsBtn, fsElement() ? 'compress' : 'expand'); }
+    /* The live button is the one control that does NOT reglyph on state: play/pause
+       and fullscreen swap glyph because they name the action, while this one names a
+       thing that is either on or off, and swapping its picture would lose the dot
+       that says so. Class and accessible name carry the state instead. */
+    function updateLiveBtn() {
+      if (!liveBtn) return;
+      liveBtn.classList.toggle('on', liveOn);
+      liveBtn.setAttribute('aria-label', liveOn ? 'Hide live scores' : 'Show live scores');
+      liveBtn.setAttribute('aria-pressed', liveOn ? 'true' : 'false');
+    }
     /* Every control is a glyph, so the accessible name has to be said out loud —
      * `icon()` renders an `aria-hidden` <svg> and nothing else, which left the bar
      * as a row of unnamed buttons to anything not looking at it. */
     var LABEL = {
       home: 'Home', prev: 'Previous', next: 'Next', play: 'Play', pause: 'Pause',
       expand: 'Full screen', compress: 'Exit full screen', grip: 'Show or hide controls',
-      share: 'Share'
+      share: 'Share', live: 'Show live scores'
     };
     function button(name, cls, handler) {
       var b = document.createElement('button');
@@ -1460,6 +1500,20 @@
         bar.appendChild(fsBtn);
         document.addEventListener('fullscreenchange', updateFsBtn);
         document.addEventListener('webkitfullscreenchange', updateFsBtn);
+      }
+      /* LAST ON THE BAR, and deliberately. Every other control is about the deck;
+         this one is about the day, and it is the only button that can appear and
+         disappear mid-session. At the end of the row it only ever extends the line
+         — anywhere else it would shift every button that follows it out from under
+         the reader's thumb the moment a match starts. */
+      if (!record) {
+        liveBtn = button('live', 'live', function () {
+          if (!liveHandler) return;
+          liveOn = !liveOn;
+          updateLiveBtn();
+          liveHandler(liveOn);
+        });
+        bar.appendChild(liveBtn);
       }
       document.body.appendChild(bar);
       // The countdown and the position rail are NOT children of the bar — they are
@@ -2447,6 +2501,39 @@
      * (see ensureLiveChrome in player.html). Boot still passes it through `start`. */
     window.WccPlayer.setFlashFrame = function (f) {
       flashItem = f ? { frame: f } : null;
+    };
+
+    /* The live-chrome toggle, offered to the bar the same way and for the same
+     * reason: the player knows nothing about live and must not learn. The page owns
+     * the feed, the latch and `body.live-chrome`; all it wants from here is a
+     * button, and all this gives back is the press.
+     *
+     * WHY THE PRESS EXISTS AT ALL. On a wall the chrome grows itself and stays,
+     * because nobody is there to ask and a screen that reflows on every innings
+     * break is worse than one that doesn't. In a hand that reasoning inverts: the
+     * reader IS there, and taking 8% of their slide for a ticker they did not ask
+     * for is a decision being made on their behalf by a rule written for an
+     * unattended screen. So the latch becomes the default and this becomes the
+     * override — pressing it pins the choice for the session (see onLiveState in
+     * player.html, which stops steering once a press has happened).
+     *
+     * `opts` = { on: <current state>, onToggle: fn(wantOn) }, or null to withdraw
+     * the button — which is how the portrait column takes it away, since the chrome
+     * it toggles is a property of the landscape stage and does not exist there.
+     *
+     * A NO-OP WITHOUT A BAR, which is the whole of the wall's protection: kiosk,
+     * record and hosted players never build one, so they never get the button, never
+     * get a press, and keep today's automatic behaviour untouched. The page can call
+     * this unconditionally. */
+    window.WccPlayer.setLiveToggle = function (opts) {
+      liveHandler = opts ? (opts.onToggle || null) : null;
+      liveOn = !!(opts && opts.on);
+      if (!bar) return;
+      bar.classList.toggle('live-avail', !!liveHandler);
+      updateLiveBtn();
+      // The bar just got a button wider (or narrower): its fit and its placement are
+      // both measured off what it shows, so neither survives the change untouched.
+      schedulePlace();
     };
 
     /* Hand a stage the transport it drives.
