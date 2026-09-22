@@ -13,6 +13,19 @@
         flex: 1;
         min-height: 0;
         position: relative;
+        /* COLUMNS SIZED FROM THEIR CONTENT pass their width in as a UNITLESS
+           number of em (`--field-em`, `--pts-em`), measured by the `em_width`
+           macro from Lato's real advance widths, and multiplied by --t-md here.
+           The unit cannot travel with the value: a header row and the body are
+           set at different sizes (--t-xs vs --t-md), and `ch`/`em` resolve
+           against each element's own font-size — which would size a header's
+           column differently from the rows beneath it. --t-md is viewport-based,
+           so the result is the same length everywhere it lands.
+           --stat-pad is the breathing room every content-sized numeric column
+           gets on its left, uniform across both grids. Lato's digit advance is
+           0.58em at every weight (tabular figures keep one advance), so a bold
+           .pts measures the same as a regular .stat. */
+        --stat-pad: 2.5vw;
     }
     .panel {
         position: absolute;
@@ -62,25 +75,31 @@
     /* Top Players: pos | name | value | bat | bowl | field | pts */
     .top-grid {
         display: grid;
-        /* The fielding column is sized from the rows themselves: the panel counts
-           the widest cell's characters into `--field-cols` (a wicketkeeper's
-           "12c 2ro 6st" is three times the single catch most players have, and at
-           a fixed 9vw it wrapped onto a second line).
+        /* THE THREE STAT COLUMNS ARE WIDEST-CONTENT + ONE SHARED PAD, so they
+           cannot drift out of rhythm with each other. Each panel measures its own
+           widest cell (see the em_width macro) and passes it in; --stat-pad is the
+           breathing room on the left, uniform across all three.
+           This started as a fix for one column — a keeper's "12c 2ro 6st" is
+           several times the single catch most players have, and at a fixed 9vw it
+           wrapped. Sizing only that one left Bat comfortable (2.52vw of headroom
+           above its widest "510") while Bowl had 0.45vw and Field none at all, so
+           two of the three read as cramped. One rule settles it: 2.5vw reproduces
+           Bat's 6vw almost exactly, which is the spacing that looked right.
            NOT `max-content`: every row here is its own grid, so content-based
-           sizing resolves per row and the columns stop lining up.
-           And the count arrives UNITLESS, converted to a length here, because the
-           header row and the data rows are set at different sizes (--t-xs vs
-           --t-md) — a `ch` or `em` width would resolve against each one's own
-           font-size and the header would sit narrower than the body beneath it.
-           --t-md is viewport-based, so this width is identical in both.
-           0.58em is Lato's digit advance (measured from the woff2), i.e. exactly
-           what one `ch` is worth at row size; the letters and spaces in these
-           cells are narrower, so it errs towards slack rather than a second line.
+           sizing resolves per row and the columns stop lining up. And measured on
+           the string's REAL width rather than a character count — these cells are
+           mostly letters and spaces, far narrower than a digit ('t' is 0.373em
+           against 0.58em), and counting characters over-measures by 29%.
            The name column pays for it: bare `1fr` has an `auto` minimum and will
            not shrink below a long name, so it needs minmax(0, 1fr) to yield —
            it already ellipsises (see .name). */
-        --field-col: calc(var(--field-cols, 8) * 0.58 * var(--t-md));
-        grid-template-columns: 2.5vw minmax(0, 1fr) 6vw 6vw 7vw var(--field-col) 5vw;
+        --bat-col:   calc(var(--bat-em,   1.74) * var(--t-md) + var(--stat-pad));
+        --bowl-col:  calc(var(--bowl-em,  3.27) * var(--t-md) + var(--stat-pad));
+        --field-col: calc(var(--field-em, 2.50) * var(--t-md) + var(--stat-pad));
+        --pts-col:   calc(var(--pts-em,   2.32) * var(--t-md) + var(--stat-pad));
+        grid-template-columns: 2.5vw minmax(0, 1fr) 6vw
+                               var(--bat-col) var(--bowl-col) var(--field-col)
+                               var(--pts-col);
         gap: 0 0.5vw;
         align-items: baseline;
     }
@@ -93,8 +112,18 @@
     .stat.empty-stat { opacity: 0.2; }
     /* Top Managers: pos | manager | team | pts */
     .league-grid {
+        /* Season totals reach five digits (10758), which overflowed the old fixed
+           5vw track — and text-align has nothing to bite on once the content is
+           wider than its box, so the numbers spilled leftwards and read as ragged
+           rather than right-aligned. Measured from the rows and padded with the
+           same --stat-pad the Top Players columns use, so the two panels' numbers
+           sit off their neighbours identically. The pad also covers what would
+           otherwise be an exact fit — these are all digits, so the measure has
+           none of the slack a mixed string leaves. The neighbouring 1fr absorbs
+           it, so the right edge stays pinned. */
+        --pts-col: calc(var(--pts-em, 2.9) * var(--t-md) + var(--stat-pad));
         display: grid;
-        grid-template-columns: 2.5vw 20vw 1fr 5vw;
+        grid-template-columns: 2.5vw 20vw 1fr var(--pts-col);
         gap: 0 0.5vw;
         align-items: baseline;
     }
@@ -253,6 +282,21 @@
     </div>
     {{ panel_nav(slide) }}
 
+    {# LATO'S ADVANCE WIDTHS, in em, for the characters these tables put in a
+       content-sized column — measured from assets/fonts/lato-latin-400-normal.woff2
+       (fontTools: hmtx advance / unitsPerEm). Digits are uniform and .stat sets
+       font-variant-numeric: tabular-nums, so one entry covers all ten. Anything
+       unlisted falls back to the digit width, the widest of the set. #}
+    {% set ADV = {' ': 0.193, 'c': 0.467, 'o': 0.556, 'r': 0.403, 's': 0.434,
+                  't': 0.373, '/': 0.373, '·': 0.273} %}
+    {% macro em_width(text) -%}
+        {%- set w = namespace(v=0.0) -%}
+        {%- for ch in text|string -%}
+            {%- set w.v = w.v + ADV.get(ch, 0.58) -%}
+        {%- endfor -%}
+        {{ w.v|round(3) }}
+    {%- endmacro %}
+
     {# Defined once, above the loop, rather than re-declared on every iteration. #}
     {% macro bat_cell(row) -%}
         {%- set runs = row[2] if row|length > 2 else '0' -%}
@@ -315,17 +359,24 @@
         {% elif tab == 'top_players' %}
             {% set max_rows = slide.top_rows if slide.top_rows is defined else 10 %}
             {% set top_rows = slide._player_standings.rows[:max_rows] %}
-            {% set tp = namespace(max_pts=0, field_w=5) %}
+            {% set tp = namespace(max_pts=0, bat_em=1.74, bowl_em=1.74, field_em=1.74, pts_em=1.74) %}
             {% for r in top_rows %}
                 {% set p = (r[8] if r|length > 8 else 0)|int %}
                 {% if p > tp.max_pts %}{% set tp.max_pts = p %}{% endif %}
-                {# Widest fielding cell, in characters — a plain count, turned into
-                   a width by .top-grid (see the note there on why the unit cannot
-                   be applied here). Floored at 5 so the "Field" header always fits. #}
-                {% set fw = field_cell(r)|trim|length %}
-                {% if fw > tp.field_w %}{% set tp.field_w = fw %}{% endif %}
+                {# Widest cell per stat column, in em — see .top-grid for why the
+                   unit is applied there and not here, and for the shared pad added
+                   on top. Floored at three digits so a column of bare "·" still
+                   leaves its header room. #}
+                {% set bw = em_width(bat_cell(r)|trim)|float %}
+                {% if bw > tp.bat_em %}{% set tp.bat_em = bw %}{% endif %}
+                {% set ow = em_width(bowl_cell(r)|trim)|float %}
+                {% if ow > tp.bowl_em %}{% set tp.bowl_em = ow %}{% endif %}
+                {% set fw = em_width(field_cell(r)|trim)|float %}
+                {% if fw > tp.field_em %}{% set tp.field_em = fw %}{% endif %}
+                {% set pw = em_width(r[8] if r|length > 8 else '')|float %}
+                {% if pw > tp.pts_em %}{% set tp.pts_em = pw %}{% endif %}
             {% endfor %}
-            <div class="table" style="--field-cols: {{ tp.field_w }}">
+            <div class="table" style="--bat-em: {{ tp.bat_em }}; --bowl-em: {{ tp.bowl_em }}; --field-em: {{ tp.field_em }}; --pts-em: {{ tp.pts_em }}">
                 <div class="top-grid col-headers">
                     <span></span>
                     <span>Player</span>
@@ -357,7 +408,12 @@
         {% elif tab == 'top_managers' %}
             {% set league_max = slide.league_rows if slide.league_rows is defined else 12 %}
             {% set league_rows = slide._team_standings.rows[:league_max] %}
-            <div class="table">
+            {% set lg = namespace(pts_em=2.32) %}
+            {% for r in league_rows %}
+                {% set pw = em_width(r[3] if r|length > 3 else '')|float %}
+                {% if pw > lg.pts_em %}{% set lg.pts_em = pw %}{% endif %}
+            {% endfor %}
+            <div class="table" style="--pts-em: {{ lg.pts_em }}">
                 <div class="league-grid col-headers">
                     <span></span>
                     <span>Manager</span>
