@@ -31,6 +31,7 @@ and you want everything else fresh).
 """
 
 import argparse
+import json
 import re
 import subprocess
 import sys
@@ -84,6 +85,24 @@ def check_ci():
     raise SystemExit(1)
 
 
+def switched_off():
+    """Fetches turned off in content/config.json — see its `fetches` map.
+
+    Each script honours the switch itself (so a CI step skips cleanly and stays
+    listed in the workflow); this is only so the plan, the listing and the final
+    tally here don't report a source as fetched when it never ran.
+    """
+    cfg_path = ROOT / "content" / "config.json"
+    if not cfg_path.exists():
+        return set()
+    try:
+        cfg = json.loads(cfg_path.read_text())
+    except json.JSONDecodeError:
+        return set()   # the scripts warn about this; don't say it twice
+    return {n for n, on in cfg.get("fetches", {}).items()
+            if on is False and not n.startswith("_")}
+
+
 def run(name, extra_args, dry_run):
     script = HERE / f"fetch_{name}.py"
     if not script.exists():
@@ -117,9 +136,11 @@ def main():
     ap.add_argument("--match-id", help="passed through to fetch_ball_events")
     args = ap.parse_args()
 
+    off = switched_off()
+
     if args.list:
         for name, why in FETCHES:
-            print(f"  {name:17} {why}")
+            print(f"  {name:17} {why}" + ("   [off in config.json]" if name in off else ""))
         return
     if args.check_ci:
         check_ci()
@@ -132,6 +153,15 @@ def main():
                          f"known: {', '.join(names)}")
     todo = [n for n in names
             if (not args.only or n in args.only) and n not in args.skip]
+
+    # Named in config.json rather than on the command line, so it is reported
+    # rather than silently dropped — a source that is off all winter should say
+    # so on every run, or the first person to wonder why the data is stale has
+    # nothing to go on.
+    for name in todo:
+        if name in off:
+            print(f"  fetch_{name}: off in content/config.json — skipping")
+    todo = [n for n in todo if n not in off]
 
     failed = []
     for name in todo:

@@ -52,11 +52,11 @@ FANTASY_EMPTY = {"headers": [], "rows": [], "tabs": {}, "page_title": None, "fet
 FIXED_PANEL_LABELS = {
     "honours": ["Top Scores", "Recent 100s", "Best Figures", "Recent 6+ Wickets"],
     "leaderboard": ["Most Runs", "Batting Average", "Most Wickets", "Bowling Average"],
-    "fantasy-league": ["Team of the Week", "Top Players", "Top Managers", "Teams"],
 }
 
-# Panel key → tab label for the `team` template, whose panels are whichever ones
-# had data this build (see build_team's `slide["_panels"]`).
+# Panel key → tab label for the templates whose panels are whichever ones had data
+# this build — they publish a `slide["_panels"]` list of keys and are named through
+# these maps (see PANEL_LABELS_BY_TEMPLATE below).
 TEAM_PANEL_LABELS = {
     "league": "League",
     "results": "Form",
@@ -65,6 +65,30 @@ TEAM_PANEL_LABELS = {
     "top_bowling": "Bowling",
     "highlights": "Records",
 }
+
+# The fantasy slide's panels, in render order. Every one of them can be legitimately
+# empty — team of the week and the published XIs are in-season things, and a season
+# that has not started has no standings either — so all four drop out when they have
+# nothing, and a slide left with none is skipped entirely (see the panel_count == 0
+# branch in build_slides). This is also what lets one template serve both the live
+# slide and a frozen season snapshot, which simply has two of the four.
+FANTASY_PANEL_LABELS = {
+    "team_of_week": "Team of the Week",
+    "top_players":  "Top Players",
+    "top_managers": "Top Managers",
+    "teams":        "Teams",
+}
+
+# Templates that name their own panels from data, keyed by template name.
+PANEL_LABELS_BY_TEMPLATE = {
+    "team": TEAM_PANEL_LABELS,
+    "fantasy-league": FANTASY_PANEL_LABELS,
+}
+
+# Category icon, Name, Value, Week Points — the width every real team-of-the-week
+# row arrives in. Anything narrower is Ant Design's "No Data" placeholder; the same
+# constant guards the fetch (scripts/fetch_fantasy_cricket.py).
+TOTW_ROW_WIDTH = 4
 
 # Senior teams that get a published-XI card on the fantasy slide's "Teams"
 # panel, in display order (left-to-right).
@@ -880,16 +904,18 @@ def slide_panel_labels(slide):
     """This slide's tab strip, as a list of panel labels — or None if it has no tabs.
 
     One panel per label, in render order, so the list *is* the panel count for every
-    carousel template. `team` names its data-driven `_panels` keys through
-    TEAM_PANEL_LABELS; the fixed carousels read straight off FIXED_PANEL_LABELS.
+    carousel template. `team` and `fantasy-league` name their data-driven `_panels`
+    keys through PANEL_LABELS_BY_TEMPLATE; the fixed carousels read straight off
+    FIXED_PANEL_LABELS.
 
     Returns None for the two kinds of slide that have no such strip:
       * plain single-panel slides, and set members (whose strip is the *set's*
         phase list, rendered by `_set_header.html` and named by `_set_phases`);
       * video reels, whose atoms are clips rather than panels.
     """
-    if slide.get("template") == "team":
-        return [TEAM_PANEL_LABELS.get(k, k) for k in slide.get("_panels") or []]
+    labels = PANEL_LABELS_BY_TEMPLATE.get(slide.get("template"))
+    if labels is not None:
+        return [labels.get(k, k) for k in slide.get("_panels") or []]
     return FIXED_PANEL_LABELS.get(slide.get("template"))
 
 
@@ -3682,16 +3708,40 @@ def build_slides(env):
             slide["_data"] = json.loads(data_path.read_text())
 
         if slide.get("template") == "fantasy-league":
+            # `fantasy_data` points the slide at a committed season snapshot
+            # instead of this build's scrape — see content/data/fantasy-2026/ and
+            # docs/design-conventions.md. A snapshot is a finished season: it has
+            # standings and nothing else, so the two in-season panels fall away on
+            # their own, and the live XIs are deliberately NOT built for it (next
+            # week's teams have no place on a slide about last season).
+            snapshot = slide.get("fantasy_data")
+            src = (ROOT / snapshot) if snapshot else FETCHED
             for tab_key, file_key in [
                 ("_player_standings", "fantasy_player_standings"),
                 ("_team_standings",   "fantasy_team_standings"),
                 ("_team_of_week",     "fantasy_team_of_week"),
             ]:
-                data_path = FETCHED / f"{file_key}.json"
+                data_path = src / f"{file_key}.json"
                 slide[tab_key] = json.loads(data_path.read_text()) if data_path.exists() else FANTASY_EMPTY
-            build_fantasy_teams(
-                slide, teams_by_id, load_fixtures(), slide["_player_standings"]
-            )
+            if snapshot:
+                slide["_teams"] = []
+            else:
+                build_fantasy_teams(
+                    slide, teams_by_id, load_fixtures(), slide["_player_standings"]
+                )
+
+            # Whichever panels actually have something to show, in render order.
+            # The team-of-the-week width test matches the template's own filter:
+            # between gameweeks the source yields a single-cell "No Data" row, and
+            # a panel whose only row the template then drops would render blank.
+            totw = [r for r in slide["_team_of_week"]["rows"] if len(r) >= TOTW_ROW_WIDTH]
+            slide["_team_of_week"]["rows"] = totw
+            slide["_panels"] = [k for k, has in [
+                ("team_of_week", bool(totw)),
+                ("top_players",  bool(slide["_player_standings"]["rows"])),
+                ("top_managers", bool(slide["_team_standings"]["rows"])),
+                ("teams",        bool(slide["_teams"])),
+            ] if has]
 
         # Any slide that names a qr_url gets a code rendered for it. Was
         # cta-only; the showcase cards need the same thing, and a QR is a

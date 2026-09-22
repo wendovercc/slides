@@ -1,0 +1,6 @@
+{
+  "template": "fantasy-league",
+  "title": "Fantasy League 2026",
+  "fantasy_data": "content/data/fantasy-2026",
+  "top_rows": 12
+}

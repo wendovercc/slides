@@ -19,21 +19,11 @@
     {
       "id": "kimble",
       "name": "Kimble",
-      "screen": true,
-      "slideshow": "pavilion-auto",
-      "default_context": {
-        "section": "all"
-      },
       "aliases": ["Kimble", "Kimble CC"]
     },
     {
       "id": "monks-risborough",
       "name": "Monks Risborough",
-      "screen": true,
-      "slideshow": "pavilion-auto",
-      "default_context": {
-        "section": "all"
-      },
       "aliases": ["Monks Risborough", "Whiteleaf", "Whiteleaf Cricket Club"]
     },
     {

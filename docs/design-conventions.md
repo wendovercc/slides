@@ -368,8 +368,51 @@ headline metric (usually points, scaled to the panel's leader).
 - For stat cells that would be blank (zero contribution), render a dim middle
   dot `·` at opacity 0.2 rather than empty space. Helps the eye scan column
   positions.
-- For whole panels with no data, render `<div class="empty">No X data yet</div>`
-  at `var(--t-sm)` and opacity 0.4.
+- For a panel that is *momentarily* thin — the data exists, there just isn't
+  much of it — render `<div class="empty">No X data yet</div>` at `var(--t-sm)`
+  and opacity 0.4.
+- **For a panel whose data source can be legitimately absent, drop the panel
+  instead.** A wall slide that tells a pavilion "No team of the week data yet"
+  every twenty seconds all winter is worse than one that doesn't mention it.
+  See *Data-driven panels* below.
+
+### Data-driven panels
+
+A carousel template can either declare a fixed panel list (`FIXED_PANEL_LABELS`
+in build.py) or publish `slide["_panels"]` — the keys of whichever panels had
+data this build — named through `PANEL_LABELS_BY_TEMPLATE`. Prefer the second
+whenever a panel's source is seasonal, optional, or externally owned.
+
+Three things fall out of it for free, and they're the reason it's worth the
+indirection:
+
+- the tab strip never names a panel that isn't there, because the labels and the
+  panels come from the same list;
+- the slide's duration is `panel_duration × len(_panels)`, so a two-panel slide
+  dwells for two panels rather than sitting on blanks;
+- **a slide left with zero panels is skipped entirely** — no `/slide/<slug>/`
+  page, and dropped from every deck that names it, with no `skip_when_empty`
+  needed per entry (`build_slides`, the `panel_count == 0` branch).
+
+`team.html` and `fantasy-league.html` both work this way. The template loops
+`{% for tab in slide._panels %}` and branches on the key; the *build* decides
+what has content, so there is one definition of "empty" rather than one per
+template.
+
+### Season snapshots
+
+`fantasy-league` doubles as the pattern for freezing a finished season. The
+slide JSON's `fantasy_data` points at a committed directory
+(`content/data/fantasy-2026/`) instead of the gitignored nightly
+`content/data/fetched/`, and because panels are data-driven the snapshot needs
+no template of its own — it arrives as a two-panel slide simply by containing
+two files. Capture one with:
+
+    python3 scripts/fetch_fantasy_cricket.py --snapshot 2026
+
+Snapshot only what is a *record* of the season. The in-season panels — team of
+the week, next week's XIs — are deliberately not captured; a frozen copy of
+either would read as stale rather than historic.
 
 ## Tile stacks
 
@@ -444,8 +487,10 @@ these and adapt:
 - `templates/slides/leaderboard.html` — four-panel carousel, sidebar layout,
   combined season leaderboards (runs, batting average, wickets, bowling
   average) with per-panel grid templates and an honours-style yellow subtitle.
-- `templates/slides/fantasy-league.html` — three-panel carousel, mixed
+- `templates/slides/fantasy-league.html` — up-to-four-panel carousel, mixed
   rendering (tables with and without bars, single- and split-name columns).
+  Reference for data-driven panels over an external source that goes quiet out
+  of season, and for the season-snapshot pattern (`fantasy-league-2026`).
 - `templates/slides/team.html` — five-panel carousel with tabs hidden when
   their data is empty; reference for the tile-stack pattern (Form,
   Schedule).

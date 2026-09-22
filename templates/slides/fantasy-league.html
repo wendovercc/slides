@@ -34,15 +34,6 @@
     .panel.panel-active { opacity: 1; visibility: visible; }
     /* Tab typography/underline come from the base — only the spacing differs. */
     .panel-nav { gap: 3vw; margin-top: 2.8vh; }
-    .placeholder {
-        flex: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: var(--t-md);
-        opacity: 0.4;
-        font-style: italic;
-    }
     .table { flex: 1; display: flex; flex-direction: column; }
     /* Team of the Week: role | name | value | pts */
     .totw-grid {
@@ -71,7 +62,25 @@
     /* Top Players: pos | name | value | bat | bowl | field | pts */
     .top-grid {
         display: grid;
-        grid-template-columns: 2.5vw 1fr 6vw 6vw 7vw 9vw 5vw;
+        /* The fielding column is sized from the rows themselves: the panel counts
+           the widest cell's characters into `--field-cols` (a wicketkeeper's
+           "12c 2ro 6st" is three times the single catch most players have, and at
+           a fixed 9vw it wrapped onto a second line).
+           NOT `max-content`: every row here is its own grid, so content-based
+           sizing resolves per row and the columns stop lining up.
+           And the count arrives UNITLESS, converted to a length here, because the
+           header row and the data rows are set at different sizes (--t-xs vs
+           --t-md) — a `ch` or `em` width would resolve against each one's own
+           font-size and the header would sit narrower than the body beneath it.
+           --t-md is viewport-based, so this width is identical in both.
+           0.58em is Lato's digit advance (measured from the woff2), i.e. exactly
+           what one `ch` is worth at row size; the letters and spaces in these
+           cells are narrower, so it errs towards slack rather than a second line.
+           The name column pays for it: bare `1fr` has an `auto` minimum and will
+           not shrink below a long name, so it needs minmax(0, 1fr) to yield —
+           it already ellipsises (see .name). */
+        --field-col: calc(var(--field-cols, 8) * 0.58 * var(--t-md));
+        grid-template-columns: 2.5vw minmax(0, 1fr) 6vw 6vw 7vw var(--field-col) 5vw;
         gap: 0 0.5vw;
         align-items: baseline;
     }
@@ -122,7 +131,6 @@
         font-variant-numeric: tabular-nums;
         color: var(--accent);
     }
-    .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
     /* Teams panel: one portrait card per senior team's next fixture */
     .teams-grid {
         flex: 1;
@@ -231,23 +239,59 @@
     }
 {% endblock %}
 {% block content %}
+    {# PANELS ARE DATA. `slide._panels` is whichever of the four had something to
+       show this build (build.py, FANTASY_PANEL_LABELS) — so an empty panel is
+       absent rather than rendered as a placeholder, the tab strip never names a
+       panel that isn't there, and a slide with no panels at all is dropped from
+       every deck by the panel_count == 0 branch in build_slides.
+
+       It is also what lets this one template render a frozen season snapshot: a
+       finished season has standings and no in-season panels, so it simply
+       arrives here as a two-panel slide. #}
     <div class="header">
         <div class="title">{{ slide.title }}</div>
     </div>
     {{ panel_nav(slide) }}
+
+    {# Defined once, above the loop, rather than re-declared on every iteration. #}
+    {% macro bat_cell(row) -%}
+        {%- set runs = row[2] if row|length > 2 else '0' -%}
+        {{ runs if runs and runs != '0' else '' }}
+    {%- endmacro %}
+
+    {% macro bowl_cell(row) -%}
+        {%- set bowl = row[6] if row|length > 6 else '0/0' -%}
+        {%- if bowl and '/' in bowl -%}
+            {%- set wkts, conc = bowl.split('/', 1) -%}
+            {%- if wkts and wkts != '0' %}{{ bowl }}{% endif -%}
+        {%- endif -%}
+    {%- endmacro %}
+
+    {% macro field_cell(row) -%}
+        {%- set parts = [] -%}
+        {%- set ct = row[3] if row|length > 3 else '0' -%}
+        {%- set ro = row[4] if row|length > 4 else '0' -%}
+        {%- set st = row[5] if row|length > 5 else '0' -%}
+        {%- if ct and ct != '0' %}{% set _ = parts.append(ct ~ 'c') %}{% endif -%}
+        {%- if ro and ro != '0' %}{% set _ = parts.append(ro ~ 'ro') %}{% endif -%}
+        {%- if st and st != '0' %}{% set _ = parts.append(st ~ 'st') %}{% endif -%}
+        {{ parts | join(' ') }}
+    {%- endmacro %}
+
     <div class="panels">
 
-        <div class="panel panel-active">
-            {# Between gameweeks the source table can yield a short placeholder
-               row; drop anything without a points cell so it can't break the
-               build, and an all-short table falls through to the empty state. #}
-            {% set totw_rows = slide._team_of_week.rows | selectattr('3', 'defined') | list %}
+        {% for tab in slide._panels %}
+        <div class="panel{% if loop.first %} panel-active{% endif %}">
+
+        {% if tab == 'team_of_week' %}
+            {# Short "No Data" placeholder rows are dropped in the build, which is
+               also what decides this panel exists at all. #}
+            {% set totw_rows = slide._team_of_week.rows %}
             {% set ns = namespace(max_pts=0) %}
             {% for r in totw_rows %}
                 {% set p = r[3]|int %}
                 {% if p > ns.max_pts %}{% set ns.max_pts = p %}{% endif %}
             {% endfor %}
-            {% if totw_rows %}
             <div class="table">
                 <div class="totw-grid col-headers">
                     <span>Role</span>
@@ -267,46 +311,21 @@
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="empty">No team of the week data yet</div>
-            {% endif %}
-        </div>
 
-        <div class="panel">
+        {% elif tab == 'top_players' %}
             {% set max_rows = slide.top_rows if slide.top_rows is defined else 10 %}
             {% set top_rows = slide._player_standings.rows[:max_rows] %}
-            {% set tp = namespace(max_pts=0) %}
+            {% set tp = namespace(max_pts=0, field_w=5) %}
             {% for r in top_rows %}
                 {% set p = (r[8] if r|length > 8 else 0)|int %}
                 {% if p > tp.max_pts %}{% set tp.max_pts = p %}{% endif %}
+                {# Widest fielding cell, in characters — a plain count, turned into
+                   a width by .top-grid (see the note there on why the unit cannot
+                   be applied here). Floored at 5 so the "Field" header always fits. #}
+                {% set fw = field_cell(r)|trim|length %}
+                {% if fw > tp.field_w %}{% set tp.field_w = fw %}{% endif %}
             {% endfor %}
-
-            {% macro bat_cell(row) -%}
-                {%- set runs = row[2] if row|length > 2 else '0' -%}
-                {{ runs if runs and runs != '0' else '' }}
-            {%- endmacro %}
-
-            {% macro bowl_cell(row) -%}
-                {%- set bowl = row[6] if row|length > 6 else '0/0' -%}
-                {%- if bowl and '/' in bowl -%}
-                    {%- set wkts, conc = bowl.split('/', 1) -%}
-                    {%- if wkts and wkts != '0' %}{{ bowl }}{% endif -%}
-                {%- endif -%}
-            {%- endmacro %}
-
-            {% macro field_cell(row) -%}
-                {%- set parts = [] -%}
-                {%- set ct = row[3] if row|length > 3 else '0' -%}
-                {%- set ro = row[4] if row|length > 4 else '0' -%}
-                {%- set st = row[5] if row|length > 5 else '0' -%}
-                {%- if ct and ct != '0' %}{% set _ = parts.append(ct ~ 'c') %}{% endif -%}
-                {%- if ro and ro != '0' %}{% set _ = parts.append(ro ~ 'ro') %}{% endif -%}
-                {%- if st and st != '0' %}{% set _ = parts.append(st ~ 'st') %}{% endif -%}
-                {{ parts | join(' ') }}
-            {%- endmacro %}
-
-            {% if top_rows %}
-            <div class="table">
+            <div class="table" style="--field-cols: {{ tp.field_w }}">
                 <div class="top-grid col-headers">
                     <span></span>
                     <span>Player</span>
@@ -334,16 +353,10 @@
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="empty">No player standings yet</div>
-            {% endif %}
-        </div>
 
-        <div class="panel">
+        {% elif tab == 'top_managers' %}
             {% set league_max = slide.league_rows if slide.league_rows is defined else 12 %}
             {% set league_rows = slide._team_standings.rows[:league_max] %}
-
-            {% if league_rows %}
             <div class="table">
                 <div class="league-grid col-headers">
                     <span></span>
@@ -360,16 +373,10 @@
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="empty">No team standings yet</div>
-            {% endif %}
-        </div>
 
-        <div class="panel">
-            {% set cards = slide._teams %}
-            {% if cards %}
+        {% elif tab == 'teams' %}
             <div class="teams-grid">
-                {% for card in cards %}
+                {% for card in slide._teams %}
                 <div class="team-card">
                     <div class="team-card-head">
                         <div class="team-card-name">{{ card.team_name }}</div>
@@ -394,10 +401,10 @@
                 </div>
                 {% endfor %}
             </div>
-            {% else %}
-            <div class="empty">No upcoming senior fixtures</div>
-            {% endif %}
+        {% endif %}
+
         </div>
+        {% endfor %}
 
     </div>
     <script>window.WCC_CAROUSEL = { panelDuration: {{ slide.panel_duration }}, panelSelector: '.panel' };</script>

@@ -91,6 +91,33 @@ fetch loads itself.
 **Not included, deliberately:** `fetch_videos.py` and `sync_videos.py`. R2 sync is
 publisher-local and reference-counted; CI never does it.
 
+#### Turning a source off
+
+Some sources go quiet for a stretch — an off-season league, a site mid-redesign — and
+there is no sense fetching them nightly or reading a failure every morning. The `fetches`
+map in `content/config.json` switches one off by name (the script minus its `fetch_`
+prefix):
+
+```json
+"fetches": { "fantasy_cricket": false }
+```
+
+A fetch not listed is **on**, so a new source needs no entry. The *script* honours the
+switch and exits cleanly, which is what makes one boolean cover both CI and a local run:
+the workflow step stays listed in `deploy.yml`, still names itself in the Actions UI, and
+`--check-ci` stays in step. `fetch_all.py` reports the skip on every run rather than
+quietly dropping it, so stale data always has a stated reason.
+
+Turning a source off leaves its existing `content/data/fetched/` files exactly as they
+are; the build keeps rendering from them until someone removes them. If a slide should go
+quiet too, that is the panel's job, not the fetch's — see *Data-driven panels* in
+`docs/design-conventions.md`.
+
+Currently off: **`fantasy_cricket`**, for the 2026-27 winter. Its final table is captured
+in `content/data/fantasy-2026/` and served by the `fantasy-league-2026` slide; a snapshot
+(`--snapshot`) deliberately ignores the switch, so a final table can still be captured
+while a source is off.
+
 ### Step 6: the upload assets
 
 `publish_meta.py` writes everything the YouTube upload form wants into

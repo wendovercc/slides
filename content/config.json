@@ -12,6 +12,11 @@
   },
   "_comment_live_poll_lead_minutes": "How long before the day's first start the live poll window opens (live-config.json poll_from) — scorers open a match and settle the toss before the first ball. The window always shuts at midnight, which is also the safeguard if the nightly build fails: a stale config's window has already closed. Outside the window no device touches live.wendovercc.org.",
   "live_poll_lead_minutes": 30,
+  "_comment_fetches": "Per-source off switches for the build's fetch steps, keyed by the script name minus its fetch_ prefix. A fetch not listed here is ON — this map is only for turning something off, so adding a new source needs no config. The script itself honours the switch and exits cleanly, so the CI step stays listed in deploy.yml (the Actions UI still names it, and fetch_all.py --check-ci stays in step) and one boolean covers both CI and a local run. Use it when a source has gone quiet or hostile for a stretch — an off-season league, a site mid-redesign — rather than commenting out workflow steps.",
+  "fetches": {
+    "_comment_fantasy_cricket": "OFF for the 2026-27 winter. The league goes read-only out of season: team of the week and the published XIs are empty, and the standings sit frozen at the final table — which is captured in content/data/fantasy-2026/ and served by the fantasy-league-2026 slide. Turn back ON when the 2027 season opens and managers pick squads.",
+    "fantasy_cricket": false
+  },
   "default_panel_duration": 20,
   "_comment_last_match_max_age_days": "How long a team's last-match PACKAGE (intro → scorecards → reels → result) stays in the decks, counted from the match date. Long enough to cover the following weekend, so Saturday's game is still the full story for a Sunday friendly, and it lapses before the next fixture replaces it anyway. In practice it only bites teams that have STOPPED playing (juniors at season's end). When the package lapses the team's standalone last-match-result card takes over automatically — see build_slideshows.",
   "last_match_max_age_days": 10,
