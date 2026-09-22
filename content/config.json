@@ -20,6 +20,8 @@
   "default_panel_duration": 20,
   "_comment_last_match_max_age_days": "How long a team's last-match PACKAGE (intro → scorecards → reels → result) stays in the decks, counted from the match date. Long enough to cover the following weekend, so Saturday's game is still the full story for a Sunday friendly, and it lapses before the next fixture replaces it anyway. In practice it only bites teams that have STOPPED playing (juniors at season's end). When the package lapses the team's standalone last-match-result card takes over automatically — see build_slideshows.",
   "last_match_max_age_days": 10,
+  "_comment_team_form_max_age_days": "How long the Team Focus slide's Form panel outlives a team's last game ONCE THE FIXTURE LIST IS EMPTY. While a team still has a fixture ahead, Form is a preview of it and never lapses however long the gap — a junior side four weeks between games has no fresher form to show. With nothing scheduled there is nothing to preview, so a week after the last result the panel drops out and the slide runs on its season-summary panels (league table, batting, bowling, records). This is what retires the Form panel at season's end, team by team as each one finishes, the way Schedule retires itself.",
+  "team_form_max_age_days": 7,
   "_comment_leaderboards": "Best-average qualification: min_innings / min_overs is the bar, relaxed back towards floor_innings / floor_overs only where it would leave a table short of rows (early season, thin squads, small junior scopes).",
   "leaderboards": {
     "min_innings": 5,

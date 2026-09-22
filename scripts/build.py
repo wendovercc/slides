@@ -2456,11 +2456,16 @@ def build_highlights(records, team_filter):
     return cards if len(cards) >= MIN_RECORD_CARDS else []
 
 
-def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records=None):
+def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records=None,
+               form_max_age_days=7):
     """Assemble the multi-panel team slide object.
 
     Panels (any with no data are omitted from slide._panels):
       league · results · schedule · top_batting · top_bowling
+
+    Results (labelled "Form") is the one panel that can have data and still be
+    dropped: it lapses `form_max_age_days` after the last game once the team has
+    no fixture left to preview. See the cut-off in the Results section.
     """
     # Header levels as data — see build_schedule and slide_title. The team slide
     # inverts the usual order: the fixed word is the title and the team is the
@@ -2472,6 +2477,18 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
     fixtures_data = fixtures_data or {}
     today = _today()
     today_iso = today.isoformat()
+
+    # Scanned up here, ahead of the panels, because the next fixture gates two of
+    # them: it fills Schedule and it keeps Form alive (see the cut-off below).
+    all_fixtures = (fixtures_data.get("all_fixtures") or {}).get(team_id) or []
+    upcoming = []
+    for m in all_fixtures:
+        iso = _iso_from_dmy(m.get("match_date", ""))
+        if not iso or iso < today_iso:
+            continue
+        upcoming.append((iso, m))
+    upcoming.sort(key=lambda x: (x[0], x[1].get("match_time") or ""))
+    upcoming = upcoming[:3]
 
     panels = []
 
@@ -2540,21 +2557,23 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
                 "innings": innings,
                 "highlights": _select_match_highlights(sc, max_hl=2),
             })
-        slide["_results"] = results
-        slide["_has_results"] = True
-        panels.append("results")
+        # Form earns its place as a preview of the next game, so while the team
+        # still has one it never goes stale — a junior side on a month's gap has
+        # no fresher form to show, and three-week-old results are the only read
+        # on the side about to play. With the fixture list empty there is nothing
+        # left to preview and the panel is just an archive, so it lapses a week
+        # after the last game and the season-summary panels (league table,
+        # batting, bowling, records) carry the slide on their own.
+        newest = max((r["date_iso"] for r in results if r["date_iso"]), default="")
+        current = bool(upcoming) or bool(newest) and (
+            (today - date.fromisoformat(newest)).days <= form_max_age_days
+        )
+        if current:
+            slide["_results"] = results
+            slide["_has_results"] = True
+            panels.append("results")
 
     # ── Tab 3: Schedule (next N fixtures) ──────────────────────────────────
-    all_fixtures = (fixtures_data.get("all_fixtures") or {}).get(team_id) or []
-    upcoming = []
-    for m in all_fixtures:
-        iso = _iso_from_dmy(m.get("match_date", ""))
-        if not iso or iso < today_iso:
-            continue
-        upcoming.append((iso, m))
-    upcoming.sort(key=lambda x: (x[0], x[1].get("match_time") or ""))
-    upcoming = upcoming[:3]
-
     slide["_has_schedule"] = False
     slide["_fixtures"] = []
     if upcoming:
@@ -3771,6 +3790,7 @@ def build_slides(env):
             build_team(
                 slide, teams_by_id, load_fixtures(),
                 load_stats("this_season"), lb_config, load_records(),
+                form_max_age_days=config.get("team_form_max_age_days", 7),
             )
 
         if slide.get("template") == "honours":
