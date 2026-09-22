@@ -922,6 +922,43 @@ readings of one condition is how the surfaces drifted in the first place. A stag
 arriving mid-session is seeded with it too, so a rotation while zoomed does not
 navigate once on the way in.
 
+### What a step costs on arrival
+
+A photograph step arriving on an iPhone used to show its veiled ground alone for a
+beat, then snap the print and the words into place — and the track's glide went
+missing under it. Three separate costs, all of them paid at the worst possible
+moment, and none of them reproducible in a desktop emulator (which splits
+compositing layers differently and has the memory to be wrong for free).
+
+- **A layer per photograph, held permanently.** `.pf-backdrop` carried
+  `will-change: transform` on the reasoning that the blur is a compositing layer
+  anyway. But the `filter` is what makes the layer; the hint only pinned it — ten of
+  them at once, on the surface the iOS jetsam work exists to protect. The ground
+  rasterised early and cheap (a blur rasterises downscaled) while the step's
+  ordinary paint arrived after the transform had finished. **Removed.**
+- **The fonts started two round trips deep.** Nothing in `player.html` declared
+  Lato — `portrait.css` did, and that is fetched only when the portrait surface is
+  built, so the woff2 requests began after HTML *and* CSS. With `font-display:
+  swap`, a reader stepping off the intro card inside the first second met the next
+  step's type in the fallback and watched it re-set. It read as the photograph being
+  slow; it was **the session being young**, which is why it only happened on the
+  FIRST one. **Preloaded from the player's head**, `crossorigin` (required even
+  same-origin, or the preload is a second download rather than a warm cache).
+- **Images decoded on the arrival frame.** `warm()` inserts the markup two steps
+  ahead, which starts the download — but an off-screen image is decoded lazily, so
+  the decode landed on the one frame already paying for the track's transform.
+  `ensureFrag` now calls `img.decode()` on insertion, moving that work into the
+  quiet time the warm radius exists to create.
+
+**What is left, and it is the blur itself.** A residual flicker in the ground above
+and below the print is WebKit re-rasterising a full-resolution photograph through
+`filter: blur()` as the track moves. The known answer is to stop blurring a big
+picture: render the backdrop at a quarter size and scale it up, which is visually
+the same blur for a sixteenth of the pixels, or have the build emit a small blurred
+ground beside each photograph the way it already emits OG crops. Neither is done —
+it is a visible change to a deliberate treatment and wants an eye on it, not a
+guess.
+
 ### Page zoom is not a pinch — *fixed*
 
 Found on a real iPhone, and it had disabled **every gesture on both surfaces** for

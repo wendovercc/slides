@@ -595,7 +595,22 @@
         return r.text();
       }).then(function (html) {
         // `keep()` may have dropped this slide while the request was in flight.
-        if (el.parentNode) el.innerHTML = html;
+        if (!el.parentNode) return;
+        el.innerHTML = html;
+        /* AND DECODE ITS PICTURES NOW, while the reader is still two steps away.
+         * Inserting the markup starts the download, but an off-screen image is
+         * decoded lazily — so the decode landed on the frame the step arrived, which
+         * is the frame already paying for the track's transform. Asking for it here
+         * moves that work into the quiet time the warm radius exists to create.
+         * Both `<img>`s on a photo step share one src, so this is one download and
+         * two decodes (the print and the blurred ground are different sizes, and a
+         * decode is per rendered size).
+         * Failures are nothing: a missing picture is the step's problem, not this
+         * function's, and an unsupported `decode` simply leaves the old behaviour. */
+        var imgs = el.querySelectorAll('img');
+        for (var m = 0; m < imgs.length; m++) {
+          if (imgs[m].decode) imgs[m].decode().catch(function () {});
+        }
       }).catch(function () {
         // Re-derived rather than closed over: `keep()` may have renumbered the
         // column while this was in flight, and `i` would then unlatch another

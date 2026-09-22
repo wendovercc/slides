@@ -5,6 +5,27 @@
     {% include "_pwa_head.html" %}
     <title>{{ title }}</title>
     {% include "_og.html" %}
+    {#- THE THREE LATO WEIGHTS, IN FLIGHT FROM THE FIRST BYTE.
+
+        Nothing in this document declares them — `assets/css/portrait.css` does, and
+        that stylesheet is fetched only when the portrait surface is BUILT. So the
+        font requests used to start two round trips deep (HTML → portrait.css →
+        woff2) and, with `font-display: swap`, a reader who stepped off the intro
+        card in the first second met the next step's type in the fallback face and
+        then watched it re-set when Lato landed. It read as the photo step being
+        slow; it was the session being young, which is why it only ever happened on
+        the FIRST photograph.
+
+        Cheap, and not only for the phone: every slide document declares the same
+        three files, so an iframe on any surface now finds them in the HTTP cache
+        instead of asking for them itself. ~69KB the deck was always going to spend.
+
+        `crossorigin` is REQUIRED even same-origin — a font is fetched in CORS mode,
+        and a preload without it is a second, separate download rather than a warm
+        cache (the same trap as the video crossorigin note in the offline player). -#}
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/fonts/lato-latin-400-normal.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/fonts/lato-latin-700-normal.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/fonts/lato-latin-900-normal.woff2">
     {#- One player, two deck sources. `screen` mode resolves its deck from the context
         calendar for a location (the pavilion walls, /screen/<loc>/); deck mode plays a
         named deck (/slideshow/<slug>/, or any deck via ?deck=<slug>). Everything else —
