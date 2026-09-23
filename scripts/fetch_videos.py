@@ -97,7 +97,7 @@ def download_clip(clip: dict) -> bool:
     try:
         node = shutil.which("node")
         cookies_file = os.environ.get("YOUTUBE_COOKIES_FILE")
-        ytdlp_cmd = ["yt-dlp"]
+        ytdlp_cmd = [clip_ids.ytdlp_cmd()]
         if node:
             ytdlp_cmd += ["--js-runtimes", f"node:{node}", "--remote-components", "ejs:github"]
         if cookies_file and os.path.exists(cookies_file):

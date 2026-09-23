@@ -1,0 +1,518 @@
+{
+  "match_id": 7756252,
+  "match_date": "12/09/2026",
+  "match_time": "10:30",
+  "ground_name": "Witchell Ground",
+  "competition_id": "",
+  "competition_name": "President's Day",
+  "is_home": true,
+  "result": "W",
+  "result_description": "Wendover CC - Hurricanes - Won",
+  "toss_won_by_us": true,
+  "toss_elected_bat": true,
+  "toss_text": "Wendover CC - Hurricanes won the toss and elected to bat",
+  "opposition_name": "Spitfires",
+  "opposition_club_name": "Wendover CC",
+  "we_bat_first": true,
+  "our_total": {
+    "runs": "300",
+    "wickets": "6",
+    "overs": "39.0",
+    "extras": {
+      "byes": 7,
+      "leg_byes": 1,
+      "wides": 10,
+      "no_balls": 5,
+      "penalty": 0,
+      "total": 23
+    }
+  },
+  "their_total": {
+    "runs": "263",
+    "wickets": "9",
+    "overs": "35.4",
+    "extras": {
+      "byes": 0,
+      "leg_byes": 3,
+      "wides": 22,
+      "no_balls": 3,
+      "penalty": 0,
+      "total": 28
+    }
+  },
+  "our_batting": [
+    {
+      "id": "4928434",
+      "name": "David Cleary",
+      "runs": 37,
+      "balls": 38,
+      "fours": 6,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Joel Heritage",
+      "bowler_name": "Harry Godden"
+    },
+    {
+      "id": "5732291",
+      "name": "James Harrington",
+      "runs": 35,
+      "balls": 30,
+      "fours": 7,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "7165317",
+      "name": "Matthew Beagley",
+      "runs": 0,
+      "balls": 0,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "4951520",
+      "name": "Thomas Duff",
+      "runs": 41,
+      "balls": 25,
+      "fours": 2,
+      "sixes": 3,
+      "not_out": true,
+      "how_out": "retired not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "302453",
+      "name": "Shailesh Govekar",
+      "runs": 40,
+      "balls": 21,
+      "fours": 5,
+      "sixes": 3,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Mike Gedye",
+      "bowler_name": "Rob Cooke"
+    },
+    {
+      "id": "6748093",
+      "name": "Salman Khan",
+      "runs": 28,
+      "balls": 15,
+      "fours": 1,
+      "sixes": 3,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Matt Robinson",
+      "bowler_name": "Sangir Kethes"
+    },
+    {
+      "id": "3789075",
+      "name": "Andrew Glazebrook",
+      "runs": 17,
+      "balls": 25,
+      "fours": 2,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "retired not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "6435142",
+      "name": "Jefin Mukkolil",
+      "runs": 9,
+      "balls": 8,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Rob Cooke",
+      "bowler_name": "Matt Robinson"
+    },
+    {
+      "id": "5751379",
+      "name": "Milo Smith",
+      "runs": 10,
+      "balls": 17,
+      "fours": 2,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Anshuman Pandit"
+    },
+    {
+      "id": "3861222",
+      "name": "Jonathan Seabrook",
+      "runs": 4,
+      "balls": 7,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Eashan Patel",
+      "bowler_name": "Anshuman Pandit"
+    },
+    {
+      "id": "4967153",
+      "name": "Aditya Govekar",
+      "runs": 24,
+      "balls": 25,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "retired not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    }
+  ],
+  "our_bowling": [
+    {
+      "id": "5751379",
+      "name": "Milo Smith",
+      "wickets": 0,
+      "runs": 41,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "4967153",
+      "name": "Aditya Govekar",
+      "wickets": 0,
+      "runs": 29,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "6748093",
+      "name": "Salman Khan",
+      "wickets": 1,
+      "runs": 32,
+      "balls": 22,
+      "maidens": 0
+    },
+    {
+      "id": "7165317",
+      "name": "Matthew Beagley",
+      "wickets": 1,
+      "runs": 21,
+      "balls": 18,
+      "maidens": 0
+    },
+    {
+      "id": "6435142",
+      "name": "Jefin Mukkolil",
+      "wickets": 2,
+      "runs": 25,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "4951520",
+      "name": "Thomas Duff",
+      "wickets": 1,
+      "runs": 20,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "3861222",
+      "name": "Jonathan Seabrook",
+      "wickets": 2,
+      "runs": 11,
+      "balls": 18,
+      "maidens": 0
+    },
+    {
+      "id": "5732291",
+      "name": "James Harrington",
+      "wickets": 0,
+      "runs": 43,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "302453",
+      "name": "Shailesh Govekar",
+      "wickets": 2,
+      "runs": 25,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "3789075",
+      "name": "Andrew Glazebrook",
+      "wickets": 0,
+      "runs": 13,
+      "balls": 12,
+      "maidens": 0
+    }
+  ],
+  "their_batting": [
+    {
+      "id": "4106458",
+      "name": "Anshuman Pandit",
+      "runs": 46,
+      "balls": 25,
+      "fours": 8,
+      "sixes": 1,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Jefin Mukkolil",
+      "bowler_name": "Salman Khan"
+    },
+    {
+      "id": "5750911",
+      "name": "Sangir Kethes",
+      "runs": 16,
+      "balls": 24,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Jefin Mukkolil"
+    },
+    {
+      "id": "4951528",
+      "name": "Harry Godden",
+      "runs": 14,
+      "balls": 11,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "lbw",
+      "fielder_name": "",
+      "bowler_name": "Jefin Mukkolil"
+    },
+    {
+      "id": "532619",
+      "name": "Matt Robinson",
+      "runs": 8,
+      "balls": 5,
+      "fours": 0,
+      "sixes": 1,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Salman Khan",
+      "bowler_name": "Thomas Duff"
+    },
+    {
+      "id": "6922684",
+      "name": "Mike Gedye",
+      "runs": 23,
+      "balls": 19,
+      "fours": 3,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "lbw",
+      "fielder_name": "",
+      "bowler_name": "Jonathan Seabrook"
+    },
+    {
+      "id": "5896200",
+      "name": "Eashan Patel",
+      "runs": 7,
+      "balls": 9,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "b",
+      "fielder_name": "",
+      "bowler_name": "Jonathan Seabrook"
+    },
+    {
+      "id": "6649167",
+      "name": "Rob Cooke",
+      "runs": 52,
+      "balls": 39,
+      "fours": 5,
+      "sixes": 2,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "5117844",
+      "name": "Kertha Kethes",
+      "runs": 7,
+      "balls": 22,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "ct",
+      "fielder_name": "Shailesh Govekar",
+      "bowler_name": "Shailesh Govekar"
+    },
+    {
+      "id": "5173993",
+      "name": "Alexander Stheeman",
+      "runs": 10,
+      "balls": 8,
+      "fours": 2,
+      "sixes": 0,
+      "not_out": false,
+      "how_out": "lbw",
+      "fielder_name": "",
+      "bowler_name": "Shailesh Govekar"
+    },
+    {
+      "id": "5371777",
+      "name": "Kaynu Samaradiwakara",
+      "runs": 9,
+      "balls": 15,
+      "fours": 1,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "retired not out",
+      "fielder_name": "",
+      "bowler_name": "Matthew Beagley"
+    },
+    {
+      "id": "4950490",
+      "name": "Freddie Nelson",
+      "runs": 0,
+      "balls": 0,
+      "fours": 0,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    },
+    {
+      "id": "1808153",
+      "name": "Joel Heritage",
+      "runs": 13,
+      "balls": 9,
+      "fours": 2,
+      "sixes": 0,
+      "not_out": true,
+      "how_out": "not out",
+      "fielder_name": "",
+      "bowler_name": ""
+    }
+  ],
+  "their_bowling": [
+    {
+      "id": "5896200",
+      "name": "Eashan Patel",
+      "wickets": 0,
+      "runs": 27,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "4950490",
+      "name": "Freddie Nelson",
+      "wickets": 0,
+      "runs": 34,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "6922684",
+      "name": "Mike Gedye",
+      "wickets": 0,
+      "runs": 18,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "5117844",
+      "name": "Kertha Kethes",
+      "wickets": 0,
+      "runs": 37,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "5173993",
+      "name": "Alexander Stheeman",
+      "wickets": 0,
+      "runs": 25,
+      "balls": 12,
+      "maidens": 0
+    },
+    {
+      "id": "5371777",
+      "name": "Kaynu Samaradiwakara",
+      "wickets": 0,
+      "runs": 23,
+      "balls": 12,
+      "maidens": 0
+    },
+    {
+      "id": "6649167",
+      "name": "Rob Cooke",
+      "wickets": 1,
+      "runs": 20,
+      "balls": 24,
+      "maidens": 0
+    },
+    {
+      "id": "1808153",
+      "name": "Joel Heritage",
+      "wickets": 0,
+      "runs": 43,
+      "balls": 18,
+      "maidens": 0
+    },
+    {
+      "id": "5750911",
+      "name": "Sangir Kethes",
+      "wickets": 1,
+      "runs": 16,
+      "balls": 18,
+      "maidens": 0
+    },
+    {
+      "id": "532619",
+      "name": "Matt Robinson",
+      "wickets": 1,
+      "runs": 13,
+      "balls": 24,
+      "maidens": 1
+    },
+    {
+      "id": "4106458",
+      "name": "Anshuman Pandit",
+      "wickets": 2,
+      "runs": 12,
+      "balls": 18,
+      "maidens": 0
+    },
+    {
+      "id": "4951528",
+      "name": "Harry Godden",
+      "wickets": 1,
+      "runs": 7,
+      "balls": 6,
+      "maidens": 0
+    },
+    {
+      "id": "5544591",
+      "name": "Danny Nelson",
+      "wickets": 0,
+      "runs": 17,
+      "balls": 6,
+      "maidens": 0
+    }
+  ],
+  "our_points": null,
+  "their_points": null,
+  "opposition_team_id": "424726",
+  "opposition_site_id": "6744",
+  "opposition_crest": "/assets/images/wcc-logo.png",
+  "opposition_form": null,
+  "opposition_performers": null
+}

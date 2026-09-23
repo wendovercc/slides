@@ -18,7 +18,13 @@
        style this deck uses for secondary figures everywhere else. */
     .sc-overs { font-size: var(--t-sm); font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: -0.5vw; }
 
-    .table { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    /* --row-scale shrinks a table that holds more rows than it was sized for — a
+       rolling-squad match with thirteen batters or thirteen bowlers, where a league
+       XI has eleven. The row's type and its padding scale together, so n rows at
+       capacity/n of both occupy exactly the height capacity rows did, and the table
+       fits by construction. It is 1 on every normal card (see
+       _scorecard_row_scale), which is the point: nothing moves for a normal match. */
+    .table { flex: 1; display: flex; flex-direction: column; min-height: 0; --row-scale: 1; }
     /* Width moved from the name to the dismissal: an XI's names mostly clear 1.35fr,
        and "c Smith b Patel" is the column that actually says what happened. */
     .bat-grid  { grid-template-columns: 1.35fr 2.05fr 4vw 3vw 3vw 4vw 5vw; }
@@ -48,8 +54,8 @@
     .row {
         display: grid;
         gap: 0 0.6vw;
-        padding: 0.45vh 0;
-        font-size: var(--t-md);
+        padding: calc(0.45vh * var(--row-scale)) 0;
+        font-size: calc(var(--t-md) * var(--row-scale));
         border-bottom: var(--hair) solid rgba(255,255,255,0.08);
         align-items: baseline;
     }
@@ -63,7 +69,7 @@
         white-space: nowrap;
         text-overflow: ellipsis;
         opacity: 0.5;
-        font-size: var(--t-ms);
+        font-size: calc(var(--t-ms) * var(--row-scale));
         font-family: 'Lato', Arial, sans-serif;
     }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -73,7 +79,7 @@
     /* Extras — total from the innings object; the b/lb/w/nb breakdown sits in
        the second column in the dim how-out style. */
     .extras-row { border-top: var(--hair) solid rgba(255,255,255,0.18); }
-    .extras-row .name { opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--t-sm); font-family: 'Lato', Arial, sans-serif; }
+    .extras-row .name { opacity: 0.7; text-transform: uppercase; letter-spacing: 0.06em; font-size: calc(var(--t-sm) * var(--row-scale)); font-family: 'Lato', Arial, sans-serif; }
     .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
 {% endblock %}
 {% block content %}
@@ -86,7 +92,7 @@
     </div>
 
     {% if slide._mode == 'batting' %}
-    <div class="table">
+    <div class="table" style="--row-scale: {{ slide.get('_row_scale', 1) }}">
         {#- No "Batting" heading: the scoreline above already names the batting
             club. The two leading cells stay as empty grid placeholders. -#}
         <div class="col-headers bat-grid">
@@ -123,7 +129,7 @@
         {% endif %}
     </div>
     {% else %}
-    <div class="table">
+    <div class="table" style="--row-scale: {{ slide.get('_row_scale', 1) }}">
         <div class="col-headers bowl-grid">
             <span class="bowl-head">Bowling · {{ slide._bowl_club }}</span>
             <span class="col-num">O</span>

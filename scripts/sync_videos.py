@@ -143,7 +143,7 @@ def download_clip(clip: dict) -> Path:
     print(f"  {fp}: downloading {url} ({start}–{end})")
     try:
         node = shutil.which("node")
-        cmd  = ["yt-dlp"]
+        cmd = [clip_ids.ytdlp_cmd()]
         if node:
             cmd += ["--js-runtimes", f"node:{node}", "--remote-components", "ejs:github"]
         cookies = os.environ.get("YOUTUBE_COOKIES_FILE")

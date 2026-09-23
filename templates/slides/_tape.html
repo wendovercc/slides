@@ -9,7 +9,9 @@
 {% macro tape(slide) %}
     {#- Club names without the " CC" suffix (drop_cc): every side here is a cricket
         club, and the two names sit at large type in narrow columns. -#}
-    {% set our_col = {"crest": slide._our_crest, "name": "Wendover", "form": slide._our_form, "performers": slide._our_performers} %}
+    {#- Our column is "Wendover" unless the build named it: an intra-club match has
+        our club on both sides, so there the name carries the XI too. -#}
+    {% set our_col = {"crest": slide._our_crest, "name": slide.get("_our_club_name") or "Wendover", "form": slide._our_form, "performers": slide._our_performers} %}
     {% set opp_col = {"crest": slide._opp_crest, "name": slide._opp_club_name | drop_cc, "form": slide._opp_form, "performers": slide._opp_performers} %}
     {% set columns = [our_col, opp_col] if slide._our_left else [opp_col, our_col] %}
 

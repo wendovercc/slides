@@ -836,6 +836,24 @@
       "skip_when_empty": true
     },
     {
+      "slug": "match-presidents-day",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "senior",
+            "all",
+            "social"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
       "slug": "last-match-result-1st-xi",
       "show_when": [
         {

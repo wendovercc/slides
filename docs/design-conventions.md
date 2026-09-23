@@ -281,6 +281,36 @@ them — don't invent panel-specific synonyms.
 Grid templates are per-slide (e.g. `.totw-grid`, `.top-grid`, `.league-grid`).
 Column widths vary; typography and alignment do not.
 
+### A table that must hold an unusual number of rows
+
+Row counts are mostly predictable — a league XI is eleven names — so tables are
+sized for the normal case and type comes from the scale, not from the content.
+Occasionally the data is genuinely longer: a rolling-squad match (President's Day,
+a pre-season split, anything where everyone bats and everyone gets an over) puts
+thirteen batters or thirteen bowlers in a table sized for eleven, and the last
+rows run off the bottom of the slide.
+
+**Don't shrink the type for everyone to make the rare case fit.** Scale that one
+table, and only when it overflows. Give the table a `--row-scale` custom property
+defaulting to `1`, have the build compute it from the row count, and scale the
+row's **type and its padding by the same factor**:
+
+```css
+.table { --row-scale: 1; }
+.row   { font-size: calc(var(--t-md) * var(--row-scale));
+         padding:   calc(0.45vh * var(--row-scale)) 0; }
+```
+
+Scaling both is what makes it fit by construction rather than by trial: row height
+is font plus padding, so *n* rows at `capacity/n` of both occupy exactly the height
+`capacity` rows did. At or under capacity the factor is `1` and the rendered card
+is identical to what it was — which is the point.
+
+Floor the factor (`scorecard.html` uses 0.8, keeping `--t-md` at 1.6vw and the
+supporting line on `--t-sm`) so the type can never fall out of the readable steps.
+Past the floor the table clips, which is the right answer: a card with that many
+rows is beyond what shrinking can rescue.
+
 ### Table titles live in the header row
 
 Where a panel stacks more than one table (`team.html` — Top batting, Top

@@ -95,6 +95,54 @@ built, so previews show real figures.
 
 ---
 
+## Off-fixture matches (President's Day, pre-season, festivals)
+
+An intra-club game is scored and streamed like any other, but it is **invisible to the
+normal path** — twice over, and for the same reason: its sides are ad-hoc Play-Cricket
+teams belonging to no team's fixture list.
+
+1. **It never reaches `/curate`.** `discover_recent_match_ids()` reads
+   `fixtures.json → recent_matches`, which is keyed by the teams in `content/teams.json`.
+   Fetch it by hand instead — everything downstream then works untouched:
+
+   ```sh
+   python scripts/fetch_ball_events.py --match-id <pc_id>
+   ```
+
+   Once its `{id}.curation.json` is committed, `curated_match_ids()` re-pulls it on every
+   build and the match stays in `/curate` for good. Its `squad` is empty (no scorecard in
+   `fixtures.json`), so the role-tag picker falls back to the club roster, and the card
+   catalogue is empty — clips, trims and tags are unaffected.
+
+2. **It has no deck to land in.** There is no `last-match-<team>` package for a side that
+   isn't a team. Pin it: write the snapshot, then add it to
+   `content/pinned-matches.json` with a `team_name` (the ad-hoc side has no `teams.json`
+   entry to take a name from).
+
+   ```sh
+   python scripts/make_match_package.py --match-id <pc_id> --our-team-id <pc_team_id> \
+       --ground "Witchell Ground" --competition "President's Day" \
+       --opposition-crest /assets/images/wcc-logo.png
+   ```
+
+   `--our-team-id` picks which side the package speaks as; the other is "opposition"
+   throughout, which is how every slide in the set is written. Both sides being us, the
+   opposition crest is our own.
+
+**A club scorer often doesn't close these matches.** Play-Cricket then reports
+`result: "M"` / "Match In Progress" however complete the scorecard, and `result: None`
+means `nothing_to_report` — the set is built but stands down. Finalising it on
+Play-Cricket is the real fix; until then `--result` / `--result-description` correct it
+in the snapshot, which is the right place: committed, hand-curated, and preferred over
+the feed. Regenerate after Play-Cricket is fixed and drop the overrides.
+
+**Naming.** Both sides are "Wendover", so a club name alone separates nothing — and
+carrying it as well spends width on the half that is identical on both sides. The
+designation therefore *replaces* the club wherever a side is named: the innings
+headlines, the toss line, the two result columns, the intro tape and the reel tag (whose
+two-level club/XI split collapses to one line). Throughout, the match reads "Hurricanes"
+v "Spitfires".
+
 ## Narration & video export — moved
 
 The narration recorder, the deck builder, the compositor and the phasing now live in

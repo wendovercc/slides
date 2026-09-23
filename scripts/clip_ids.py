@@ -18,6 +18,9 @@ the intended behaviour, not a side effect — but it is not free, so change it
 deliberately.
 """
 import hashlib
+import shutil
+import sys
+from pathlib import Path
 
 # Frogbox streams the match at 1080p and YouTube keeps that rendition (format 137,
 # ~1872k, against 994k for 720p). Fetching at 720 and upscaling in the compositor
@@ -32,3 +35,16 @@ def fingerprint(url: str, start, end) -> str:
     key = (f"{url}:{start if start is not None else 0}-{end if end is not None else ''}"
            f"@{CLIP_MAX_HEIGHT}p")
     return hashlib.sha256(key.encode()).hexdigest()[:12]
+
+
+def ytdlp_cmd() -> str:
+    """The yt-dlp to run.
+
+    Both fetchers shell out to the binary, not the library, so having the module
+    importable is not enough: run `.venv/bin/python scripts/sync_videos.py` with
+    the venv's bin off PATH and every clip fails with a bare "No such file or
+    directory: 'yt-dlp'" — fifty times over, one per clip. Prefer the binary
+    installed beside the running interpreter, and fall back to PATH.
+    """
+    local = Path(sys.executable).parent / "yt-dlp"
+    return str(local) if local.exists() else (shutil.which("yt-dlp") or "yt-dlp")

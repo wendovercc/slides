@@ -129,10 +129,15 @@ def load_pinned_matches():
     match that has one.
 
     Manifest (``content/pinned-matches.json``) is a list of:
-        {"slug", "match_id", "team_id", "title"}
+        {"slug", "match_id", "team_id", "title", "team_name"?}
     - ``slug``     set slug referenced from a slideshow (e.g. "match-denham-cc")
     - ``team_id``  the team whose match this was, for crest/stats/league lookups
     - ``title``    the small per-slide heading (e.g. "Match Highlights")
+    - ``team_name``  optional designation to show instead of the team's own name.
+      For a side that exists only for one day — President's Day, a pre-season
+      split — there is no teams.json entry to take a name from, and the raw
+      ``team_id`` would show through on screen. Season form and performers stay
+      empty for such a side, which is correct: it has no season behind it.
     Returns each manifest entry with the loaded snapshot under ``_package`` (None
     when the snapshot file is missing).
     """
@@ -1827,6 +1832,36 @@ def _fmt_date_future(iso_date, today):
     if delta == 1:
         return "TOMORROW"
     return datetime.combine(d, datetime.min.time()).strftime(f"%a {d.day} %b").upper()
+
+
+# How many rows a scorecard table holds at full size. A league XI plus the extras
+# line is 12, which is what the batting table is sized for; the bowling table's
+# header row is taller (it carries "Bowling · <club>" at --t-sm rather than a bare
+# column strip), so it holds one fewer. See _scorecard_row_scale.
+SC_BAT_ROWS = 12
+SC_BOWL_ROWS = 11
+
+
+def _scorecard_row_scale(rows, capacity):
+    """Shrink factor for a scorecard table holding more rows than it was sized for.
+
+    A rolling-squad match — President's Day, a pre-season split, anything where
+    everyone bats and everyone gets an over — produces 13 batters or 13 bowlers
+    where a league XI produces 11, and those rows ran off the bottom of the slide.
+    Scaling the row's type and its padding by the SAME factor makes the table fit
+    by construction: row height is font + padding, so n rows at capacity/n of both
+    occupy exactly the height capacity rows did.
+
+    Normal cards are untouched — at or under capacity the factor is 1 and not a
+    pixel moves, which is the point: the wall must not pay for the rare match.
+
+    Floored so type can never fall below the deck's readable steps (0.8 × --t-md
+    is 1.6vw, putting the how-out line on --t-sm). A card with enough rows to
+    reach the floor is past where shrinking helps, and clips instead.
+    """
+    if rows <= capacity:
+        return 1
+    return max(0.8, round(capacity / rows, 3))
 
 
 def _split_innings_total(total):
@@ -4174,8 +4209,9 @@ def build_match_packages(env, slide_meta):
     # ?ctx=archive (slide-bridge.js), the mode the video compositor renders in —
     # "Last Match" is true only on the wall, and false the moment the clip is a
     # standalone YouTube video. See docs/narrated-decks.md.
-    # (slug_prefix, team_id, match, set_title, archive_title, standalone_result)
-    jobs = [(f"last-match-{tid}", tid, m, "Last Match", "Match Highlights", True)
+    # (slug_prefix, team_id, match, set_title, archive_title, standalone_result,
+    #  team_name)
+    jobs = [(f"last-match-{tid}", tid, m, "Last Match", "Match Highlights", True, None)
             for tid, m in sorted(last_matches.items())]
     for pin in load_pinned_matches():
         if not pin.get("_package"):
@@ -4183,11 +4219,12 @@ def build_match_packages(env, slide_meta):
             continue
         pin_title = pin.get("title", "Match Highlights")
         jobs.append((pin["slug"], pin["team_id"], pin["_package"],
-                     pin_title, pin_title, False))
+                     pin_title, pin_title, False, pin.get("team_name")))
 
-    for slug_prefix, team_id, m, set_title, archive_title, standalone_result in jobs:
+    for (slug_prefix, team_id, m, set_title, archive_title, standalone_result,
+         team_name) in jobs:
         team = teams_by_id.get(team_id, {})
-        title = team.get("name", team_id)
+        title = team_name or team.get("name", team_id)
 
         league_name = team.get("league_name", "")
         comp_name = m.get("competition_name", "") or ""
@@ -4204,6 +4241,18 @@ def build_match_packages(env, slide_meta):
         # toss line, the innings headlines, the result columns and description, and
         # the reel tag. The ground badge keeps its full name — that's a place.
         opp_club = drop_cc(opp_club)
+        # An intra-club game — President's Day, a pre-season split — has "Wendover"
+        # on both sides, and a club name alone then separates nothing: the two
+        # innings headlines, the toss line and the two result columns would all read
+        # the same word. The designation is the only thing that tells the sides
+        # apart, so it REPLACES the club there: "Hurricanes" v "Spitfires". Keeping
+        # the club as well ("Wendover Hurricanes") only spends width on the half
+        # that is identical on both sides and true of everyone watching.
+        # Everywhere that already carries club and designation as separate fields —
+        # the reel tag — is left alone, since it never had the ambiguity.
+        intra_club = bool(opp_club) and opp_club == OUR_CLUB
+        our_side = title if intra_club and title else OUR_CLUB
+        opp_side = opp_team if intra_club and opp_team else opp_club
         date_formatted = fmt_match_date(m.get("match_date", ""))
         ground = m.get("ground_name") or ""
         is_home = m.get("is_home", True)
@@ -4226,8 +4275,8 @@ def build_match_packages(env, slide_meta):
         # (labels stay innings-level): batting then bowling. Both carry the innings
         # headline (batting club + readable score).
         # (batting_club, total, batting_rows, bowling_club, bowling_rows)
-        our_innings = (OUR_CLUB, m.get("our_total"), our_batting, opp_club, their_bowling)
-        their_innings = (opp_club, m.get("their_total"), their_batting, OUR_CLUB, our_bowling)
+        our_innings = (our_side, m.get("our_total"), our_batting, opp_side, their_bowling)
+        their_innings = (opp_side, m.get("their_total"), their_batting, our_side, our_bowling)
         ordered = [our_innings, their_innings] if we_bat_first else [their_innings, our_innings]
         labels = ["1st Innings", "2nd Innings"]
         innings_present = []   # unique innings labels with any content (for the strip)
@@ -4242,14 +4291,18 @@ def build_match_packages(env, slide_meta):
             _score, _overs = _split_innings_total(total)
             scoreline = {"_bat_club": bat_club, "_score_readable": _score, "_score_overs": _overs}
             if batting:
+                extras = innings_extras(total, batting)
                 innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-batting", label, {
                     "_mode": "batting", "_batting": batting,
-                    "_extras": innings_extras(total, batting),
+                    "_extras": extras,
                     "_extras_parts": extras_breakdown_str(total), **scoreline,
+                    "_row_scale": _scorecard_row_scale(
+                        len(batting) + (1 if extras is not None else 0), SC_BAT_ROWS),
                 }))
             if bowling:
                 innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-bowling", label, {
                     "_mode": "bowling", "_bowling": bowling, "_bowl_club": bowl_club, **scoreline,
+                    "_row_scale": _scorecard_row_scale(len(bowling), SC_BOWL_ROWS),
                 }))
         # Did this match reach an OUTCOME worth reporting? A result covers the cases
         # where nobody batted much (abandoned, conceded — Play-Cricket still records
@@ -4285,8 +4338,12 @@ def build_match_packages(env, slide_meta):
         set_meta_fields = {
             "_set_date": date_short,
             "_set_is_home": is_home,
-            "_set_opp_club": opp_club,
-            "_set_opp_team": opp_team,
+            # The header names our side by designation alone ("1st XI") and the
+            # other by club + designation, because the club is only ever in doubt on
+            # their side. Intra-club it isn't in doubt at all, so repeating our own
+            # club against us reads as noise: "Hurricanes vs Spitfires".
+            "_set_opp_club": opp_team if intra_club and opp_team else opp_club,
+            "_set_opp_team": "" if intra_club and opp_team else opp_team,
             "_set_ground": ground,
         }
         set_common = {"_set_title": set_title, "_set_title_archive": archive_title,
@@ -4333,9 +4390,14 @@ def build_match_packages(env, slide_meta):
             # always on top and nothing to distinguish the two reels.
             # Club and XI kept apart: the template gives the designation the smaller
             # muted treatment the header subtitle uses (.sub-opp-sub).
+            # Intra-club, the tag's two-level club/XI split collapses the same way
+            # the headlines do: the club line would be the identical word above both
+            # sides, so the designation stands alone as the side's name.
             we_bat = "wendover" in bat_club.lower()
-            ours = {"club": OUR_CLUB, "desig": title, "batting": we_bat}
-            theirs = {"club": opp_club, "desig": opp_team, "batting": not we_bat}
+            ours = {"club": our_side, "desig": "" if intra_club else title,
+                    "batting": we_bat}
+            theirs = {"club": opp_side, "desig": "" if intra_club else opp_team,
+                      "batting": not we_bat}
             sides = [ours, theirs] if we_bat_first else [theirs, ours]
             # Resolve each clip's cards to rendered content and place them on the
             # played clip's timeline. The R2 file is trimmed to the *played* bounds,
@@ -4434,7 +4496,7 @@ def build_match_packages(env, slide_meta):
         toss_won_us = m.get("toss_won_by_us")
         toss_bat = m.get("toss_elected_bat")
         if toss_won_us is not None and toss_bat is not None:
-            toss_winner = OUR_CLUB if toss_won_us else opp_club
+            toss_winner = our_side if toss_won_us else opp_side
             toss_line = f"{toss_winner} won the toss and elected to {'bat' if toss_bat else 'field'}"
         else:
             toss_line = m.get("toss_text") or ""
@@ -4453,7 +4515,7 @@ def build_match_packages(env, slide_meta):
         intro_slug = f"{slug_prefix}-intro"
         emit(intro_slug, intro_tmpl, {
             "template": "match-intro", "title": title,
-            "_opp_club_name": opp_club,
+            "_our_club_name": our_side, "_opp_club_name": opp_side,
             "_our_crest": "/assets/images/wcc-logo.png",
             "_our_form": our_form, "_our_performers": our_performers,
             "_opp_crest": opp_crest, "_opp_form": opp_form, "_opp_performers": opp_performers,
@@ -4483,7 +4545,7 @@ def build_match_packages(env, slide_meta):
         # the sequence strip) and the standalone latest-result card (no strip).
         opp_result = {"W": "L", "L": "W"}.get(result, result)
         result_desc = result_summary(
-            result, m.get("our_total"), m.get("their_total"), we_bat_first, OUR_CLUB, opp_club
+            result, m.get("our_total"), m.get("their_total"), we_bat_first, our_side, opp_side
         )
         set_result_fields = {
             "_no_match": False,
@@ -4491,14 +4553,14 @@ def build_match_packages(env, slide_meta):
             # Result lists the side that batted first on the left.
             "_our_left": we_bat_first,
             "_our_crest": "/assets/images/wcc-logo.png",
-            "_our_name": OUR_CLUB,
+            "_our_name": our_side,
             "_our_result": result, "_our_result_label": _RESULT_LABELS.get(result, result),
             "_our_points": m.get("our_points"),
             "_our_score": _split_innings_total(m.get("our_total"))[0],
             "_our_overs": _split_innings_total(m.get("our_total"))[1],
             "_our_performers": team_performers(our_batting, our_bowling, their_batting),
             "_opp_crest": m.get("opposition_crest"),
-            "_opp_name": opp_club,
+            "_opp_name": opp_side,
             "_opp_result": opp_result, "_opp_result_label": _RESULT_LABELS.get(opp_result, opp_result),
             "_opp_points": m.get("their_points"),
             "_opp_score": _split_innings_total(m.get("their_total"))[0],

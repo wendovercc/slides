@@ -2,5 +2,9 @@ jinja2>=3.1
 qrcode[pil]>=7.4
 playwright>=1.44
 beautifulsoup4>=4.12
-yt-dlp>=2024.1.0
+# YouTube breaks older yt-dlp releases regularly — a stale one fails every clip
+# with an opaque 403 from googlevideo, not an error that names the cause. Keep
+# the floor recent, and `pip install -U yt-dlp` is the first thing to try when
+# a sync that used to work suddenly can't download anything.
+yt-dlp>=2026.8.19
 boto3>=1.34

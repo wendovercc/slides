@@ -1,0 +1,14 @@
+{
+  "title": "President's Day",
+  "description": "Scorecards, highlights and awards from the latest President's Day.",
+  "homepage_rank": 7,
+  "og_image": "assets/images/wcc-logo.png",
+  "og_image_fit": "contain",
+  "og_image_alt": "Wendover Cricket Club crest",
+  "refresh_interval_seconds": 3600,
+  "slides": [
+    {
+      "slug": "match-presidents-day"
+    }
+  ]
+}
