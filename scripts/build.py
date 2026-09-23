@@ -1304,6 +1304,46 @@ def load_teams():
     return {t["id"]: t for t in teams}
 
 
+def _our_desig(team):
+    """A one-word tag for one of our sides inside a league table: the last word
+    of its name ("Women's Softball Kites" -> "Kites"), except for an XI, whose
+    last word says nothing ("1st XI")."""
+    name = (team or {}).get("name", "")
+    last = name.split()[-1] if name.split() else ""
+    return name if last.upper() == "XI" else last
+
+
+def prepare_league_tables(league_data):
+    """Order a fetched league table's columns the way every panel shows them —
+    team first, the stat columns next, Pts last — and set `rows`.
+
+    Where two of our sides share a division (the women's softball pair), both
+    rows come back from Play-Cricket as plain "Wendover CC", which on screen
+    reads as the table printing us twice. Name those rows apart; a lone row of
+    ours is unambiguous and stays as the league writes it.
+    """
+    teams_by_pc_id = {str(t.get("play_cricket_team_id") or ""): t
+                      for t in load_teams().values()
+                      if t.get("play_cricket_team_id")}
+    for table in league_data.get("league_table", []):
+        ordered = sorted(table["headings"].items(), key=lambda x: int(x[0].split("_")[1]))
+        ordered = [(k, v) for k, v in ordered
+                   if k == "column_1" or v.lower() not in LEAGUE_TABLE_EXCLUDED]
+        team_col  = [(k, v) for k, v in ordered if k == "column_1"]
+        pts_cols  = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
+        rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
+        table["headings_list"] = team_col + rest_cols + pts_cols
+        rows = table["values"]
+        ours = [r for r in rows if str(r.get("team_id") or "") in teams_by_pc_id]
+        if len(ours) > 1:
+            for r in ours:
+                desig = _our_desig(teams_by_pc_id[str(r["team_id"])])
+                if desig:
+                    r["column_1"] = f"{r['column_1']} {desig}"
+        table["rows"] = rows
+    return league_data
+
+
 def build_league_positions(slide, teams_by_id, stats_data):
     form = stats_data.get("form", {}) if stats_data else {}
     rows = []
@@ -2499,21 +2539,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
     if league_id:
         path = FETCHED / f"league_table_{league_id}.json"
         if path.exists():
-            league_data = json.loads(path.read_text())
-            for table in league_data.get("league_table", []):
-                ordered = sorted(
-                    table["headings"].items(),
-                    key=lambda x: int(x[0].split("_")[1]),
-                )
-                ordered = [
-                    (k, v) for k, v in ordered
-                    if k == "column_1" or v.lower() not in LEAGUE_TABLE_EXCLUDED
-                ]
-                team_col = [(k, v) for k, v in ordered if k == "column_1"]
-                pts_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
-                rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
-                table["headings_list"] = team_col + rest_cols + pts_cols
-                table["rows"] = table["values"]
+            league_data = prepare_league_tables(json.loads(path.read_text()))
             slide["_league_data"] = league_data
             slide["_league_team_id"] = str(team.get("play_cricket_team_id", ""))
             slide["_league_name"] = team.get("league_name", "")
@@ -2774,9 +2800,19 @@ def recurring_events_on(d):
 
 
 def infer_section(team_ids):
+    """Which part of the club an activity belongs to: "senior", "junior",
+    "women" — or "all" when it spans more than one (a club day, a mixed
+    training night). Each team declares its own section in teams.json; a team
+    that doesn't falls back to the old id-prefix guess, which is right for
+    every age group we run."""
     if not team_ids:
         return "all"
-    sections = {"junior" if tid.startswith("u") else "senior" for tid in team_ids}
+    teams_by_id = load_teams()
+    sections = {
+        teams_by_id.get(tid, {}).get("section")
+        or ("junior" if tid.startswith("u") else "senior")
+        for tid in team_ids
+    }
     return sections.pop() if len(sections) == 1 else "all"
 
 
@@ -3831,20 +3867,7 @@ def build_slides(env):
             slide["_empty"] = not slide["_events"]
 
         if slide.get("template") == "league-table" and "_data" in slide:
-            for table in slide["_data"]["league_table"]:
-                ordered = sorted(
-                    table["headings"].items(),
-                    key=lambda x: int(x[0].split("_")[1]),
-                )
-                ordered = [
-                    (k, v) for k, v in ordered
-                    if k == "column_1" or v.lower() not in LEAGUE_TABLE_EXCLUDED
-                ]
-                team_col  = [(k, v) for k, v in ordered if k == "column_1"]
-                pts_cols  = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
-                rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
-                table["headings_list"] = team_col + rest_cols + pts_cols
-                table["rows"] = table["values"]
+            prepare_league_tables(slide["_data"])
 
         # Panel count drives the derived duration: a data-driven `_panels` list
         # (team) wins; video slides set _override_duration and own their timing;
@@ -4056,15 +4079,7 @@ def build_league_panel(team):
     path = FETCHED / f"league_table_{league_id}.json"
     if not path.exists():
         return None
-    league_data = json.loads(path.read_text())
-    for table in league_data.get("league_table", []):
-        ordered = sorted(table["headings"].items(), key=lambda x: int(x[0].split("_")[1]))
-        ordered = [(k, v) for k, v in ordered if k == "column_1" or v.lower() not in LEAGUE_TABLE_EXCLUDED]
-        team_col = [(k, v) for k, v in ordered if k == "column_1"]
-        pts_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() == "pts"]
-        rest_cols = [(k, v) for k, v in ordered if k != "column_1" and v.lower() != "pts"]
-        table["headings_list"] = team_col + rest_cols + pts_cols
-        table["rows"] = table["values"]
+    league_data = prepare_league_tables(json.loads(path.read_text()))
     return league_data, str(team.get("play_cricket_team_id", "")), team.get("league_name", "")
 
 

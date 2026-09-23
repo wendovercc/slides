@@ -15,7 +15,8 @@
         {
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ]
@@ -50,7 +51,8 @@
         {
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ]
@@ -85,7 +87,8 @@
         {
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ]
@@ -104,6 +107,111 @@
         {
           "teams": [
             "friendly-xi"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-womens-1st-xi",
+      "show_when": [
+        {
+          "section": [
+            "women",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "team-womens-1st-xi",
+      "show_when": [
+        {
+          "teams": [
+            "womens-1st-xi"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "womens-1st-xi"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-womens-softball-kites",
+      "show_when": [
+        {
+          "section": [
+            "women",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "team-womens-softball-kites",
+      "show_when": [
+        {
+          "teams": [
+            "womens-softball-kites"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "womens-softball-kites"
+          ],
+          "type": [
+            "match"
+          ],
+          "phase": [
+            "warm_up"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "live-match-womens-softball-hawks",
+      "show_when": [
+        {
+          "section": [
+            "women",
+            "all"
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "team-womens-softball-hawks",
+      "show_when": [
+        {
+          "teams": [
+            "womens-softball-hawks"
+          ],
+          "type": [
+            "training"
+          ]
+        },
+        {
+          "teams": [
+            "womens-softball-hawks"
           ],
           "type": [
             "match"
@@ -645,7 +753,8 @@
         {
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ]
@@ -683,7 +792,8 @@
           ],
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ],
@@ -700,7 +810,8 @@
           ],
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ],
@@ -717,7 +828,8 @@
           ],
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ],
@@ -734,7 +846,8 @@
           ],
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ],
@@ -751,7 +864,8 @@
           ],
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ],
@@ -768,7 +882,62 @@
           ],
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-womens-1st-xi",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "women",
+            "all",
+            "social"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-womens-softball-kites",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "women",
+            "all",
+            "social"
+          ]
+        }
+      ],
+      "skip_when_empty": true
+    },
+    {
+      "slug": "last-match-result-womens-softball-hawks",
+      "show_when": [
+        {
+          "type": [
+            "idle",
+            "training",
+            "bar"
+          ],
+          "section": [
+            "women",
+            "all",
+            "social"
           ]
         }
       ],
@@ -1035,7 +1204,8 @@
         {
           "section": [
             "senior",
-            "all"
+            "all",
+            "social"
           ]
         }
       ]

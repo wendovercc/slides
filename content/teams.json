@@ -7,7 +7,8 @@
       "play_cricket_team_id": 171199,
       "league_table_name": "Wendover CC",
       "league_name": "Thames Valley Cricket League",
-      "cs365_team_name": "1st XI"
+      "cs365_team_name": "1st XI",
+      "section": "senior"
     },
     {
       "id": "2nd-xi",
@@ -16,13 +17,45 @@
       "play_cricket_team_id": 171200,
       "league_table_name": "Wendover CC",
       "league_name": "Thames Valley Cricket League",
-      "cs365_team_name": "2nd XI"
+      "cs365_team_name": "2nd XI",
+      "section": "senior"
     },
     {
       "id": "friendly-xi",
       "name": "Friendly XI",
       "play_cricket_team_id": 267849,
-      "cs365_team_name": "Friendly XI"
+      "cs365_team_name": "Friendly XI",
+      "section": "senior"
+    },
+    {
+      "id": "womens-1st-xi",
+      "name": "Women's 1st XI",
+      "play_cricket_team_id": 424059,
+      "league_table_name": "Wendover CC",
+      "cs365_team_name": "Womens 1st XI",
+      "section": "women"
+    },
+    {
+      "id": "womens-softball-kites",
+      "name": "Women's Softball Kites",
+      "play_cricket_league_id": 142917,
+      "play_cricket_team_id": 424723,
+      "league_table_name": "Wendover CC",
+      "league_name": "Bucks Cricket Competitions",
+      "game_type": "pairs",
+      "cs365_team_name": "Women Softball Kites",
+      "section": "women"
+    },
+    {
+      "id": "womens-softball-hawks",
+      "name": "Women's Softball Hawks",
+      "play_cricket_league_id": 142917,
+      "play_cricket_team_id": 424724,
+      "league_table_name": "Wendover CC",
+      "league_name": "Bucks Cricket Competitions",
+      "game_type": "pairs",
+      "cs365_team_name": "Women Softball Hawks",
+      "section": "women"
     },
     {
       "id": "u9",
@@ -30,7 +63,8 @@
       "play_cricket_league_id": 136875,
       "play_cricket_team_id": 82829,
       "game_type": "pairs",
-      "cs365_team_name": "Under 9"
+      "cs365_team_name": "Under 9",
+      "section": "junior"
     },
     {
       "id": "u10-lightning",
@@ -38,7 +72,8 @@
       "play_cricket_league_id": 136883,
       "play_cricket_team_id": 403812,
       "game_type": "pairs",
-      "cs365_team_name": "U10 Lightning"
+      "cs365_team_name": "U10 Lightning",
+      "section": "junior"
     },
     {
       "id": "u10-thunder",
@@ -46,7 +81,8 @@
       "play_cricket_league_id": 136885,
       "play_cricket_team_id": 403811,
       "game_type": "pairs",
-      "cs365_team_name": "U10 Thunder"
+      "cs365_team_name": "U10 Thunder",
+      "section": "junior"
     },
     {
       "id": "u11-incredibles",
@@ -54,7 +90,8 @@
       "play_cricket_league_id": 136896,
       "play_cricket_team_id": 403810,
       "game_type": "pairs",
-      "cs365_team_name": "U11 Incredibles"
+      "cs365_team_name": "U11 Incredibles",
+      "section": "junior"
     },
     {
       "id": "u11-invincibles",
@@ -62,7 +99,8 @@
       "play_cricket_league_id": 136916,
       "play_cricket_team_id": 403809,
       "game_type": "pairs",
-      "cs365_team_name": "U11 Invincibles"
+      "cs365_team_name": "U11 Invincibles",
+      "section": "junior"
     },
     {
       "id": "u12-hurricanes",
@@ -70,7 +108,8 @@
       "play_cricket_league_id": 136925,
       "play_cricket_team_id": 82827,
       "game_type": "pairs",
-      "cs365_team_name": "Under 12 Hurricanes"
+      "cs365_team_name": "Under 12 Hurricanes",
+      "section": "junior"
     },
     {
       "id": "u12-spitfires",
@@ -78,7 +117,8 @@
       "play_cricket_league_id": 136924,
       "play_cricket_team_id": 378133,
       "game_type": "pairs",
-      "cs365_team_name": "Under 12 Spitfires"
+      "cs365_team_name": "Under 12 Spitfires",
+      "section": "junior"
     },
     {
       "id": "u13-hurricanes",
@@ -86,7 +126,8 @@
       "play_cricket_league_id": 136933,
       "play_cricket_team_id": 352516,
       "game_type": "standard",
-      "cs365_team_name": "U13 Hurricanes"
+      "cs365_team_name": "U13 Hurricanes",
+      "section": "junior"
     },
     {
       "id": "u13-spitfires",
@@ -94,7 +135,8 @@
       "play_cricket_league_id": 136937,
       "play_cricket_team_id": 327045,
       "game_type": "standard",
-      "cs365_team_name": "U13 Spitfires"
+      "cs365_team_name": "U13 Spitfires",
+      "section": "junior"
     },
     {
       "id": "u14-hurricanes",
@@ -102,7 +144,8 @@
       "play_cricket_league_id": 136940,
       "play_cricket_team_id": 352513,
       "game_type": "standard",
-      "cs365_team_name": "U14 Hurricanes"
+      "cs365_team_name": "U14 Hurricanes",
+      "section": "junior"
     },
     {
       "id": "u15-hurricanes",
@@ -110,7 +153,8 @@
       "play_cricket_league_id": 136959,
       "play_cricket_team_id": 301948,
       "game_type": "standard",
-      "cs365_team_name": "Under 15 Hurricanes"
+      "cs365_team_name": "Under 15 Hurricanes",
+      "section": "junior"
     },
     {
       "id": "u15-spitfires",
@@ -118,7 +162,8 @@
       "play_cricket_league_id": 136958,
       "play_cricket_team_id": 378134,
       "game_type": "standard",
-      "cs365_team_name": "Under 15 Spitfires"
+      "cs365_team_name": "Under 15 Spitfires",
+      "section": "junior"
     },
     {
       "id": "u17-spitfires",
@@ -126,7 +171,8 @@
       "play_cricket_league_id": 136964,
       "play_cricket_team_id": 378135,
       "game_type": "standard",
-      "cs365_team_name": "Under 17 Spitfires"
+      "cs365_team_name": "Under 17 Spitfires",
+      "section": "junior"
     },
     {
       "id": "u11-girls",
@@ -134,7 +180,8 @@
       "play_cricket_league_id": 136968,
       "play_cricket_team_id": 403819,
       "game_type": "pairs",
-      "cs365_team_name": "Wendover Girls U11"
+      "cs365_team_name": "Wendover Girls U11",
+      "section": "junior"
     },
     {
       "id": "u13-girls",
@@ -142,7 +189,8 @@
       "play_cricket_league_id": 136974,
       "play_cricket_team_id": 355798,
       "game_type": "standard",
-      "cs365_team_name": "Ballinger Wendover Girls U13 (HB)"
+      "cs365_team_name": "Ballinger Wendover Girls U13 (HB)",
+      "section": "junior"
     }
   ]
 }

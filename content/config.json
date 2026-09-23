@@ -54,7 +54,8 @@
       "from": "2026-08-06",
       "start": "18:30",
       "end": "24:00",
-      "section": "senior"
+      "_comment_section": "The bar belongs to the social section — it is the one thing a social member joins for, and the crowd in the room on a Thursday night is a social crowd rather than a playing one. Slides that should be up while the bar is open name \"social\" in their show_when.",
+      "section": "social"
     }
   ],
   "activity_phases": {

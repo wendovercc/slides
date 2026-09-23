@@ -1,0 +1,10 @@
+{
+  "template": "schedule",
+  "title": "Women",
+  "teams": [
+    "womens-1st-xi",
+    "womens-softball-kites",
+    "womens-softball-hawks"
+  ],
+  "panel_duration": 15
+}

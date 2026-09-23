@@ -47,6 +47,11 @@
       "aliases": ["Aylesbury CC", "Wendover Road"]
     },
     {
+      "id": "john-colet",
+      "name": "John Colet School",
+      "aliases": ["John Colet School", "John Colet School Hall", "John Colet"]
+    },
+    {
       "id": "tring-road",
       "name": "Tring Road",
       "screen": true,

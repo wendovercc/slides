@@ -1,12 +1,16 @@
 {
   "title": "Match Results",
-  "description": "Match results for the latest senior and junior games",
+  "description": "Match results for the latest senior, women's and junior games",
   "homepage_rank": 4,
   "refresh_interval_seconds": 300,
   "slides": [
     { "slug": "last-match-result-1st-xi" },
     { "slug": "last-match-result-2nd-xi" },
     { "slug": "last-match-result-friendly-xi" },
+
+    { "slug": "last-match-result-womens-1st-xi" },
+    { "slug": "last-match-result-womens-softball-kites" },
+    { "slug": "last-match-result-womens-softball-hawks" },
 
     { "slug": "last-match-result-u17-spitfires" },
     { "slug": "last-match-result-u15-hurricanes" },
