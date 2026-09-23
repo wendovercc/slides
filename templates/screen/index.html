@@ -141,6 +141,7 @@
         .badge-training  { background: rgba(26,92,122,0.38);  color: #86c9e6; }
         .badge-idle      { background: rgba(255,255,255,0.10); color: var(--muted); }
         .badge-hire      { background: rgba(122,92,0,0.42);   color: #e7cf86; }
+        .badge-bar       { background: rgba(108,74,168,0.38); color: #c3b0ee; }
         .badge-event     { background: rgba(212,175,55,0.22); color: var(--gold); }
         .badge-scheduled { background: rgba(255,255,255,0.10); color: var(--muted); }
         .badge-live {
@@ -297,7 +298,7 @@
     <script>
         const TEAM_NAMES = {{ team_names | tojson }};
         const YT_DATA = {{ youtube | tojson }};
-        const TYPE_LABELS = { match: 'Match', training: 'Training', idle: 'Quiet', hire: 'Hire', club_event: 'Event', section_event: 'Event', live: 'Live', scheduled: 'Scheduled', offair: 'Off air',
+        const TYPE_LABELS = { match: 'Match', training: 'Training', idle: 'Quiet', hire: 'Hire', bar: 'Bar', club_event: 'Event', section_event: 'Event', live: 'Live', scheduled: 'Scheduled', offair: 'Off air',
             // Match Day card states. All three fall through badge()'s class map to
             // the muted `idle` pill except `live`, which is the pulsing red one.
             nokey: 'Fixtures only', nomatch: 'No matches today', matchday: 'Match today' };
@@ -308,13 +309,19 @@
             return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
         }
         function badge(type, phase) {
-            const cls = ['match', 'training', 'idle', 'hire', 'live', 'scheduled'].includes(type)
+            const cls = ['match', 'training', 'idle', 'hire', 'bar', 'live', 'scheduled'].includes(type)
                 ? type : (String(type).endsWith('event') ? 'event' : 'idle');
             const label = (type === 'match' && MATCH_PHASE_LABELS[phase]) || TYPE_LABELS[type] || type;
             return `<span class="badge badge-${cls}">${label}</span>`;
         }
         function metaText(ctx) {
             const a = ctx.audience || {};
+            // An entry that carries its own name IS its own meta line: "Members Bar"
+            // says more than the section it gates on, and a hire's label names the
+            // party in the room. Section and teams are what's left to say about the
+            // entries with no name of their own — matches, training, idle.
+            const label = a.label || (ctx.detail || {}).title;
+            if (label) return `<span class="ctx-meta">${esc(label)}</span>`;
             const parts = [];
             if (a.section && SECTION_LABELS[a.section]) parts.push(SECTION_LABELS[a.section]);
             const teams = (a.teams || []).map(t => TEAM_NAMES[t] || t);
