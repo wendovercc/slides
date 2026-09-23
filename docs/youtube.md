@@ -1,7 +1,7 @@
 # YouTube live-stream enrichment
 
 The home page shows a **Live Streams** card for the club's YouTube channel
-(`@Wendovercclive`) with a "Now / Next" summary, mirroring the screen cards.
+(`@wendovercricketclub`) with a "Now / Next" summary, mirroring the screen cards.
 Frogbox match streams end up on this channel.
 
 ## How it works
@@ -56,7 +56,7 @@ resets daily (US Pacific). Hardcoding `channel_id` in `config.json` removes the
 In `content/config.json → homepage_cards`:
 
 ```json
-{ "type": "youtube", "title": "Live Streams", "url": "https://www.youtube.com/@Wendovercclive", "handle": "Wendovercclive" }
+{ "type": "youtube", "title": "Live Streams", "url": "https://www.youtube.com/@wendovercricketclub", "handle": "wendovercricketclub" }
 ```
 
 - `handle` — channel handle (without `@`); resolved to a channel ID at fetch time.

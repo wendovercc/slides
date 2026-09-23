@@ -236,6 +236,9 @@
                 {% if c.type == 'screen' %}
                 <div class="card-ctx" data-loc-id="{{ c.loc_id }}"></div>
                 {% elif c.type == 'youtube' %}
+                {# The one card that carries both: the channel URL, the way the other
+                   external links name theirs, then the Now/Next the feed fills in. #}
+                {% if c.get('description') %}<span class="card-desc">{{ c.description }}</span>{% endif %}
                 <div class="card-ctx" data-yt></div>
                 {% elif c.get('ctx') == 'live' and live_enabled %}
                 <div class="card-ctx" data-live></div>

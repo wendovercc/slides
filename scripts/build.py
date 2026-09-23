@@ -5033,6 +5033,9 @@ def build_screen_locations(env, homepage_shows=None):
                 "title": c.get("title", "Live Streams"),
                 "href": c["url"],
                 "target": "_blank",
+                # Shown under the title like an external card's, above the
+                # Now/Next the youtube_live feed fills in client-side.
+                "description": c.get("description"),
             })
             youtube_data = {"live": yt.get("live", []), "upcoming": yt.get("upcoming", [])}
 
