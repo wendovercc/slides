@@ -1,5 +1,12 @@
 # Live Match Presentation — Design
 
+> **v2 note:** the *innards* of these surfaces are being replaced — the chrome is
+> moving from rendering current state to scheduling a stream of events ("what just
+> happened"). The model, the type table and the match-day simulator live in
+> **`docs/live-events.md`**, which is the source of truth for that work. This
+> document still describes the surfaces themselves, and everything below about
+> layout, the L-frame, the latch, portrait and the strip's channels holds.
+>
 > Status: **agreed design direction, not yet built.** Planning source of truth for
 > putting live in-progress match info on the pavilion wall. Companion to
 > `docs/match-highlights.md` (the post-match reels/cards it borrows from) and the
@@ -242,6 +249,12 @@ minutes, passing through every tile state (roles, a chase turning either way, a
 decided-but-unpublished result, a silent feed, a team with no match). The build must
 have baked views for the chosen day, hence `WCC_TODAY`. See
 `assets/js/live-strip-sim.js`.
+
+That simulator is **strip-only** — it posts fabricated feeds at the strip page it is
+loaded into. For a whole match day across *every* surface at once (ticker, context
+tile, strip, live-match slides, clip flashes, the event stream) there is now a
+player-level one that drives the real engine: `/slideshow/live/?sim=matchday`, with a
+key press per poll. See `docs/live-events.md`.
 
 ## Player-profile enrichment (a third opportunity)
 

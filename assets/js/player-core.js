@@ -2621,6 +2621,13 @@
     });
 
     // Expose the flash entry point for the live engine (running in this same frame).
+    /* Play/pause, for the match-day simulator: holding the clock has to stop the deck
+     * advancing too, or "everything is held" is untrue of the biggest moving thing on
+     * the screen. Exposed rather than reached through the `hosted` message path
+     * because that path is an editor's, and this is not an editor. */
+    window.WccPlayer.setPlaying = function (p) { setPlaying(!!p); };
+    window.WccPlayer.isPlaying = function () { return playing; };
+
     window.WccPlayer.flash = enqueueFlash;
 
     /* The news-flash overlay, handed over after the fact. It is a property of the

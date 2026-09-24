@@ -96,7 +96,18 @@
         try { parent.postMessage({ type: 'wcc-flash-done', reason: reason || 'ended' }, '*'); } catch (e) {}
     }
 
+    // Is this an HLS playlist, or a plain media file? Frogbox highlights are always
+    // `.m3u8`, so in production this is always HLS — but the match-day simulator
+    // borrows the R2 ball-event clips, which are MP4, and hls.js cannot open one.
+    // Feeding a media file straight to the element is what a <video> is for.
+    function isHls(url) { return /\.m3u8(\?|#|$)/i.test(String(url || '')); }
+
     function attach(url) {
+        if (!isHls(url)) {
+            video.src = url;
+            video.play().catch(function () {});
+            return;
+        }
         // Safari can play HLS natively; Chromium (the Pi wall) needs hls.js.
         if (video.canPlayType('application/vnd.apple.mpegurl')) {
             video.src = url;

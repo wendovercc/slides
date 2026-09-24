@@ -21,6 +21,19 @@
   function start(opts) {
     opts = opts || {};
     var endpoint = opts.endpoint || 'https://live.wendovercc.org/state.json';
+    /* WHERE THE FEED COMES FROM, as a seam. Default is the Worker over the network;
+     * the match-day simulator supplies its own (live-sim.js), which is the whole
+     * reason it can drive the real engine instead of being a parallel mock. Called
+     * as transport(kind, url) -> Promise<feed>, kind being 'live' or 'league'; a
+     * rejection is treated exactly like a failed fetch.
+     *
+     * A supplied transport also stands in for the ACCESS GATE, because there is no
+     * Worker to authorise against: no key is needed and none is checked. The gate
+     * exists to stop unauthorised polls costing Worker invocations, and a simulated
+     * poll costs nothing. `manual` then hands the clock over too — the engine polls
+     * only when asked, so a key press can step the day forward. */
+    var transport = opts.transport || null;
+    var manual = !!opts.manual;
     // Same-origin poll list (the daily build writes it next to the player), so the
     // engine works the instant the site is built — locally and in prod — instead of
     // waiting on the Worker's own copy of the config to deploy. We resolve the ids
@@ -54,6 +67,154 @@
     var flashEvents = opts.flashEvents || 'all';
     var seenClips = null;             // null until baselined; then a {id:1} set
     var cfgById = {};                 // pc_id -> config match (crest/team attribution)
+
+    /* The EVENT STREAM (see live-events.js). The engine holds the previous poll of
+     * each feed and differentiates against it, so every surface downstream is fed
+     * the same events rather than each deriving its own. This is the v2 substrate:
+     * nothing in the shipping chrome consumes it yet (the ticker and strip still
+     * render current state), so it is additive — the inspector slide is its first
+     * reader, and it broadcasts as `wcc-events`.
+     *
+     * The previous snapshots are the point: "what's new" is not a property of a feed,
+     * only of two feeds, and only this loop sees both. */
+    var prevFeed = null, prevLeague = null;
+    var events = window.WccLiveEvents ? WccLiveEvents.store() : null;
+    /* EVERY time judgement in the event model reads this, never `Date.now()` directly,
+     * so the simulator can freeze and step time independently of data arriving (see
+     * live-clock.js). Absent module → the wall clock, exactly as before. */
+    function clockNow() { return window.WccClock ? WccClock.now() : Date.now(); }
+    // A tick that just re-broadcasts the scheduler's answer, so a surface that shows
+    // events sees one expire without waiting for the next poll — the dwell clock runs
+    // faster than the poll clock.
+    var EVENT_TICK_MS = opts.eventTickMs || 1000;
+    var EVENT_CAP = opts.eventCap || 60;
+
+    function eventBroadcast() {
+        if (!events) return;
+        var now = clockNow();
+        var d = events.tick(now);
+        var msg = {
+          type: 'wcc-events',
+          // The scheduler's verdict: what to show, until when, and why it won.
+          showing: d.event || null, until: d.until, holding: !!d.holding, reason: d.reason || null,
+          // Its working, for the inspector slide — the ranking IS the algorithm, and
+          // being unable to see it is what makes weights impossible to tune.
+          // `at_pick` rides along so a surface can say which row's numbers are the
+          // ones that won rather than the ones that are current.
+          ranked: d.ranked.slice(0, 40).map(function (r) {
+            return { id: r.ev.id, score: Math.round(r.score * 10) / 10,
+                     freshness: Math.round(r.freshness * 100) / 100,
+                     novelty: Math.round(r.novelty * 100) / 100,
+                     superseded: !!r.superseded,
+                     at_pick: !!r.at_pick };
+          }),
+          // The winning score, kept out of the ranking so the band can show it plainly.
+          picked: d.picked ? { score: Math.round(d.picked.score * 10) / 10,
+                               freshness: Math.round(d.picked.freshness * 100) / 100,
+                               novelty: Math.round(d.picked.novelty * 100) / 100 } : null,
+          /* THE TAIL OF THE STORE, NOT ALL OF IT. This message crosses into every
+           * slide iframe once a second, and a structured clone of four hundred events
+           * five times a second is real work on a Pi. Sixty is comfortably more than
+           * any surface renders, and `size` still reports the true total so nothing
+           * has to lie about how much it is not showing. */
+          events: events.all().slice(-EVENT_CAP), size: events.size(), now: now,
+          floor: WccLiveEvents.SHOW_FLOOR,
+          // So a surface can say out loud that time is not real — an inspector showing
+          // ages against a frozen clock with no sign of it would be quietly misleading.
+          clock: clockState()
+        };
+        framesOf().forEach(function (f) {
+          try { if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*'); } catch (e) {}
+        });
+        // Standalone (the inspector slide opened on its own, the simulator page) there
+        // are no child frames; the same message on our own window reaches them.
+        try { window.postMessage(msg, '*'); } catch (e) {}
+    }
+    /* The clock, as the rest of the page needs to hear about it. `advanced` is stable
+     * between keypresses — never `skew`, which drifts by the second and would put a
+     * moving number on a screen that is supposed to be still.
+     *
+     * Broadcast as its own message because the surfaces that must go still for a hold
+     * (the ticker's segment cycle, the strip's view cycle, the pulsing live dot) do not
+     * read the event stream — they render current state and rotate on timers of their
+     * own, and a held clock has to stop those too or "held" is a lie about most of the
+     * screen. */
+    function clockState() {
+        return window.WccClock
+            ? { manual: WccClock.isManual(), advanced: Math.round(WccClock.advanced() / 1000) }
+            : { manual: false, advanced: 0 };
+    }
+    function clockBroadcast() {
+        var msg = { type: 'wcc-clock', held: clockState().manual, advanced: clockState().advanced };
+        framesOf().forEach(function (f) {
+            try { if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*'); } catch (e) {}
+        });
+        try { window.postMessage(msg, '*'); } catch (e) {}
+    }
+    // A surface that loads mid-hold asks, rather than sitting animated until the next
+    // time the clock happens to change.
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d && d.type === 'wcc-clock-request') clockBroadcast();
+    });
+
+    function ingest(kind, feed) {
+        if (!events || !window.WccLiveEvents) return;
+        var now = clockNow();
+        var cfg = {
+          byId: cfgById,
+          /* Lets the extractor's clip join reach back past this poll — footage lags
+           * the scorecard, so the wicket it belongs to was extracted a poll or two
+           * ago and lives in the store, not in this batch. Newest first, this match
+           * only, and only recently enough to plausibly be the same incident. */
+          recent: function (matchKey) {
+            var cutoff = now - 600000;
+            return events.all().filter(function (ev) {
+              return ev.match.key === matchKey && ev.received_at >= cutoff;
+            }).reverse();
+          }
+        };
+        var found = kind === 'league'
+          ? WccLiveEvents.extractLeague(prevLeague, feed, now, cfg)
+          : WccLiveEvents.extractLive(prevFeed, feed, now, cfg);
+        found.forEach(function (ev) { events.add(ev); });
+        if (kind === 'league') prevLeague = feed; else prevFeed = feed;
+        eventBroadcast();
+        return found;
+    }
+    /* What `start` hands back: the clock and the stream, for a caller that wants to
+     * drive them. The simulator steps `poll`/`pollLeague` from a key press; the
+     * inspector reads the store directly when it happens to share this window. Also
+     * parked on WccLive so a console (or a page that did not start the engine itself)
+     * can reach it. */
+    var handle = {
+      poll: function () { return poll(); },
+      pollLeague: function () { return leaguePoll(); },
+      events: events,
+      // The seam the strip's ladder will use once it announces committed moves: an
+      // event source that is neither of the two feeds.
+      addLadderMove: function (move) {
+        if (!events || !window.WccLiveEvents) return null;
+        var ev = WccLiveEvents.ladderEvent(move, clockNow(), { byId: cfgById });
+        if (ev) { events.add(ev); eventBroadcast(); }
+        return ev;
+      },
+      broadcastEvents: eventBroadcast
+    };
+    window.WccLive.handle = handle;
+
+    if (events) setInterval(eventBroadcast, EVENT_TICK_MS);
+    // A time jump changes the answer immediately; waiting up to a tick to say so makes
+    // stepping the clock feel broken.
+    if (events && window.WccClock) WccClock.onChange(eventBroadcast);
+    // Held/released is a separate announcement from "time moved", and every surface
+    // needs it, not only the ones reading events.
+    if (window.WccClock) WccClock.onChange(clockBroadcast);
+    // A surface that loads mid-interval asks, rather than waiting up to a tick.
+    window.addEventListener('message', function (e) {
+      var d = e.data;
+      if (d && d.type === 'wcc-events-request') eventBroadcast();
+    });
 
     function key() { try { return localStorage.getItem(keyName) || ''; } catch (e) { return ''; } }
 
@@ -104,13 +265,17 @@
     var cfgReady = null;     // promise for that resolution, so the league loop can wait
 
     function windowState() {
+      // A simulated day is whatever day the simulator says it is, so the real poll
+      // window has no jurisdiction over it — out of season it would close every run
+      // before the first tick.
+      if (transport) return 'open';
       return window.WccLiveWindow ? window.WccLiveWindow.state(pollWindow) : 'open';
     }
 
     // Arm the gate before anything below can poll. The config resolution still
     // runs while stopped — it's same-origin and free, and it leaves pcs/cfgById
     // ready so a key arriving later resumes into a working loop immediately.
-    if (!key()) halt('nokey');
+    if (!transport && !key()) halt('nokey');
     if (window.WccLiveKey && window.WccLiveKey.onChange) window.WccLiveKey.onChange(resume);
 
     // Worker URL: ?pc= the resolved ids (works pre-deploy + shares the cache key
@@ -192,6 +357,9 @@
 
     function schedule(ms) {
       if (timer) clearTimeout(timer);
+      // Manual mode: the caller owns the clock (a key press, a simulator tick), so
+      // the engine never schedules itself forward.
+      if (manual) return;
       timer = setTimeout(poll, ms);
     }
 
@@ -208,6 +376,22 @@
 
     function poll() {
       if (stopped) return;
+      // A supplied transport carries its own authorisation story (there is no Worker
+      // to authorise against), so it bypasses the key gate entirely — see `transport`.
+      if (transport) {
+        return Promise.resolve()
+          .then(function () { return transport('live', url()); })
+          .then(function (feed) {
+            if (!feed) { onFail('error'); return; }
+            fails = 0; last = feed; lastStatus = 'ok';
+            broadcast(feed, 'ok');
+            onState(feed, 'ok');
+            detectClips(feed);
+            ingest('live', feed);
+            schedule(intervalFor(feed));
+          })
+          .catch(function () { onFail('offline'); });
+      }
       var k = key();
       if (!k) { halt('nokey'); return; }
       var w = windowState();
@@ -225,6 +409,7 @@
             broadcast(feed, 'ok');
             onState(feed, 'ok');
             detectClips(feed);
+            ingest('live', feed);
             schedule(intervalFor(feed));
           });
         })
@@ -277,6 +462,15 @@
     }
     function leaguePoll() {
       if (stopped) return;
+      if (transport) {
+        return Promise.resolve()
+          .then(function () { return transport('league', leagueUrl()); })
+          .then(function (feed) {
+            if (feed) { leagueLast = feed; leagueBroadcast(); ingest('league', feed); }
+          })
+          .catch(function () { /* keep last good; the caller will ask again */ })
+          .then(function () { if (!stopped && !manual) leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
+      }
       var k = key();
       if (!k) { halt('nokey'); return; }
       // Same window as the WCC loop — the other-games feed is context around our
@@ -291,7 +485,7 @@
           if (r.status === 403) { halt('forbidden'); return null; }
           return r.ok ? r.json() : null;
         })
-        .then(function (feed) { if (feed) { leagueLast = feed; leagueBroadcast(); } })
+        .then(function (feed) { if (feed) { leagueLast = feed; leagueBroadcast(); ingest('league', feed); } })
         .catch(function () { /* keep last good; retry next tick */ })
         .then(function () { if (!stopped) leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
     }
@@ -301,6 +495,22 @@
       if (!d || d.type !== 'wcc-league-request' || !e.source) return;
       try { e.source.postMessage({ type: 'wcc-league', matches: (leagueLast && leagueLast.matches) || [] }, '*'); } catch (err) {}
     });
+    /* A SIMULATED DAY skips both config fetches. Neither says anything useful about
+     * it — out of season `live-config.json` holds no matches at all, which would
+     * leave the engine with an empty poll list and a closed window — and the
+     * simulator already knows the day's matches, so it hands the match map straight
+     * in. Both loops start at once; in manual mode that first poll is the only one
+     * until something asks for the next. */
+    if (transport) {
+      if (opts.cfgById) cfgById = opts.cfgById;
+      cfgReady = Promise.resolve();
+      pcs = opts.matches || [];
+      leagueIds = opts.leagueMatches || [];
+      poll();
+      leaguePoll();
+      return handle;
+    }
+
     // Resolve league ids from same-origin config; only start the loop if today has
     // any (no idle polling on a day with no other league games).
     fetch(leagueConfigUrl, { cache: 'no-store' })
@@ -339,5 +549,6 @@
         .catch(function () { /* keep pcs null + window null → bare fallback */ })
         .then(function () { poll(); });
     }
+    return handle;
   }
 })();

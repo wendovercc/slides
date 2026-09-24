@@ -213,6 +213,14 @@
             100% { box-shadow: 0 0 0 0 rgba(179,38,30,0); }
         }
         html.portrait .tick-live.is-live i { animation: tick-pulse-p 1.8s infinite; }
+        /* TIME HELD (the match-day simulator only — see live-clock.js). The bar's
+           segment cycle is stopped in script; this stops the things CSS is animating
+           on its own, the pulsing live dot above all. A screen described as held has
+           to actually be still, or the word means nothing. */
+        html.clock-held *, html.clock-held *::before, html.clock-held *::after {
+            animation-play-state: paused !important;
+            transition: none !important;
+        }
     </style>
 </head>
 <body>
@@ -446,7 +454,24 @@
         idx = 0;
         showSeg(0);
         stop();
-        if (segments.length > 1) {
+        // Not while held — a repaint must not smuggle the rotation back in.
+        if (segments.length > 1 && !clockHeld) {
+            timer = setInterval(function () { idx = (idx + 1) % segments.length; showSeg(idx); }, CYCLE_MS);
+        }
+    }
+
+    /* A HELD CLOCK STOPS THE CYCLE. The segment rotation is this bar's own timer and
+       owes nothing to the feed, so a held clock would otherwise leave the one surface
+       the hold is meant to make readable still flicking between segments every nine
+       seconds. On release the cycle is rebuilt from the current segment list.
+       Production never sees this: only the simulator can hold the clock. */
+    var clockHeld = false;
+    function setHeld(held) {
+        if (held === clockHeld) return;
+        clockHeld = held;
+        document.documentElement.classList.toggle('clock-held', held);
+        if (held) stop();
+        else if (segments.length > 1 && !timer) {
             timer = setInterval(function () { idx = (idx + 1) % segments.length; showSeg(idx); }, CYCLE_MS);
         }
     }
@@ -454,10 +479,12 @@
     window.addEventListener('message', function (e) {
         var d = e.data;
         if (d && d.type === 'wcc-live') render(d);
+        else if (d && d.type === 'wcc-clock') setHeld(!!d.held);
     });
     // Ask the player's live engine for the last feed immediately (same handshake the
     // today board uses), so the bar paints without waiting for the next poll.
     try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'wcc-clock-request' }, '*'); } catch (e) {}
 })();
 </script>
 </body>

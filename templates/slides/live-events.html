@@ -1,0 +1,367 @@
+{% extends 'slides/_base-sidebar.html' %}
+{#
+  The live event stream, and the scheduler's working, as a slide.
+
+  A development instrument rather than a thing for the bar wall: it shows every
+  event the engine has extracted, the three timestamps each one carries, and the
+  interest / freshness / novelty numbers that decide which of them is on the chrome
+  right now. The point is to be able to argue with the weights — a ranking you
+  cannot see is a ranking you cannot tune.
+
+  A slide and not an overlay HUD on purpose: it scales with the slide layer, sits in
+  the Match Day deck beside the chrome it is explaining, and can simply be walked to.
+
+  Renders from the `wcc-events` broadcast (see live-engine.js). No baked data at all,
+  so it is empty and honest on a day with no cricket; drive it with the simulator:
+      /slideshow/live/?sim=matchday
+#}
+{% block title %}Live events{% endblock %}
+{% block styles %}
+    .header { display: flex; align-items: baseline; gap: 1vw; margin-bottom: 0.8vh; }
+    .title {
+        font-size: var(--t-lg); font-weight: bold; line-height: 1.2;
+        text-shadow: var(--title-shadow);
+    }
+    .counts { font-size: var(--t-sm); color: var(--accent); letter-spacing: 0.04em; }
+    .counts .dim { color: rgba(255,255,255,0.55); }
+    /* Every age and every score on this slide is measured against the scheduler's
+       clock. If that clock is being held by hand, saying so is not optional — the
+       numbers would otherwise look like a live afternoon that had stopped making
+       sense. */
+    .held {
+        margin-left: auto; padding: 0.1vh 0.6vw; border-radius: var(--radius);
+        background: var(--accent); color: var(--navy-1);
+        font-size: var(--t-sm); font-weight: 900;
+        text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .held[hidden] { display: none !important; }
+
+    /* THE SCHEDULER'S ANSWER, given the top of the slide because it is the output the
+       whole model exists to produce. Gold-edged like the chrome's own flag, so the
+       relationship to the ticker below is legible. */
+    .now {
+        display: grid; grid-template-columns: 9vw 1fr 7vw;
+        gap: 0 0.8vw; align-items: center;
+        border-left: 0.3vw solid var(--accent);
+        background: rgba(255,255,255,0.05);
+        padding: 0.7vh 1vw; margin-bottom: 1vh; min-height: 7vh;
+    }
+    .now-kind {
+        font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.1em;
+        color: var(--accent); font-weight: 900; line-height: 1.3;
+    }
+    .now-kind .why { display: block; color: rgba(255,255,255,0.5); font-weight: 400;
+                     letter-spacing: 0.04em; text-transform: none; }
+    .now-head { font-size: var(--t-md); font-weight: bold; line-height: 1.25; }
+    .now-sub { font-size: var(--t-sm); color: rgba(255,255,255,0.65); margin-top: 0.2vh; }
+    .now-num { text-align: right; font-size: var(--t-sm); font-variant-numeric: tabular-nums;
+               line-height: 1.35; }
+    .now-num b { font-size: var(--t-md); }
+    /* Collapsed is a RESULT, not a failure, so it gets a considered empty state
+       rather than a blank box — the floor being what it is, is the information. */
+    .now.empty { border-left-color: rgba(255,255,255,0.25); }
+    .now.empty .now-head { color: rgba(255,255,255,0.5); font-weight: normal; font-style: italic; }
+    /* Footage changes what showing MEANS (the slideshow gives way to the clip), so it
+       is marked on the band rather than left to the type column. */
+    .now.clip { border-left-color: #b3261e; }
+    .flash-tag {
+        display: inline-block; margin-left: 0.5vw; padding: 0 0.4vw;
+        border-radius: var(--radius-sm); background: #b3261e;
+        font-size: var(--t-xs); font-weight: 900; letter-spacing: 0.08em;
+        text-transform: uppercase; vertical-align: 0.15em;
+    }
+
+    .table-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    /* `min-height: 0` lets the table shrink inside the flex column instead of forcing
+       the wrap open, and the clip is the backstop for a run of events longer than
+       `--row-scale` can absorb: rows are lost off the bottom rather than drawn over
+       the slide's own furniture. */
+    .table { min-height: 0; overflow: hidden; }
+    /* type · match · headline · happened · received · shown · I · F · N · score */
+    .ev-grid {
+        display: grid;
+        grid-template-columns: 6.5vw 5.5vw 1fr 6vw 4.2vw 4.2vw 3vw 3vw 3vw 4vw;
+        gap: 0 0.45vw; align-items: baseline;
+    }
+    .col-headers {
+        padding: 0.3vh 0 0.5vh;
+        border-bottom: var(--hair) solid rgba(255,255,255,0.25);
+        font-size: var(--t-xs); letter-spacing: 0.08em; text-transform: uppercase;
+        color: rgba(255,255,255,0.55);
+    }
+    .col-num { text-align: right; }
+    /* Row type scales with the count, per the convention for tables that must hold an
+       unusual number of rows — an event stream has no predictable length at all. */
+    .table { --row-scale: 1; }
+    .row {
+        font-size: calc(var(--t-ms) * var(--row-scale));
+        padding: calc(0.42vh * var(--row-scale)) 0;
+        border-bottom: var(--hair) solid rgba(255,255,255,0.08);
+        white-space: nowrap;
+    }
+    .row:nth-child(even) { background: rgba(255,255,255,0.03); }
+    .kind { text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.85em;
+            color: var(--accent); overflow: hidden; text-overflow: ellipsis; }
+    /* Whose match it is, as a channel of its own: the club-centricity of the interest
+       model is the first thing anyone will want to check. */
+    .who { font-size: 0.85em; overflow: hidden; text-overflow: ellipsis; }
+    .who.ours { color: #fff; font-weight: bold; }
+    .who.other { color: rgba(255,255,255,0.5); }
+    .what { overflow: hidden; text-overflow: ellipsis; }
+    .what .det { color: rgba(255,255,255,0.5); font-size: 0.85em; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .t { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.85em;
+         color: rgba(255,255,255,0.6); }
+    /* An unbracketed happened_at is a real state (no cursor either side), so it says
+       so rather than showing a plausible-looking number. */
+    .t.unknown { color: rgba(255,255,255,0.3); font-style: italic; }
+    .never { color: rgba(255,255,255,0.3); }
+    .score { font-weight: bold; }
+    /* Below the floor = ineligible. Dimming the whole row is the honest rendering:
+       these are events the chrome will not show. */
+    .row.below .score { color: rgba(255,255,255,0.35); }
+    .row.below .what, .row.below .kind { opacity: 0.55; }
+    /* Superseded = a snapshot a newer one has made wrong, not merely old. Struck
+       through rather than dimmed, because "retired" and "low-scoring" are different
+       states and the score column reads 0 for both. */
+    .row.gone .what { text-decoration: line-through; opacity: 0.45; }
+    .row.gone .kind, .row.gone .num, .row.gone .t { opacity: 0.45; }
+    /* The gold row IS the marker. Its I/F/N are the numbers it won with rather than
+       current ones (being shown zeroes its novelty) — which needs no second annotation,
+       because "picked" and "showing the values it was picked on" are the same fact. */
+    .row.showing { background: rgba(212,175,55,0.16); }
+    .row.showing .score { color: var(--accent); }
+    .row.hasclip .kind::after { content: ' ▶'; color: #e0645c; }
+
+    .empty-state {
+        flex: 1; display: flex; flex-direction: column; align-items: center;
+        justify-content: center; gap: 0.8vh; color: rgba(255,255,255,0.5);
+    }
+    /* `display: flex` above is a CLASS selector and so beats the browser's own
+       `[hidden] { display: none }`, which is where this went wrong: `hidden` was being
+       set correctly on every render and simply ignored, leaving "No live events"
+       sitting behind a full table. Any element given a `display` needs this alongside
+       it. */
+    .empty-state[hidden] { display: none !important; }
+    .empty-state .big { font-size: var(--t-md); }
+    .empty-state .small { font-size: var(--t-sm); }
+    /* THE COLUMN LEGEND, ABOVE THE TABLE. Below it, the rows grew down over it — the
+       table has no fixed height and an event stream has no fixed length, so anything
+       underneath is in the way by design rather than by accident. Above, it also reads
+       in the right order: what the columns mean, then the columns. */
+    .legend {
+        margin-bottom: 0.4vh; font-size: var(--t-xs); color: rgba(255,255,255,0.45);
+        letter-spacing: 0.04em;
+    }
+    .legend b { color: rgba(255,255,255,0.7); font-weight: 700; }
+{% endblock %}
+{% block content %}
+    <div class="header">
+        <div class="title">Live event stream</div>
+        <div class="counts" id="counts"></div>
+        <div class="held" id="held" hidden>time held</div>
+    </div>
+
+    <div class="now empty" id="now">
+        <div class="now-kind">Showing<span class="why" id="now-why"></span></div>
+        <div>
+            <div class="now-head" id="now-head">waiting for the feed</div>
+            <div class="now-sub" id="now-sub"></div>
+        </div>
+        <div class="now-num" id="now-num"></div>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="table-wrap">
+        <div class="table" id="table">
+            <div class="ev-grid col-headers">
+                <span>Type</span>
+                <span>Match</span>
+                <span>Event</span>
+                <span class="col-num">Happened</span>
+                <span class="col-num">Recvd</span>
+                <span class="col-num">Shown</span>
+                <span class="col-num">I</span>
+                <span class="col-num">F</span>
+                <span class="col-num">N</span>
+                <span class="col-num">Score</span>
+            </div>
+            <div id="rows"></div>
+        </div>
+        <div class="empty-state" id="empty">
+            <div class="big">No live events</div>
+            <div class="small">Nothing has happened yet, or there is no cricket on.</div>
+            <div class="small">Drive a whole match day with <b>?sim=matchday</b> on the player URL.</div>
+        </div>
+    </div>
+<script>
+(function () {
+    var rowsEl = document.getElementById('rows');
+    var tableEl = document.getElementById('table');
+    var emptyEl = document.getElementById('empty');
+    var countsEl = document.getElementById('counts');
+    var legendEl = document.getElementById('legend');
+    var nowEl = document.getElementById('now');
+    var nowHead = document.getElementById('now-head');
+    var nowSub = document.getElementById('now-sub');
+    var nowNum = document.getElementById('now-num');
+    var nowWhy = document.getElementById('now-why');
+    var heldEl = document.getElementById('held');
+
+    // How many rows fit at full size. Past this the table scales its type and padding
+    // by the same factor (see the stylesheet) rather than shrinking the type for
+    // every run — the convention for tables with no predictable row count.
+    var CAPACITY = 15, SCALE_FLOOR = 0.78;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+    }
+    // Ages read as "how long ago", which is the only form anyone reads a timestamp in
+    // on a wall. Sub-minute resolution matters here: the whole model turns on a few
+    // seconds of difference.
+    /* A 0..1 factor, unambiguously. The first version dropped the leading zero for
+       compactness (`.85`) by slicing the first character off `toFixed(2)` — which
+       turned 1.00 into ".00", exactly what 0.00 renders as. The two ends of the scale
+       meaning opposite things and printing the same is the worst case for a column
+       whose whole job is to explain a decision, so the ends now say so plainly. */
+    function factor(v) {
+        if (v == null) return '—';
+        if (v >= 0.995) return '1';
+        if (v <= 0.005) return '0';
+        return v.toFixed(2).slice(1);
+    }
+    // Seconds as a short duration, for the held-clock badge.
+    function dur(s) {
+        s = Math.abs(Math.round(s));
+        if (s < 60) return s + 's';
+        var m = Math.floor(s / 60), r = s % 60;
+        return m + 'm' + (r ? String(r).padStart(2, '0') : '');
+    }
+    function ago(ms) {
+        if (ms == null) return '—';
+        var s = Math.max(0, Math.round(ms / 1000));
+        if (s < 60) return s + 's';
+        var m = Math.floor(s / 60);
+        if (m < 60) return m + 'm' + (s % 60 ? String(s % 60).padStart(2, '0') : '');
+        return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0');
+    }
+    /* The happened_at RANGE, as a width rather than a pair of clock times: what the
+       reader wants is "how long ago, and how sure are we". A bracket we could only
+       close on one side prints the bound with a ± of nothing, and one we could not
+       bracket at all says so — see `.t.unknown`. */
+    function happened(ev, now) {
+        var a = ev.happened_at && ev.happened_at[0], b = ev.happened_at && ev.happened_at[1];
+        if (b == null) return { text: 'unknown', unknown: true };
+        if (a == null) return { text: '≤' + ago(now - b), unknown: true };
+        var span = Math.max(0, b - a);
+        return { text: ago(now - b) + (span > 1500 ? ' ±' + Math.round(span / 1000) + 's' : ''),
+                 unknown: false };
+    }
+
+    function render(d) {
+        // The scheduler's clock, as the engine reports it — never this document's own
+        // `Date.now()`, which would disagree with every number on the slide the moment
+        // the simulator held time still.
+        var now = d.now || Date.now();
+        var clk = d.clock || {};
+        heldEl.hidden = !clk.manual;
+        if (clk.manual) {
+            // `advanced` only — how much time has been stepped by hand. Never the
+            // distance to the wall clock: that grows a second every second, and a
+            // counter ticking away is exactly what a held screen must not have on it.
+            heldEl.textContent = 'time held' + (clk.advanced ? ' · +' + dur(clk.advanced) : '');
+        }
+        var evs = d.events || [];
+        var byId = {};
+        (d.ranked || []).forEach(function (r) { byId[r.id] = r; });
+
+        // `size` is the store's true total; `events` is only its tail (the engine
+        // caps what it ships across the frame boundary), so the headline counts the
+        // former and the table counts what it actually has.
+        countsEl.innerHTML = evs.length
+            ? '<b>' + (d.size || evs.length) + '</b> events <span class="dim">· ' +
+              evs.filter(function (e) { return !e.shown_at; }).length + ' never shown · ' +
+              evs.filter(function (e) { return e.clip; }).length + ' with footage</span>'
+            : '';
+
+        // The scheduler's answer, first, because it is the output.
+        var showing = d.showing;
+        nowEl.classList.toggle('empty', !showing);
+        nowEl.classList.toggle('clip', !!(showing && showing.clip));
+        if (showing) {
+            nowHead.innerHTML = esc(showing.payload.headline || '') +
+                (showing.clip ? '<span class="flash-tag">news flash</span>' : '');
+            nowSub.textContent = [showing.payload.detail, showing.match.team,
+                                  showing.match.division].filter(Boolean).join(' · ');
+            nowWhy.textContent = (d.holding ? 'holding · ' : '') + (d.reason || '');
+            /* Only what the table below does not already carry. Score and interest are
+               in the highlighted row, so repeating them here says nothing twice, and the
+               countdown to the end of the dwell was the last ticking number left on a
+               surface meant to be read rather than watched. The dwell itself stays: it
+               is a property of the event, and it is nowhere else. */
+            nowNum.innerHTML = '<b>' + Math.round(showing.dwell / 100) / 10 + 's</b> dwell';
+        } else {
+            // Collapsed. Say WHY, because "nothing is worth a screen" and "nothing has
+            // happened" are different states and the difference is the model working.
+            nowHead.textContent = 'chrome collapsed';
+            nowSub.textContent = d.reason || '';
+            nowWhy.textContent = '';
+            nowNum.innerHTML = evs.length ? 'floor ' + d.floor : '';
+        }
+
+        // Newest first: an event stream is read from the top.
+        var list = evs.slice().sort(function (a, b) { return b.received_at - a.received_at; })
+                       .slice(0, 40);
+        var shownCount = Math.min(list.length, 24);
+        tableEl.style.setProperty('--row-scale',
+            String(Math.max(SCALE_FLOOR, Math.min(1, CAPACITY / Math.max(1, shownCount)))));
+
+        emptyEl.hidden = list.length > 0;
+        rowsEl.hidden = list.length === 0;
+        rowsEl.innerHTML = list.slice(0, shownCount).map(function (ev) {
+            var r = byId[ev.id] || { score: 0, freshness: 0, novelty: 0 };
+            var h = happened(ev, now);
+            var cls = ['ev-grid', 'row'];
+            if (showing && ev.id === showing.id) cls.push('showing');
+            else if (r.superseded) cls.push('gone');
+            else if (r.score < (d.floor || 0)) cls.push('below');
+            if (ev.clip) cls.push('hasclip');
+            return '<div class="' + cls.join(' ') + '">' +
+                '<span class="kind">' + esc(ev.label || ev.type) + '</span>' +
+                '<span class="who ' + (ev.match.ours ? 'ours' : 'other') + '">' +
+                    esc(ev.match.ours ? (ev.match.team || 'Ours') : (ev.match.division || 'League')) + '</span>' +
+                '<span class="what">' + esc(ev.payload.headline || '') +
+                    (ev.payload.detail ? ' <span class="det">' + esc(ev.payload.detail) + '</span>' : '') + '</span>' +
+                '<span class="t' + (h.unknown ? ' unknown' : '') + '">' + esc(h.text) + '</span>' +
+                '<span class="t">' + ago(now - ev.received_at) + '</span>' +
+                '<span class="t' + (ev.shown_at ? '' : ' never') + '">' +
+                    (ev.shown_at ? ago(now - ev.shown_at) + (ev.shown_count > 1 ? '×' + ev.shown_count : '') : 'never') + '</span>' +
+                '<span class="num">' + ev.interest + '</span>' +
+                '<span class="num">' + factor(r.freshness) + '</span>' +
+                '<span class="num">' + factor(r.novelty) + '</span>' +
+                '<span class="num score">' + (r.score >= 10 ? Math.round(r.score) : r.score.toFixed(1)) + '</span>' +
+            '</div>';
+        }).join('');
+
+        legendEl.innerHTML = '<b>score = I × F × N</b> · floor ' + (d.floor || 0) +
+            ' · <b>I</b> interest · <b>F</b> freshness (decays from when it happened)' +
+            ' · <b>N</b> novelty (0 = shown too recently)' +
+            ' · struck through = superseded' +
+            (list.length > shownCount ? ' · ' + (list.length - shownCount) + ' older not shown' : '');
+    }
+
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (d && d.type === 'wcc-events') render(d);
+    });
+    // The engine broadcasts on its own tick, but a slide that arrives mid-interval
+    // asks rather than waiting — same handshake as the live feed's.
+    try { window.parent.postMessage({ type: 'wcc-events-request' }, '*'); } catch (e) {}
+    // Standalone (no player around it) there is no parent to ask; the engine also
+    // posts to its own window, so nothing further is needed.
+})();
+</script>
+{% endblock %}

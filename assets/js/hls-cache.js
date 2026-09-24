@@ -177,6 +177,16 @@
   // already fully cached resolves true without re-downloading.
   function prefetch(url, id) {
     if (!SUPPORTED || !url) return Promise.resolve(false);
+    /* A PLAIN MEDIA FILE HAS NOTHING TO PRE-STAGE. Everything below parses the URL as
+     * a playlist and caches its segments so the reveal opens on local bytes; an MP4 has
+     * no playlist and no segments, and the element fetches it itself anyway (the Cache
+     * API entry would never be consulted without a service worker). So it reports ready
+     * immediately and is simply streamed.
+     *
+     * Production clips are always Frogbox `.m3u8`, so this changes nothing on the wall.
+     * It exists because the match-day simulator borrows the R2 ball-event clips, which
+     * are MP4 — and a gate that never opens would mean the news flash never fires. */
+    if (!/\.m3u8(\?|#|$)/i.test(String(url))) return Promise.resolve(true);
     var mid = String(id != null ? id : canonicalUrl(url));
     return openCache().then(function (cache) {
       return verifyReady(cache, mid).then(function (ready) {

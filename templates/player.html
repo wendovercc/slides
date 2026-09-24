@@ -436,7 +436,7 @@
 <script src="/assets/js/refresh.js?v={{ asset_version }}"></script>
 <script src="/assets/js/player-core.js?v={{ asset_version }}"></script>
 {% if not screen %}{# The phone surface. A wall can never be portrait (the rule is built on `interactive`, which /screen/ withholds), so it is not shipped there. #}<script src="/assets/js/portrait.js?v={{ asset_version }}"></script>{% endif %}
-{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script><script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script><script src="/assets/js/live-engine.js?v={{ asset_version }}"></script>{% endif %}
+{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script><script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script>{# The clock, the chase model and the event substrate must all be defined BEFORE the engine, which reads the clock and differentiates each poll into events as it arrives. #}<script src="/assets/js/live-clock.js?v={{ asset_version }}"></script><script src="/assets/js/live-chase.js?v={{ asset_version }}"></script><script src="/assets/js/live-events.js?v={{ asset_version }}"></script><script src="/assets/js/live-engine.js?v={{ asset_version }}"></script>{% endif %}
 <script>
 const params = new URLSearchParams(window.location.search);
 const PREVIEW = params.has('preview');
@@ -496,8 +496,15 @@ const LOCAL_DECK = (DECK && DECK.indexOf('local:') === 0) ? DECK.slice(6) : null
 // so an unprovisioned visitor must present exactly as if live_enabled were false:
 // no live slides in the deck, no ticker/strip/flash chrome, no poller. One constant
 // stands in for the flag everywhere below.
+/* The match-day SIMULATOR stands in for the access key. The gate exists so that an
+   unprovisioned visitor costs the Worker nothing and sees nothing; a simulated day
+   reaches no Worker at all, so there is nothing for a key to authorise. Without this
+   the live slides and the whole L-frame chrome would be filtered out of the deck and
+   the simulator would have nothing to drive. `?sim=matchday` is opt-in, never on by
+   accident, and the feed it produces is fiction — see assets/js/live-sim.js. */
+const LIVE_SIM = params.get('sim') === 'matchday';
 const LIVE_ON = {{ 'true' if live_enabled else 'false' }}
-    && !!(window.WccLiveKey && window.WccLiveKey.get());
+    && (LIVE_SIM || !!(window.WccLiveKey && window.WccLiveKey.get()));
 
 // ...but the live *feed* is a property of the wall, not of the deck document. A
 // browser-held deck (`?deck=local:`) is an editor artefact: the deck builder's preview
@@ -1065,6 +1072,18 @@ async function init() {
        the portrait column has no such band — the slide fills the width of its step.
        So a deck that opens in portrait builds none of this, and builds it if the
        phone is turned. Idempotent, because that can happen more than once. */
+    /* The match-day simulator, fetched only when asked for: it is a development tool
+       and nobody else should pay a request for it. It starts the engine itself (it
+       owns the clock), so it is loaded after the chrome frames exist and can be
+       broadcast to. */
+    function ensureLiveSim() {
+        if (!LIVE_SIM || document.getElementById('live-sim-js')) return;
+        const s = document.createElement('script');
+        s.id = 'live-sim-js';
+        s.src = '/assets/js/live-sim.js?v={{ asset_version }}';
+        document.head.appendChild(s);
+    }
+
     function ensureLiveChrome() {
         if (!LIVE_FEED_ON || document.getElementById('ticker-frame')) return;
         for (const [id, cls, src] of [['ticker-frame', 'ticker', '/live-ticker/'],
@@ -1143,6 +1162,8 @@ async function init() {
        because a phone can be turned more than once. */
     if (PORTRAIT) ensurePortraitDock(); else ensureLiveChrome();
     _livePortrait = PORTRAIT;
+    // After the chrome, so the simulator's first poll has frames to broadcast to.
+    ensureLiveSim();
     {% endif %}
     applyDebugScale();
 
@@ -1414,7 +1435,18 @@ async function init() {
         });
         // One live-feed poll loop for the whole deck, broadcasting to every slide
         // iframe (live-aware slides render it; others ignore it).
-        {% if live_enabled %}if (LIVE_FEED_ON && window.WccLive) WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });{% endif %}
+        // One live-feed poll loop for the whole deck. Under the simulator the ENGINE
+        // IS STARTED BY live-sim.js instead, because the simulator owns the clock
+        // (manual polling, stepped by a key press) — starting it here too would give
+        // the deck two pollers racing on one store.
+        {% if live_enabled %}
+        if (LIVE_FEED_ON && window.WccLive && !LIVE_SIM) {
+            WccLive.start({ frames: () => Array.from(document.querySelectorAll('iframe')), onState: onLiveState });
+        }
+        // The simulator drives the same parent-frame chrome callback the real loop
+        // does, so the ticker's sticky latch behaves as it would on a match day.
+        if (LIVE_SIM) window.onLiveState = onLiveState;
+        {% endif %}
         if (PREVIEW) startReloadTicker(reloadMs);
         armRotation(finalSlides);
     }

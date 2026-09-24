@@ -3552,6 +3552,42 @@ def build_live_matches(env, slide_meta):
         print("  live-match: no matches with a pc_id today")
 
 
+def build_live_events_slide(env, slide_meta):
+    """Emit the `live-events` slide — the event stream and the scheduler's working,
+    as a slide (templates/slides/live-events.html).
+
+    A DEVELOPMENT INSTRUMENT for the v2 live chrome, which schedules events ("what
+    just happened") rather than rendering current state. It renders nothing baked: the
+    whole slide comes from the `wcc-events` broadcast the engine emits after diffing
+    each poll against the last (assets/js/live-events.js), so it is honestly empty on
+    a day with no cricket and comes alive under the simulator:
+
+        python3 scripts/build.py
+        open 'http://localhost:8000/slideshow/live/?sim=matchday'
+
+    Always emitted when live is on — it has no fixtures to depend on, unlike the
+    live-match set — and marked `_live` so a device with no access key drops it like
+    every other live surface."""
+    slug = "live-events"
+    slide = {"template": "live-events", "title": "Live events",
+             "panel_duration": 30, "duration": 30}
+    out_dir = SITE / "slide" / slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "index.html").write_text(
+        env.get_template("slides/live-events.html").render(slide=slide, slug=slug))
+    slide_meta[slug] = {
+        "slide_active": True, "slide_expires": None,
+        "_title": "Live events",
+        "_template": "live-events",
+        "duration": slide["duration"],
+        "panel_duration": slide["panel_duration"],
+        # Part of the live feature set: no access key, no slide (the build flag is
+        # global, provisioning is per-device).
+        "_live": True,
+    }
+    print(f"  slide/{slug}")
+
+
 def build_context_calendar():
     config = load_config()
     phase_cfg = config.get("activity_phases", _DEFAULT_PHASES)
@@ -5152,6 +5188,7 @@ if __name__ == "__main__":
     if live_enabled:
         print("Building live-match slides...")
         build_live_matches(env, slide_meta)
+        build_live_events_slide(env, slide_meta)
     else:
         print("Skipping live-match slides (live_enabled=false)")
 
