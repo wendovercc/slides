@@ -29,6 +29,15 @@ Three consequences fall straight out of the change, and they are the point of it
   the ticker beside it describes that same event rather than drifting on its own
   timer. "Show this event" is one verb whose shape depends on what the event has.
 
+**So the L-frame survives a takeover.** Under v1 a clip was a full-bleed interruption
+and the chrome was in its way, so the flash covered the whole stage. Under v2 the clip
+and the L are two parts of one presentation of one event: the footage shows what
+happened, and the L says whose match it was, what the score is and what it did to the
+table. Covering the context in order to show the picture threw away the half that
+explains it. The flash now takes the **slide's** retracted box instead of the stage, so
+the ticker and strip stay beside it — still 16:9, because that box is a uniform scale of
+a 16:9 stage (`body.live-chrome iframe.flash` in `templates/player.html`).
+
 ## The event record
 
 ```

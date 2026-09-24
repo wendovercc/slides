@@ -164,15 +164,40 @@
         #slide-layer iframe.active { opacity: 1; visibility: visible; }
 
         /* Live-highlight news-flash: a dedicated overlay iframe the player raises above
-           everything (slides AND chrome) — a clip takeover is full-bleed 16:9. */
+           the slides. With no live chrome up it is full-bleed 16:9 over the whole stage. */
         iframe.flash {
             position: absolute; inset: 0; width: 100%; height: 100%; border: none;
             z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.5s ease;
         }
         iframe.flash.flash-active { opacity: 1; }
+        /* BUT THE L-FRAME SURVIVES A TAKEOVER. The clip takes the SLIDE's box — the
+           same retracted rectangle #slide-layer occupies below — rather than the whole
+           stage, so the ticker and strip stay beside it instead of being covered.
+
+           This is the v2 reading of what a takeover is. Under v1 a clip was a full-bleed
+           interruption and the chrome was in its way; under v2 the clip and the chrome
+           are two parts of one presentation of one event — the footage shows what
+           happened and the L says whose match it was, what the score is and what it did
+           to the table. Covering the context to show the picture threw away the half
+           that explains it. See docs/live-events.md.
+
+           Still 16:9: the retracted box is a uniform scale of a 16:9 stage, so the clip
+           is smaller and not letterboxed. Geometry animates on the same curve as the
+           slide layer's retraction, so a chrome latch mid-clip glides rather than jumps. */
+        body.live-chrome iframe.flash {
+            inset: auto;
+            top: 0; left: calc(var(--live-band) * 100%);
+            width: calc((1 - var(--live-band)) * 100%);
+            height: calc((1 - var(--live-band)) * 100%);
+            transition: opacity 0.5s ease,
+                        left 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+                        width 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+                        height 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
 
         /* Live ticker: sits in the bottom band the retracting slide layer uncovers (z
-           below the slides, so scale(1) hides it; below the flash so a clip covers it).
+           below the slides, so scale(1) hides it). A clip no longer covers it — the
+           flash takes the slide's box and the L stays up beside it, see above.
            Its own bar paints the navy/gold footer; the strip + corner are the stage
            matte behind it. Never intercepts input. */
         iframe.ticker {
