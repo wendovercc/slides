@@ -220,7 +220,10 @@ consumer that loads without the module falls back to `Date.now()`, so it is neve
 hard dependency (see the asset-cache-skew note).
 
 Freezing keeps the instant it was frozen *at* rather than resetting to zero, so the
-day so far stays as old as it really is and ages remain meaningful. A time jump fires
+day so far stays as old as it really is and ages remain meaningful. The simulator then
+parks it on **today's date at the day's opening time**, so the whole fiction shares one
+time base and nothing comparing the held clock with the real one sees a date months out.
+A time jump fires
 `onChange`, which makes the engine rebroadcast at once — waiting up to a tick to
 reflect a keypress reads as a broken control.
 
@@ -288,86 +291,266 @@ cd site && python3 -m http.server 8000
 open 'http://localhost:8000/slideshow/live/?sim=matchday'
 ```
 
-**It arrives with time held** and the first poll already on screen (the engine polls
-once on start, so there is a toss to look at). Nothing moves again until you ask it to
-— which is the state you want on arrival, rather than a running day you have to catch.
-Add **`&play`** to start it running instead, for simply watching an afternoon go by.
+**It arrives paused** at the start of the day with the first poll already on screen
+(the engine polls once on start, so there is a toss to look at). Nothing moves again
+until you ask it to — which is the state you want on arrival, rather than a running day
+you have to catch. Add **`&play`** to start it running, or **`&at=16:20`** to begin part
+way through the afternoon.
 
-**Data arriving and time passing are separate controls**, because they are separate
-questions and every judgement the model makes — freshness decaying, a repeat window
-reopening, a dwell running out — is a function of the second. Holding the clock is
-what makes the algorithm legible: a ranking sits still long enough to read, a dwell
-stops expiring under you, and ten minutes of ageing is two keypresses rather than ten
-minutes.
+### One axis, and it is the day's own clock
+
+**Sim time — milliseconds since the day began — is the only state the controls move.**
+Which over each match is in, how old an event is, when the feed last spoke and what the
+scheduler thinks "now" is are all functions of it, so there is one thing to move and
+"paused" has one meaning: nothing is moving, the deck included.
 
 | key | |
 |---|---|
-| **data** | |
-| `n` | one poll forward, carrying the time it took (+15s) |
-| `N` | one poll at the **same instant** as the last — no time passes |
-| `a` | autoplay on/off (starts on) |
-| `[` `]` | slower / faster (4s → 0.5s per poll) |
-| **time** | |
-| `k` | hold / release the clock (holds the whole screen; **held at boot**) |
-| `.` / `>` | push a held clock on 30s / 5m, with **no new data** |
-| `,` | pull it back 30s, to re-watch a decision |
+| `k` | play / pause (**paused at boot**) |
+| `c` | straight to **the next change on screen**, at full speed |
+| `[` `]` | slower / faster (×15, ×60, ×240 real time) |
+| `.` or `n` | one poll on (15s while play is on, 30 either side of it) |
+| `>` | five minutes on |
+| `o` | to the next over anywhere in play |
+| `e` | to the next incident — the markers on the bar |
+| `b` | a minute **back**, which restarts the day there |
 | | |
 | `r` | restart the day |
-| `h` | hide/show the clock HUD |
+| `h` | hide/show the HUD |
 
-**These avoid every key `player-core.js` binds** — Space, `←`, `→`, Home, End,
-PageDown, Escape and `f`/`F` (fullscreen). Both keydown listeners sit on the same
-document and both fire, so a shared key makes one press do two unrelated things: `f`
-held time *and* went fullscreen, and Space and `→` stepped a poll *as well as* driving
-the deck. The deck's transport is now left alone — Space still plays/pauses it, `→`
-still moves it on. Check the two lists against each other before adding a key.
+`c` goes to the moment the scheduler next changes its mind about what to **show**, and it
+is the one to watch the chrome against. It is a different question from `e`, which goes to
+the next thing that *happens*, and the two come apart constantly: a wicket arriving
+mid-dwell waits its turn, a dwell expiring with nothing new promotes something from ten
+minutes ago, and a superseded pick loses the screen with no new event at all. None of it
+can be worked out in advance — it depends on the store's state at the instant it is asked
+— so the day is **run** until it happens.
 
-`n` carries time with it by default, and that default matters: on a real afternoon
-data does not arrive with zero elapsed time, and if it did, every event in the store
-would share one timestamp and every `happened_at` bracket would be zero wide — the
-model would look like it worked when it had nothing to work on. `N` is the deliberate
-exception, for looking at how simultaneous arrivals rank.
+Run, not played: a poll at a time still, because the store is built out of the differences
+between them, but as fast as the promises resolve rather than at the day's watching rate.
+A seek lands in **5–7ms** even when it crosses half an hour of cricket; at ×60 the same
+thing took a second and a half of staring. Capped at an hour of quiet so a dead stretch
+cannot silently run to the end of the day, and cancelled by any other key. The HUD's
+**chrome:** line names the current pick, so a stop says what it stopped on.
 
-### Holding time holds the whole screen
+It also stops on the chrome **collapsing**: between events the dwell expires with nothing
+above `SHOW_FLOOR` and the answer is honestly empty, which is a change worth seeing rather
+than one to skip. Expect two stops per event, one either side. Plain play now stops at the
+end of the day rather than running on into an empty evening.
 
-A hold that only stopped the scheduler's clock would be a lie about most of what is
-moving, so `f` stops all of it:
+**`b`, not `,`.** The comma is already prev-slide on the hardware this is driven from — it
+is not in `player-core.js`, it arrives from outside the page — so the two fought exactly
+as `f` and Space once did on the keys player-core *does* own. Worth remembering that the
+key list to check against is not only this repo's. If `.` ever turns out to be next-slide
+on the same hardware, `n` is already the alias for it.
+
+The bar under the HUD is the whole afternoon, with a marker per incident — a toss, an
+innings break, rain on and off, a hundred, a five-for, a result decided, a result
+confirmed, a ladder move; each tooltip says which and when. **Click it to skip ahead.**
+The markers are derivable because the day is pre-rolled: the cricket is known before a
+ball of it is shown, which is also what makes `e` possible.
+
+**These avoid every key `player-core.js` binds** — Space, `←`, `→`, Home, End, PageDown,
+Escape and `f`/`F` (fullscreen). Both keydown listeners sit on the same document and both
+fire, so a shared key makes one press do two unrelated things: `f` once held time *and*
+went fullscreen, and Space and `→` stepped a poll *as well as* driving the deck. The
+deck's transport is left alone — Space still plays/pauses it, `→` still moves it on.
+Check the two lists against each other before adding a key.
+
+### There was a second axis, and why there no longer is
+
+Data arriving and time passing used to be separate controls, because a poll was **one
+over** while the model was told that poll had taken **fifteen seconds** — sixteen times
+out. Out it had to be: a poll that aged the day by four minutes would have expired a
+wicket's three-minute repeat window before the next one arrived, and every dwell and ttl
+would have looked broken. But two clocks on one screen is one clock too many to reason
+about, and the discrepancy was the reason there were two.
+
+So the compression is gone. An over takes four minutes of sim time and **each feed is
+polled at its real cadence** — sixteen polls to an over on ours, a twentieth of that on
+the league's (below) — most of them returning a scorecard that has not changed. That is
+what an afternoon actually looks like, and the unchanged-poll diff is a path the
+one-poll-per-over simulation never took. A whole day is ~1,700 polls of our own feed,
+which is a couple of minutes of watching at ×240 and milliseconds when skipped.
+
+### Our matches are polled far more often than the division's
+
+**In manual mode the engine schedules nothing** — `schedule` and the league timer both
+bail — so the simulator is the only thing that decides the ratio between the two feeds,
+and a chrome tuned against a division that moved as briskly as our own matches would be
+tuned against a fiction. It therefore asks the engine's own question of the same feed
+(`intervalFor`) rather than assuming a rate:
+
+| feed | cadence | why |
+|---|---|---|
+| ours | `FAST` 15s while anything is in play | what the Worker is polled at on a match day |
+| ours | `SLOW` 30s otherwise | before the first ball, and while a result is decided but unconfirmed, so a scorer's correction is still caught |
+| ours | `IDLE` 120s | an empty feed |
+| the division | `LEAGUE_MS` 300s, on its own timer, all day | matches the Worker's `LEAGUE_TTL` |
+
+Over a full simulated day that is ~1,700 polls of ours against ~96 of the league's, and
+exactly **20:1 while play is on**. The cadence steps down again at the last result, which
+is a transition the flat-rate version never produced at all.
+
+Two things this got wrong first time, both worth not repeating: keying the league off a
+poll **counter** (`polls % 20`) is right only at the fast cadence and silently becomes 20
+minutes during a coarse skip, so both feeds are on sim-time timers instead; and a flat 15s
+all day polls the empty ends of the afternoon twice as fast as the wall ever does. The HUD
+shows both counts (`poll 194 ours / 13 league`) so the ratio is visible rather than
+assumed.
+
+### Why there is no stepping back
+
+The engine holds the previous poll to diff against and the store only ever accumulates,
+so the day can be run **on** but not rewound — a rewind would have to rebuild both. A
+reload rebuilds both for nothing, so `b` and a click behind the playhead reload with
+`&at=`, which runs the day up to that point for real and leaves a store that honestly
+holds the afternoon so far.
+
+A long skip still delivers every poll in between, in order, because the diff chain is
+what makes the store mean anything — but on a coarser spacing, and with the clip flash
+disarmed so it does not fire fifty video takeovers on its way past. `detectClips` reads
+`WccPlayer.flash` fresh every poll, so borrowing it is enough and the shipping engine
+needs no flag. It is given back a *turn* later rather than at the end of the loop,
+because the engine detects clips inside its poll's own promise chain, which settles after
+the synchronous skip has returned.
+
+### Pausing stops the whole screen
+
+A pause that only stopped the scheduler's clock would be a lie about most of what is
+moving, so it stops all of it:
 
 - **The deck stops advancing** (`WccPlayer.setPlaying(false)`), so it cannot walk off
-  the thing you were reading. The previous play state is remembered — releasing must
-  not start a deck that was already paused.
+  the thing you were reading. The previous play state is remembered — resuming must not
+  start a deck that was already paused.
 - **The ticker's segment cycle and the strip's view cycle stop.** Those are the
   surfaces' own timers and owe nothing to the feed, so they would otherwise keep
-  rotating through a "held" screen. The engine broadcasts `wcc-clock`; each surface
+  rotating through a stopped screen. The engine broadcasts `wcc-clock`; each surface
   clears its interval and sets a `clock-held` class that pauses CSS animations too —
   the pulsing live dot included.
-- **Autoplay stops**, since its whole premise is that time passes on its own.
 
-**Nothing on a held screen may show a moving number.** The distance between a frozen
-clock and the wall clock grows a second every second, so it is never displayed; what
-the HUD and the inspector's **time held** badge show is `advanced()` — how much time
-has been *stepped by hand* since the hold — which changes only on a keypress. The
-inspector shows the badge whenever the clock is not real, because otherwise every age
-and score on it would look like a live afternoon that had quietly stopped making
-sense.
+**"Held" is not the same question as "manual".** The clock is manual for the whole
+simulated run now, so `isManual()` can no longer tell a stopped day from a running one —
+reading it would freeze the ticker's cycle for the entire afternoon. The simulator
+therefore tells the clock its play state (`WccClock.running`), and the engine asks
+`WccClock.isHeld()`, which is manual *and* not moving. Both are inert in production,
+where the clock is never manual; the engine falls back to `isManual()` for an older
+`live-clock.js` served from cache (see the asset-cache-skew note).
+
+**Nothing on a stopped screen may show a moving number.** The distance between a held
+clock and the wall clock grows a second every second, so it is never displayed; what the
+HUD and the inspector's **time held** badge show is `advanced()` — how much time has been
+stepped through by hand — which changes only when you move the day. The inspector shows
+the badge whenever the clock is not real, because otherwise every age and score on it
+would look like a live afternoon that had quietly stopped making sense.
 
 It drives the **shipping** path, not a parallel mock: a deterministic ball-by-ball
 simulation becomes the exact feed shapes the Worker emits (`rv.mjs` for ours,
 `pc.mjs` for the league's), handed to the real engine through its `transport` seam.
 The engine polls, holds, differentiates, schedules and broadcasts — all shipping
 code. `transport` also stands in for the access gate, because there is no Worker to
-authorise against, and `manual` hands the clock over so a key press steps the day.
+authorise against, and `manual` hands the clock over so the day's own time is the only
+clock on the page.
 
 **No build inputs needed** — it invents the day, so it works in December on a repo
 with an empty `live-config.json`. But if the build baked a real day it **adopts its
-identities** (pc_ids, team names, opposition, division, home/away) and simulates
-those, because the `live-match-{team}` slides are each bound to a baked `pc_id`:
+identities** and simulates those, from both configs:
+
+- `/live-config.json` → our matches' pc_ids, team names, opposition, division,
+  home/away, because the `live-match-{team}` slides are each bound to a baked `pc_id`.
+- `/live-league.json` → the division's match ids, clubs, competition, team ids and real
+  start times, because **every surface that shows other clubs' matches pairs a card to a
+  baked fixture by `match_id`** — the strip's ladder tiles via `cardFor`
+  (`leagueById[fx.match_id]`) and the today board via `LEAGUE_SCORES[o.match_id]`. An
+  invented id lights up neither: the cards arrive, match no row, and are dropped without
+  a word. This is the single most confusing thing about testing those two surfaces.
 
 ```
 WCC_TODAY=2026-08-08 WCC_LIVE_ENABLED=1 python3 scripts/build.py
 ```
 
-One poll = one over. One run passes through every state worth seeing: a toss, a
+Both adoptions keep the simulation's own shape — the beats, the staggering, the
+abandonment, the silent match — and only re-label it.
+
+### Simulating a league match day
+
+The division needs one thing our own matches do not: **a baked fixture list**, because the
+today board's other-games rows and the ladder's other tiles are baked and the feed only
+decorates them. `live-league.json` and `ev.league.others` both come from
+`content/data/fetched/league_today.json`, and `_load_league_today` discards that file
+outright if its `date` is not the build's date — so a stale file is the same as no file.
+Out of season there are no league fixtures to fetch at all, which would leave those two
+surfaces untestable for six months of the year.
+
+So the build can **invent the division too** — `WCC_SIM_LEAGUE=1`:
+
+```
+WCC_TODAY=2026-10-04 WCC_SIM_LEAGUE=1 WCC_LIVE_ENABLED=1 python3 scripts/build.py
+cd site && python3 -m http.server 8000
+open 'http://localhost:8000/slideshow/live/?sim=matchday'
+```
+
+```
+  league_today: SIMULATED — 2 invented match(es) across 1 division(s) [WCC_SIM_LEAGUE]
+  live-league.json — 2 other-league match(es) today
+[sim] adopted 2 baked league match(es): Chesham CC v Gerrards Cross CC #990291700, …
+```
+
+`_sim_league_today` needs no PC-API call and no season, because every division we play in
+has a **committed** `league_table_<comp>.json` — a list of the clubs in it with their real
+team ids. It pairs the other sides off the table in order and invents only who plays whom
+and when. Ids are stamped in a `99xxxxxxx` range so an invented fixture can never be taken
+for a real PC match id in a log line or a cache, and the whole thing is deterministic, so a
+rebuild does not reshuffle the division under a test. It is a drop-in for the real file, so
+`others` bakes with positions, point-differences and swing flags exactly as it would in
+August, and the simulator then adopts those ids from `live-league.json`.
+
+`WCC_TODAY` still has to be a day **we** have a league match on, since the whole scope is
+"the divisions Wendover is playing in today" — `_sim_league_today` reads the competition
+off our own fixtures. `2026-10-04` works in the committed data; so does `2026-11-01`.
+
+Two things to expect, neither a fault:
+
+- **The board's times may not match the sim's clock.** It shows the baked fixture time,
+  and the only in-season division in the committed data starts at 10:15, which is before
+  the simulated day opens at 12:30. `startAtTime` notices a start outside the window and
+  keeps the template's instead, so the cricket runs in the afternoon while the board says
+  morning. Harmless; the ids are what the surfaces pair on.
+- **A real fetch is still the honest test** for the fixture list itself
+  (`scripts/fetch_league_fixtures.py`, needs `PLAY_CRICKET_API_TOKEN` +
+  `PLAY_CRICKET_SITE_ID`, honours `WCC_TODAY`). `WCC_SIM_LEAGUE` is for exercising the two
+  surfaces, not for checking that discovery works.
+
+Without either, the simulator still runs the division on the lean feed — the event stream,
+the inspector and the ticker key off the feed alone — but those two baked surfaces have
+nothing for a score to attach to, which looks exactly like a broken feed and is not.
+
+The simulated division also **leaves out the sides already playing us**: with two Wendover
+teams out in one division, a naive pairing off the table put both of our opponents into a
+second game as well, which is not a day anyone could have. Excluded by team id where the
+table row has one, since a club can have two sides in a division and only one of them is
+playing us.
+
+#### A caveat about the example day: TWO Wendover teams in ONE division
+
+`2026-10-04` is an unusual fixture list — Women's Softball **Hawks (10:15)** and **Kites
+(11:45)**, both in competition `142917` — and **the today board does not handle that well
+today.** `attach_league_context` hangs a `league` block off *each* match event, so the
+division's other games are baked under both cards and the board lists them twice, while the
+one game in that division a viewer would most want alongside the Hawks — the Kites' — is
+absent from both, because our own club is excluded from "other games" by definition:
+
+```
+Women's Softball Hawks → others: ['990291700']
+Women's Softball Kites → others: ['990291700']
+```
+
+**Noted for the production today-board revisit, not fixed here** — it is a pre-existing
+board issue, nothing to do with the simulator, and it would be the wrong thing to patch
+from inside a test harness. Worth knowing while testing on this date, though: a duplicated
+other-games list is the board, not the feed.
+
+One run passes through every state worth seeing: a toss, a
 first innings, a target set, a chase turning both ways, fifties, a **hundred** and a
 **five-for** (guaranteed by `beats`, which bias the dice and the overs rather than
 writing figures into the card), clips arriving late, a rain break that actually
@@ -464,6 +647,81 @@ update. The ladder may be the more useful thing to have up during those, with th
 carried by the ticker's text instead. That is a per-type choice to be made by looking at
 it, not reasoned out in advance, and the inspector plus the simulator are how to look at
 it.
+
+#### NOTED, NOT BUILT: the toss and the INNINGS START are both events we want
+
+Two early events are missing, and they are missing for different reasons. Neither is built
+— the production feed is deliberately untouched for now — but the second is much the
+cheaper and has the stronger claim.
+
+**1. An innings starting is a real change to the league ladder, not just a good moment for
+it.** The strip's bat/bowl glyph is derived from the *last* innings in the card
+(`live-strip.html:321`):
+
+```js
+if (!inns.length) return { idle: 'nodata' };
+var cur = inns[inns.length - 1];
+var batting = inningsSide(card, cur) === side;
+var out = { role: batting ? 'bat' : 'bowl' };
+```
+
+So an innings appearing repaints the ladder twice over:
+
+- **the first innings** — the two tiles go from *no glyph at all* (`idle: 'nodata'`) to a
+  bat and a ball. The match visibly comes alive in the standings.
+- **the second innings** — both glyphs swap, *and* the tiles gain a lean and a certainty
+  where the first innings gave them `certainty = 0` ("a role, no lean"), because a chase
+  now exists to have an opinion about. The fill changes, not just the corner.
+
+That makes it the clearest case yet for the ladder as a panel: the event *is* a ladder
+repaint, so showing the ladder is not a curatorial choice about what best completes the
+event — it is showing the thing that just changed.
+
+**It needs no new feed field and no Worker change.** Both extractors already see it and
+both say nothing:
+
+- `extractLive` has the seam and discards it — `var pinn = matchInnings(pi, inn, ii);
+  if (!pinn) return;` (`live-events.js:401`). An innings with no previous counterpart is
+  skipped, and that is precisely the signal.
+- `extractLeague` already detects a new innings appearing, as `mi.length > pi.length &&
+  pi.length` — note the `&& pi.length`, which deliberately excludes the *first* innings
+  from being read as a closure.
+
+**The sharp point: for a limited-overs match, the first innings closing and the second
+innings starting are the same instant.** `innings_closed` already fires there, and fires
+*because* the new innings appeared. So an `innings_start` event would duplicate it on the
+second innings and is genuinely novel only on the **first** — which is to say, the event
+worth adding is *the match has started*. What is distinct about the second innings is not
+the event but the panel: the chase becomes real, and the existing `innings_closed` can
+carry that.
+
+**2. The toss**, which is the one blocked on the feed. For our own matches it already
+exists. For the division it does not, at two silent layers: `pc.mjs normaliseMatch()` does
+not carry a toss field into the league card, and `extractLeague` has no toss branch. The
+data is there — `match_detail.json`, the same endpoint the league feed already calls,
+carries `toss_won_by_team_id` and a ready-made `toss` sentence, and `fetch_fixtures.py`
+(~line 359) reads both for our matches today.
+
+**Its open question is timeliness, not availability.** PC-API's live-score is coarse and
+patchy for other clubs (see the league-wide-today work), and it is not known whether `toss`
+populates at toss time or only when the scorer submits — possibly after the match. A toss
+arriving at seven in the evening would be treated as news, since a standing fact appearing
+on an ordinary poll is detected as the field appearing and `MAX_BACKDATE` clamps its age to
+fifteen minutes regardless. `scripts/probe_live.py` against a couple of other clubs'
+fixture ids mid-afternoon would settle it. The innings-start route sidesteps the question
+entirely, which is another reason to reach for it first.
+
+**And it wants a different panel from the innings start.** At the toss there is no score
+and no innings, so the ladder is the honest answer for a league match and previous-match
+form for ours (above). At the first innings start there is a ladder that has just changed.
+Two nearby events, two different panels — a useful pair to settle the per-type panel
+mapping against, and both of them reachable in the simulator with `c`.
+
+One weighting note for whenever this is built: a league toss clears the floor comfortably
+— interest is `round(40 × 0.55) = 22` against a `SHOW_FLOOR` of 8 — so six divisions' worth
+of tosses and first innings would genuinely compete for the screen around one o'clock
+rather than being quietly dropped. Where a `match_started` sits relative to `toss` (40) and
+`innings_closed` (74) is a decision to take at the inspector, not in advance.
 
 Two consequences worth stating now:
 

@@ -3095,10 +3095,104 @@ def build_live_config():
     print(f"  live-config.json — {len(matches)} pollable match(es) today, poll window {window}{replay}")
 
 
+def _sim_league_today():
+    """INVENT today's other league matches, from the COMMITTED league tables.
+
+    `WCC_SIM_LEAGUE=1` only, and the point of it is this: the today board's other-games
+    rows and the strip's ladder tiles are BAKED, not fed. Both pair a live card to a baked
+    fixture *by match id* (today.html's `LEAGUE_SCORES[o.match_id]`, live-strip.html's
+    `cardFor`), so the match-day simulator cannot light either one up on its own, however
+    good the feed it produces — there is nothing for a score to attach to. This is the
+    missing half, and it needs no PC-API call and no season: every division we play in has
+    a committed `league_table_<comp>.json`, which is a list of the clubs in it and their
+    real team ids. The only fiction is who plays whom, and when.
+
+    Deterministic, so a rebuild does not reshuffle the division under a test, and ids are
+    stamped in a 99xxxxxxx range so an invented fixture can never be taken for a real PC
+    match id in a log line or a cache.
+
+    Returns the same {competition_id: [slim match, ...]} shape as the real file."""
+    by_comp = {}
+    events, _ = _todays_events()
+    # WHO IS ALREADY BUSY in each division: our own sides, and the sides playing them.
+    # Gathered across ALL of today's events first, because two Wendover teams can be out
+    # in the same division — and a side already playing us cannot also be playing each
+    # other, which is what a naive pairing off the table produces.
+    engaged = {}
+    for ev in events:
+        if ev.get("type") != "match" or not ev.get("competition_id"):
+            continue
+        eng = engaged.setdefault(str(ev["competition_id"]),
+                                 {"ids": set(), "clubs": set(), "ev": ev, "time": None})
+        if ev.get("opposition_team_id"):
+            eng["ids"].add(str(ev["opposition_team_id"]))
+        if ev.get("opposition"):
+            eng["clubs"].add(str(ev["opposition"]).strip())
+        t = str(ev.get("time") or "")
+        if re.match(r"^\d{1,2}:\d{2}$", t) and (eng["time"] is None or t < eng["time"]):
+            eng["time"] = t
+    for comp, eng in engaged.items():
+        ev = eng["ev"]
+        table = FETCHED / f"league_table_{comp}.json"
+        if not table.exists():
+            continue
+        try:
+            rows = json.loads(table.read_text())["league_table"][0]
+        except (ValueError, OSError, KeyError, IndexError):
+            continue
+        # "Great Kingshill CC - Under 9" → club + team name, the same split the rest of
+        # the build uses on table rows. Our own side is dropped: it is playing us.
+        sides = []
+        for r in rows.get("values", []):
+            label = (r.get("column_1") or "").strip()
+            club, _, team = label.partition(" - ")
+            tid = str(r.get("team_id") or "")
+            if not club or club.startswith(OUR_CLUB):
+                continue
+            # By team id where the row has one, since a club can have two sides in a
+            # division and only one of them is playing us.
+            if tid and tid in eng["ids"]:
+                continue
+            if not tid and club in eng["clubs"]:
+                continue
+            sides.append({"club": club, "team": team or club, "id": tid})
+        # Paired off the table in order, which is not how a fixture list is drawn but is
+        # stable and gives every game two sides of roughly similar standing — so the
+        # ladder's swing flags and point-differences have something to say.
+        ours_time = eng["time"] or "13:00"
+        base = int(ours_time.split(":")[0]) * 60 + int(ours_time.split(":")[1])
+        matches = []
+        for i in range(0, len(sides) - 1, 2):
+            h, a = sides[i], sides[i + 1]
+            idx = i // 2
+            mins = base + (idx % 3) * 30          # a staggered afternoon, not one mass start
+            matches.append({
+                "match_id": 990000000 + (int(comp) % 10000) * 100 + idx,
+                "competition_id": comp,
+                "competition_name": rows.get("name") or ev.get("competition") or "",
+                "match_date": _today().isoformat(),
+                "match_time": f"{mins // 60:02d}:{mins % 60:02d}",
+                "ground_name": None,
+                "home_club_name": h["club"], "home_team_name": h["team"], "home_team_id": h["id"],
+                "away_club_name": a["club"], "away_team_name": a["team"], "away_team_id": a["id"],
+            })
+        if matches:
+            by_comp[comp] = matches
+    total = sum(len(v) for v in by_comp.values())
+    print(f"  league_today: SIMULATED — {total} invented match(es) across "
+          f"{len(by_comp)} division(s) [WCC_SIM_LEAGUE]")
+    return by_comp
+
+
 def _load_league_today():
     """Today's OTHER league matches (scripts/fetch_league_fixtures.py), grouped by
     competition_id. Stale (wrong date) or missing → empty, so the board degrades to
-    schedule-only rather than surfacing yesterday's fixtures."""
+    schedule-only rather than surfacing yesterday's fixtures.
+
+    `WCC_SIM_LEAGUE=1` invents them instead, for simulating a league match day out of
+    season — see _sim_league_today."""
+    if str(os.environ.get("WCC_SIM_LEAGUE", "")).lower() in ("1", "true", "on", "yes"):
+        return _sim_league_today()
     p = FETCHED / "league_today.json"
     if not p.exists():
         return {}

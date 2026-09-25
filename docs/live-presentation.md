@@ -177,6 +177,24 @@ The vertical partner of the ticker footer: the same player-owned chrome, showing
   under a **FINAL** caption, with the tiles a touch quieter. The caption carries the
   meaning: muting alone would read as stale data rather than a settled result. The
   required rate is the one live-only stat — there's nothing left to require it over.
+- **IDEA, NOT BUILT — pair the bat/bowl glyphs by colour, so you can see who is playing
+  whom.** The ladder is in league order, so the two sides of a fixture are almost never
+  adjacent: with three or four games on in a division you can see who is batting, but not
+  who they are batting *against*, and reading it off the TLAs means knowing the fixture
+  list. A shared hue on the bat and the ball of one match would make each pairing legible
+  at a glance across the whole column — and it is the one channel on the tile that is
+  currently doing nothing, since `.role` is flat white (`color: #fff`, the glyph drawing in
+  `currentColor`).
+
+  Two things to design around rather than ignore. **Colour is already load-bearing here** —
+  the fill is the points green/red of the result lean (`leanColour`), so a second colour
+  channel on the same tile has to be clearly *not* that: a pairing hue must not read as a
+  lean. And the brand has **gold as its sole accent with deliberately neutral value bars**,
+  so a rainbow of fixture hues is a bigger departure than it looks. Options worth trying in
+  the simulator: a small set of desaturated pairing tints; or one hue per *match* applied
+  only to the glyph outline; or — cheapest and most on-brand — reserve colour for OUR match
+  (gold bat, gold ball) and pair the rest with a shape or a subtle tick instead, on the
+  grounds that the pairing a viewer in the pavilion actually needs is the one involving us.
 - **Baked vs live:** the build bakes only *context* (today's matches, their
   divisions, the day's fixtures in them — `build_live_strip`). Every channel above
   is derived at runtime in `templates/live-strip.html` from the two feeds the player
@@ -253,8 +271,9 @@ have baked views for the chosen day, hence `WCC_TODAY`. See
 That simulator is **strip-only** — it posts fabricated feeds at the strip page it is
 loaded into. For a whole match day across *every* surface at once (ticker, context
 tile, strip, live-match slides, clip flashes, the event stream) there is now a
-player-level one that drives the real engine: `/slideshow/live/?sim=matchday`, with a
-key press per poll. See `docs/live-events.md`.
+player-level one that drives the real engine: `/slideshow/live/?sim=matchday`, a whole
+afternoon on one time axis with a clickable bar of its incidents. See
+`docs/live-events.md`.
 
 ## Player-profile enrichment (a third opportunity)
 

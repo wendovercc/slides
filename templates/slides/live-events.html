@@ -238,7 +238,9 @@
         s = Math.abs(Math.round(s));
         if (s < 60) return s + 's';
         var m = Math.floor(s / 60), r = s % 60;
-        return m + 'm' + (r ? String(r).padStart(2, '0') : '');
+        if (m < 60) return m + 'm' + (r ? String(r).padStart(2, '0') : '');
+        // The simulator's axis is a whole afternoon, and "230m" is not a reading.
+        return Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0');
     }
     function ago(ms) {
         if (ms == null) return '—';

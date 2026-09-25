@@ -140,9 +140,14 @@
      * own, and a held clock has to stop those too or "held" is a lie about most of the
      * screen. */
     function clockState() {
-        return window.WccClock
-            ? { manual: WccClock.isManual(), advanced: Math.round(WccClock.advanced() / 1000) }
-            : { manual: false, advanced: 0 };
+        /* `isHeld` is manual AND not moving, which is what the surfaces actually want: a
+         * simulated day that is RUNNING is time passing, and stopping the ticker's cycle
+         * for it would freeze most of the screen for the whole run. Falls back to
+         * `isManual` for an older live-clock.js that has no such question — the asset
+         * cache can serve this page one (see the asset-cache-skew note). */
+        if (!window.WccClock) return { manual: false, advanced: 0 };
+        var held = WccClock.isHeld ? WccClock.isHeld() : WccClock.isManual();
+        return { manual: held, advanced: Math.round(WccClock.advanced() / 1000) };
     }
     function clockBroadcast() {
         var msg = { type: 'wcc-clock', held: clockState().manual, advanced: clockState().advanced };
