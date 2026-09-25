@@ -1,0 +1,762 @@
+{% extends 'slides/_base-sidebar.html' %}
+{% block title %}{{ slide.title }}{% endblock %}
+{#- Match Day: the state of up to three Wendover matches, each inside the division
+    it belongs to, with the rest of that division's games beneath it.
+
+    LAYOUT ONLY at this stage — the geometry is settled here first and the content
+    fills in afterwards. What's rendered now is the part that's known at build time
+    (who's playing whom, when, where, in what league); the `.md-state` region in
+    LAID OUT AT BUILD TIME, PATCHED AT RUNTIME. Every tile's column, span and row
+    is decided by match_day_layout() and written into the markup as a grid
+    coordinate; the feed only ever sets the text behind a `data-f` hook, so there
+    is never a second copy of the layout in JS free to drift from this one. The
+    baked paint IS the pre-play state — empty apertures, and the zones ordered on
+    the assumption that the home side bats first, which is what a real board shows
+    before the toss — so there is no initial render call to blank it.
+
+    TWO PRESENTATIONS PER TILE, and the feed picks. Before a ball is scored each
+    tile shows its PRE-MATCH panel — the home side's crest, club, team and form
+    top-left, the opposition's bottom-right, split by a diagonal rule, all in the
+    tape's vocabulary — and the square tiles name each side's club over its team
+    designation where their score will go. All of
+    that is overnight data, so it bakes; the board only takes over once there is a
+    scored innings to put on it, which is also what keeps an unscored match off it
+    all afternoon. A decided match still says only "Result" in the note; the rest
+    of the finished-match presentation is the next piece of work.
+
+    NO FORM SEQUENCE EXISTS FOR A DIVISION CLUB WE DON'T PLAY — `opposition_form`
+    comes from fetch_play_cricket pulling our own opponents' results, and the
+    committed league table has no form column. That is why the squares name the
+    team rather than showing form; giving them form means fetching each division
+    club's results.
+
+    ONE SIX-COLUMN GRID CARRIES EVERYTHING, with every item placed by explicit
+    `grid-column` / `grid-row` coming out of match_day_layout(). Six columns
+    because six divides by one, two and three exactly, so every match tile is a
+    whole number of columns wide (6, 3 or 2) whatever the day looks like. Four
+    rows:
+
+      1  division headings      — each spans its division
+      2  our match tiles        — `1fr`, so they take all the height left over
+    3-5  other games            — one column each, filling the division's span
+                                  and wrapping down; three rows is the cap
+
+    A division is grouped by its HEADING ALONE, centred across the columns it
+    owns. There is no container box: nesting a grid per division would let one
+    with two rows of squares squash its own match tiles while its neighbour's
+    stayed tall, and a tint behind them would be a third shade saying what the
+    centring already says.
+
+    Bands are keyed by DIVISION, not by fixture. That's what lets one band show
+    the whole division — including a second Wendover side in it — rather than
+    repeating an identical "other games" list under each of our two teams, which
+    is what the today board does today.
+
+    Sidebar layout, as the today board — this is a data-dense board and the two
+    should read as the same surface. -#}
+{#- Form as badges, the tape's vocabulary at tile size. Only our own matches get
+    these — see the note in the docstring about the division's other games. -#}
+{% macro form_badges(form) %}
+    {%- if form -%}
+        <span class="fm">{% for r in form %}<span class="fm-b fm-{{ r }}">{{ r }}</span>{% endfor %}</span>
+    {%- else -%}
+        <span class="fm-none">No form yet</span>
+    {%- endif -%}
+{% endmacro %}
+{% block styles %}
+    .md-head { height: 7vh; flex-shrink: 0; display: flex; align-items: baseline; gap: 1.2vw; }
+    .md-title { font-size: var(--t-lg); font-weight: 700; }
+    .md-date { margin-left: auto; font-size: var(--t-sm); text-transform: uppercase;
+        letter-spacing: 0.08em; color: var(--muted); }
+
+    /* The four rows of the docstring. The match row is the only flexible one, so
+       surplus height falls to our own matches and the squares below keep their
+       aspect ratio. An `auto` row with nothing in it collapses to nothing, so a
+       board with one row of other games spends no height on the second. */
+    .md-grid { flex: 1; min-height: 0; display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        grid-template-rows: auto 1fr auto auto auto;
+        gap: 1.2vh 0.9vw; }
+
+    /* ── The division heading ────────────────────────────────────────────── */
+    /* No box and no rule: the heading is CENTRED IN ITS SPAN, and that alone says
+       which columns belong to it. A container tint under a group of tiles that
+       already have their own backgrounds was a third shade doing what the
+       centring does for nothing. */
+    .md-div-head { grid-row: 1; min-width: 0;
+        display: flex; align-items: baseline; justify-content: center; gap: 0.6vw;
+        font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.08em;
+        color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; }
+    .md-div-name { font-weight: 700; color: var(--text); min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; }
+    .md-div-more { flex-shrink: 0; opacity: 0.7; }
+
+    /* ── A Wendover match tile ───────────────────────────────────────────── */
+    .md-col { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+        background: rgba(255,255,255,0.05); border: var(--hair) solid rgba(255,255,255,0.1);
+        border-radius: var(--radius); overflow: hidden;
+        padding: calc(1.1vh * var(--tile-h)) calc(1vw * var(--tile-w)); }
+
+    /* Meta row: the tile-stack idiom — col-header typography, badges at full
+       opacity parked at the right end, and it must stay one line. */
+    /* The row's type is set ONCE here and inherited; its pill and badge then size
+       their padding in `em`, so the whole row scales as one thing with the tile's
+       width rather than each part needing its own factor. */
+    .md-meta { flex-shrink: 0; display: flex; align-items: center;
+        gap: calc(0.6vw * var(--tile-w)); font-size: calc(var(--t-sm) * var(--tile-w));
+        text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
+    .md-time { font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+    .md-time .tbc { font-size: 0.75em; font-weight: 400; color: var(--muted); }
+    .md-meta .spacer { flex: 1; }
+    /* Home/Away pill + ground: the Team Focus Schedule sizing verbatim, so this
+       board and that one agree. */
+    .ha { flex-shrink: 0; letter-spacing: 0.08em;
+        border-radius: var(--radius); padding: 0.1vh 0.45em;
+        background: rgba(60,180,80,0.3); border: var(--hair) solid rgba(60,180,80,0.5); }
+    .ha.away { background: rgba(180,100,40,0.3); border-color: rgba(180,100,40,0.5); }
+    /* Inverted location badge (navy on gold), the today board's `.loc-badge`
+       verbatim. Not uppercased: the name is a GROUND, and it should read the way
+       it's written on a signpost. `text-transform` has to be re-asserted because
+       the meta row it sits in uppercases everything else on the line. Unlike the
+       today board it takes no max-width — the tile is two, three or six columns
+       wide, so the tile is the bound and the badge ellipsises inside it. */
+    .md-loc { flex-shrink: 1; min-width: 0; background: var(--accent); color: var(--navy-1);
+        font-weight: 700; text-transform: none; letter-spacing: 0.02em;
+        padding: 0.2vh 0.58em; border-radius: var(--radius-sm);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ── The scoreboard ───────────────────────────────────────────────────
+       The familiar village-scoreboard arrangement, and deliberately no more than
+       that: TOTAL and WICKETS in the big digits on the top row, OVERS and LAST
+       MAN beneath them. Four figures is the whole board. The physical ones carry
+       about this much because it's what can be read from the boundary, which is
+       the same problem this slide has.
+
+       It takes the height the tile has left — which is the height the grid's
+       `1fr` match row gave the tile — so it fills most of the tile without any
+       of it being content-driven. */
+    .md-state { flex: 1; min-height: 0; margin-top: calc(1.4vh * var(--tile-h)); display: flex; }
+    /* `display` beats the `hidden` attribute, so re-assert it — both the pre-match
+       panel and the board set one. */
+    .md-state > [hidden] { display: none; }
+
+    /* ── Before a ball is bowled ──────────────────────────────────────────
+       The live-match slide's Pre-match panel (_tape.html), cut down to a tile and
+       STACKED rather than set side by side: a tile is at its narrowest two of six
+       columns, which is not enough for two columns of its own. The wall has height
+       to spare here and width it hasn't.
+
+       Everything else follows the tape. Crest in a white disc over a centred
+       stack, CLUB as the headline, the gold "Form" label over the badges — no
+       "vs", and no gold on our own name: gold belongs to the label, not to us.
+
+       The tape can leave the team designation to its slide header; this tile has
+       no header to leave it to, so the club name carries the team under it.
+
+       THE SPLIT IS DIAGONAL. Home sits top-left, the opposition bottom-right, and
+       the tape's divider runs between them as a hairline from the BOTTOM-LEFT
+       corner to the TOP-RIGHT. It is drawn as one gradient rather than a rotated
+       element, and the direction is the easy thing to get backwards: a gradient's
+       colour bands run PERPENDICULAR to its own line, so the band we want — the
+       bottom-left-to-top-right diagonal — needs a gradient line along the other
+       one, `to bottom right`. CSS aims a corner keyword's gradient line so that
+       the perpendicular through the centre passes through the two neighbouring
+       corners, so the hard stop at 50% lands exactly on the corner-to-corner
+       diagonal whatever the tile's shape — 2 columns or 6, one row of squares or
+       three.
+
+       EACH SIDE IS CENTRED ON ITS TRIANGLE, not docked in its corner. A stack in
+       the corner leaves the middle of the tile empty and the diagonal with nothing
+       either side of it; a box of two thirds in each dimension, pinned to the
+       corner with its content centred, puts each stack around (1/3, 1/3) and
+       (2/3, 2/3) — which are the two triangles' centroids — and lets it grow into
+       the space instead. All of it is known overnight, so it bakes. */
+    .md-pre { flex: 1; min-width: 0; min-height: 0; overflow: hidden; position: relative;
+        border-radius: var(--radius);
+        background: linear-gradient(to bottom right,
+            transparent 0 calc(50% - var(--hair)),
+            rgba(255,255,255,0.12) calc(50% - var(--hair)) calc(50% + var(--hair)),
+            transparent calc(50% + var(--hair)) 100%); }
+    .pre-side { position: absolute; width: 64%; height: 62%; overflow: hidden;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; gap: calc(0.55vh * var(--tile-u)); padding: 0 calc(0.4vw * var(--tile-w)); }
+    .pre-side.home { top: 0; left: 0; }
+    .pre-side.away { bottom: 0; right: 0; }
+
+    /* ONE SCALE KNOB for the whole panel, baked from how many rows of other-game
+       tiles the board needed — the same fact `--sb-h` is cut from, and for the
+       same reason: three rows leave the match tile about 23vh, and a stack sized
+       for a one-row day is half as tall again as that. */
+    .pre-crest { width: calc(5vh * var(--tile-u)); height: calc(5vh * var(--tile-u));
+        flex-shrink: 0; border-radius: 50%; object-fit: contain;
+        background: #fff; padding: calc(0.4vh * var(--tile-u)); box-sizing: border-box; }
+    .pre-club { max-width: 100%; font-size: calc(var(--t-md) * var(--tile-u));
+        font-weight: 900; line-height: 1.05;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The line is HELD OPEN when the side has no designation — height 1.1em
+       against its own font-size is exactly one line. Not every league names its
+       teams (the women's indoor softball table is all bare club names), and a
+       side that drops the line would sit a line higher than the one opposite. */
+    .pre-team { max-width: 100%; font-size: calc(var(--t-xs) * var(--tile-u));
+        color: var(--muted); opacity: 0.8; line-height: 1.1; height: 1.1em;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The tape's `.stat-label` verbatim. */
+    .pre-label { font-size: calc(var(--t-xs) * var(--tile-u)); text-transform: uppercase;
+        letter-spacing: 0.1em; color: var(--accent); font-weight: 700; line-height: 1; }
+
+    /* Form badges — the tape's `.badge` colours, sized for a tile. Square, so
+       both dimensions are the same unit. */
+    .fm { display: flex; gap: 0.35vh; }
+    .fm-b { width: 1.9vh; height: 1.9vh; line-height: 1.9vh; text-align: center;
+        border-radius: var(--radius-sm); font-size: var(--t-xxs); font-weight: 700; }
+    .md-pre .fm-b { width: calc(1.9vh * var(--tile-u)); height: calc(1.9vh * var(--tile-u));
+        line-height: calc(1.9vh * var(--tile-u)); font-size: calc(var(--t-xxs) * var(--tile-u)); }
+    .fm-W { background: var(--accent-win); color: #fff; }
+    .fm-L { background: var(--accent-loss); color: #fff; }
+    .fm-T { background: var(--accent-draw); color: #fff; }
+    .fm-D { background: #444; color: #ccc; }
+    .fm-A, .fm-C, .fm-NR { background: var(--accent-amber); color: #ffe; }
+    .fm-none { font-size: var(--t-xs); color: var(--muted); opacity: 0.4; }
+    /* `--sb-h` is a CONSTANT, and that it can be is the point of scaling the
+       spacer tiles: a board with three rows of them now hands the match row about
+       43vh rather than 23, so the apertures no longer have to shrink as the day
+       fills up. The spacers give the height instead, which is the right side to
+       take it from — they carry two lines of type, and the figures are what the
+       board is for. */
+    .sb { --sb-h: 9vh; flex: 1; min-width: 0; min-height: 0;
+        display: flex; flex-direction: column; gap: calc(0.8vh * var(--tile-h)); }
+
+    /* TWO ZONES, ONE PER SIDE, each headed by the team it belongs to — which is
+       why the tile no longer carries a "Wendover vs Chalfont" line of its own.
+       The side batting is on top and holds the working board; the other side
+       holds its completed innings, which in the second innings IS the target. */
+    .sb-zone { display: flex; flex-direction: column; gap: calc(0.4vh * var(--tile-h)); min-height: 0; }
+    .sb-zone.bat { flex: 1; }
+    .sb-head { position: relative; flex-shrink: 0; display: flex; align-items: baseline;
+        gap: calc(0.5vw * var(--tile-w)); white-space: nowrap; }
+    /* Crest at TWICE the club name's size, which is more than the header line can
+       hold — so it is taken out of flow and hung from the top of the header,
+       overhanging the apertures below rather than pushing them down. Positioned,
+       so it paints over the cells that come after it in the DOM. */
+    .sb-crest { position: absolute; left: 0; top: 0; z-index: 1;
+        width: calc(var(--t-md) * var(--tile-u) * 2);
+        height: calc(var(--t-md) * var(--tile-u) * 2);
+        border-radius: 50%; object-fit: contain;
+        background: #fff; padding: calc(0.3vh * var(--tile-u)); box-sizing: border-box; }
+    .sb-crest[hidden] { display: none; }
+    /* The names clear the crest only when there is one — an away friendly with no
+       cached badge must not sit in an empty indent. */
+    .sb-names { min-width: 0; display: flex; flex-direction: column; }
+    .sb-head.has-crest .sb-names { padding-left: calc(var(--t-md) * var(--tile-u) * 2 + 0.6vw * var(--tile-w)); }
+    /* The team under the club, as the pre-match panel has it (`.pre-team`). IN
+       FLOW, unlike the crest: it pushes the apertures down rather than hanging
+       over them, which is why the `--sb-h` steps below are cut for it. Held open
+       at one line when a side has no designation, so the two zones stay level. */
+    .sb-desig { max-width: 100%; font-size: calc(var(--t-xs) * var(--tile-u));
+        color: var(--muted); opacity: 0.8; line-height: 1.1; height: 1.1em;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* The pre-match panel's `.pre-club` — same size, weight and case — so the
+       tile names its sides identically before and during the match. */
+    .sb-team { min-width: 0; font-size: calc(var(--t-md) * var(--tile-u));
+        font-weight: 900; line-height: 1.05;
+        overflow: hidden; text-overflow: ellipsis; }
+    .sb-note { margin-left: auto; flex-shrink: 0; font-size: calc(var(--t-xs) * var(--tile-u));
+        text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); opacity: 0.6; }
+
+    .sb-grid { flex: 1; min-height: 0; display: grid;
+        grid-template-columns: 1fr 1fr; grid-template-rows: 1.25fr 1fr;
+        gap: calc(0.7vh * var(--tile-h)) calc(0.7vw * var(--tile-w)); }
+    /* Digits sunk into a dark panel, as they are on a board: the figure is what
+       carries, the housing recedes. */
+    .sb-cell { min-width: 0; min-height: 0; overflow: hidden;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: calc(0.3vh * var(--tile-h)); background: rgba(0,0,0,0.35); border-radius: var(--radius); }
+    /* The label is painted above the aperture on the board itself, so it goes
+       above the figure here rather than beside it. Scaled on `--pre-u` like the
+       rest of the tile: left at a flat --t-xs it was 1.7vh of a 5vh cell on the
+       busiest day, which is most of the room the figure needed. */
+    .sb-label { font-size: calc(var(--t-xs) * var(--tile-u)); text-transform: uppercase;
+        letter-spacing: 0.12em; color: var(--muted); opacity: 0.65; line-height: 1; }
+    /* TWO KNOBS, BOTH BAKED, because the figure is bounded in both axes and the
+       two bounds come from different facts about the day.
+         --sb-w  the tile's width: two, three or six columns, so a figure sized
+                 for the widest tile would overflow the narrowest.
+         --sb-h  the most height a figure may take, which is a constant — see the
+                 note on `.sb`. The spacer tiles flex with the row count so the
+                 match row doesn't have to.
+       `min()` of the two is the largest figure that fits. */
+    .sb-num { font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums;
+        font-size: min(var(--sb-w), var(--sb-h)); }
+    .sb-cell.small .sb-num { font-size: min(calc(var(--sb-w) * 0.62), calc(var(--sb-h) * 0.68)); }
+    /* The other side's innings: one wide aperture with the label beside the
+       figure rather than above it, so it costs a row and not a zone. */
+    .sb-cell.wide { flex-direction: row; gap: calc(0.8vw * var(--tile-w)); padding: calc(0.5vh * var(--tile-h)) 0; }
+    .sb-cell.wide .sb-num { font-size: min(calc(var(--sb-w) * 0.5), calc(var(--sb-h) * 0.55)); }
+    /* Yet to bat, and it says so IN the aperture rather than beside the club name:
+       "Total ·" is a figure the side does not have, and the aperture is where a
+       reader is already looking for it. The cell centres its content, which is
+       also what clears the crest hanging down the left of the zone. */
+    .sb-cell.wide .sb-wait { font-size: calc(var(--t-sm) * var(--tile-u));
+        text-transform: uppercase; letter-spacing: 0.1em;
+        color: var(--muted); opacity: 0.6; }
+    .sb-cell > [hidden] { display: none; }
+    /* Gold is THE SCORELINE — runs and wickets together — because that is what it
+       is on the other-game tiles, where `141/6` is one gold figure (.sq-runs).
+       Overs and the contextual aperture stay white: they qualify the score, they
+       aren't part of it. */
+    .sb-cell.total .sb-num, .sb-cell.wkts .sb-num { color: var(--accent); }
+    /* Nothing scored yet — the house empty-state dot, which is also what a real
+       board looks like before the first over. Shared by both boards. */
+    .blank { opacity: 0.2; }
+
+    /* ── An other-game tile ──────────────────────────────────────────────── */
+    /* One column wide, and only as tall as its four lines need. The ratio SETS
+       THE HEIGHT OF GRID ROWS 3-5, and so how much is left for the match row
+       above — which makes it the board's main vertical lever, and the reason it
+       is not a constant. A day with three rows of these spends three times what a
+       one-row day does, so the tile gets squarer and its type smaller as the rows
+       multiply (`--sq-r` / `--sq-u`, baked on the grid): the alternative is a
+       scoreboard whose figures shrink instead, and the figures are the point.
+       Same
+       background and border as a Wendover match tile, so the board reads as one
+       family of tiles at two sizes.
+
+       NO SCOREBOARD HERE. Labelled apertures need width this tile hasn't got —
+       at one column of six they came out as unreadable slivers. Four lines of
+       plain type instead: each side named in full, its score under it in the
+       format the rest of the site uses. */
+    .sq { min-width: 0; aspect-ratio: var(--sq-r); overflow: hidden;
+        display: flex; flex-direction: column; gap: calc(0.6vh * var(--sq-u));
+        background: rgba(255,255,255,0.05); border: var(--hair) solid rgba(255,255,255,0.1);
+        border-radius: var(--radius); padding: calc(0.7vh * var(--sq-u)) 0.7vw; }
+    /* THE TWO SIDES SPLIT THE TILE and each centres its own content, rather than
+       the tile centring both together. Centring the pair put all the slack at the
+       two ends and left the rule wherever the type happened to finish — and the
+       slack is not the same in both states, because the score line is a rung
+       taller than the designation it replaces. Halving the tile fixes the rule at
+       the midpoint and gives each state the same geometry. */
+    .sq-side { flex: 1; min-width: 0; min-height: 0;
+        display: flex; flex-direction: column; justify-content: center; }
+    /* The pre-match divider, and it stays once the scores arrive: two sides need
+       separating either way, and the tile reads the same before and after. */
+    .sq-rule { flex-shrink: 0; height: var(--hair); background: rgba(255,255,255,0.12); }
+    /* Clamped to one line: a club name that wraps would push the fourth line out
+       of a fixed-height square. */
+    .sq-team { font-size: calc(var(--t-sm) * var(--sq-u)); font-weight: 700; line-height: 1.15;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sq-score { font-size: calc(var(--t-ms) * var(--sq-u)); line-height: 1.15;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Gold for the figure, as the headline metric is everywhere else. */
+    .sq-runs { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--accent); }
+    /* Overs are the smaller blue supporting figure, as on the today board — and
+       a rung smaller again here, because "123/4 (32.4 ov)" has to clear a ~10vw
+       tile. */
+    .sq-ov { font-size: calc(var(--t-xs) * var(--sq-u)); font-weight: 400; color: var(--light-blue); margin-left: 0.3vw; }
+    /* Before the game is scored the team designation stands where the score will
+       go — no form badges here, because we have no form for a club we don't play.
+       Held open at one line whether or not there is a designation, so the two
+       sides of the tile stay level and the tile keeps its height either way. */
+    .sq-desig { display: block; font-size: calc(var(--t-xs) * var(--sq-u)); color: var(--muted); opacity: 0.8;
+        line-height: 1.15; height: 1.15em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Yet to bat, or the target once there is one. */
+    .sq-note { font-size: calc(var(--t-sm) * var(--sq-u)); text-transform: uppercase; letter-spacing: 0.08em;
+        color: var(--muted); opacity: 0.6; }
+
+    .md-empty { flex: 1; display: flex; align-items: center; justify-content: center;
+        font-size: var(--t-lg); color: var(--muted); opacity: 0.4; }
+{% endblock %}
+{% block content %}
+<div class="md-head">
+    <span class="md-title">Match Day</span>
+    <span class="md-date">{{ slide._date }}</span>
+</div>
+
+{% if slide._bands %}
+{#- The spacer tiles' shape, and their type with it. See `.sq` — this is the
+    board's main vertical lever, so it answers to how many rows of them there are. -#}
+{% set sq = {2: ('8 / 5', 0.88), 3: ('9 / 5', 0.75)}.get(slide._other_rows, ('7 / 5', 1.0)) %}
+<div class="md-grid" style="--sq-r: {{ sq[0] }}; --sq-u: {{ sq[1] }}">
+    {% for band in slide._bands %}
+    {% set cols = 'grid-column: %d / span %d' % (band.start, band.span) %}
+
+    <div class="md-div-head" style="{{ cols }}">
+        <span class="md-div-name">{{ band.division or band.name or 'Friendly' }}</span>
+        {% if band.division and band.name %}<span>{{ band.name }}</span>{% endif %}
+        {% if band.others_hidden %}<span class="md-div-more">+{{ band.others_hidden }} more</span>{% endif %}
+    </div>
+
+    {% for m in band.matches %}
+    {% set ev = m.ev %}
+    {#- WHO IS BATTING. Until the toss is known the home side is assumed to bat
+        first, which is the convention the board itself has always run on; once the
+        feed is wired it will say. Our side reads as the team ("1st XI"), theirs as
+        the club — the same split the today board uses. -#}
+    {% set bat_name = m.pre.home.club %}
+    {% set field_name = m.pre.away.club %}
+    {% set us_club = (m.pre.home if ev.is_home else m.pre.away).club %}
+    {% set them_club = (m.pre.away if ev.is_home else m.pre.home).club %}
+    {#- THREE KNOBS, ALL BAKED, because the tile is squeezed on two axes
+        independently and different metrics answer to different ones.
+
+          --tile-w  how much WIDTH this tile got (its column span). Horizontal
+                    padding, horizontal gaps and the meta row's type: three
+                    matches split six columns three ways, and at that width a meta
+                    row sized for a six-column tile is most of the tile.
+          --tile-h  how much HEIGHT the match row got (rows of other-game tiles).
+                    Vertical padding, vertical gaps, vertical rhythm.
+          --tile-u  the product, for TYPE THAT MUST FIT BOTH — the club and team
+                    names, the aperture labels.
+
+        The width bonus in `--tile-u` is spent only on a quiet day. A six-column
+        tile is wide, but on a two- or three-row day it is not tall, and the names
+        are what the board spends its height on — inflating them there took the
+        apertures below the size their own figures need. So past one row of other
+        games the factor can reduce but not raise. -#}
+    {% set tile_h = {2: 1.15, 3: 0.75}.get(slide._other_rows, 1.45) %}
+    {% set tile_w = {2: 0.8, 6: 1.25}.get(m.span, 1.0) %}
+    {% set u_w = tile_w if slide._other_rows < 2 else [tile_w, 1.0] | min %}
+    <div class="md-col" style="grid-column: {{ m.col }} / span {{ m.span }};
+                --tile-w: {{ tile_w }}; --tile-h: {{ tile_h }}; --tile-u: {{ (tile_h * u_w) | round(3) }}"
+         {% if ev.pc_id != None %}data-pc="{{ ev.pc_id }}"{% endif %}
+         data-home="{{ 1 if ev.is_home else 0 }}"
+         data-us="{{ us_club }}" data-them="{{ them_club }}"
+         data-us-crest="{{ (m.pre.home if ev.is_home else m.pre.away).crest or '' }}"
+         data-them-crest="{{ (m.pre.away if ev.is_home else m.pre.home).crest or '' }}"
+         data-us-team="{{ (m.pre.home if ev.is_home else m.pre.away).team }}"
+         data-them-team="{{ (m.pre.away if ev.is_home else m.pre.home).team }}">
+        <div class="md-meta">
+            <span class="md-time">{% if ev.time %}{{ ev.time }}{% else %}<span class="tbc">TBC</span>{% endif %}</span>
+            <span class="spacer"></span>
+            {% if ev.ground %}<span class="md-loc">{{ ev.ground }}</span>{% endif %}
+            <span class="ha{% if not ev.is_home %} away{% endif %}">{{ 'Home' if ev.is_home else 'Away' }}</span>
+        </div>
+        <div class="md-state">
+            <div class="md-pre" data-f="pre">
+                {% for where in ['home', 'away'] %}
+                {% set side = m.pre[where] %}
+                <div class="pre-side {{ where }}">
+                    {% if side.crest %}<img class="pre-crest" src="{{ side.crest }}" alt="">{% endif %}
+                    <div class="pre-club">{{ side.club }}</div>
+                    <div class="pre-team">{{ side.team }}</div>
+                    <div class="pre-label">Form</div>
+                    {{ form_badges(side.form) }}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="sb" hidden data-f="board" style="--sb-w: {{ {2: '4.2vw', 3: '5.6vw', 6: '9vw'}[m.span] }}">
+                <div class="sb-zone bat">
+                    <div class="sb-head{% if m.pre.home.crest %} has-crest{% endif %}" data-f="bat-head">
+                        <img class="sb-crest" data-f="bat-crest" src="{{ m.pre.home.crest }}" alt=""
+                             {% if not m.pre.home.crest %}hidden{% endif %}>
+                        <div class="sb-names">
+                            <span class="sb-team" data-f="bat-team">{{ bat_name }}</span>
+                            <span class="sb-desig" data-f="bat-desig">{{ m.pre.home.team }}</span>
+                        </div>
+                    </div>
+                    <div class="sb-grid">
+                        <div class="sb-cell total"><span class="sb-label">Total</span><span class="sb-num blank" data-f="total">·</span></div>
+                        <div class="sb-cell wkts"><span class="sb-label">Wickets</span><span class="sb-num blank" data-f="wkts">·</span></div>
+                        <div class="sb-cell small"><span class="sb-label">Overs</span><span class="sb-num blank" data-f="overs">·</span></div>
+                        {#- The fourth aperture is the contextual one: LAST MAN while the
+                            first innings is on, TO WIN once there is a target to chase.
+                            Baked as the first innings; the feed relabels it. -#}
+                        <div class="sb-cell small"><span class="sb-label" data-f="ctx-label">Last man</span><span class="sb-num blank" data-f="ctx">·</span></div>
+                    </div>
+                </div>
+                <div class="sb-zone">
+                    <div class="sb-head{% if m.pre.away.crest %} has-crest{% endif %}" data-f="field-head">
+                        <img class="sb-crest" data-f="field-crest" src="{{ m.pre.away.crest }}" alt=""
+                             {% if not m.pre.away.crest %}hidden{% endif %}>
+                        <div class="sb-names">
+                            <span class="sb-team" data-f="field-team">{{ field_name }}</span>
+                            <span class="sb-desig" data-f="field-desig">{{ m.pre.away.team }}</span>
+                        </div>
+                        <span class="sb-note" data-f="note"></span>
+                    </div>
+                    {#- Baked as the pre-play state: nobody has batted, so the
+                        aperture reads "To bat" and the Total it will hold is
+                        hidden until there is one. -#}
+                    <div class="sb-cell wide">
+                        <span class="sb-label" data-f="field-label" hidden>Total</span>
+                        <span class="sb-num blank" data-f="field-total" hidden>·</span>
+                        <span class="sb-wait" data-f="field-wait">To bat</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% for o in band.others %}
+    <div class="sq" style="grid-column: {{ o.col }}; grid-row: {{ o.row }}"
+         data-mid="{{ o.match_id }}"
+         data-home="{{ o.home.club | drop_cc }}" data-away="{{ o.away.club | drop_cc }}">
+        {#- Home side first, on the same pre-toss assumption the match tiles make.
+            Before the game is scored each side reads club over team designation;
+            the feed then replaces both designations with scores. -#}
+        <div class="sq-side">
+            <div class="sq-team" data-f="a-team">{{ o.home.club | drop_cc }}</div>
+            <div class="sq-score" data-f="a-score"><span class="sq-desig">{{ o.home.desig }}</span></div>
+        </div>
+        <div class="sq-rule"></div>
+        <div class="sq-side">
+            <div class="sq-team" data-f="b-team">{{ o.away.club | drop_cc }}</div>
+            <div class="sq-score" data-f="b-score"><span class="sq-desig">{{ o.away.desig }}</span></div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endfor %}
+</div>
+{% else %}
+<div class="md-empty">No Wendover matches today</div>
+{% endif %}
+
+{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script>{% endif %}
+<script>
+(function () {
+    'use strict';
+    var ENDPOINT = 'https://live.wendovercc.org/state.json';
+    // Build flag AND a provisioned device — an unkeyed device presents exactly as
+    // if live_enabled were false (no polling, no updates), since the feed is
+    // unreachable to it anyway. Mirrors the today board and LIVE_ON in the players.
+    var LIVE_ENABLED = {{ 'true' if live_enabled else 'false' }}
+        && !!(window.WccLiveKey && window.WccLiveKey.get());
+    var PCS = {{ (slide._pc_ids or []) | tojson }};
+
+    /* THE BOARDS ARE PATCHED, NOT RE-RENDERED. Every tile's position, span and row
+     * is decided at build time by match_day_layout() and written into the markup as
+     * a grid coordinate; rebuilding that from JS would be a second copy of the
+     * layout, free to drift from the first. So each figure carries a `data-f` hook
+     * and the feed only ever sets text. The baked paint IS the pre-play state, which
+     * is also why there is no initial render call — an empty first paint would blank
+     * a board the build had already filled in correctly. */
+    var tiles = [].slice.call(document.querySelectorAll('.md-col[data-pc]'));
+    var squares = [].slice.call(document.querySelectorAll('.sq[data-mid]'));
+    var LEAGUE = {};   // league match_id -> { innings by side, batting order }
+    /* The square's baked paint is its form line, and it has to come BACK if the
+       feed stops having anything to say about that game — so it is kept rather
+       than overwritten. The match tiles need no equivalent: their pre-match panel
+       is a separate element that is hidden, not replaced. */
+    squares.forEach(function (el) {
+        ['a-score', 'b-score'].forEach(function (k) {
+            var cell = el.querySelector('[data-f="' + k + '"]');
+            if (cell) cell.setAttribute('data-pre', cell.innerHTML);
+        });
+    });
+
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function f(el, name) { return el.querySelector('[data-f="' + name + '"]'); }
+    // A figure, or the house empty-state dot when the feed hasn't got one.
+    function setNum(el, v) {
+        var blank = (v == null || v === '');
+        el.textContent = blank ? '\u00b7' : String(v);
+        el.classList.toggle('blank', blank);
+    }
+    function setTeam(el, name) { el.textContent = name || ''; }
+    // The crest travels with the side, so it swaps zones when the innings does.
+    // No crest (an away friendly with no cached badge) drops the indent too.
+    function setCrest(head, img, url) {
+        img.hidden = !url;
+        if (url) img.setAttribute('src', url);
+        head.classList.toggle('has-crest', !!url);
+    }
+    // The site's innings format: "172 ao", "220/4 dec", "141/6" — the today board's
+    // scoreHtml, as text.
+    function scoreText(inn) {
+        if (!inn || inn.runs == null) return '';
+        var w = inn.wickets == null ? 0 : inn.wickets;
+        return inn.declared ? (inn.runs + '/' + w + ' dec')
+             : (w >= 10 ? (inn.runs + ' ao') : (inn.runs + '/' + w));
+    }
+
+    // ---- our matches --------------------------------------------------------
+    // Is this innings ours? Structural: the feed says which side is at home, the
+    // tile knows whether that's us. Never a name test — a team name bundles an
+    // arbitrary designation and a club's own name can end in "XI".
+    function oursInn(inn, weHome) {
+        if (typeof inn.is_home === 'boolean') return inn.is_home === weHome;
+        return String(inn.side || '').toLowerCase().indexOf('wendover') !== -1;
+    }
+    function applyMatch(el, m) {
+        var us = el.getAttribute('data-us'), them = el.getAttribute('data-them');
+        var weHome = el.getAttribute('data-home') === '1';
+        var inns = (m && m.innings) || [];
+        var cur = inns.length ? inns[inns.length - 1] : null;
+
+        /* WHICH PRESENTATION. The board is a live-innings view, so it only earns
+           the tile once there is a scored innings to put on it; until then the
+           pre-match panel stands, which is also what happens when a match is in
+           the feed but nobody is scoring it. */
+        var scoring = !!(cur && cur.runs != null);
+        f(el, 'pre').hidden = scoring;
+        f(el, 'board').hidden = !scoring;
+        if (!scoring) return;
+        // The side that isn't batting has batted already iff there's an earlier
+        // innings — which is also the innings that sets the target.
+        var other = inns.length > 1 ? inns[inns.length - 2] : null;
+
+        // Until a ball is scored the baked assumption stands: the home side bats.
+        var batOurs = cur ? oursInn(cur, weHome) : weHome;
+        var usCrest = el.getAttribute('data-us-crest') || '';
+        var themCrest = el.getAttribute('data-them-crest') || '';
+        var usTeam = el.getAttribute('data-us-team') || '';
+        var themTeam = el.getAttribute('data-them-team') || '';
+        setTeam(f(el, 'bat-team'), batOurs ? us : them);
+        setTeam(f(el, 'field-team'), batOurs ? them : us);
+        setTeam(f(el, 'bat-desig'), batOurs ? usTeam : themTeam);
+        setTeam(f(el, 'field-desig'), batOurs ? themTeam : usTeam);
+        setCrest(f(el, 'bat-head'), f(el, 'bat-crest'), batOurs ? usCrest : themCrest);
+        setCrest(f(el, 'field-head'), f(el, 'field-crest'), batOurs ? themCrest : usCrest);
+
+        setNum(f(el, 'total'), cur ? cur.runs : null);
+        setNum(f(el, 'wkts'), cur ? cur.wickets : null);
+        setNum(f(el, 'overs'), cur ? cur.overs : null);
+
+        // The contextual aperture. TO WIN the moment a target exists, LAST MAN
+        // before then. Floored at zero: a chase that has passed the target is won,
+        // not owed a negative number.
+        var lbl = f(el, 'ctx-label'), ctx = f(el, 'ctx');
+        if (other && other.runs != null && cur) {
+            lbl.textContent = 'To win';
+            var need = other.runs + 1 - (cur.runs || 0);
+            setNum(ctx, need > 0 ? need : 0);
+        } else {
+            lbl.textContent = 'Last man';
+            // `runs` on last_wicket is the batter's own score. Guarded rather than
+            // assumed: the today board only ever reads name/how/fow off it, so a
+            // feed without it must blank the aperture, not print "undefined".
+            var lw = cur && cur.last_wicket;
+            setNum(ctx, lw && lw.runs != null ? lw.runs : null);
+        }
+
+        // The other side's zone: their innings, which in the second innings IS the
+        // target. Until they have one the aperture says "To bat" in its place
+        // rather than showing a Total they haven't got.
+        var yetToBat = !other;
+        f(el, 'field-label').hidden = yetToBat;
+        f(el, 'field-total').hidden = yetToBat;
+        f(el, 'field-wait').hidden = !yetToBat;
+        setNum(f(el, 'field-total'), other ? scoreText(other) : null);
+        // A decided match still only says so — the rest of the match-state
+        // presentation is the next piece of work.
+        f(el, 'note').textContent = (m && m.complete) ? 'Result' : '';
+    }
+
+    // ---- the division's other games -----------------------------------------
+    // Card contract = live-worker/src/pc.mjs buildLeagueState, as the today board
+    // reads it: { matches: [{ match_id, complete, home_team_id,
+    // innings: [{ team_batting_id, runs, wickets, overs, declared }] }] }.
+    function applyLeague(matches) {
+        (matches || []).forEach(function (m) {
+            if (m.match_id == null) return;
+            var rec = { complete: !!m.complete, order: [] };
+            (m.innings || []).forEach(function (inn) {
+                // Which side an innings belongs to, BY TEAM ID: PC tags every
+                // innings with team_batting_id, so this needs no name comparison.
+                if (inn.team_batting_id == null || m.home_team_id == null) return;
+                var side = String(inn.team_batting_id) === String(m.home_team_id) ? 'home' : 'away';
+                rec[side] = inn;
+                rec.order.push(side);
+            });
+            LEAGUE[String(m.match_id)] = rec;
+        });
+    }
+    function setSide(teamEl, scoreEl, name, inn, isOther, batting) {
+        teamEl.textContent = name || '';
+        if (inn && inn.runs != null) {
+            scoreEl.innerHTML = '<span class="sq-runs">' + esc(scoreText(inn)) + '</span>' +
+                (inn.overs ? '<span class="sq-ov">(' + esc(inn.overs) + ' ov)</span>' : '');
+        } else if (isOther && batting) {
+            // The game is being scored and this side hasn't gone in yet.
+            scoreEl.innerHTML = '<span class="sq-note">To bat</span>';
+        } else {
+            // Nothing scored either side — back to the baked form line.
+            scoreEl.innerHTML = scoreEl.getAttribute('data-pre') || '';
+        }
+    }
+    function paintSquare(el) {
+        var rec = LEAGUE[el.getAttribute('data-mid')] || {};
+        var name = { home: el.getAttribute('data-home'), away: el.getAttribute('data-away') };
+        // Whoever is batting leads, as on our own boards; before a ball, the home
+        // side, which is what the build baked.
+        var bat = (rec.order && rec.order.length) ? rec.order[rec.order.length - 1] : 'home';
+        var other = bat === 'home' ? 'away' : 'home';
+        // Is this game being scored at all? One side's innings is enough; with
+        // none, both lines go back to their form.
+        var scoring = !!((rec[bat] && rec[bat].runs != null) || (rec[other] && rec[other].runs != null));
+        setSide(f(el, 'a-team'), f(el, 'a-score'), name[bat], rec[bat], false, scoring);
+        setSide(f(el, 'b-team'), f(el, 'b-score'), name[other], rec[other], true, scoring);
+    }
+
+    function render(feed) {
+        var byId = {};
+        ((feed && feed.matches) || []).forEach(function (m) {
+            if (m.pc_id != null) byId[String(m.pc_id)] = m;
+        });
+        tiles.forEach(function (el) { applyMatch(el, byId[el.getAttribute('data-pc')] || null); });
+    }
+
+    window.addEventListener('message', function (e) {
+        var d = e.data;
+        if (!d || !LIVE_ENABLED) return;   // no key → stay on the baked paint
+        if (d.type === 'wcc-live') render(d);
+        else if (d.type === 'wcc-league') { applyLeague(d.matches); squares.forEach(paintSquare); }
+    });
+
+    // Live enrichment is gated behind config.live_enabled AND a key on this device.
+    // Off = the board stays on its baked paint and never touches the endpoint.
+    {% if live_enabled %}
+    if (!LIVE_ENABLED) {
+        // No key: nothing more to do — the baked paint is the whole slide.
+    } else if (window.top !== window.self) {
+        // Embedded: the player's live engine owns both poll loops and broadcasts
+        // wcc-live / wcc-league (handled above). Ask for the last of each now so
+        // the first paint doesn't wait a whole cycle.
+        try {
+            window.parent.postMessage({ type: 'wcc-live-request' }, '*');
+            window.parent.postMessage({ type: 'wcc-league-request' }, '*');
+        } catch (err) {}
+    } else {
+        // Standalone: self-poll our own matches, but only with a key, only inside
+        // the day's poll window, and stop dead on a 403 — the same three gates the
+        // engine applies. The division's slow feed has no standalone path; it
+        // arrives from the engine when the board is in a player.
+        var params = new URLSearchParams(location.search);
+        var pcs = params.getAll('pc');
+        var explicitPcs = pcs.length > 0;
+        if (!pcs.length) pcs = PCS;
+        var timer = null, pollWindow = null;
+        var schedule = function () { clearTimeout(timer); timer = setTimeout(poll, 20000); };
+        var poll = function () {
+            var key = (window.WccLiveKey && window.WccLiveKey.get()) || '';
+            if (!pcs.length || !key) return;
+            var w = window.WccLiveWindow ? WccLiveWindow.state(pollWindow) : 'open';
+            if (w === 'closed') return;                                   // terminal
+            if (w === 'early') { clearTimeout(timer); timer = setTimeout(poll, WccLiveWindow.msUntilOpen(pollWindow)); return; }
+            var qs = '?' + pcs.map(function (x) { return 'pc=' + encodeURIComponent(x); }).join('&');
+            fetch(ENDPOINT + qs, { headers: { 'Authorization': 'Bearer ' + key } })
+                .then(function (r) {
+                    if (r.ok) return r.json().then(function (feed) { render(feed); schedule(); });
+                    if (r.status === 403) return;                         // terminal
+                    schedule();
+                })
+                .catch(function () { schedule(); });
+        };
+        // A key arriving (cog in another tab) restarts the loop without a reload.
+        if (window.WccLiveKey && window.WccLiveKey.onChange)
+            window.WccLiveKey.onChange(function () { clearTimeout(timer); poll(); });
+        // Same source of truth as the engine. An explicit ?pc= skips the window,
+        // matching the engine's caller-supplied-ids behaviour.
+        if (explicitPcs) poll();
+        else fetch('/live-config.json', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (cfg) { if (cfg && window.WccLiveWindow) pollWindow = WccLiveWindow.parse(cfg); })
+            .catch(function () {})
+            .then(function () { poll(); });
+    }
+    {% endif %}
+})();
+</script>
+{% endblock %}

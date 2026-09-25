@@ -9,6 +9,10 @@
       "slug": "today"
     },
     {
+      "slug": "match-day",
+      "skip_when_empty": true
+    },
+    {
       "slug": "live-match-1st-xi"
     },
     {

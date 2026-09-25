@@ -3297,6 +3297,200 @@ def attach_league_context(events, teams_by_id):
         }
 
 
+# The match-day board's grid. Six columns, because six divides by one, two and
+# three without a remainder: whatever number of our matches the board is carrying,
+# every match tile is the same whole number of columns wide (6, 3 or 2) and every
+# division's span is a whole number too. A fourth fixture is dropped rather than
+# squeezed — the today board remains the complete schedule.
+MATCH_DAY_COLUMNS = 6
+MATCH_DAY_MAX_MATCHES = 3
+# Grid rows: the division heading, the match tiles, then the other games.
+MATCH_DAY_HEAD_ROW = 1
+MATCH_DAY_MATCH_ROW = 2
+MATCH_DAY_OTHER_ROW = 3
+# Other-game tiles are one column wide, so a division's span is how many fit on
+# a row. Three rows is the cap — a full division is four or five other games, and
+# with three of our sides out in three different leagues each band is only two
+# columns wide, so it takes three rows to show them. Past that the board would be
+# taller than the stage, so the surplus is counted rather than drawn.
+MATCH_DAY_OTHER_ROWS = 3
+
+
+def _match_day_demo(events, spec):
+    """Pad the match-day board out to `NxM` — N of our matches, each in its own
+    division with M other games in it — so the busy layouts can be looked at out
+    of season, when the real fixture list is two winter softball games.
+
+    `WCC_MATCH_DAY_DEMO=3x6` only, like WCC_TODAY and WCC_SIM_LEAGUE; never
+    reachable in CI or on the wall. Our own matches are CLONED from whatever is
+    really on, so crests, clubs, teams and form stay real and the tiles are the
+    width the type actually has to fit. The other games are deliberately BLANK
+    spacer tiles: what needs looking at here is the geometry, and inventing a
+    division's worth of club names would only be a second fiction to read past.
+
+    Divisions are always made distinct, because that is the demanding case — it
+    is what splits six columns three ways and drives each band to three rows."""
+    m = re.match(r"^(\d+)\s*[xX*]\s*(\d+)$", str(spec).strip())
+    if not m:
+        print(f"  match-day: ignoring WCC_MATCH_DAY_DEMO={spec!r} (want e.g. 3x6)")
+        return events
+    n_matches, n_others = int(m.group(1)), int(m.group(2))
+    real = [e for e in events if e.get("type") == "match"]
+    if not real or n_matches < 1:
+        return events
+    out = []
+    for i in range(n_matches):
+        ev = dict(real[i % len(real)])
+        ev["competition_id"] = f"demo{i}"
+        ev["competition"] = f"Demo Division {i + 1}"
+        ev["time"] = f"{11 + i:02d}:00"
+        lg = dict(ev.get("league") or {})
+        lg["division"] = ev["competition"]
+        lg["others"] = [{"match_id": f"demo{i}-{j}", "time": None,
+                         "home": {"club": "", "team": ""},
+                         "away": {"club": "", "team": ""}}
+                        for j in range(n_others)]
+        ev["league"] = lg
+        out.append(ev)
+    print(f"  match-day: DEMO — {n_matches} match(es) x {n_others} spacer(s) "
+          f"[WCC_MATCH_DAY_DEMO]")
+    # The non-match events (training, the bar) are dropped: the board only ever
+    # renders matches, so carrying them would change nothing but the printout.
+    return out
+
+
+def _team_desig(team, club):
+    """A side's team designation, or "" when it only repeats the club. PC writes
+    the name either way round ("1st XI", "Hurley CC - 1st XI", or just the club),
+    so strip a leading club prefix before comparing."""
+    team = re.sub(r"^.*?\s+-\s+", "", (team or "").strip())
+    club = (club or "").strip()
+    return "" if not team or team == club or drop_cc(team) == drop_cc(club) else team
+
+
+def _other_side_pre(side):
+    """A division game's side, with the team designation the pre-match square
+    names under the club.
+
+    NO FORM SEQUENCE IS AVAILABLE FOR A CLUB WE DON'T PLAY: `opposition_form`
+    exists only because fetch_play_cricket pulls our own opponents' results, and
+    the committed league table carries no form column. Giving these tiles real
+    form means fetching each division club's results — a fetch change and a
+    per-club API call, not something the build can derive."""
+    side = dict(side or {})
+    side["desig"] = _team_desig(side.get("team"), side.get("club"))
+    return side
+
+
+def _match_pre(ev, stats, all_fixtures):
+    """The pre-match block for one of our fixtures: each side's crest, name and
+    recent form, keyed home/away because that's how the tile draws them (home in
+    the top-left triangle, away in the bottom-right).
+
+    Exactly the sources the live-match slide's Pre-match panel uses — our form
+    from the season stats, theirs off the fixture's `opposition_form`, crests
+    already localised onto the event — so the two previews can't disagree."""
+    fixture = next((f for f in (all_fixtures.get(ev.get("team")) or [])
+                    if str(f.get("match_id")) == str(ev.get("pc_id"))), {})
+    # CLUB is the headline and TEAM the line under it, as the tape has it — except
+    # that the tape can leave the designation to its slide header, and this tile
+    # has no header to leave it to, so it carries both. The designation is dropped
+    # when it only repeats the club.
+    def desig(team, club):
+        team = (team or "").strip()
+        return "" if not team or team == (club or "").strip() else team
+
+    opp_club = drop_cc(ev.get("opposition") or "")
+    ours = {"club": drop_cc(ev.get("our_club") or "") or OUR_CLUB,
+            "team": desig(ev.get("team_name"), ev.get("our_club")),
+            "crest": ev.get("our_crest") or "/assets/images/wcc-logo.png",
+            "form": ((stats or {}).get("form", {}).get(ev.get("team"), {}).get("all", []))[-5:]}
+    theirs = {"club": opp_club,
+              "team": desig(ev.get("opposition_team"), opp_club),
+              "crest": ev.get("opp_crest"),
+              "form": fixture.get("opposition_form") or []}
+    return {"home": ours if ev.get("is_home") else theirs,
+            "away": theirs if ev.get("is_home") else ours}
+
+
+def match_day_layout(events, stats=None, all_fixtures=None):
+    """Place today's WCC matches and their divisions on the match-day board's
+    six-column grid, returning the bands with every grid coordinate resolved.
+
+    THE SPLIT. A division's span is its share of the board: `6 / total × its own
+    matches`. Three of our matches with two in one league gives 4-2; two in
+    different leagues gives 3-3; anything all in one league gives 6. Equivalently,
+    and this is how it's computed, every match tile is `6 / total` columns wide
+    and a division spans its tiles — so our matches are all the same width however
+    the day's leagues happen to fall.
+
+    Columns are grouped by division, groups ordered by earliest start and matches
+    in time order within a group. The grouping is what makes a span expressible at
+    all: a grid span has to be contiguous, and grouping makes it so by
+    construction rather than by luck.
+
+    Bands are keyed by DIVISION, not by fixture. `attach_league_context` hangs an
+    identical `others` list off every match in a division, so two of our sides in
+    one league would list the same games twice — and the one game a viewer most
+    wants beside the Hawks, the Kites' match, is in neither list, since "other
+    games" excludes our own club by definition. One band per division carries our
+    matches and everyone else's games once each.
+
+    Returns (matches, bands): the flat list of matches kept, and the bands. Each
+    band has `start`/`span` (its own columns), `matches` (each with `col`/`span`)
+    and `others` (each with `col`/`row`), so the template only places what it is
+    handed."""
+    matches = [e for e in events if e.get("type") == "match"]
+    matches.sort(key=lambda e: (e.get("time") or "99:99"))
+
+    groups, by_comp = [], {}
+    for ev in matches:
+        comp = str(ev.get("competition_id") or "")
+        # A friendly has no division, so it can't share one — each gets its own
+        # group, and so its own band.
+        key = comp or "solo:%d" % len(groups)
+        g = by_comp.get(key)
+        if g is None:
+            g = by_comp[key] = {"comp": comp, "events": []}
+            groups.append(g)
+        g["events"].append(ev)
+
+    kept = []
+    for g in groups:
+        g["take"] = g["events"][:MATCH_DAY_MAX_MATCHES - len(kept)]
+        kept.extend(g["take"])
+    groups = [g for g in groups if g["take"]]
+    if not kept:
+        return [], []
+    tile_span = MATCH_DAY_COLUMNS // len(kept)
+
+    bands, col = [], 1
+    for g in groups:
+        take = g["take"]
+        span = tile_span * len(take)
+        lg = take[0].get("league") or {}
+        all_others = lg.get("others") or []
+        # As many as fill the band's rows; the rest are counted, not drawn.
+        shown = all_others[:span * MATCH_DAY_OTHER_ROWS]
+        bands.append({
+            "competition_id": g["comp"],
+            "name": lg.get("name") or take[0].get("league_name") or "",
+            "division": lg.get("division") or take[0].get("competition") or "",
+            "start": col, "span": span,
+            "matches": [{"ev": e, "col": col + i * tile_span, "span": tile_span,
+                         "pre": _match_pre(e, stats, all_fixtures or {})}
+                        for i, e in enumerate(take)],
+            "others": [dict(o, col=col + i % span, row=MATCH_DAY_OTHER_ROW + i // span,
+                            home=_other_side_pre(o.get("home")),
+                            away=_other_side_pre(o.get("away")))
+                       for i, o in enumerate(shown)],
+            "others_hidden": len(all_others) - len(shown),
+            "other_rows": -(-len(shown) // span) if shown else 0,
+        })
+        col += span
+    return kept, bands
+
+
 def build_league_config():
     """Publish site/live-league.json — today's OTHER league matches (their pc ids),
     the poll list for the live-proxy Worker's future slow /league.json endpoint.
@@ -4030,6 +4224,35 @@ def build_slides(env):
             # no team/section gating — it's the whole club's day — so an empty day is
             # the only reason a screen wouldn't show it.
             slide["_empty"] = not slide["_events"]
+
+        # Match-day board: the same day, arranged as a grid of our matches with
+        # their divisions banded underneath. Deliberately separate from the today
+        # board — that one is the whole club's schedule, this one is the state of
+        # up to three matches. Both bake from todays_events so they can't disagree.
+        if slide.get("template") == "match-day":
+            training, all_fx, loc_lookup, loc_names = load_schedule_data()
+            events = todays_events(
+                teams_by_id, training, all_fx, loc_lookup, loc_names,
+                _load_yt_broadcasts(), _load_live_seed())
+            attach_league_context(events, teams_by_id)
+            demo = os.environ.get("WCC_MATCH_DAY_DEMO")
+            if demo:
+                events = _match_day_demo(events, demo)
+            slide["_matches"], slide["_bands"] = match_day_layout(
+                events, load_stats("this_season"), all_fx)
+            # How many rows of square tiles the grid ends up with — the deepest
+            # band decides it for every band, since the rows are shared. The
+            # scoreboard's figures are capped against it: two rows of squares
+            # take ~40vh off the match row, and a numeral sized for a roomy tile
+            # does not fit the cell that leaves.
+            slide["_other_rows"] = max([b["other_rows"] for b in slide["_bands"]] or [0])
+            slide["_date"] = _today().strftime("%A %-d %B")
+            # No match today and the board has nothing to be about — the today
+            # board still carries training and the bar. Decks opt out with
+            # skip_when_empty rather than the slide vanishing everywhere.
+            # The pollable ids on the board, for the standalone self-poll path.
+            slide["_pc_ids"] = [m["pc_id"] for m in slide["_matches"] if m.get("pc_id")]
+            slide["_empty"] = not slide["_matches"]
 
         if slide.get("template") == "league-table" and "_data" in slide:
             prepare_league_tables(slide["_data"])
