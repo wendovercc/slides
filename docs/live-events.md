@@ -472,6 +472,66 @@ WCC_TODAY=2026-08-08 WCC_LIVE_ENABLED=1 python3 scripts/build.py
 Both adoptions keep the simulation's own shape — the beats, the staggering, the
 abandonment, the silent match — and only re-label it.
 
+### Simulating our own match day — `WCC_SIM_MATCHES=1`
+
+The **match-day board is baked**: `match_day_layout()` decides every tile's column, span
+and row at build time and the feed only ever sets text behind a `data-f` hook. So out of
+season, when there is no fixture within months of today, the board has nothing to draw and
+the simulator's afternoon has nowhere to land — the same trap `WCC_SIM_LEAGUE` was written
+to get out of on the division's side, and for the same six months of the year.
+
+```
+WCC_SIM_MATCHES=1 WCC_SIM_LEAGUE=1 WCC_LIVE_ENABLED=1 python3 scripts/build.py
+cd site && python3 -m http.server 8000
+open 'http://localhost:8000/slideshow/live/?sim=matchday&at=16:30'
+```
+
+```
+  fixtures: SIMULATED — 3 invented Wendover match(es) today [WCC_SIM_MATCHES]
+  league_today: SIMULATED — 8 invented match(es) across 3 division(s) [WCC_SIM_LEAGUE]
+  live-config.json — 3 pollable match(es) today, poll window 2026-09-26T12:30 → …
+```
+
+`_sim_fixtures_today` invents **three** matches — the shape the layout is hardest at, three
+tiles of two columns — from `teams.json`'s `play_cricket_league_id` and the first other side
+in that division's **committed** `league_table_<comp>.json`. The clubs, team ids and
+competitions are therefore real; only who plays whom and when is fiction. Ids sit in the
+`99xxxxxxx` range, as the league sim's do. It is merged into `all_fixtures` at the three
+places the build loads it, so `todays_events`, `attach_league_context`, `match_day_layout`
+and `live-config.json` all need to know nothing about it.
+
+**A real fixture today wins outright** — the override prints `ignored` and stands down
+rather than doubling up a live match day. Pair it with `WCC_SIM_LEAGUE=1`, which reads the
+competition off these invented fixtures and fills the division tiles beneath them.
+
+#### What the simulated day now covers
+
+Only ONE of our three matches is scored properly from first over to confirmed result. The
+other two, and three of the division's five, are the afternoons a board gets wrong:
+
+| Match | Scenario | What it exercises |
+|---|---|---|
+| 1st XI (streamed) | rain break 15:00, scorer offline 16:20–16:50, result unconfirmed 25 min | `Break` / `Rain delay`, `↻ 30m` mid-chase, decided-but-unpublished |
+| 2nd XI | `noFinish` — last over scored, then the tablet is shut | a card never completed: the age climbs all evening, no verdict ever posts |
+| Sunday XI | `notScored` — never scored at all | `Score book` (a noun, on purpose: the state says no live score is coming, not that the game is over — and not that anything is broken at our end), and the pre-match panel standing all day |
+| division | rain, then abandoned | the `Abandoned` verdict on a square |
+| division | `coarseEvery: 9` — synced in lumps | a square walking fresh → aged (`↻ 14m`) → stale (score withdrawn) → fresh |
+| division | `silent` + `resultOnly` — kept in the book | `In play` on the rule with both clubs still named, then a result at the close |
+| division | `noFeed` — the per-match fetch failed | `No feed` on a square |
+
+The freshness bands themselves live in `assets/js/live-status.js` (ours: 5 min of scorer
+silence; theirs: 10 min aged, 30 min stale, observed rather than reported because the PC
+feed carries no scorer cursor at all). Both boards read them, so the today board and the
+match-day board cannot give a different account of the same match.
+
+Two things the simulator is deliberate about here:
+
+- **A card that stands still is not "in play".** `stillScoring()` excludes the never-scored,
+  the unfinished, the book-kept and the unreadable, so the HUD's count and `c` (jump to the
+  next change) don't offer moments that never arrive.
+- **The stall freezes the CARD, not the cricket.** When the scorer comes back the score
+  jumps several overs at once, which is what actually happens and what a board must survive.
+
 ### Simulating a league match day
 
 The division needs one thing our own matches do not: **a baked fixture list**, because the

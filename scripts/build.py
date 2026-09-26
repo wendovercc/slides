@@ -11,6 +11,7 @@ import re
 import shutil
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import qrcode
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
@@ -2852,14 +2853,16 @@ def infer_section(team_ids):
 
 
 def _load_yt_broadcasts():
-    """Our channel's scheduled/live YouTube broadcasts (the same source the
-    homepage uses). Lets us mark a fixture streamed *in advance* when WE host
-    the Frogbox stream; away streams only surface at runtime via the feed."""
+    """Our channel's YouTube broadcasts for today — scheduled, live, and today's
+    already-finished ones (the same source the homepage uses). Lets us mark a
+    fixture streamed *in advance* when WE host the Frogbox stream; away streams
+    only surface at runtime via the feed. Which fixture each one belongs to is
+    decided by _attach_streams."""
     p = FETCHED / "youtube_live.json"
     if not p.exists():
         return []
     y = json.loads(p.read_text())
-    return (y.get("live") or []) + (y.get("upcoming") or [])
+    return (y.get("live") or []) + (y.get("upcoming") or []) + (y.get("recent") or [])
 
 
 def _load_live_seed():
@@ -2868,6 +2871,152 @@ def _load_live_seed():
     doesn't carry yet, or forcing `streamed` on an away game we know is streamed."""
     p = CONTENT / "live-seed.json"
     return json.loads(p.read_text()) if p.exists() else []
+
+
+# Every club name on the channel and in our fixture list ends the same way, so the
+# suffix distinguishes nothing; "the" and the "v" itself are likewise noise.
+_NAME_NOISE = {"the", "club", "v", "vs", "versus"}
+
+
+def _name_tokens(s):
+    """A club/team/competition name as loose comparison tokens: lowercased, the
+    CC suffix dropped, punctuation gone. "Chalfont St Peter CC - 2nd XI" ->
+    {chalfont, st, peter, 2nd, xi}."""
+    s = re.sub(r"\b(cricket club|cc)\b", " ", (s or "").lower())
+    return {t for t in re.split(r"[^a-z0-9]+", s) if t and t not in _NAME_NOISE}
+
+
+def _broadcast_start(b):
+    """A broadcast's start as LOCAL minutes-past-midnight, or None. YouTube states
+    it in UTC, our fixture times are local clock times, and for half the season
+    those differ by an hour — so the comparison has to happen after a conversion,
+    not on the raw string."""
+    st = b.get("scheduled_start") or b.get("actual_start")
+    if not st:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(st).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone(ZoneInfo("Europe/London"))
+    return dt.hour * 60 + dt.minute
+
+
+def _fixture_start(ev):
+    """A fixture's start as local minutes-past-midnight, or None."""
+    try:
+        h, m = (int(x) for x in str(ev.get("time") or "").split(":")[:2])
+    except ValueError:
+        return None
+    return h * 60 + m
+
+
+# What a broadcast has to score before we will put a play button on a fixture. A
+# guessed stream is worse than a missing one: the icon says "you can watch this
+# game", and pointing it at the wrong game is a promise we then break.
+_STREAM_MIN_SCORE = 3.0
+# Frogbox Go goes live about half an hour before the first ball, and the whole of
+# the hour before the start counts as on time.
+_STREAM_LEAD_MINS = 60
+
+
+def _stream_score(ev, b):
+    """How much this broadcast looks like this fixture's stream, as a score with
+    the reasons that made it up.
+
+    The title Frogbox Go writes is "<competition>: <home team> v <away team>" and
+    the description carries the competition type, so the evidence available is:
+    the opposition's name on one side of the "v" (decisive — it is the one thing
+    that differs between two of our sides playing on the same afternoon), our own
+    team's designation (which separates the 1st XI's game from the 2nd's when both
+    play the same club), the competition, and the start time."""
+    title = b.get("title") or ""
+    blob = title + "\n" + (b.get("description") or "")
+    title_tokens = _name_tokens(title)
+    # The two sides as the title names them, so "Amersham" has to appear as a
+    # TEAM rather than anywhere in a line that may also name a competition.
+    sides = [_name_tokens(x) for x in re.split(r"\s+(?:v|vs|versus)\.?\s+", title, flags=re.I)]
+    score, why = 0.0, []
+
+    opp = _name_tokens(ev.get("opposition") or "")
+    if opp and any(opp <= side for side in sides):
+        score += 4.0
+        why.append("opposition")
+    elif opp and opp <= title_tokens:
+        # Named, but not as one side of the fixture — a title we have not seen the
+        # shape of. Worth something, not everything.
+        score += 2.5
+        why.append("opposition (loose)")
+
+    desig = _name_tokens(ev.get("team_name") or "")
+    if desig and desig <= title_tokens:
+        score += 2.0
+        why.append("our team")
+
+    comp = _name_tokens(ev.get("competition") or "") | _name_tokens(ev.get("league_name") or "")
+    if comp:
+        blob_tokens = _name_tokens(blob)
+        # Overlap, not containment: "TVCL Division 3B" and "TVCL Div 3B" are the
+        # same division written two ways, and neither contains the other.
+        if len(comp & blob_tokens) >= max(1, round(len(comp) * 0.5)):
+            score += 1.5
+            why.append("competition")
+
+    start, bstart = _fixture_start(ev), _broadcast_start(b)
+    if start is not None and bstart is not None:
+        lead = start - bstart          # positive = the stream starts first
+        if 0 <= lead <= _STREAM_LEAD_MINS:
+            score += 1.5
+            why.append("start time")
+        elif -30 <= lead <= _STREAM_LEAD_MINS + 30:
+            score += 0.5               # near the window; corroborating, not deciding
+        else:
+            # Hours from this fixture's start: it is far more likely to be another
+            # game on the same day than a very early stream of this one.
+            score -= 1.0
+            why.append("start time off")
+    return score, why
+
+
+def _attach_streams(events, broadcasts):
+    """Mark each of today's matches with the YouTube broadcast that is its stream —
+    at most one each way, since Frogbox Go schedules one stream per fixture.
+
+    Best pairs first, each broadcast and each fixture claimed once, and nothing
+    claimed below _STREAM_MIN_SCORE. The one exception is the common case: a
+    single stream and a single pollable match today, where there is only one game
+    it could be about — accepted on a start time that is not contradictory."""
+    matches = [e for e in events if e.get("type") == "match"]
+    if not matches or not broadcasts:
+        return
+    pairs = []
+    for ev in matches:
+        for b in broadcasts:
+            if not b.get("video_id"):
+                continue
+            score, why = _stream_score(ev, b)
+            pairs.append((score, why, ev, b))
+    lone = len(matches) == 1 and len([b for b in broadcasts if b.get("video_id")]) == 1
+    pairs.sort(key=lambda p: -p[0])
+    taken_ev, taken_b = set(), set()
+    for score, why, ev, b in pairs:
+        if id(ev) in taken_ev or b["video_id"] in taken_b:
+            continue
+        if score < _STREAM_MIN_SCORE and not (lone and score >= 0):
+            continue
+        ev["streamed"] = True
+        ev["video_id"] = b["video_id"]
+        ev["stream_url"] = b.get("url")
+        taken_ev.add(id(ev))
+        taken_b.add(b["video_id"])
+        print(f"  stream — {ev.get('team_name')} v {ev.get('opposition')} "
+              f"<- {b['video_id']} (score {score:g}: {', '.join(why) or 'lone pair'})")
+    for b in broadcasts:
+        if b.get("video_id") and b["video_id"] not in taken_b:
+            print(f"  stream — {b['video_id']} \"{(b.get('title') or '')[:60]}\" "
+                  "matched no fixture today")
 
 
 def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
@@ -2896,13 +3045,6 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
             return datetime.strptime(s, "%d/%m/%Y").date().isoformat()
         except (ValueError, TypeError):
             return None
-
-    def streamed_today():
-        for b in yt_broadcasts:
-            st = str(b.get("scheduled_start") or b.get("actual_start") or "")
-            if st[:10] == today_iso:
-                return {"video_id": b.get("video_id"), "url": b.get("url")}
-        return None
 
     # Our club's short name for live scorelines/results. Prefer the team's PC
     # league-table name ("Wendover CC"); friendly/junior teams that carry none
@@ -2941,10 +3083,6 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 "our_crest": "/assets/images/wcc-logo.png",
                 "opp_crest": opp_crest(f.get("opposition_club_name") or f.get("opposition_team_name")),
             }
-            st = streamed_today()
-            if st:
-                m["streamed"] = True
-                m["video_id"] = st.get("video_id")
             events.append(m)
             if pc_id:
                 by_id[str(pc_id)] = m
@@ -2961,6 +3099,11 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
             "team_names": names,
             "ground": loc_names.get(loc_id, s.get("location", "")),
         })
+
+    # Which of today's matches is on the stream. Done as a matching pass over the
+    # whole day rather than per fixture: a broadcast belongs to ONE game, and only
+    # by comparing it against every candidate can we tell which.
+    _attach_streams(events, yt_broadcasts)
 
     # Manual seed: add/annotate today's MATCH events (id, streamed) — prefer
     # annotating an existing fixture by id, else by team (a today fixture with no
@@ -3012,7 +3155,8 @@ def _todays_events():
         for a in l.get("aliases", []):
             loc_lookup[a.lower()] = l["id"]
     fx = FETCHED / "fixtures.json"
-    all_fixtures = json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {}
+    all_fixtures = _with_sim_fixtures(
+        json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {})
     tr = FETCHED / "cs365_training.json"
     training = json.loads(tr.read_text()).get("sessions", []) if tr.exists() else []
     return todays_events(teams_by_id, training, all_fixtures, loc_lookup, loc_names,
@@ -3093,6 +3237,107 @@ def build_live_config():
     window = f"{poll_from} → {poll_until}" if poll_from else "closed (nothing on)"
     replay = " [replay build: window is the REAL day]" if _today() != date.today() else ""
     print(f"  live-config.json — {len(matches)} pollable match(es) today, poll window {window}{replay}")
+
+
+_SIM_FIXTURES_SAID = []
+
+
+def _sim_fixtures_today():
+    """INVENT today's WENDOVER matches, from the COMMITTED league tables.
+
+    `WCC_SIM_MATCHES=1` only, and it is the other half of _sim_league_today. The
+    match-day board is BAKED from today's fixtures — every tile's column, span and
+    row is decided at build time — so out of season, when there is no fixture
+    anywhere near today, the board has nothing to draw and the whole of the
+    simulator's afternoon has nowhere to land. Six months of the year that leaves
+    the board and its live presentations untestable, which is exactly the trap
+    _sim_league_today was written to get out of on the division's side.
+
+    Three matches, because three is what the board's layout is hardest at (three
+    tiles of two columns each) and what the simulator has scenarios for. Divisions
+    come from `teams.json` (`play_cricket_league_id`) and the opposition off that
+    division's committed table, so the names, the team ids and the competition are
+    all real; the only fiction is who plays whom, and when.
+
+    Ids are stamped in the 99xxxxxxx range, as the league sim's are, so an invented
+    fixture can never be taken for a real PC match id in a log line or a cache.
+
+    Returns {team_id: [fixture]} in fetch_fixtures' own shape, so it can be merged
+    into all_fixtures and every consumer downstream needs to know nothing."""
+    teams = [t for t in load_teams().values() if t.get("play_cricket_league_id")]
+    out, idx = {}, 0
+    for team in teams:
+        if idx >= MATCH_DAY_MAX_MATCHES:
+            break
+        comp = str(team["play_cricket_league_id"])
+        table = FETCHED / f"league_table_{comp}.json"
+        if not table.exists():
+            continue
+        try:
+            rows = json.loads(table.read_text())["league_table"][0]
+        except (ValueError, OSError, KeyError, IndexError):
+            continue
+        # The first side in the division that isn't us — deterministic, so a rebuild
+        # doesn't reshuffle the afternoon under a test.
+        opp = None
+        for r in rows.get("values", []):
+            label = (r.get("column_1") or "").strip()
+            club, _, desig = label.partition(" - ")
+            if not club or club.startswith(OUR_CLUB):
+                continue
+            opp = {"club": club, "team": desig or club, "id": str(r.get("team_id") or "")}
+            break
+        if not opp:
+            continue
+        # A staggered afternoon and alternating venues, which is what a real Saturday
+        # looks like and what the board has to lay out.
+        start = 13 * 60 + idx * 15
+        is_home = idx % 2 == 0
+        out.setdefault(team["id"], []).append({
+            "match_id": 991000000 + idx,
+            "match_date": _today().strftime("%d/%m/%Y"),
+            "match_time": f"{start // 60:02d}:{start % 60:02d}",
+            "ground_name": None if is_home else opp["club"],
+            "is_home": is_home,
+            "opposition_club_name": opp["club"],
+            "opposition_team_name": opp["team"],
+            "opposition_team_id": opp["id"],
+            "competition_name": rows.get("name") or "",
+            "competition_id": comp,
+            "league_name": team.get("league_name") or "",
+            # The form the pre-match panel draws their five badges from. Invented, but
+            # a panel with an empty row on one side would hide a real layout question.
+            "opposition_form": ["W", "L", "W", "W", "L"][: 5 - idx],
+        })
+        idx += 1
+    # Said once: several build phases each load the fixtures, and eight identical
+    # lines in the log is noise rather than reassurance.
+    if not _SIM_FIXTURES_SAID:
+        print(f"  fixtures: SIMULATED — {idx} invented Wendover match(es) today "
+              "[WCC_SIM_MATCHES]")
+        _SIM_FIXTURES_SAID.append(True)
+    return out
+
+
+def _with_sim_fixtures(all_fixtures):
+    """all_fixtures, plus today's invented matches under `WCC_SIM_MATCHES=1`.
+
+    A real fixture today wins outright: the override exists for the days when there
+    is nothing on, and silently doubling up a live match day would be worse than
+    doing nothing at all."""
+    if str(os.environ.get("WCC_SIM_MATCHES", "")).lower() not in ("1", "true", "on", "yes"):
+        return all_fixtures
+    today = _today().strftime("%d/%m/%Y")
+    for fixtures in (all_fixtures or {}).values():
+        if any(f.get("match_date") == today for f in fixtures or []):
+            if not _SIM_FIXTURES_SAID:
+                print("  fixtures: WCC_SIM_MATCHES ignored — real match(es) already today")
+                _SIM_FIXTURES_SAID.append(True)
+            return all_fixtures
+    merged = dict(all_fixtures or {})
+    for team_id, fixtures in _sim_fixtures_today().items():
+        merged[team_id] = list(merged.get(team_id) or []) + fixtures
+    return merged
 
 
 def _sim_league_today():
@@ -3739,7 +3984,7 @@ def build_live_matches(env, slide_meta):
             loc_lookup[a.lower()] = l["id"]
     fx = FETCHED / "fixtures.json"
     fx_data = json.loads(fx.read_text()) if fx.exists() else {}
-    all_fixtures = fx_data.get("all_fixtures", {})
+    all_fixtures = _with_sim_fixtures(fx_data.get("all_fixtures", {}))
     # Per-team next-match fixtures carry the published XI (fetched pre-match); on
     # match morning a team's next match IS today's, so it's the source for the
     # Pre-match "OUT" tags below.
@@ -4114,7 +4359,7 @@ def build_slides(env):
             training_path = FETCHED / "cs365_training.json"
             training = json.loads(training_path.read_text())["sessions"] if training_path.exists() else []
             fixtures_data = load_fixtures()
-            all_fixtures = (fixtures_data or {}).get("all_fixtures", {})
+            all_fixtures = _with_sim_fixtures((fixtures_data or {}).get("all_fixtures", {}))
             _schedule_cache["data"] = (training, all_fixtures, loc_lookup, loc_names)
         return _schedule_cache["data"]
 

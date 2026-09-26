@@ -65,11 +65,19 @@
         var p = s.split('.');
         return (parseInt(p[0], 10) || 0) * 6 + (p.length > 1 ? (parseInt(p[1], 10) || 0) : 0);
     }
-    // The innings allotment, inferred from how the FIRST innings closed rather than
-    // any max_overs field (unreliable in the feed — see the DLS overs note): a side
-    // that was neither bowled out nor declared, and stopped on a whole over, was
-    // stopped BY the allotment. Anything else leaves it unknown, and the chase
-    // model falls back to its wickets-only form.
+    /* The innings allotment, inferred from how the FIRST innings closed rather than
+     * any max_overs field (unreliable in the feed — see the DLS overs note): a side
+     * that was neither bowled out nor declared, and stopped on a whole over, was
+     * stopped BY the allotment. Anything else leaves it unknown, and the chase model
+     * falls back to its wickets-only form.
+     *
+     * OPEN, and now visible on the wall: that fallback caps its certainty at 0.4, so a
+     * game whose first innings was bowled out shows a timid swingometer beside a
+     * confident one for an equally poised game — on our own tiles' "To win" aperture
+     * and on the division squares alike. What it wants is a real allotment, and the
+     * cheapest candidate is the COMPETITION rather than the match: TVCL divisions play
+     * a known length, so a per-competition table baked at build time would settle every
+     * league game without a feed at all. Until then, an inference is all this is. */
     function allotmentOvers(first) {
         if (!first || (first.wickets || 0) >= 10 || first.declared) return null;
         var b = ballsOf(first.overs);

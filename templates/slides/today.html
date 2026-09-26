@@ -167,7 +167,7 @@
 <div class="today-list" id="today-list"></div>
 <div class="today-empty" id="today-empty" hidden>Nothing scheduled at the club today</div>
 
-{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script>{% endif %}
+{% if live_enabled %}<script src="/assets/js/live-key.js?v={{ asset_version }}"></script><script src="/assets/js/live-window.js?v={{ asset_version }}"></script>{#- The status vocabulary, shared with the match-day board so the two never give a different account of the same match. -#}<script src="/assets/js/live-status.js?v={{ asset_version }}"></script>{% endif %}
 <script>
 (function () {
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
@@ -185,6 +185,11 @@
     // future `wcc-league` broadcast — see applyLeague). render() reads this so a
     // league update just re-paints from the baked schedule + the latest scores.
     var LEAGUE_SCORES = {};
+    // The league cards as they arrived, and the envelope they came in: the status
+    // module reads both (the card for its state, the envelope's `generated_at` for
+    // the clock it ages against), and LEAGUE_SCORES is a per-side reshaping that has
+    // thrown the rest of the card away.
+    var LEAGUE_CARDS = {}, lastLeague = null;
     var lastFeed = null, lastStatus = 'ok';
     // Poll states worth admitting to in the header. 'nokey' and 'closed' are normal
     // (an unprovisioned device, or out of hours) and stay silent.
@@ -201,70 +206,28 @@
         return w ? esc(w.name) + ' — ' + esc(w.how || '') + (w.fow != null ? ' @ ' + w.fow : '') : ''; }
     function timeCell(ev) { return ev.time ? esc(ev.time) : '<span class="tbc">TBC</span>'; }
 
-    // How stale a live score may get before the badge stops claiming "Live" and
-    // starts reporting its age instead. RV is polled every ~20-30s and a syncing
-    // scorer lands well inside a minute, so five minutes of silence is a stall,
-    // not jitter.
-    var STALE_AFTER = 300;
-    // RV's per-match scorer cursor, as epoch seconds. rv.mjs normalises it, but a
-    // Worker deployed before that change still sends ASP.NET's `/Date(ms)/`, and
-    // the two roll out independently — so parse both rather than depending on the
-    // newer server.
-    function scoresUpdated(lm) {
-        var v = lm && lm.scores_updated;
-        if (v == null || v === '') return null;
-        if (typeof v === 'number') return v > 1e11 ? Math.round(v / 1000) : v;
-        var m = /\/Date\((-?\d+)/.exec(String(v));
-        return m ? Math.round(Number(m[1]) / 1000) : null;
-    }
-    function secsSince(t) { return t ? Math.max(0, Math.round(Date.now() / 1000 - t)) : null; }
-    // Coarse on purpose: at ten feet the question is "minutes or hours?", and a
-    // figure that ticks every second reads as noise.
-    function fmtAge(s) { return s < 5400 ? Math.round(s / 60) + 'm' : Math.round(s / 3600) + 'h'; }
+    /* THE RAIL'S STATUS CELL — one token answering "how current is this line?", and
+       the vocabulary itself lives in assets/js/live-status.js because the match-day
+       board asks the same question of the same feeds. Nothing but placement here.
 
-    // The rail's status cell: ONE token answering "how current is this line?".
-    // Ordered by what it would be dishonest to hide — a broken pipe first, then a
-    // settled result, then a scheduled pause (during which silence is expected and
-    // must NOT read as a stall), then the live/stalled split, then not-yet-started.
-    // Nothing at all when live is disabled or the match isn't pollable.
+       Nothing at all when live is disabled or the match isn't pollable. */
     function feedBadge(ev, lm, status) {
-        if (!LIVE_ENABLED || !ev.pc_id) return '';
-        var cls, txt;
-        var age = secsSince(scoresUpdated(lm));
-        if (status !== 'ok') { cls = 'off'; txt = 'No feed'; }
-        else if (lm && lm.complete) { cls = 'res'; txt = 'Result'; }
-        else if (lm && lm.phase === 'break') { cls = 'brk'; txt = 'Break'; }
-        else if (lm && lm.phase === 'live') {
-            // Scored and current, or scored and gone quiet — in which case the age
-            // REPLACES the word, so the column stays one token wide and a stall is
-            // legible across the room.
-            if (age != null && age >= STALE_AFTER) { cls = 'stale'; txt = '↻ ' + fmtAge(age); }
-            else { cls = 'live'; txt = '● Live'; }
-        }
-        // Nothing scored yet AND the fixture says live scoring isn't switched on —
-        // the book-only game that would otherwise sit on "Awaiting" all afternoon.
-        // Deliberately guarded on having no innings, so this hint (whose in-play
-        // semantics are still unconfirmed) can never contradict a score we can see.
-        else if (lm && lm.live_scoring_allowed === false && !(lm.innings || []).length) {
-            cls = 'off'; txt = 'Not scored';
-        }
-        else { cls = 'wait'; txt = 'Awaiting'; }
-        return '<span class="feed-badge ' + cls + '">' + txt + '</span>';
+        if (!LIVE_ENABLED || !ev.pc_id || !window.WccStatus) return '';
+        var st = WccStatus.ours(lm, status, lastFeed);
+        return st ? '<span class="feed-badge ' + st.cls + '">' + esc(st.text) + '</span>' : '';
     }
 
-    // The same rail column for a DIVISION game. PC-API carries no scorer cursor, so
-    // this reports STATE ONLY — never freshness. Blank until the league poll has
-    // said something about the match at all, rather than asserting "not started"
-    // about a game we simply haven't heard from.
-    function leagueBadge(sc) {
-        if (!LIVE_ENABLED || !sc) return '';
-        var cls, txt;
-        if (sc.phase === 'no-feed') { cls = 'off'; txt = 'No feed'; }
-        else if (sc.done) { cls = 'res'; txt = 'Result'; }
-        else if (sc.started) { cls = 'play'; txt = 'In play'; }
-        else if (sc.phase === 'pre') { cls = 'wait'; txt = 'Awaiting'; }
-        else return '';
-        return '<span class="feed-badge ' + cls + '">' + txt + '</span>';
+    /* The same rail column for a DIVISION game — state, plus the one freshness
+       judgement the PC feed can support (see WccStatus.league: it has no scorer
+       cursor, so silence is OBSERVED rather than reported). Blank until the league
+       poll has said something about the match at all, rather than asserting "not
+       started" about a game we simply haven't heard from. */
+    function leagueBadge(mid) {
+        if (!LIVE_ENABLED || !window.WccStatus) return '';
+        var card = LEAGUE_CARDS[String(mid)];
+        if (!card) return '';
+        var st = WccStatus.league(card, WccStatus.observe(String(mid), card, lastLeague));
+        return st ? '<span class="feed-badge ' + st.cls + '">' + esc(st.text) + '</span>' : '';
     }
 
     // Club names read as the club, not the registration: "Hurley CC" -> "Hurley".
@@ -422,7 +385,7 @@
             // the table's 2nd — the one the house stripe starts on.
             return matchRow(first, second, sc.result ? shortenClubs(sc.result) : '',
                             { showTime: showTime, time: o.time, matchId: o.match_id,
-                              alt: i % 2 === 0, status: leagueBadge(LEAGUE_SCORES[String(o.match_id)]) });
+                              alt: i % 2 === 0, status: leagueBadge(o.match_id) });
         }).join('');
     }
 
@@ -473,9 +436,11 @@
     // Stored per SIDE (home/away) so a league row renders exactly like ours: each
     // club followed by its own innings. The engine's league loop + Worker
     // /league.json endpoint are still to come; this consumer is ready for them.
-    function applyLeague(matches) {
+    function applyLeague(matches, envelope) {
+        lastLeague = envelope || null;
         (matches || []).forEach(function (m) {
             if (m.match_id == null) return;
+            LEAGUE_CARDS[String(m.match_id)] = m;
             var inns = m.innings || [];
             var rec = { result: m.complete ? (m.result_club || m.result || '') : '',
                         // What the rail reports for this row: state, not freshness.
@@ -527,7 +492,7 @@
         var d = e.data;
         if (!d || !LIVE_ENABLED) return;   // no key → stay on the baked paint above
         if (d.type === 'wcc-live') render(d, d.status || 'ok');
-        else if (d.type === 'wcc-league') { applyLeague(d.matches); render(lastFeed, lastStatus); }
+        else if (d.type === 'wcc-league') { applyLeague(d.matches, d); render(lastFeed, lastStatus); }
     });
 
     // Live enrichment (poll / engine broadcast) is gated behind config.live_enabled

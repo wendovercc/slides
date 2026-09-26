@@ -109,20 +109,32 @@
     }
 
     // ---- the day ------------------------------------------------------------
-    // Invented rather than read from the build, so the simulator has no
-    // prerequisites. Deliberately the awkward shape of a real Saturday: two of our
-    // sides in different divisions, one of them streamed, plus the rest of one
-    // division playing each other.
+    /* Invented rather than read from the build, so the simulator has no
+     * prerequisites. Deliberately the awkward shape of a real Saturday: three of our
+     * sides in different divisions, one of them streamed, plus the rest of one
+     * division playing each other.
+     *
+     * AND DELIBERATELY NOT THREE WELL-SCORED GAMES. Only one of our three is scored
+     * ball by ball from first over to confirmed result; the second is scored and
+     * then abandoned unfinished, the third is never scored at all, and the division
+     * covers a washout, a book-kept card, a feed we cannot read and a scorer who
+     * syncs in lumps. Those are the afternoons the boards get wrong, so they are the
+     * afternoons that have to be in every run. */
     var DAY = {
         ours: [
             { pc_id: 7400001, team_name: '1st XI', competition_short: 'TVCL Div 4A',
               our_club: 'Wendover CC', opposition: 'Chalfont St Peter CC', is_home: true,
               streamed: true, allot: 45, start: at('13:00'), publishAfter: mins(25),
               seed: 17,
-              // A shower midway through, then play resumes; and the result sits
+              // A shower midway through, then play resumes; the scorer then loses
+              // signal for half an hour in the chase (the cricket carries on without
+              // us, so the card jumps when they come back) — deliberately clear of
+              // this match's innings break, so the stall and the break each get a
+              // window of their own to be looked at in; and the result sits
               // unconfirmed for twenty-five minutes, which is the window the chrome
               // has to hedge with "to be confirmed".
-              beats: { clips: true, rainFrom: at('15:00'), rainFor: mins(20) } },
+              beats: { clips: true, rainFrom: at('15:00'), rainFor: mins(20),
+                       stallFrom: at('17:20'), stallFor: mins(30) } },
             // WE BAT FIRST here, which is not decoration: it puts our innings at
             // innings[0] and the opposition's chase at innings[1], the mirror of the
             // match above. Every consumer that binds a side by position rather than
@@ -135,22 +147,48 @@
               streamed: false, allot: 40, start: at('13:15'), publishAfter: mins(8),
               seed: 29,
               // A hundred and a five-for guaranteed, so the rare events are in
-              // every run rather than in one run out of ten.
-              beats: { hundred: true, fiveFor: true } }
+              // every run rather than in one run out of ten. And the card is never
+              // FINISHED — the last over is scored and the tablet is shut, so no
+              // result is ever posted: the state a board will otherwise sit on for
+              // the rest of the evening as if the game were still going.
+              beats: { hundred: true, fiveFor: true, noFinish: true } },
+            // A third side out, and this one is NEVER SCORED. Its fixture is real,
+            // the feed answers about it all afternoon, and there is never anything
+            // on it — which is the commonest state of all on a junior or friendly
+            // Saturday, and the one that must not read as "● Live" with an empty
+            // board. Only lands on the boards when the day has three matches
+            // (WCC_SIM_MATCHES invents three; a real Saturday usually has them).
+            { pc_id: 7400003, team_name: 'Sunday XI', competition_short: 'Friendly',
+              our_club: 'Wendover CC', opposition: 'Aston Clinton CC', is_home: true,
+              streamed: false, allot: 40, start: at('13:30'), publishAfter: mins(10),
+              seed: 37, beats: { notScored: true } }
         ],
-        // The rest of the 2nd XI's division, on the lean PC feed. One is rained off
-        // and abandoned; one finishes early and posts its result; one never says
-        // anything at all (a match scored in the book).
+        // The rest of the 2nd XI's division, on the lean PC feed: one scored
+        // properly, one rained off and abandoned, one synced in lumps, one kept in
+        // the book that posts a result at the close, and one we cannot read at all.
         league: [
             { match_id: 7410001, home: 'Chesham CC', away: 'Tring Park CC',
               competition: 'TVCL Div 6C', allot: 40, start: at('13:00'), seed: 41 },
             { match_id: 7410002, home: 'Aylesbury Town CC', away: 'Berkhamsted CC',
               competition: 'TVCL Div 6C', allot: 40, start: at('12:45'), seed: 53,
               beats: { rainFrom: at('14:15'), abandon: true } },
+            // SYNCED IN LUMPS. Somebody scoring on paper and typing it in at the
+            // drinks break: the figures are real but stand still for half an hour at
+            // a time, which is what walks a division tile through fresh -> aged ->
+            // stale and back. The commonest kind of league score there is.
             { match_id: 7410003, home: 'Great Missenden CC', away: 'Wycombe House CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('12:55'), seed: 67 },
+              competition: 'TVCL Div 6C', allot: 40, start: at('12:55'), seed: 67,
+              beats: { coarseEvery: 9 } },
+            // SCORED IN THE BOOK. The card exists all afternoon and never carries an
+            // innings; a result appears at the close because somebody posts one.
             { match_id: 7410004, home: 'Flackwell Heath CC', away: 'Hazlemere CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('13:10'), seed: 79, silent: true }
+              competition: 'TVCL Div 6C', allot: 40, start: at('13:10'), seed: 79,
+              silent: true, resultOnly: true },
+            // A MATCH WE CANNOT READ AT ALL — the per-match fetch failed, which
+            // pc.mjs degrades to a `no-feed` card rather than failing the batch.
+            { match_id: 7410005, home: 'Chalfont St Giles CC', away: 'Holmer Green CC',
+              competition: 'TVCL Div 6C', allot: 40, start: at('13:00'), seed: 91,
+              noFeed: true }
         ]
     };
 
@@ -396,25 +434,47 @@
         function whenElapsed(el) {
             var rb = cfg.beats || {};
             var rainEl = rb.rainFrom == null ? Infinity : rb.rainFrom - cfg.start;
-            return cfg.start + el + (el > rainEl ? (rb.rainFor || 0) : 0);
+            // The interval between innings is time the afternoon spends not playing,
+            // so every over of the chase happens that much later in the day.
+            return cfg.start + el + (el > n1 * OVER_MS ? INNINGS_BREAK_MS : 0)
+                 + (el > rainEl ? (rb.rainFor || 0) : 0);
         }
         function firstOverWhere(snaps, test) {
             for (var i = 0; i < snaps.length; i++) if (test(snaps[i])) return snaps[i].over;
             return null;
         }
         var label = cfg.team_name + ' v ' + cfg.opposition.replace(/ CC$/, '');
+        /* Reassigned below for a match that is never scored, hence `var` and not a
+         * once-and-for-all list. */
         var marks = [
             { at: cfg.start, kind: 'start', label: label + ' — toss' },
-            { at: whenElapsed(n1 * OVER_MS), kind: 'break', label: label + ' — innings break' },
-            { at: whenElapsed(doneAt * OVER_MS), kind: 'result', label: label + ' — decided' },
-            { at: whenElapsed(doneAt * OVER_MS) + cfg.publishAfter, kind: 'final',
-              label: label + ' — result confirmed' }
+            { at: whenElapsed(n1 * OVER_MS), kind: 'break', label: label + ' — innings break' }
         ];
+        /* A card nobody finishes is never decided and never confirmed, so it gets
+           neither moment — what it gets instead is the moment the scoring stops, which
+           is the one worth scrubbing to. */
+        if (cfg.beats && cfg.beats.noFinish) {
+            marks.push({ at: whenElapsed(doneAt * OVER_MS), kind: 'break',
+                         label: label + ' — scoring stops, never finished' });
+        } else {
+            marks.push({ at: whenElapsed(doneAt * OVER_MS), kind: 'result', label: label + ' — decided' });
+            marks.push({ at: whenElapsed(doneAt * OVER_MS) + cfg.publishAfter, kind: 'final',
+                         label: label + ' — result confirmed' });
+        }
         if (cfg.beats && cfg.beats.rainFrom != null) {
             marks.push({ at: cfg.beats.rainFrom, kind: 'rain', label: label + ' — rain stops play' });
             marks.push({ at: cfg.beats.rainFrom + (cfg.beats.rainFor || 0), kind: 'rain',
                          label: label + ' — play resumes' });
         }
+        if (cfg.beats && cfg.beats.stallFrom != null) {
+            marks.push({ at: cfg.beats.stallFrom, kind: 'break', label: label + ' — scorer offline' });
+            marks.push({ at: cfg.beats.stallFrom + (cfg.beats.stallFor || mins(20)), kind: 'break',
+                         label: label + ' — scoring resumes' });
+        }
+        // Nothing is ever scored, so there is no moment in the day to stop at — and a
+        // timeline offering a toss and a result for a game that has neither would be
+        // the bar lying about the afternoon it is scrubbing through.
+        if (cfg.beats && cfg.beats.notScored) marks = [];
         // The beats are applied to ONE innings (ours with the bat), so that is the
         // innings the guaranteed milestones are found in, dated through the overs before it.
         var beatSnaps = (weFirst ? first : second).snaps, beatOffset = weFirst ? 0 : n1;
@@ -430,25 +490,67 @@
                                            kind: 'milestone', label: label + ' — a five-for' });
 
         return {
-            id: cfg.pc_id, ours: true, cfg: cfg, doneAt: doneAt, marks: marks,
+            id: cfg.pc_id, ours: true, cfg: cfg, doneAt: doneAt, n1: n1, marks: marks,
             // Clips arrive on the streamed match only, and they arrive a poll LATE —
             // footage lags the scorecard in reality, and an extractor that assumed
             // otherwise would never join a clip to its wicket.
             card: function (ms) {
+                var b = cfg.beats || {};
+                /* A MATCH NOBODY SCORES. Common, and the state a board is most likely
+                 * to get wrong: the fixture is real, the feed answers, and it will
+                 * never say anything else all afternoon. RV's own hints are how it is
+                 * told apart from a game that simply hasn't started (the surfaces read
+                 * `live_scoring_allowed` for exactly this), so they are what the card
+                 * carries — and no innings, ever. */
+                if (b.notScored) {
+                    return { pc_id: cfg.pc_id, phase: 'pre', complete: false, final: false,
+                             home: cfg.is_home ? cfg.our_club : oppClub,
+                             away: cfg.is_home ? oppClub : cfg.our_club,
+                             teams: sides.map(function (sd) {
+                                 return { club: sd.club, name: sd.team, is_home: sd.is_home,
+                                          batted_first: sd.batted_first, outcome: null };
+                             }),
+                             innings: [], clips: [], scores_updated: null,
+                             live_scored: false, live_scoring_allowed: false,
+                             was_live_scored: false };
+                }
                 var raw = ms - cfg.start;
                 if (raw < 0) return null;                     // not started yet
+                /* THE SCORER STOPS SYNCING — a phone with no signal at the far ground,
+                 * which happens most Saturdays somewhere. The distinction that matters
+                 * is that the CRICKET carries on: when the scorer comes back the card
+                 * jumps several overs at once, so the board must neither freeze the
+                 * afternoon nor present the frozen figures as current. Modelled as
+                 * scoring pinned to the moment the sync stopped, with the cursor pinned
+                 * there too — which is the only thing that makes it detectable. */
+                var stalled = b.stallFrom != null && ms >= b.stallFrom &&
+                              ms < b.stallFrom + (b.stallFor || mins(20));
                 // Rain stops play, so the scorecard stops with it: the time spent under
                 // the covers moves the clock and not the game. Without this the break
                 // would be cosmetic and the feed would keep scoring through it.
-                var b = cfg.beats || {};
                 var lost = b.rainFrom == null ? 0
                     : Math.max(0, Math.min(ms - b.rainFrom, b.rainFor || mins(15)));
+                // Afternoon minus the covers.
+                var open = (stalled ? b.stallFrom - cfg.start : raw) - lost;
+                /* THE INNINGS BREAK IS AN INTERVAL, not a label: for eight minutes
+                 * after the first innings closes the clock runs and the cricket does
+                 * not, so no ball of the chase can be scored during it. Without this
+                 * the card reported "Innings break" while the second innings was
+                 * already twelve for one — a break in name only, and one that showed
+                 * up the moment `break_desc` started driving `phase`. */
+                var brk = Math.max(0, Math.min(open - n1 * OVER_MS, INNINGS_BREAK_MS));
+                var inBreak = brk > 0 && brk < INNINGS_BREAK_MS;
                 // Play, as opposed to afternoon: overs come off this and nothing else.
-                var elapsed = raw - lost;
+                var elapsed = open - brk;
                 var t = Math.floor(elapsed / OVER_MS);        // completed overs
                 var doneElapsed = doneAt * OVER_MS;
-                var complete = elapsed >= doneElapsed;
-                var final = elapsed >= doneElapsed + cfg.publishAfter;
+                /* THE CARD NOBODY FINISHES. The last over is scored and then the tablet
+                 * is shut: no result, no confirmation, the innings just stops. The
+                 * decided-and-published path is exercised on another match, and this is
+                 * the other thing that really happens — and the one a board will sit on
+                 * for hours if it treats a still scorecard as a live one. */
+                var complete = elapsed >= doneElapsed && !b.noFinish;
+                var final = complete && elapsed >= doneElapsed + cfg.publishAfter;
                 var inns = [];
                 var i1 = first.snaps[Math.min(t, n1) - 1];
                 if (t >= 1) inns.push(inningsOf(sides[0], i1, 1, true));
@@ -476,9 +578,16 @@
                                  (inn.wickets >= 10) || inn.declared;
                     if (inn.closed) inn.at_crease = [];
                 });
+                /* WHAT STATE THE MATCH IS IN, as rv.mjs derives it: a break_desc IS
+                 * phase 'break' there (derivePhase), and a simulator that set the
+                 * description without the phase left every consumer's break case
+                 * untested — which is how the today board's BREAK badge came to have
+                 * never fired in a simulated afternoon. */
+                var breakDesc = rainNow(cfg, ms) ? 'Rain delay'
+                              : (!complete && inBreak ? 'Innings break' : null);
                 return {
                     pc_id: cfg.pc_id,
-                    phase: complete ? 'post' : 'live',
+                    phase: complete ? 'post' : (breakDesc ? 'break' : 'live'),
                     complete: complete, final: final,
                     result: result, result_club: resultClub,
                     home: cfg.is_home ? cfg.our_club : oppClub,
@@ -490,9 +599,7 @@
                     }),
                     score_text: null,
                     leader_text: complete && final ? result : null,
-                    break_desc: rainNow(cfg, ms) ? 'Rain delay'
-                              : (!complete && elapsed >= n1 * OVER_MS &&
-                                 elapsed < n1 * OVER_MS + INNINGS_BREAK_MS ? 'Innings break' : null),
+                    break_desc: breakDesc,
                     toss: { winner: sides[0].team, winner_club: oppClub, decision: 'bat',
                             is_wendover: false,
                             text: oppClub + ' won the toss and elected to bat' },
@@ -506,7 +613,18 @@
                      * hours after we heard about it. The fiction is the PACE of the
                      * day, not when the client is living. A poll's worth behind now,
                      * because a scorer syncs after the ball, not during it. */
-                    scores_updated: Math.floor((clockNow() - FAST_MS) / 1000),
+                    /* WHEN THE SCORER LAST SYNCED. Ordinarily now, a poll's worth
+                     * ago (a scorer syncs after the ball, not during it) — but under a
+                     * stall, or on a card abandoned unfinished, it stays where the
+                     * scoring stopped, and every board's "↻ 14m" grows out of the gap
+                     * between the two. On the simulated clock, like `generated_at`:
+                     * both boards age a score by subtracting one from the other, so a
+                     * cursor on the real clock would price the whole afternoon stale. */
+                    scores_updated: Math.floor(((dayEpoch + (
+                        stalled ? b.stallFrom
+                                : (b.noFinish && elapsed >= doneElapsed
+                                   ? whenElapsed(doneElapsed) : ms)
+                    )) - FAST_MS) / 1000),
                     // The simulated wall clock, for display only — nothing schedules
                     // off this, and no real feed carries it.
                     sim_clock: new Date(clockNow()).toISOString(),
@@ -664,8 +782,33 @@
             card: function (ms) {
                 var elapsed = ms - cfg.start;
                 if (elapsed < 0) return null;
-                if (cfg.silent) return null;                  // scored in the book
+                if (cfg.noFeed) return { match_id: cfg.match_id, phase: 'no-feed',
+                                         competition: cfg.competition, error: 'simulated',
+                                         home: cfg.home, away: cfg.away,
+                                         complete: false, innings: [] };
+                var done = elapsed >= doneAt * OVER_MS;
+                /* SCORED IN THE BOOK. The PC card exists all afternoon and says
+                 * nothing: "Match In Progress" with no innings behind it, which is a
+                 * real state and not a broken feed — the board has to be able to say
+                 * so without inventing a score. A result at the close only if
+                 * somebody posts one. */
+                if (cfg.silent) {
+                    var posted = done && cfg.resultOnly;
+                    return { match_id: cfg.match_id, competition: cfg.competition,
+                             home: cfg.home, away: cfg.away,
+                             home_team_id: hid, away_team_id: aid,
+                             phase: posted ? 'post' : 'live', complete: !!posted,
+                             result: posted ? cfg.home + ' - Won' : null,
+                             result_applied_to: posted ? hid : null,
+                             result_club: posted ? cfg.home + ' won' : null,
+                             score_text: null, innings: [] };
+                }
                 var t = Math.floor(elapsed / OVER_MS);        // completed overs
+                /* SYNCED IN LUMPS: the card only ever shows whole blocks of overs, so
+                 * its figures stand still between syncs exactly as a hand-kept book
+                 * typed in at the drinks break does. The cricket is unaffected — this
+                 * is about when we HEAR about it. */
+                if (beats.coarseEvery) t = Math.floor(t / beats.coarseEvery) * beats.coarseEvery;
                 var rained = beats.rainFrom != null && ms >= beats.rainFrom;
                 var abandoned = rained && beats.abandon;
                 var complete = abandoned || elapsed >= doneAt * OVER_MS;
@@ -1033,18 +1176,55 @@
     }
 
     // ---- getting somewhere --------------------------------------------------------
+    // Time spent under the covers, which moves the afternoon and not the game.
+    function lostTo(f, ms) {
+        var b = f.cfg.beats || {};
+        return b.rainFrom == null ? 0 : Math.max(0, Math.min(ms - b.rainFrom, b.rainFor || 0));
+    }
+    /* PLAY TIME for this match, as opposed to afternoon: the clock minus the time
+     * spent under the covers and minus the interval between innings. The card is a
+     * function of this and nothing else, so anything asking "when can this change?"
+     * has to ask in these terms. (`n1` is our own matches' first-innings length; the
+     * division's cards model no interval, so they have none to subtract.) */
+    function playAt(f, ms) {
+        var open = ms - f.cfg.start - lostTo(f, ms);
+        if (f.n1 == null) return open;
+        return open - Math.max(0, Math.min(open - f.n1 * OVER_MS, INNINGS_BREAK_MS));
+    }
+    // How far into the interval between innings this match is, or 0.
+    function breakSoFar(f, ms) {
+        if (f.n1 == null) return 0;
+        var open = ms - f.cfg.start - lostTo(f, ms);
+        var brk = Math.max(0, Math.min(open - f.n1 * OVER_MS, INNINGS_BREAK_MS));
+        return brk < INNINGS_BREAK_MS ? brk : 0;
+    }
+    /* IS THIS MATCH'S CARD STILL GOING TO CHANGE? Not every match in the day is a
+     * match being scored — one of ours is never scored at all, one is abandoned
+     * unfinished, one of the division's is kept in the book and one cannot be read.
+     * Those cards stand still, and counting them as "in play", or jumping the clock
+     * to their next over boundary, would offer a moment that never arrives. */
+    function stillScoring(f, ms) {
+        var b = f.cfg.beats || {};
+        if (b.notScored || f.cfg.silent || f.cfg.noFeed) return false;
+        var c = f.card(ms);
+        if (!c || c.complete) return false;
+        if (b.noFinish && playAt(f, ms) >= f.doneAt * OVER_MS) return false;
+        return true;
+    }
     // The next over boundary anywhere in play: the next moment a score can change. Rain
     // pushes it back as the covers stay on, hence the fallback.
     function nextOverAt() {
         var best = null;
         ours.concat(others).forEach(function (f) {
-            var c = f.card(simTime);
-            if (!c || c.complete) return;
-            var b = f.cfg.beats || {};
-            var lost = b.rainFrom == null ? 0
-                : Math.max(0, Math.min(simTime - b.rainFrom, b.rainFor || 0));
-            var el = simTime - f.cfg.start - lost;
-            var when = f.cfg.start + lost + (Math.floor(el / OVER_MS) + 1) * OVER_MS;
+            if (!stillScoring(f, simTime)) return;
+            var el = playAt(f, simTime);
+            // Measured in PLAY time and added back to the clock, since the two only
+            // advance together while a ball can be bowled.
+            var gap = OVER_MS - (el % OVER_MS);
+            // Mid-interval nothing can change at all until it ends, which is itself
+            // the next thing to happen to this card.
+            var brk = breakSoFar(f, simTime);
+            var when = brk > 0 ? simTime + (INNINGS_BREAK_MS - brk) : simTime + gap;
             if (when > simTime && (best === null || when < best)) best = when;
         });
         return best === null ? simTime + OVER_MS : best;
@@ -1121,7 +1301,7 @@
     function hud() {
         if (!box) buildHud();
         var inPlay = ours.concat(others).filter(function (f) {
-            var c = f.card(simTime); return c && !c.complete;
+            return stillScoring(f, simTime);
         }).length;
         var nx = nextIncident();
         txt.textContent =

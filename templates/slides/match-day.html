@@ -127,6 +127,29 @@
         text-transform: uppercase; letter-spacing: 0.08em; white-space: nowrap; }
     .md-time { font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: 0; }
     .md-time .tbc { font-size: 0.75em; font-weight: 400; color: var(--muted); }
+    .md-time[hidden], .md-status[hidden] { display: none; }
+
+    /* ── The status token ─────────────────────────────────────────────────
+       IT TAKES THE START TIME'S PLACE, and that is the whole idea: once a game is
+       under way what time it started is the least interesting thing the board could
+       say about it, and the most interesting — is this score current? — has nowhere
+       else to go on a line already carrying a ground and a Home/Away pill. So the
+       two share one slot, the time standing until the feed has something better.
+
+       ONE TOKEN, and the vocabulary is assets/js/live-status.js, shared with the
+       today board: two boards on this wall must not give a different account of the
+       same match. The colours are that board's too.
+
+       Weight 900 like the time it replaces — it is a headline, not an annotation. */
+    .md-status { font-weight: 900; letter-spacing: 0.06em; }
+    .md-status.live  { color: #ff6b6b; }
+    .md-status.brk   { color: var(--gold); }
+    .md-status.res   { color: var(--light-blue); }
+    /* Scored, but the scorer has gone quiet — amber, deliberately warmer than the
+       gold BREAK so a stall never reads as a scheduled pause. */
+    .md-status.stale { color: #ff9b3d; }
+    .md-status.off   { color: var(--muted); font-weight: 400; opacity: 0.6; }
+    .md-status.wait, .md-status.play { color: var(--text); font-weight: 700; }
     .md-meta .spacer { flex: 1; }
     /* Home/Away pill + ground: the Team Focus Schedule sizing verbatim, so this
        board and that one agree. */
@@ -140,6 +163,29 @@
        the meta row it sits in uppercases everything else on the line. Unlike the
        today board it takes no max-width — the tile is two, three or six columns
        wide, so the tile is the bound and the badge ellipsises inside it. */
+    /* ── Streamed on YouTube ─────────────────────────────────────────────
+       THE GLYPH ALONE. The today board can afford "▶ Streamed" in a card
+       subtitle; a two-column tile's meta row already carries a ground name and a
+       Home/Away pill, and the play button is the one badge on this wall that needs
+       no word — everyone knows it. Parked with the badges at the right end, left
+       of the ground, per the tile-stack idiom.
+
+       ITS RED IS YOUTUBE'S, and it is the only place on the board that colour
+       appears. Gold is the house accent and stays the house accent; this is not
+       decoration but a logo, and a gold or white play button would read as one of
+       our own badges rather than as "this is on YouTube". It is also the wall's
+       established live-video colour (the today board's LIVE pill, the feed
+       badge's ● Live), so it lands in a family rather than alone.
+
+       Sized in `em` off the meta row's inherited type, so it shrinks with the tile
+       like everything else on the line. */
+    /* Board-local rather than a design token: it is YouTube's colour, not ours, and
+       nothing else on the wall may reach for it. */
+    .md-yt { --yt-red: #ff0000;
+        flex-shrink: 0; display: inline-flex; align-items: center; color: var(--yt-red); }
+    .md-yt[hidden] { display: none; }
+    .md-yt svg { height: 1.15em; width: auto; display: block; }
+
     .md-loc { flex-shrink: 1; min-width: 0; background: var(--accent); color: var(--navy-1);
         font-weight: 700; text-transform: none; letter-spacing: 0.02em;
         padding: 0.2vh 0.58em; border-radius: var(--radius-sm);
@@ -248,10 +294,20 @@
 
     /* TWO ZONES, ONE PER SIDE, each headed by the team it belongs to — which is
        why the tile no longer carries a "Wendover vs Chalfont" line of its own.
-       The side batting is on top and holds the working board; the other side
-       holds its completed innings, which in the second innings IS the target. */
+
+       THEY ARE ORDERED BY BATTING ORDER, not by who is batting: the side that
+       batted first is on top all afternoon, and the working board moves DOWN to the
+       second zone when the chase starts. An order that followed the bat swapped the
+       two sides over at the innings break — a reader who had learnt which half of
+       the tile was which had to learn it again, and the scorecard everyone already
+       knows reads first innings first.
+
+       `board` marks the zone holding the apertures, and so the zone that takes the
+       tile's spare height; the other is a single line. The feed moves the class with
+       the innings. In the result state nothing holds apertures and it stays on zone
+       1, which is where the slack has been all along. */
     .sb-zone { display: flex; flex-direction: column; gap: calc(0.4vh * var(--tile-h)); min-height: 0; }
-    .sb-zone.bat { flex: 1; }
+    .sb-zone.board { flex: 1; }
     .sb-head { position: relative; flex-shrink: 0; display: flex; align-items: baseline;
         gap: calc(0.5vw * var(--tile-w)); white-space: nowrap; }
     /* Crest at TWICE the club name's size, which is more than the header line can
@@ -390,29 +446,119 @@
        at one column of six they came out as unreadable slivers. Four lines of
        plain type instead: each side named in full, its score under it in the
        format the rest of the site uses. */
-    .sq { min-width: 0; aspect-ratio: var(--sq-r); overflow: hidden;
+    .sq { --sq-pad-x: 0.7vw;
+        /* A deep navy, and it has to stay darker than the DARKEST end of the slide's
+           background gradient (--navy-2), or the batting half would vanish on the
+           bottom row of squares while reading clearly on the top one. */
+        --sq-bat-bg: rgba(6,16,36,0.6);
+        min-width: 0; aspect-ratio: var(--sq-r); overflow: hidden; position: relative;
+        /* A stacking context, so the batting half can sit at z-index -1: above the
+           tile's own background, below its type. Without it, -1 would paint behind
+           this tile's background instead of the slide's. */
+        z-index: 0;
         display: flex; flex-direction: column; gap: calc(0.6vh * var(--sq-u));
         background: rgba(255,255,255,0.05); border: var(--hair) solid rgba(255,255,255,0.1);
-        border-radius: var(--radius); padding: calc(0.7vh * var(--sq-u)) 0.7vw; }
+        border-radius: var(--radius); padding: calc(0.7vh * var(--sq-u)) var(--sq-pad-x); }
+    /* ── Who is in ────────────────────────────────────────────────────────
+       THE BATTING SIDE'S HALF IS SUNK INTO A DARKER PANEL, which is a fact the tile
+       used to get across for free and no longer does: while the lines led with
+       whoever was batting, the order itself said who was in. In batting order it
+       cannot, so the tile has to say it another way — and a recess is the same thing
+       the scoreboard's apertures do with the figures that matter.
+
+       FULL-BLEED TO THE TILE'S EDGES, deliberately: an inset panel would put an edge
+       a couple of pixels from type that is already small, and giving the type room to
+       clear it would mean the two lines shifting sideways every time the panel moved
+       at the innings break. Bleeding to the edges has no inner edge to clear, the
+       tile's own radius clips it, and the dividing rule becomes the line between a
+       dark half and a pale one — which is the whole statement, made once.
+
+       Not shown on a decided game (nobody is in) or over a withdrawn stale score (we
+       have just declined to say what the state of play is; saying who is batting off
+       the same figures would be having it both ways). */
+    .sq-bat { position: absolute; left: 0; right: 0; z-index: -1; background: var(--sq-bat-bg); }
+    .sq-bat[hidden] { display: none; }
+    .sq-bat[data-half="a"] { top: 0; bottom: 50%; }
+    .sq-bat[data-half="b"] { top: 50%; bottom: 0; }
+
     /* THE TWO SIDES SPLIT THE TILE and each centres its own content, rather than
        the tile centring both together. Centring the pair put all the slack at the
        two ends and left the rule wherever the type happened to finish — and the
        slack is not the same in both states, because the score line is a rung
        taller than the designation it replaces. Halving the tile fixes the rule at
        the midpoint and gives each state the same geometry. */
-    .sq-side { flex: 1; min-width: 0; min-height: 0;
+    .sq-side { flex: 1; min-width: 0; min-height: 0; position: relative;
         display: flex; flex-direction: column; justify-content: center; }
+    /* ── The swingometer, on a division game ──────────────────────────────
+       THE SAME TWO CHANNELS AS OUR OWN TILES' "To win" aperture, and priced by the
+       same module (live-chase.js), so no two things on this board can disagree about
+       who is winning: FILL COLOUR is the lean, FILL HEIGHT the certainty, rising from
+       the bottom.
+
+       IT IS A BAR IN THE MARGIN, not a wash behind the type, and that is the whole of
+       the difference from the aperture's. There the colour sits behind board digits in
+       a sunken black cell built to take it; a square has no such cell — its type is
+       small and sits on a pale translucent tile, where a saturated block behind the
+       words made both harder to read and a washed-out one stopped saying anything. So
+       the colour moves OUT of the text: a slim bar in the tile's own right-hand
+       padding, which is empty by construction (the verdict badge and the age chip both
+       stop at the content edge). Full strength, because nothing is competing with it
+       now.
+
+       It belongs to the CHASING side, which since the lines went into batting order is
+       always the lower half — so the bar occupies the bottom half's right margin and
+       grows upward towards the rule, under the side it is about, exactly as a ladder
+       tile's fill does. A full bar reaches the halfway line, which is as far as a
+       chase's certainty can go.
+
+       Only while the chase is ON: a decided game has its verdict badge, and a withdrawn
+       (stale) score has nothing honest to price. */
+    .sq-fill { position: absolute; bottom: 0; height: 0; z-index: 0;
+        right: calc(0.16vw - var(--sq-pad-x)); width: 0.38vw;
+        border-radius: 99px; transition: height 0.6s ease; }
+    .sq-fill[data-v="win"] { background: var(--accent-win); }
+    .sq-fill[data-v="loss"] { background: var(--accent-loss); }
+
     /* The pre-match divider, and it stays once the scores arrive: two sides need
-       separating either way, and the tile reads the same before and after. */
-    .sq-rule { flex-shrink: 0; height: var(--hair); background: rgba(255,255,255,0.12); }
+       separating either way, and the tile reads the same before and after.
+
+       IT BREAKS FOR THE STATUS, and only where the words are — the line is redrawn as
+       a gradient with a transparent band exactly the width of the token (`--stat-w`,
+       measured and written on the tile by setStat), so the rule still separates the
+       two sides everywhere the text isn't. Hiding the whole line instead cost the
+       tile its division for the sake of eight characters. The token's own horizontal
+       padding is what keeps the line off the letters. */
+    .sq-rule { --rule-c: rgba(255,255,255,0.12);
+        flex-shrink: 0; height: var(--hair); background: var(--rule-c); }
+    /* The fallback gap is a PERCENTAGE, not zero: `--stat-w` is measured, and a
+       measurement can come back 0 (an element laid out in a hidden document, say),
+       which with a zero default would draw the line straight under the words. Nearly
+       half the rule is roughly what these tokens occupy, so a failed measurement
+       degrades to about the right gap instead of to none. */
+    .sq[data-stat] .sq-rule { background: linear-gradient(to right,
+        var(--rule-c) 0 calc(50% - var(--stat-w, 45%) / 2),
+        transparent calc(50% - var(--stat-w, 45%) / 2) calc(50% + var(--stat-w, 45%) / 2),
+        var(--rule-c) calc(50% + var(--stat-w, 45%) / 2) 100%); }
     /* Clamped to one line: a club name that wraps would push the fourth line out
-       of a fixed-height square. */
-    .sq-team { font-size: calc(var(--t-sm) * var(--sq-u)); font-weight: 700; line-height: 1.15;
+       of a fixed-height square. A little more leading than the score below it, which
+       is a bigger face on a tighter line — the name is the thing every square has, so
+       it sets the rhythm the four lines read on. */
+    .sq-team { font-size: calc(var(--t-sm) * var(--sq-u)); font-weight: 700; line-height: 1.32;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* THE SCORE LINE IS A ROW, because a decided game puts its verdict on the right
        of it. The score takes what's left and ellipsises, so a long verdict can
-       never wrap the line out of a fixed-height square. */
-    .sq-line { display: flex; align-items: center; gap: 0.4vw; min-width: 0; overflow: hidden; }
+       never wrap the line out of a fixed-height square.
+
+       IT RESERVES THE HEIGHT OF ITS TALLEST STATE whatever it is currently holding,
+       and that is what lines the verdict badges up ACROSS the board. The line holds a
+       score (`--t-ms`) on a game being scored and a team designation (a held-open line
+       of `--t-xs`) on one that isn't — and since each side centres its block in its
+       half, a shorter line on one square lifted its badge a couple of pixels clear of
+       its neighbour's. Reserving the tall state everywhere makes every square's
+       geometry identical in every state, which is the same trick `.sq-desig` plays one
+       level down by holding itself open at one line. */
+    .sq-line { display: flex; align-items: center; gap: 0.4vw; min-width: 0; overflow: hidden;
+        min-height: calc(var(--t-ms) * var(--sq-u) * 1.15); }
     .sq-score { flex: 1; min-width: 0; font-size: calc(var(--t-ms) * var(--sq-u)); line-height: 1.15;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* Gold for the figure, as the headline metric is everywhere else. */
@@ -428,6 +574,52 @@
     .sq-desig { display: block; font-size: calc(var(--t-xs) * var(--sq-u)); color: var(--muted); opacity: 0.8;
         line-height: 1.15; height: 1.15em;
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* ── A division game's freshness ──────────────────────────────────────
+       THE PC FEED CARRIES NO SCORER CURSOR (live-worker/src/pc.mjs), so on these
+       tiles silence is observed rather than reported, and the bands are coarser than
+       our own matches' — a score that has stood for eight minutes is ordinary on a
+       5-15 minute sync and a stall on RV. Two presentations, and which one is used
+       is the difference between qualifying a score and not showing it:
+
+         AGED (10 min)  — the score stays and says how old it is, in the slot the
+                          verdict badge will later take (they never coexist: a
+                          decided game has nothing left to go stale).
+         STALE (30 min) — the score GOES. A mid-innings total half an hour cold is
+                          not the state of play, and a board that shows it as if it
+                          were is worse than a board that admits it doesn't know.
+
+       A CLOSED innings is exempt from both, however old: a first-innings total or a
+       finished game's score is a fact, not a bulletin. */
+    .sq-age { flex-shrink: 0; margin-left: auto; color: #ff9b3d;
+        font-size: calc(var(--t-xxs) * var(--sq-u)); font-weight: 700;
+        font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sq-age[hidden] { display: none; }
+    /* ── The status standing in for a score ───────────────────────────────
+       IT SITS ON THE DIVIDING RULE, centred both ways, and that position is the
+       point of it. Written into the top side's score cell it displaced that side's
+       NAME as well — and the two clubs are what the tile is for; a square that
+       cannot say who is playing has stopped being a fixture. On the rule it belongs
+       to the match rather than to either side, which is what it is about, and both
+       names and both designations stay exactly where they were.
+
+       The rule breaks for it rather than the token being given a background to mask
+       the line: the tile's own background is a translucent white over a slide-wide
+       gradient, so any opaque swatch behind the words would be a patch that almost
+       matched. See `.sq-rule`, which draws itself around the gap instead.
+
+       BADGE SIZE, NOT SCORE SIZE — `--t-xxs`, the same step the verdict badge takes
+       on this tile, because it is doing the verdict's job (a word about the state of
+       the game) and not the score's. */
+    .sq-stat { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        max-width: 92%; padding: 0 0.4em; text-align: center;
+        font-size: calc(var(--t-xxs) * var(--sq-u)); font-weight: 700; line-height: 1.2;
+        text-transform: uppercase; letter-spacing: 0.08em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sq-stat[hidden] { display: none; }
+    .sq-stat.stale { color: #ff9b3d; }
+    .sq-stat.play { color: var(--text); opacity: 0.75; }
+    .sq-stat.off, .sq-stat.wait { color: var(--muted); opacity: 0.6; }
+
     /* Yet to bat, or the target once there is one. */
     .sq-note { font-size: calc(var(--t-sm) * var(--sq-u)); text-transform: uppercase; letter-spacing: 0.08em;
         color: var(--muted); opacity: 0.6; }
@@ -504,12 +696,10 @@
 
     {% for m in band.matches %}
     {% set ev = m.ev %}
-    {#- WHO IS BATTING. Until the toss is known the home side is assumed to bat
-        first, which is the convention the board itself has always run on; once the
-        feed is wired it will say. Our side reads as the team ("1st XI"), theirs as
-        the club — the same split the today board uses. -#}
-    {% set bat_name = m.pre.home.club %}
-    {% set field_name = m.pre.away.club %}
+    {#- WHO BATS FIRST. Until the toss is known the home side is assumed to, which
+        is the convention the board itself has always run on; once the feed is wired
+        it will say. That assumption is what decides which side each ZONE of the
+        scoreboard is baked as — see the `.sb` block below. -#}
     {% set us_club = (m.pre.home if ev.is_home else m.pre.away).club %}
     {% set them_club = (m.pre.away if ev.is_home else m.pre.home).club %}
     {#- THREE KNOBS, ALL BAKED, because the tile is squeezed on two axes
@@ -536,14 +726,25 @@
                 --tile-w: {{ tile_w }}; --tile-h: {{ tile_h }}; --tile-u: {{ (tile_h * u_w) | round(3) }}"
          {% if ev.pc_id != None %}data-pc="{{ ev.pc_id }}"{% endif %}
          data-home="{{ 1 if ev.is_home else 0 }}" data-tvcl="{{ 1 if band.tvcl else 0 }}"
+         data-span="{{ m.span }}"
          data-us="{{ us_club }}" data-them="{{ them_club }}"
          data-us-crest="{{ (m.pre.home if ev.is_home else m.pre.away).crest or '' }}"
          data-them-crest="{{ (m.pre.away if ev.is_home else m.pre.home).crest or '' }}"
          data-us-team="{{ (m.pre.home if ev.is_home else m.pre.away).team }}"
          data-them-team="{{ (m.pre.away if ev.is_home else m.pre.home).team }}">
         <div class="md-meta">
-            <span class="md-time">{% if ev.time %}{{ ev.time }}{% else %}<span class="tbc">TBC</span>{% endif %}</span>
+            <span class="md-time" data-f="time">{% if ev.time %}{{ ev.time }}{% else %}<span class="tbc">TBC</span>{% endif %}</span>
+            {#- The status token, which takes the time's place once the feed has
+                something better to say than when the game started. Baked hidden and
+                empty: before a ball, the time IS the state. -#}
+            <span class="md-status" data-f="status" hidden></span>
             <span class="spacer"></span>
+            {#- The play button, baked from the build's fixture<->broadcast match
+                (_attach_streams) and raisable at runtime: the feed knows about an
+                AWAY stream we could not have known about overnight, so the runtime
+                may turn this on but never off. -#}
+            <span class="md-yt" data-f="yt"{% if not ev.get('streamed') %} hidden{% endif %}
+                  aria-label="Streamed on YouTube"><svg viewBox="0 0 24 17" aria-hidden="true"><path fill="currentColor" d="M23.5 2.65a3 3 0 0 0-2.11-2.12C19.53 0 12 0 12 0S4.47 0 2.61.53A3 3 0 0 0 .5 2.65C0 4.51 0 8.4 0 8.4s0 3.89.5 5.75a3 3 0 0 0 2.11 2.12C4.47 16.8 12 16.8 12 16.8s7.53 0 9.39-.53a3 3 0 0 0 2.11-2.12C24 12.29 24 8.4 24 8.4s0-3.89-.5-5.75Z"/><path fill="#fff" d="M9.55 12.1 16.2 8.4 9.55 4.7Z"/></svg></span>
             {% if ev.ground %}<span class="md-loc">{{ ev.ground }}</span>{% endif %}
             <span class="ha{% if not ev.is_home %} away{% endif %}">{{ 'Home' if ev.is_home else 'Away' }}</span>
         </div>
@@ -561,57 +762,59 @@
                 {% endfor %}
             </div>
             <div class="sb" hidden data-f="board" style="--sb-w: {{ {2: '4.2vw', 3: '5.6vw', 6: '9vw'}[m.span] }}">
-                <div class="sb-zone bat{% if m.pre.home.crest %} has-crest{% endif %}" data-f="bat-zone">
+                {#- TWO ZONES IN BATTING ORDER — the side that batted FIRST on top, and
+                    it stays there. Which is why both zones are built the same: the
+                    working board belongs to whoever is batting NOW, so in the second
+                    innings it is the BOTTOM zone that holds the apertures while the
+                    top one states the innings it closed (which is also the target).
+
+                    Symmetric markup rather than one board moved between the zones at
+                    runtime: this template's contract is that the build lays the tile
+                    out and the feed only ever sets text behind a `data-f` hook, and a
+                    board reparented by the feed would be the layout in two places.
+                    Both zones bake both presentations; the feed shows one each.
+
+                    BAKED AS THE FIRST INNINGS, on the same home-bats-first assumption
+                    the rest of the tile makes: zone 1 has the apertures, zone 2 says
+                    "To bat". -#}
+                {% for z in [1, 2] %}
+                {% set k = 'z%d' % z %}
+                {% set side = m.pre.home if z == 1 else m.pre.away %}
+                <div class="sb-zone{% if z == 1 %} board{% endif %}{% if side.crest %} has-crest{% endif %}"
+                     data-f="{{ k }}-zone">
                     <div class="sb-head">
-                        <img class="sb-crest" data-f="bat-crest" src="{{ m.pre.home.crest }}" alt=""
-                             {% if not m.pre.home.crest %}hidden{% endif %}>
+                        <img class="sb-crest" data-f="{{ k }}-crest" src="{{ side.crest }}" alt=""
+                             {% if not side.crest %}hidden{% endif %}>
                         <div class="sb-names">
-                            <span class="sb-team" data-f="bat-team">{{ bat_name }}</span>
-                            <span class="sb-desig" data-f="bat-desig">{{ m.pre.home.team }}</span>
+                            <span class="sb-team" data-f="{{ k }}-team">{{ side.club }}</span>
+                            <span class="sb-desig" data-f="{{ k }}-desig">{{ side.team }}</span>
                         </div>
                     </div>
-                    <div class="sb-grid" data-f="grid">
-                        <div class="sb-cell total"><span class="sb-label">Total</span><span class="sb-num blank" data-f="total">·</span></div>
-                        <div class="sb-cell wkts"><span class="sb-label">Wickets</span><span class="sb-num blank" data-f="wkts">·</span></div>
-                        <div class="sb-cell small"><span class="sb-label">Overs</span><span class="sb-num blank" data-f="overs">·</span></div>
+                    <div class="sb-grid" data-f="{{ k }}-grid"{% if z == 2 %} hidden{% endif %}>
+                        <div class="sb-cell total"><span class="sb-label">Total</span><span class="sb-num blank" data-f="{{ k }}-total">·</span></div>
+                        <div class="sb-cell wkts"><span class="sb-label">Wickets</span><span class="sb-num blank" data-f="{{ k }}-wkts">·</span></div>
+                        <div class="sb-cell small"><span class="sb-label">Overs</span><span class="sb-num blank" data-f="{{ k }}-overs">·</span></div>
                         {#- The fourth aperture is the contextual one: LAST MAN while the
                             first innings is on, TO WIN once there is a target to chase —
                             and in the chase it carries the swingometer behind its figure
                             (`.sb-fill`). Baked as the first innings, collapsed: the feed
-                            relabels it and raises the fill. -#}
-                        <div class="sb-cell small"><span class="sb-fill" data-f="ctx-fill"></span><span class="sb-label" data-f="ctx-label">Last man</span><span class="sb-num blank" data-f="ctx">·</span></div>
+                            relabels it and raises the fill. In the chase it is the SECOND
+                            zone's that is showing, which is the chasing side's own. -#}
+                        <div class="sb-cell small"><span class="sb-fill" data-f="{{ k }}-ctx-fill"></span><span class="sb-label" data-f="{{ k }}-ctx-label">Last man</span><span class="sb-num blank" data-f="{{ k }}-ctx">·</span></div>
                     </div>
-                    {#- THE RESULT STATE'S LINE. Once the match is decided the working
-                        board above is put away and this side — the one batting when it
-                        ended — states its innings the way the side below already does,
-                        with the verdict badge on the right. Baked hidden: nothing is
-                        decided at build time. -#}
-                    <div class="sb-line" data-f="bat-line" hidden>
-                        <span class="sb-fig blank" data-f="bat-total">·</span>
-                        <span class="sb-ov" data-f="bat-overs" hidden></span>
-                        <span class="sb-wait" data-f="bat-wait" hidden>To bat</span>
-                        <span class="res sb-res" data-f="bat-res" hidden></span>
-                    </div>
-                </div>
-                <div class="sb-zone{% if m.pre.away.crest %} has-crest{% endif %}" data-f="field-zone">
-                    <div class="sb-head">
-                        <img class="sb-crest" data-f="field-crest" src="{{ m.pre.away.crest }}" alt=""
-                             {% if not m.pre.away.crest %}hidden{% endif %}>
-                        <div class="sb-names">
-                            <span class="sb-team" data-f="field-team">{{ field_name }}</span>
-                            <span class="sb-desig" data-f="field-desig">{{ m.pre.away.team }}</span>
-                        </div>
-                    </div>
-                    {#- Baked as the pre-play state: nobody has batted, so the line
-                        reads "To bat" and the score it will hold is hidden until
-                        there is one. -#}
-                    <div class="sb-line" data-f="field-line">
-                        <span class="sb-fig blank" data-f="field-total" hidden>·</span>
-                        <span class="sb-ov" data-f="field-overs" hidden></span>
-                        <span class="sb-wait" data-f="field-wait">To bat</span>
-                        <span class="res sb-res" data-f="field-res" hidden></span>
+                    {#- THE ZONE'S SCORE LINE, for whenever it is not the one batting:
+                        the innings it has closed, "To bat" before it has one, and the
+                        verdict badge on the right once the match is decided. Zone 1
+                        bakes it hidden (it holds the apertures); zone 2 bakes it as the
+                        pre-play state, waiting to bat. -#}
+                    <div class="sb-line" data-f="{{ k }}-line"{% if z == 1 %} hidden{% endif %}>
+                        <span class="sb-fig blank" data-f="{{ k }}-fig"{% if z == 2 %} hidden{% endif %}>·</span>
+                        <span class="sb-ov" data-f="{{ k }}-fov" hidden></span>
+                        <span class="sb-wait" data-f="{{ k }}-wait"{% if z == 1 %} hidden{% endif %}>To bat</span>
+                        <span class="res sb-res" data-f="{{ k }}-res" hidden></span>
                     </div>
                 </div>
+                {% endfor %}
             </div>
         </div>
     </div>
@@ -624,6 +827,9 @@
     <div class="sq" style="grid-column: {{ o.col }}; grid-row: {{ o.row }}"
          data-mid="{{ o.match_id }}" data-tvcl="{{ 1 if band.tvcl else 0 }}"
          data-home="{{ o.home.club | drop_cc }}" data-away="{{ o.away.club | drop_cc }}">
+        {#- The batting side's half, sunk behind everything else (see `.sq-bat`).
+            Baked hidden: before a ball, nobody is in. -#}
+        <span class="sq-bat" data-f="bat-half" hidden></span>
         {#- Home side first, on the same pre-toss assumption the match tiles make.
             Before the game is scored each side reads club over team designation;
             the feed then replaces both designations with scores. The verdict badge
@@ -632,14 +838,23 @@
             <div class="sq-team" data-f="a-team">{{ o.home.club | drop_cc }}</div>
             <div class="sq-line">
                 <div class="sq-score" data-f="a-score"><span class="sq-desig">{{ o.home.desig }}</span></div>
+                <span class="sq-age" data-f="a-age" hidden></span>
                 <span class="res sq-res" data-f="a-res" hidden></span>
             </div>
         </div>
+        {#- The match's own status (not a side's), centred on the rule it replaces:
+            "In play" for a game nobody is scoring ball by ball, "No feed" for one we
+            cannot read, or a withdrawn stale score's age. Baked hidden. -#}
+        <span class="sq-stat" data-f="stat" hidden></span>
         <div class="sq-rule"></div>
         <div class="sq-side">
+            {#- The chase's swingometer, on the side batting second (this one, since
+                the lines are in batting order). Collapsed until there is a chase. -#}
+            <span class="sq-fill" data-f="b-fill"></span>
             <div class="sq-team" data-f="b-team">{{ o.away.club | drop_cc }}</div>
             <div class="sq-line">
                 <div class="sq-score" data-f="b-score"><span class="sq-desig">{{ o.away.desig }}</span></div>
+                <span class="sq-age" data-f="b-age" hidden></span>
                 <span class="res sq-res" data-f="b-res" hidden></span>
             </div>
         </div>
@@ -655,6 +870,9 @@
 {#- TVCL league points for the verdict badges, and the chase model behind the
     "To win" aperture's swingometer. Both shared with the live strip's ladder, so the
     two surfaces price one result — and one chase — the same way. -#}
+{#- The status vocabulary (● Live / Break / ↻ 14m / Result / …), shared with the
+    today board so the two never give a different account of the same match. -#}
+<script src="/assets/js/live-status.js?v={{ asset_version }}"></script>
 <script src="/assets/js/tvcl-points.js?v={{ asset_version }}"></script>
 <script src="/assets/js/live-chase.js?v={{ asset_version }}"></script>{% endif %}
 <script>
@@ -678,6 +896,13 @@
     var tiles = [].slice.call(document.querySelectorAll('.md-col[data-pc]'));
     var squares = [].slice.call(document.querySelectorAll('.sq[data-mid]'));
     var LEAGUE = {};   // league match_id -> { innings by side, batting order }
+    /* The cards as they arrived, and the envelope each feed came in. The status
+       module needs both: the card for its state, and the envelope's `generated_at`
+       for the clock it ages against (see live-status.js — never the browser's, so
+       that one subtraction is honest in production and under the simulator alike).
+       LEAGUE above is a per-side reshaping that has thrown the rest away. */
+    var LEAGUE_CARDS = {}, lastLeague = null;
+    var lastFeed = null, lastTransport = 'ok';
     /* The square's baked paint is its form line, and it has to come BACK if the
        feed stops having anything to say about that game — so it is kept rather
        than overwritten. The match tiles need no equivalent: their pre-match panel
@@ -828,7 +1053,7 @@
        and "To bat" standing in for a score the side hasn't got yet. Both zones use
        it — the other side's all afternoon, ours as well once the match is decided. */
     function setLine(el, key, inn, waiting) {
-        var fig = f(el, key + '-total'), ov = f(el, key + '-overs'), wait = f(el, key + '-wait');
+        var fig = f(el, key + '-fig'), ov = f(el, key + '-fov'), wait = f(el, key + '-wait');
         fig.hidden = waiting;
         wait.hidden = !waiting;
         ov.hidden = waiting || !(inn && inn.overs);
@@ -841,6 +1066,36 @@
         var inns = (m && m.innings) || [];
         var cur = inns.length ? inns[inns.length - 1] : null;
 
+        /* THE STATUS TOKEN TAKES THE START TIME'S PLACE — but only once there is
+           something better to say than when the game started. "Awaiting" is not
+           better: before a ball is scored the time IS the state of the match, and a
+           board that threw it away at nine in the morning to say "Awaiting" all
+           morning would have made itself less useful. Same for a device with no key
+           and a build with live off, where nothing will ever arrive — they keep the
+           baked time, which is the whole slide for them.
+
+           A BREAK NAMES ITSELF where the tile is wide enough to take it: "Rain
+           delay" and "Tea" are different afternoons, and six columns have the room
+           for the distinction that two have not. */
+        var st = window.WccStatus ? WccStatus.ours(m, lastTransport, lastFeed) : null;
+        var showSt = !!st && st.cls !== 'wait';
+        var statusEl = f(el, 'status'), timeEl = f(el, 'time');
+        if (showSt) {
+            statusEl.className = 'md-status ' + st.cls;
+            statusEl.textContent = (st.detail && el.getAttribute('data-span') === '6')
+                ? st.detail : st.text;
+        }
+        statusEl.hidden = !showSt;
+        timeEl.hidden = showSt;
+
+        /* THE PLAY BUTTON IS RAISED, NEVER LOWERED. The build matched our own
+           channel's broadcasts to today's fixtures overnight (_attach_streams); the
+           feed additionally knows when the OPPOSITION is streaming, which is a thing
+           we could not have known then. A feed that says nothing about a stream is
+           not saying there isn't one, so a quiet feed must not take the icon off a
+           game the build knew was streamed. */
+        if (m && m.streamed) f(el, 'yt').hidden = false;
+
         /* WHICH PRESENTATION. The board is a live-innings view, so it only earns
            the tile once there is a scored innings to put on it; until then the
            pre-match panel stands, which is also what happens when a match is in
@@ -849,84 +1104,100 @@
         f(el, 'pre').hidden = scoring;
         f(el, 'board').hidden = !scoring;
         if (!scoring) return;
-        // The side that isn't batting has batted already iff there's an earlier
-        // innings — which is also the innings that sets the target.
-        var other = inns.length > 1 ? inns[inns.length - 2] : null;
 
-        // Until a ball is scored the baked assumption stands: the home side bats.
-        var batOurs = cur ? oursInn(cur, weHome) : weHome;
+        /* WHICH ZONE IS WHICH SIDE: BATTING ORDER, and it does not change all
+           afternoon. `innings` arrives in batting order, so innings[0]'s side owns
+           zone 1 — and until a ball is scored the baked assumption stands, which is
+           that the home side bats first.
+
+           What DOES move is the working board: it belongs to whoever is batting now,
+           so it sits in zone 1 through the first innings and drops to zone 2 for the
+           chase, while zone 1 states the innings it closed. A decided match has no
+           apertures anywhere, and the slack stays on zone 1. */
+        var firstOurs = inns.length ? oursInn(inns[0], weHome) : weHome;
+        var decided = !!(m && m.complete);
+        var boardZone = decided ? 0 : Math.max(0, Math.min(1, inns.length - 1));
         var usCrest = el.getAttribute('data-us-crest') || '';
         var themCrest = el.getAttribute('data-them-crest') || '';
         var usTeam = el.getAttribute('data-us-team') || '';
         var themTeam = el.getAttribute('data-them-team') || '';
-        setTeam(f(el, 'bat-team'), batOurs ? us : them);
-        setTeam(f(el, 'field-team'), batOurs ? them : us);
-        setTeam(f(el, 'bat-desig'), batOurs ? usTeam : themTeam);
-        setTeam(f(el, 'field-desig'), batOurs ? themTeam : usTeam);
-        setCrest(f(el, 'bat-zone'), f(el, 'bat-crest'), batOurs ? usCrest : themCrest);
-        setCrest(f(el, 'field-zone'), f(el, 'field-crest'), batOurs ? themCrest : usCrest);
 
-        setNum(f(el, 'total'), cur ? cur.runs : null);
-        setNum(f(el, 'wkts'), cur ? cur.wickets : null);
-        setNum(f(el, 'overs'), cur ? cur.overs : null);
-
-        // The contextual aperture. TO WIN the moment a target exists, LAST MAN
-        // before then. Floored at zero: a chase that has passed the target is won,
-        // not owed a negative number.
-        var lbl = f(el, 'ctx-label'), ctx = f(el, 'ctx');
-        if (other && other.runs != null && cur) {
-            lbl.textContent = 'To win';
-            var need = other.runs + 1 - (cur.runs || 0);
-            setNum(ctx, need > 0 ? need : 0);
-            // A target exists, so there is a chase to price: the aperture carries the
-            // lean behind the figure it already shows.
-            setSwing(f(el, 'ctx-fill'), chaseState(inns));
-        } else {
-            lbl.textContent = 'Last man';
-            setSwing(f(el, 'ctx-fill'), null);
-            // `runs` on last_wicket is the batter's own score. Guarded rather than
-            // assumed: the today board only ever reads name/how/fow off it, so a
-            // feed without it must blank the aperture, not print "undefined".
-            var lw = cur && cur.last_wicket;
-            setNum(ctx, lw && lw.runs != null ? lw.runs : null);
-        }
-
-        /* THE RESULT PRESENTATION. A decided match has nothing moving left to put in
-           an aperture, so the working board is put away and the side that was batting
-           states its innings on a line like the one below it. Both sides then read
-           the same way — crest, club, team, score, verdict — which is the tale of the
-           tape the Result panel draws, stacked instead of side by side.
-
-           The zones DON'T reorder: the side batting last stays on top, where it has
-           been all afternoon. A board that rearranged itself at the final ball would
-           make a reader re-find both sides to read the result off it. */
-        var decided = !!(m && m.complete);
         var vs = matchVerdicts(m, weHome);
-        var vBat = batOurs ? vs.us : vs.them, vField = batOurs ? vs.them : vs.us;
         var oi = ourIdx(inns, weHome);
         var tvcl = el.getAttribute('data-tvcl') === '1';
         var pUs = decided ? pricePoints(inns, oi, m.result, tvcl) : null;
         var pThem = decided ? pricePoints(inns, inns.length === 2 && oi >= 0 ? 1 - oi : -1,
-                                         m.result, tvcl) : null;
+                                          m.result, tvcl) : null;
 
-        f(el, 'grid').hidden = decided;
-        f(el, 'bat-line').hidden = !decided;
-        setLine(el, 'bat', cur, false);
-        // The other side's line: their innings, which in the second innings IS the
-        // target. Until they have one it says "To bat" — but not once the match is
-        // over, since a side that never batted in a finished game is not waiting to.
-        setLine(el, 'field', other, !other && !decided);
-        setRes(f(el, 'bat-res'), vBat, batOurs ? pUs : pThem);
-        setRes(f(el, 'field-res'), vField, batOurs ? pThem : pUs);
+        for (var z = 0; z < 2; z++) {
+            var k = 'z' + (z + 1);
+            var mine = z === 0 ? firstOurs : !firstOurs;   // is this zone our side?
+            var zone = f(el, k + '-zone');
+            /* The innings this zone shows: its own — zone 1 batted first — except
+               that the zone holding the board shows the innings IN PROGRESS, which in
+               a two-innings game is the same innings. (Two innings a side is not a
+               format this league plays, and one zone per side assumes as much.) */
+            var zoneInn = ((!decided && z === boardZone)
+                ? inns[inns.length - 1] : inns[z]) || null;
+            var holds = !decided && z === boardZone;
+
+            setTeam(f(el, k + '-team'), mine ? us : them);
+            setTeam(f(el, k + '-desig'), mine ? usTeam : themTeam);
+            // The crest travels with the side, so it follows the side into its zone.
+            setCrest(zone, f(el, k + '-crest'), mine ? usCrest : themCrest);
+            zone.classList.toggle('board', z === boardZone);
+            f(el, k + '-grid').hidden = !holds;
+            f(el, k + '-line').hidden = holds;
+
+            if (holds) {
+                setNum(f(el, k + '-total'), zoneInn ? zoneInn.runs : null);
+                setNum(f(el, k + '-wkts'), zoneInn ? zoneInn.wickets : null);
+                setNum(f(el, k + '-overs'), zoneInn ? zoneInn.overs : null);
+                /* The contextual aperture. TO WIN the moment a target exists — which
+                   is to say from the second innings on, since the target is the
+                   innings above this zone — and LAST MAN before then. Floored at
+                   zero: a chase that has passed the target is won, not owed a
+                   negative number. */
+                var target = inns.length > 1 ? inns[inns.length - 2] : null;
+                var lbl = f(el, k + '-ctx-label'), ctx = f(el, k + '-ctx');
+                if (target && target.runs != null && zoneInn) {
+                    lbl.textContent = 'To win';
+                    var need = target.runs + 1 - (zoneInn.runs || 0);
+                    setNum(ctx, need > 0 ? need : 0);
+                    // A target exists, so there is a chase to price: the aperture
+                    // carries the lean behind the figure it already shows, and this
+                    // zone is the chasing side's own.
+                    setSwing(f(el, k + '-ctx-fill'), chaseState(inns));
+                } else {
+                    lbl.textContent = 'Last man';
+                    setSwing(f(el, k + '-ctx-fill'), null);
+                    // `runs` on last_wicket is the batter's own score. Guarded rather
+                    // than assumed: the today board only ever reads name/how/fow off
+                    // it, so a feed without it must blank the aperture, not print
+                    // "undefined".
+                    var lw = zoneInn && zoneInn.last_wicket;
+                    setNum(ctx, lw && lw.runs != null ? lw.runs : null);
+                }
+            } else {
+                /* This zone's line: the innings it closed. "To bat" stands in for a
+                   score the side hasn't got yet — but not once the match is over,
+                   since a side that never batted in a finished game is not waiting
+                   to. */
+                setLine(el, k, zoneInn, !zoneInn && !decided);
+            }
+            setRes(f(el, k + '-res'), mine ? vs.us : vs.them, mine ? pUs : pThem);
+        }
     }
 
     // ---- the division's other games -----------------------------------------
     // Card contract = live-worker/src/pc.mjs buildLeagueState, as the today board
     // reads it: { matches: [{ match_id, complete, home_team_id,
     // innings: [{ team_batting_id, runs, wickets, overs, declared }] }] }.
-    function applyLeague(matches) {
+    function applyLeague(matches, envelope) {
+        lastLeague = envelope || null;
         (matches || []).forEach(function (m) {
             if (m.match_id == null) return;
+            LEAGUE_CARDS[String(m.match_id)] = m;
             var rec = { complete: !!m.complete, result: m.result || '', won: null, order: [] };
             /* WHO WON, BY TEAM ID. `result_applied_to` is the winning team's id and
                the feed only sets it on a decided match; a complete card without one
@@ -969,43 +1240,139 @@
         var inns = order.length === 2 ? [rec[order[0]], rec[order[1]]] : [];
         return pricePoints(inns, order.indexOf(side), rec.result, tvcl);
     }
-    function setSide(teamEl, scoreEl, name, inn, isOther, batting, decided) {
+    /* ONE SIDE OF A DIVISION TILE — the sides in batting order, first on top. `o`
+       carries what the side's own innings cannot say: whether the game is being
+       scored at all, whether it is decided, and how old the figures are. A WITHDRAWN score (too stale to show) arrives here as no
+       innings at all, and falls back to the baked line — the side's designation,
+       which is what stood there before a ball was scored and is still true. The
+       status itself is not a side's business: it goes on the rule, in setStat. */
+    function setSide(el, key, name, inn, o) {
+        var teamEl = f(el, key + '-team'), scoreEl = f(el, key + '-score');
+        var ageEl = f(el, key + '-age');
         teamEl.textContent = name || '';
+        ageEl.hidden = !o.ageText;
+        ageEl.textContent = o.ageText || '';
+        var batting = o.batting && !o.withdrawn, decided = o.decided;
+        if (o.withdrawn) inn = null;
         if (inn && inn.runs != null) {
             /* Once the game is decided the badge stands where the overs were: overs
                qualify a score that is still moving, the line has room for one or the
                other, and a finished innings' figure is the score itself. */
             scoreEl.innerHTML = '<span class="sq-runs">' + esc(scoreText(inn)) + '</span>' +
                 (inn.overs && !decided ? '<span class="sq-ov">(' + esc(inn.overs) + ' ov)</span>' : '');
-        } else if (isOther && batting && !decided) {
-            // The game is being scored and this side hasn't gone in yet. Not once it
-            // is decided: a side that never batted in a game that is over is not
-            // waiting to, so the line goes back to naming the team instead.
+        } else if (batting && !decided) {
+            /* The game is being scored and this side hasn't gone in yet — which, now
+               that the lines are in batting order, can only be the second one: the
+               side that batted first owns innings[0] by construction. Not once the
+               game is decided: a side that never batted in a game that is over is not
+               waiting to, so the line goes back to naming the team instead. */
             scoreEl.innerHTML = '<span class="sq-note">To bat</span>';
         } else {
             // Nothing scored either side — back to the baked form line.
             scoreEl.innerHTML = scoreEl.getAttribute('data-pre') || '';
         }
     }
+    /* THE MATCH'S STATUS, on the rule. One per tile, because it is one statement
+       about the game — and the rule breaks around it (see `.sq-rule`). */
+    function setStat(el, st) {
+        var stat = f(el, 'stat');
+        if (!stat) return;                     // a page older than this markup
+        stat.hidden = !st;
+        if (st) {
+            stat.className = 'sq-stat ' + st.cls;
+            stat.textContent = st.text;
+            el.setAttribute('data-stat', st.cls);
+            /* HOW WIDE THE GAP IN THE RULE IS: the token's own laid-out width, read
+               back after the text is in place (and after `hidden` has come off, or it
+               would measure zero). The rule is drawn around it in CSS, so the line
+               breaks for the words and nowhere else. A zero measurement is left unset
+               so the CSS fallback gap applies rather than no gap at all. */
+            var w = stat.offsetWidth;
+            if (w > 0) el.style.setProperty('--stat-w', w + 'px');
+            else el.style.removeProperty('--stat-w');
+        } else {
+            el.removeAttribute('data-stat');
+            el.style.removeProperty('--stat-w');
+        }
+    }
     function paintSquare(el) {
-        var rec = LEAGUE[el.getAttribute('data-mid')] || {};
+        var mid = el.getAttribute('data-mid');
+        var rec = LEAGUE[mid] || {};
+        var card = LEAGUE_CARDS[mid] || null;
         var name = { home: el.getAttribute('data-home'), away: el.getAttribute('data-away') };
-        // Whoever is batting leads, as on our own boards; before a ball, the home
-        // side, which is what the build baked.
-        var bat = (rec.order && rec.order.length) ? rec.order[rec.order.length - 1] : 'home';
-        var other = bat === 'home' ? 'away' : 'home';
+        /* ORDERED BY BATTING ORDER, as our own tiles are: the side that batted
+           FIRST leads and stays there all afternoon, rather than the two swapping
+           over at the innings break. `rec.order` is built from the innings as they
+           arrive, so order[0] batted first by construction; before a ball, the home
+           side, which is what the build baked. */
+        var first = (rec.order && rec.order.length) ? rec.order[0] : 'home';
+        var second = first === 'home' ? 'away' : 'home';
         // Is this game being scored at all? One side's innings is enough; with
         // none, both lines go back to their form.
-        var scoring = !!((rec[bat] && rec[bat].runs != null) || (rec[other] && rec[other].runs != null));
+        var scoring = !!((rec[first] && rec[first].runs != null) || (rec[second] && rec[second].runs != null));
         var tvcl = el.getAttribute('data-tvcl') === '1';
-        var vBat = verdictOf(rec, bat), vOther = verdictOf(rec, other);
-        setSide(f(el, 'a-team'), f(el, 'a-score'), name[bat], rec[bat], false, scoring, !!vBat);
-        setSide(f(el, 'b-team'), f(el, 'b-score'), name[other], rec[other], true, scoring, !!vOther);
-        setRes(f(el, 'a-res'), vBat, pointsFor(rec, bat, tvcl));
-        setRes(f(el, 'b-res'), vOther, pointsFor(rec, other, tvcl));
+        var vFirst = verdictOf(rec, first), vSecond = verdictOf(rec, second);
+
+        /* HOW OLD ARE THESE FIGURES? Observed, not reported — the PC feed states no
+           time about the scoring at all, so live-status.js watches the numbers and
+           times how long they have stood still (first sight counts as now, so a
+           board opened mid-afternoon never accuses a scorer of silence it did not
+           witness). */
+        var S = window.WccStatus;
+        var age = (S && card) ? S.observe(mid, card, lastLeague) : null;
+        var state = (S && card) ? S.league(card, age) : null;
+        var band = S ? S.band(age) : 'fresh';
+        /* WHOSE SCORE IS AT RISK OF BEING STALE: only the innings in progress, which
+           is the LAST one to arrive — and now that the lines are in batting order
+           that is not necessarily the top one. The side that batted earlier is closed
+           and its total is a fact, as is every innings of a decided game, so those
+           figures stand however old they are. */
+        var playing = (rec.order && rec.order.length) ? rec.order[rec.order.length - 1] : null;
+        var live = !!(playing && rec[playing] && !(S && S.closed(card, rec[playing])));
+        var stale = live && band === 'stale';
+        var aged = live && band === 'aged';
+        var chip = aged ? ('\u21bb ' + S.fmtAge(age)) : null;
+        /* Nothing scored either side, but the feed has something to say about the
+           game — PC's "Match In Progress" with no innings behind it (nobody is
+           scoring it ball by ball), or a card we could not fetch. It goes on the rule,
+           because it is one statement about the match rather than two about the sides. */
+        var idle = !scoring && state && (state.cls === 'play' || state.cls === 'off');
+        /* THE CHASE, PRICED THE SAME WAY AS OURS — live-chase.js, off the card's own
+           two innings (already in batting order). Only while the chase is live: a
+           decided game says it with a verdict badge, and a stale score that we have
+           withdrawn must not be priced as if it were the state of play. */
+        /* WHICH HALF OF THE TILE IS BATTING — the side whose innings is in progress,
+           which in batting order is the top half in the first innings and the bottom
+           half in the chase. Struck as soon as the game is decided or its score
+           withdrawn: see `.sq-bat`. */
+        var inPlay = live && !stale && !vFirst && !vSecond;
+        var batHalf = f(el, 'bat-half');
+        if (batHalf) {
+            batHalf.hidden = !inPlay;
+            if (inPlay) batHalf.setAttribute('data-half', playing === first ? 'a' : 'b');
+        }
+
+        var cardInns = (card && card.innings) || [];
+        setSwing(f(el, 'b-fill'),
+                 (!vSecond && !stale && cardInns.length === 2) ? chaseState(cardInns) : null);
+        setStat(el, stale ? state : (idle ? state : null));
+        // The withdrawal and the age chip follow the innings in progress to whichever
+        // line it is on — top in the first innings, bottom in the chase.
+        setSide(el, 'a', name[first], rec[first], {
+            batting: scoring, decided: !!vFirst,
+            withdrawn: stale && playing === first,
+            ageText: playing === first ? chip : null });
+        setSide(el, 'b', name[second], rec[second], {
+            batting: scoring, decided: !!vSecond,
+            withdrawn: stale && playing === second,
+            ageText: playing === second ? chip : null });
+        setRes(f(el, 'a-res'), vFirst, pointsFor(rec, first, tvcl));
+        setRes(f(el, 'b-res'), vSecond, pointsFor(rec, second, tvcl));
     }
 
-    function render(feed) {
+    function render(feed, transport) {
+        lastFeed = feed || lastFeed;
+        lastTransport = transport || 'ok';
         var byId = {};
         ((feed && feed.matches) || []).forEach(function (m) {
             if (m.pc_id != null) byId[String(m.pc_id)] = m;
@@ -1016,8 +1383,8 @@
     window.addEventListener('message', function (e) {
         var d = e.data;
         if (!d || !LIVE_ENABLED) return;   // no key → stay on the baked paint
-        if (d.type === 'wcc-live') render(d);
-        else if (d.type === 'wcc-league') { applyLeague(d.matches); squares.forEach(paintSquare); }
+        if (d.type === 'wcc-live') render(d, d.status || 'ok');
+        else if (d.type === 'wcc-league') { applyLeague(d.matches, d); squares.forEach(paintSquare); }
     });
 
     // Live enrichment is gated behind config.live_enabled AND a key on this device.
@@ -1053,11 +1420,14 @@
             var qs = '?' + pcs.map(function (x) { return 'pc=' + encodeURIComponent(x); }).join('&');
             fetch(ENDPOINT + qs, { headers: { 'Authorization': 'Bearer ' + key } })
                 .then(function (r) {
-                    if (r.ok) return r.json().then(function (feed) { render(feed); schedule(); });
-                    if (r.status === 403) return;                         // terminal
+                    if (r.ok) return r.json().then(function (feed) { render(feed, 'ok'); schedule(); });
+                    // A refusal and an error are both states the board must own up to:
+                    // the token reports the pipe, since no card can.
+                    if (r.status === 403) { render(null, 'forbidden'); return; }   // terminal
+                    render(null, 'error');
                     schedule();
                 })
-                .catch(function () { schedule(); });
+                .catch(function () { render(null, 'offline'); schedule(); });
         };
         // A key arriving (cog in another tab) restarts the loop without a reload.
         if (window.WccLiveKey && window.WccLiveKey.onChange)

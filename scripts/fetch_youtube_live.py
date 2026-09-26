@@ -5,12 +5,19 @@ Uses the YouTube Data API v3 with YOUTUBE_API_KEY (a CI secret). The channel is
 taken from the `homepage_cards` entry of type "youtube" in content/config.json
 (its `handle` or `channel_id`). Writes content/data/fetched/youtube_live.json:
 
-    { fetched_at, channel_id, channel_url, live: [...], upcoming: [...] }
+    { fetched_at, channel_id, channel_url, live: [...], upcoming: [...], recent: [...] }
 
-Each item: { title, video_id, url, scheduled_start?, actual_start? }.
-Upcoming is sorted by scheduled start ascending. Exits cleanly (0) if the API
-key or channel is absent so the build still succeeds — the home page just shows
-the stream card without enrichment.
+Each item: { title, description, video_id, url, scheduled_start?, actual_start? }.
+Upcoming is sorted by scheduled start ascending. `recent` is today's ALREADY
+FINISHED broadcasts — a stream that has ended leaves `live`/`upcoming`, and
+without it a rebuild mid-afternoon would take the "streamed" mark off a game
+that plainly was. The description is kept because Frogbox Go writes the
+competition into it ("ECB Friendly Round:1") while the title carries the two
+team names — between them they are what a broadcast is matched to a fixture by
+(see _attach_streams in build.py).
+
+Exits cleanly (0) if the API key or channel is absent so the build still
+succeeds — the home page just shows the stream card without enrichment.
 """
 
 import json
@@ -73,15 +80,20 @@ def video_details(video_ids):
     for v in data.get("items", []):
         out[v["id"]] = {
             "title": v["snippet"]["title"],
+            # Trimmed: we match on the first line or two (the competition), and a
+            # full Frogbox description would bloat every build's JSON.
+            "description": (v["snippet"].get("description") or "")[:400],
             "live": v.get("liveStreamingDetails", {}),
         }
     return out
 
 
 def collect(channel_id, event_type):
-    """Search the channel for live/upcoming broadcasts, enriched with timing."""
+    """Search the channel for live/upcoming/completed broadcasts, enriched with
+    timing. Newest first, which is what makes the `completed` search useful — it
+    would otherwise return the whole back catalogue in relevance order."""
     search = get_json(
-        "search", part="snippet", channelId=channel_id,
+        "search", part="snippet", channelId=channel_id, order="date",
         eventType=event_type, type="video", maxResults=10,
     )
     ids = [it["id"]["videoId"] for it in search.get("items", []) if it["id"].get("videoId")]
@@ -92,6 +104,7 @@ def collect(channel_id, event_type):
         lsd = d.get("live", {})
         items.append({
             "title": d.get("title", ""),
+            "description": d.get("description", ""),
             "video_id": vid,
             "url": f"https://www.youtube.com/watch?v={vid}",
             "scheduled_start": lsd.get("scheduledStartTime"),
@@ -120,6 +133,11 @@ def main():
         live = collect(channel_id, "live")
         upcoming = collect(channel_id, "upcoming")
         upcoming.sort(key=lambda x: x.get("scheduled_start") or "")
+        # Today's finished broadcasts only — the channel's whole archive is not a
+        # fact about today, and matching reads this list as "streamed today".
+        today = datetime.now(timezone.utc).date().isoformat()
+        recent = [b for b in collect(channel_id, "completed")
+                  if str(b.get("actual_start") or b.get("scheduled_start") or "")[:10] == today]
 
         OUT.parent.mkdir(parents=True, exist_ok=True)
         OUT.write_text(json.dumps({
@@ -128,8 +146,10 @@ def main():
             "channel_url": card.get("url", ""),
             "live": live,
             "upcoming": upcoming,
+            "recent": recent,
         }, indent=2))
-        print(f"  youtube_live.json — {len(live)} live, {len(upcoming)} upcoming")
+        print(f"  youtube_live.json — {len(live)} live, {len(upcoming)} upcoming, "
+              f"{len(recent)} finished today")
         return 0
     except Exception as e:
         # Never fail the build over an optional enrichment feed.
