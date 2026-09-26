@@ -3368,6 +3368,14 @@ def _team_desig(team, club):
     return "" if not team or team == club or drop_cc(team) == drop_cc(club) else team
 
 
+def _is_tvcl(league_name):
+    """Whether TVCL Win/Lose scoring applies to a league — the only points system
+    we know (Match Rules §9, and the only one `tvclPoints` implements). Off for any
+    other league, which means no surface prices its results: the strip's ladder
+    holds position and the match-day board badges the verdict with no points."""
+    return "thames valley" in (league_name or "").lower()
+
+
 def _other_side_pre(side):
     """A division game's side, with the team designation the pre-match square
     names under the club.
@@ -3476,6 +3484,9 @@ def match_day_layout(events, stats=None, all_fixtures=None):
             "competition_id": g["comp"],
             "name": lg.get("name") or take[0].get("league_name") or "",
             "division": lg.get("division") or take[0].get("competition") or "",
+            # Whether the division's results can be priced — see _is_tvcl. The
+            # other-game tiles badge points only where it's true.
+            "tvcl": _is_tvcl(lg.get("name") or take[0].get("league_name")),
             "start": col, "span": span,
             "matches": [{"ev": e, "col": col + i * tile_span, "span": tile_span,
                          "pre": _match_pre(e, stats, all_fixtures or {})}
@@ -3635,7 +3646,7 @@ def _strip_league_view(ev, our_team_id, by_comp):
         # Whether TVCL Win/Lose scoring applies — the only points system we know
         # (Match Rules §9). Off for any other league, which just means the ladder
         # can't price a result and so never reorders for it.
-        "tvcl": "thames valley" in (ev.get("league_name") or "").lower(),
+        "tvcl": _is_tvcl(ev.get("league_name")),
         # True when the table snapshot may ALREADY include today's results, in
         # which case adding today's points again would double-count and jump a
         # tile twice. See _table_counts_today.

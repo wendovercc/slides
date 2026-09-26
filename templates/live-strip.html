@@ -135,6 +135,9 @@
 <!-- The chase model (resources, target, win probability), shared with the event
      extractor so the two never disagree about who is winning. -->
 <script src="/assets/js/live-chase.js?v={{ asset_version }}"></script>
+<!-- TVCL Win/Lose league points, shared with the match-day board so the ladder and
+     the board's result badges can't price the same result differently. -->
+<script src="/assets/js/tvcl-points.js?v={{ asset_version }}"></script>
 <script>
 (function () {
     var root = document.getElementById('strip');
@@ -359,34 +362,12 @@
     }
 
     // ---- league points ------------------------------------------------------
-    // TVCL Win/Lose (Match Rules §9) — the system every senior division we play in
-    // uses. A PORT of tvclPoints() in live-worker/src/rv.mjs, which is the
-    // authority and carries the unit tests; keep the two in step. It has to exist
-    // here because the ladder prices OTHER clubs' matches, which arrive on the lean
-    // PC feed with no points attached (our own match carries the server's figures,
-    // preferred below when present).
-    var batFirstRuns = function (r) { return r < 100 ? 0 : Math.min(5, 1 + Math.floor((r - 100) / 25)); };
-    var batSecondFixed = function (r) { return r < 100 ? 0 : Math.min(3, 1 + Math.floor((r - 100) / 25)); };
-    var bowlSecondPts = function (w) { return w >= 2 ? Math.min(8, w - 1) : 0; };
-    var bowlFirstPts = function (w) { return Math.min(5, Math.ceil(w / 2)); };
-    function pctTargetPts(second, first) {
-        if (!first) return 0;
-        var p = (second / first) * 100;
-        return p > 95 ? 5 : p > 90 ? 4 : p > 85 ? 3 : p > 80 ? 2 : p > 75 ? 1 : 0;
-    }
-    // [pointsForTheSideThatBattedFirst, pointsForTheSideThatChased], or null when
-    // the outcome isn't a clean win/tie/washout.
+    // TVCL Win/Lose (Match Rules §9), in tvcl-points.js because the match-day
+    // board badges finished games with the same figures. Absent script (a page
+    // newer than its cached assets) prices nothing, which the ladder already
+    // treats as "not final" and so holds position for.
     function tvclPoints(inns, resultText) {
-        if (!inns || inns.length < 2) return null;
-        var i1 = inns[0], i2 = inns[1], r1 = i1.runs || 0, r2 = i2.runs || 0;
-        var t = String(resultText || '');
-        if (/abandon|no result|wash|cancel/i.test(t)) return [7, 7];
-        if (/\btied?\b/i.test(t) || r1 === r2) return [14, 14];
-        var firstWon = r1 > r2;
-        return [
-            firstWon ? 22 : batFirstRuns(r1) + bowlSecondPts(i2.wickets || 0),
-            firstWon ? bowlFirstPts(i1.wickets || 0) + batSecondFixed(r2) + pctTargetPts(r2, r1) : 22
-        ];
+        return window.WccPoints ? WccPoints.tvcl(inns, resultText) : null;
     }
 
     // What one side actually earned, once its match is decided. Prefers the
