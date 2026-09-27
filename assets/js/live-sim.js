@@ -1413,12 +1413,16 @@
      *
      * Nothing baked → the invented division stands, which is still worth having: the
      * event stream, the inspector and the ticker key off the feed alone. */
+    // The baked division fixtures, kept for the engine (clubs, competition, ground).
+    var BAKED_LEAGUE = [];
     function adoptBakedLeague() {
         return fetch('/live-league.json', { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (cfg) {
                 var ms = ((cfg && cfg.matches) || []).filter(function (m) { return m.match_id != null; });
                 if (!ms.length) return;
+                // Handed to the engine as `leagueRows` — see the start() call.
+                BAKED_LEAGUE = ms;
                 // Keep the simulation's own shape — the abandonment, the silent one, the
                 // staggering — and re-label it, as adoptBakedDay does for ours. Cycling
                 // the templates is what keeps that coverage on a longer fixture list.
@@ -1473,6 +1477,12 @@
             cfgById: cfgById,
             matches: DAY.ours.map(function (m) { return m.pc_id; }),
             leagueMatches: DAY.league.map(function (m) { return m.match_id; }),
+            /* Supplying the ids skips the engine's own config fetch, so the baked
+               rows have to be handed over with them — the extractor reads the clubs
+               and the GROUND off those, and without them a division match starting
+               can only say "Match under way". Empty when the build baked no league
+               fixtures, which is the invented-division case. */
+            leagueRows: BAKED_LEAGUE,
             // Read LAZILY: the player assigns window.onLiveState inside its own
             // start(), which may not have run when the simulator arms itself.
             onState: function (feed, status) {

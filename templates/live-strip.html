@@ -22,9 +22,10 @@
         html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
             font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--text); }
 
-        /* The column reveals with the rest of the live chrome. It carries no header
-           of its own: the ticker's gold flag, directly below it in the bottom-left
-           corner, names the featured XI and its division for BOTH surfaces. */
+        /* The column reveals with the rest of the live chrome. It carries no header:
+           what names the match is the FOOTER at its bottom end (`.foot`), sitting
+           directly on the gold tile below, which now carries the event type rather
+           than the team. */
         .strip {
             position: absolute; inset: 0; display: flex; flex-direction: column;
             background: var(--matte);
@@ -72,6 +73,50 @@
         .cval { font-size: 3.4vh; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
         .clabel { font-size: 1.4vh; font-weight: 700; letter-spacing: 0.04em;
             text-transform: uppercase; color: rgba(255,255,255,0.6); }
+
+        /* THE FOOTER: whose match this panel is about, in the band directly above the
+           gold tile.
+
+           The strip used to have no header of any kind, deliberately — the gold tile
+           below it named the featured XI and its division for both surfaces. The tile
+           now carries the EVENT TYPE instead (see live-ticker.html), so the
+           attribution comes back here.
+
+           BOTTOM, not top, and that is the whole point of it. At the top of a
+           full-height column it would sit the better part of a screen away from the
+           tile and the bar it belongs with, and read as a separate object; at the
+           bottom the three parts of the L are one cluster in the corner, and the
+           attribution lands on both paths out of it — up the side and along the
+           bottom. It also puts the naming block at the terminus of the gold spine,
+           where the L actually joins.
+
+           Fixed height and `flex-shrink: 0`, like `.panel-cap`, so it takes no share
+           of the tile flex: ten league tiles lose a little height rather than the
+           footer being squeezed. Solid on the matte with a hairline over it so it
+           reads as the foot of the column and not as a gap in it. */
+        .foot {
+            flex-shrink: 0; padding: 0.55vh 0.4vh 0.7vh;
+            border-top: 0.15vh solid rgba(255,255,255,0.18);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 0.2vh; text-align: center; overflow: hidden;
+        }
+        .foot-team {
+            font-size: 1.7vh; font-weight: 900; letter-spacing: 0.04em;
+            text-transform: uppercase; line-height: 1.05;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        /* Long XI names — "U11 Incredibles" — step down, exactly as the gold flag did
+           when it was carrying them. The binding constraint is the longest WORD,
+           which cannot be broken. */
+        .foot.is-long .foot-team { font-size: 1.35vh; letter-spacing: 0.01em; }
+        .foot-div {
+            font-size: 1.25vh; font-weight: 700; letter-spacing: 0.05em;
+            color: rgba(255,255,255,0.6); line-height: 1.1;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .foot-div:empty { display: none; }
 
         /* Chase-panel caption. Only shown once the match is over, naming the block
            so final numbers can't read as a chase still in progress — muting alone
@@ -138,6 +183,15 @@
 <!-- TVCL Win/Lose league points, shared with the match-day board so the ladder and
      the board's result badges can't price the same result differently. -->
 <script src="/assets/js/tvcl-points.js?v={{ asset_version }}"></script>
+<!-- FRESHNESS, on the match-day board's terms. Without this the ladder had no way
+     to know how old a score was and so laddered a card the board had already
+     withdrawn as too stale to show — the two surfaces giving different accounts of
+     the same match, which is the thing every shared module here exists to stop. -->
+<script src="/assets/js/live-status.js?v={{ asset_version }}"></script>
+<!-- The event model: the per-type panel mapping and its fallback chains live in the
+     type table, so the strip asks which panel an event wants rather than deciding
+     for itself. Pure and DOM-free — nothing here starts a feed. -->
+<script src="/assets/js/live-events.js?v={{ asset_version }}"></script>
 <script>
 (function () {
     var root = document.getElementById('strip');
@@ -196,6 +250,34 @@
                '>' + inner + '</div>';
     }
 
+    /* The footer: which match the panel above is about. Its content mirrors the
+       decomposition in live-events.js — our match names the XI over the division,
+       and a match of someone else's would name the division alone, since which two
+       clubs is answered by the panel's own tiles. Every view the strip holds today is
+       one of OURS (the views are baked per Wendover match), so the second case only
+       arrives when the strip starts taking its subject from the event stream. */
+    function isLongLabel(label) {
+        var longest = 0;
+        String(label || '').split(/\s+/).forEach(function (w) {
+            if (w.length > longest) longest = w.length;
+        });
+        return String(label || '').length > 9 || longest > 6;
+    }
+    function footer(view, ev) {
+        /* WHOSE MATCH, from the event when there is one. Ours names the XI over the
+           division; somebody else's names the division alone, because which two
+           clubs is answered by the panel's own marked tiles and two club names have
+           never fitted 8vw — and the ticker has just said them anyway. */
+        var ours = !ev || !ev.match || ev.match.ours;
+        var team = ours ? (view.team_label || '')
+                        : ((ev.match && ev.match.division) || view.name_short || view.name || '');
+        var div = ours ? (view.name_short || view.name || '') : '';
+        if (!team && !div) return '';
+        return '<div class="foot' + (isLongLabel(team) ? ' is-long' : '') + '">' +
+               '<span class="foot-team">' + esc(team) + '</span>' +
+               '<span class="foot-div">' + esc(div) + '</span></div>';
+    }
+
     // One full-size stat tile (same footprint as a team tile): value over caption.
     function statTile(val, label, done) {
         return '<div class="tile stat-tile' + (done ? ' done' : '') + '">' +
@@ -237,7 +319,12 @@
     // from whatever is currently held, so a missing feed degrades to 'nodata'
     // tiles rather than a stale picture.
     var liveByPc = {}, leagueById = {};
-    var featuredPc = null;   // the ticker's current match, when it tells us
+    /* The last league ENVELOPE, kept because `live-status.js` ages a card against
+       `generated_at` — the feed's own clock — and not against this browser's. That
+       is what makes an age a subtraction of two numbers from one clock, and it is
+       also the only version that survives the match-day simulator, whose cards are
+       stamped on a simulated afternoon. */
+    var lastLeague = null;
 
     // ---- side resolution ----------------------------------------------------
     // Everything here binds by ID, never by name. Both feeds identify sides
@@ -310,9 +397,39 @@
     // point where feed shapes become tile state; everything above it is model,
     // everything below it is paint. A side we can't resolve (a seeded match with no
     // team ids) reads as a silent feed rather than guessing.
-    function assess(card, side) {
-        if (!card || card.phase === 'pre' || card.phase === 'no-feed') return { idle: 'nodata' };
-        if (!side) return { idle: 'nodata' };
+    /* IS THIS MATCH ACTUALLY ON? — the board's `cls: 'play'`, which is what the
+       silent dot is supposed to mean and what it had stopped meaning. A break counts:
+       the game is under way, the players are just off the field. */
+    function onNow(card) {
+        return !!card && (card.phase === 'live' || card.phase === 'break' || !!card.break_desc);
+    }
+
+    /* THREE IDLE STATES, matching the three the match-day board draws (`WccStatus`
+       classes 'play' / 'wait' / 'off'):
+
+         'nodata'  THE DOT — the match is ON and we have no score for it. Either
+                   nobody is scoring it ball by ball, or the score we had has been
+                   withdrawn as stale. "Match on but no data", which is what the dot
+                   has always said it meant.
+         'quiet'   NO MARK, ordinary tile — a fixture today that has not started, or
+                   one the feed has said nothing about. The board is deliberately
+                   silent here too ("rather than asserting 'not started' about a game
+                   we simply haven't heard from"), and a dot would be this tile
+                   claiming a game is under way when it is not.
+         'none'    DIMMED — no fixture at all today. Not playing, not waiting.
+
+       The dot used to go on ALL of these but the last, so a side yet to start looked
+       exactly like one in play with an unscored card — which is what made two of the
+       division's four games indistinguishable from the other two. */
+    function assess(card, side, ourSide, stale) {
+        if (!card) return { idle: 'quiet' };
+        /* NO FEED is the board's third class and the strip has no third mark for it,
+           so it lands on 'quiet' — the honest half of the choice, since the alternative
+           was to keep asserting a game was in play when the truth is we could not
+           reach it. It does mean a fetch failure now looks like a game not yet
+           started; see the note in the commit. */
+        if (card.phase === 'no-feed') return { idle: 'quiet' };
+        if (!side) return { idle: 'quiet' };
         var inns = card.innings || [];
         if (card.complete) {
             var lean = outcomeFor(card, side);
@@ -321,7 +438,37 @@
             var prov = card.final === false;
             return { lean: lean, certainty: lean ? 1 : 0, provisional: prov };
         }
-        if (!inns.length) return { idle: 'nodata' };
+        /* THE TOSS PUTS THE GLYPHS UP BEFORE A BALL IS BOWLED. Until it did, the role
+           came only from the last innings in the card, so between the toss and the
+           first ball both tiles sat blank — `idle: 'nodata'`, the same state as a
+           feed saying nothing at all — while the feed in fact knew exactly who was
+           about to bat. A role and no lean is already the first-innings presentation
+           (`certainty = 0` below), so this is that same state, half an hour earlier.
+
+           `phase: 'pre'` no longer short-circuits above for the same reason: a
+           pre-match card with the toss in it has something to say. One without still
+           lands on `nodata`, through the innings check here. */
+        if (!inns.length) {
+            var firstBat = window.WccChase ? WccChase.battingFirst(card, ourSide) : null;
+            // No toss either: the dot only if the game is actually under way — a
+            // scoreless card for a match nobody is scoring. Before the start, quiet.
+            if (!firstBat) return { idle: onNow(card) ? 'nodata' : 'quiet' };
+            return { role: firstBat === side ? 'bat' : 'bowl', certainty: 0 };
+        }
+        /* A SCORE THE BOARD HAS WITHDRAWN MUST NOT BE LADDERED. `stale` is the
+           match-day board's own judgement, computed by the caller from the same
+           `live-status.js` bands the squares use — so the two surfaces cannot give
+           different accounts of the same match.
+
+           The board strikes three things on a stale square: the batting-half marker,
+           the chase pricing (`setSwing(null)`) and the score itself, which the status
+           token replaces. Those are exactly this tile's role glyph, its lean and
+           certainty, and its TLA-with-a-dot — so withdrawing to the silent-feed state
+           is the same decision made in the strip's own vocabulary. It also settles
+           the ladder for free: with no `p` on the row, `expectedPoints` falls back to
+           neutral, so no ghost arrow and no projected reorder rides a score we have
+           just said we do not trust. */
+        if (stale) return { idle: 'nodata' };
         var cur = inns[inns.length - 1];
         var batting = inningsSide(card, cur) === side;
         var out = { role: batting ? 'bat' : 'bowl' };
@@ -352,6 +499,35 @@
     function cardFor(view, fx) {
         if (!fx) return null;
         return fx.ours ? liveByPc[String(fx.match_id)] : leagueById[String(fx.match_id)];
+    }
+
+    /* IS THIS CARD'S SCORE TOO OLD TO LADDER? — the match-day board's rule, reached
+       the same way it reaches it (`paintSquare`).
+
+       ONLY SOMEBODY ELSE'S MATCHES. The board treats the two feeds differently and
+       deliberately: a division square withdraws its score at the stale band, while
+       one of OUR tiles keeps its score and reports the age beside it ("↻ 30m"),
+       because our feed carries the scorer's own cursor and far more to be wrong
+       about. Withdrawing ours here would be the ladder overruling the board, which is
+       the opposite of the point.
+
+       A CLOSED INNINGS IS EXEMPT FROM ALL OF IT — `WccStatus.closed` — so a first
+       innings total during the chase, and every innings of a decided match, keep
+       their figures however long they have stood. Nothing can change them, so there
+       is nothing to be stale about.
+
+       `observe` is how the watch is kept: it records the figures it saw against the
+       feed's own clock and returns how long they have stood. Calling it once per
+       render matches what the board does, and it is idempotent while the figures
+       hold still. */
+    function staleCard(fx, card) {
+        var S = window.WccStatus;
+        if (!S || !fx || fx.ours || !card || card.complete) return false;
+        var inns = card.innings || [];
+        var cur = inns.length ? inns[inns.length - 1] : null;
+        var age = S.observe('l' + fx.match_id, card, lastLeague);
+        if (!cur || S.closed(card, cur)) return false;
+        return S.band(age) === 'stale';
     }
     function fixtureForTeam(view, teamId) {
         var fxs = view.fixtures || [];
@@ -460,7 +636,13 @@
             var fx = fixtureForTeam(view, team.team_id);
             var card = fx ? cardFor(view, fx) : null;
             var side = fx ? tileSide(team, fx) : null;
-            var state = fx ? assess(card, side) : { idle: 'none' };
+            /* Which side of THIS tile's fixture is Wendover, for the toss to be read
+               against — `battingFirst` needs it to put "we bat" on the home/away axis
+               the tiles bind to. Only our own fixture has a toss in the feed at all
+               (the league feed carries none), and there we are one of the two sides,
+               so the tile's own `ours` flag answers it without a lookup. */
+            var ourSide = (fx && fx.ours && side) ? (team.ours ? side : other(side)) : null;
+            var state = fx ? assess(card, side, ourSide, staleCard(fx, card)) : { idle: 'none' };
             var t = { key: team.team_id, tla: team.tla, ours: team.ours, points: team.points,
                       settledPts: fx ? settledPoints(view, card, side) : null };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
@@ -469,54 +651,106 @@
         return ladder(view, rows);
     }
 
-    // Two tiles: the side that batted first on top (once the feed says who), the
-    // chaser below with its chase panel. Before a ball is bowled the baked order
-    // (us first) stands. With only two sides, our own id resolves both — whichever
-    // side we aren't is the opposition — so a fixture missing the opposition's team
-    // id still renders.
-    function friendlyTiles(view) {
-        var card = liveByPc[String(view.pc_id)];
-        var fx = (view.fixtures || [])[0];
-        var teams = (view.teams || []).slice();
-        var ourSide = tileSide(teams[0].ours ? teams[0] : teams[1], fx);
-        var sides = teams[0].ours ? [ourSide, other(ourSide)] : [other(ourSide), ourSide];
-        var first = card && (card.innings || [])[0];
-        if (first && ourSide) {
-            var firstSide = inningsSide(card, first);
-            if (firstSide && firstSide !== sides[0]) { teams.reverse(); sides.reverse(); }
+    /* THE TWO SIDES OF ONE MATCH, batting side on top — the `score` panel. Works for
+       ANY fixture in the view, ours or the division's, because an event about
+       somebody else's match wants their score in the band, not ours.
+
+       It was `friendlyTiles` and read only `view.pc_id`, which was fine while the
+       panel was a property of the FIXTURE (a friendly has no ladder, so it got this).
+       Now it is a property of the EVENT, so the same two tiles have to be drawable
+       for any of the ten sides in a division view.
+
+       The two team rows come from the fixture's `team_ids`; a two-team view whose
+       opposition has no id (a friendly the build could not resolve) falls back to the
+       view's own pair, which is what used to resolve it — "whichever side we aren't". */
+    function matchTiles(view, fx) {
+        if (!fx) return [];
+        var card = cardFor(view, fx);
+        var all = view.teams || [];
+        var teams = (fx.team_ids || []).map(function (id) {
+            return all.filter(function (t) { return String(t.team_id) === String(id); })[0] || null;
+        }).filter(Boolean);
+        if (teams.length < 2 && all.length === 2) teams = all.slice();
+        if (teams.length < 2) return [];
+
+        var sides = teams.map(function (t) { return tileSide(t, fx); });
+        // A view of two where an id wouldn't resolve: our own side places both.
+        if (!sides[0] || !sides[1]) {
+            var oursAt = teams[0].ours ? 0 : 1;
+            var os = tileSide(teams[oursAt], fx);
+            if (!os) return [];
+            sides[oursAt] = os; sides[1 - oursAt] = other(os);
         }
+        var oursIdx = teams[0].ours ? 0 : (teams[1].ours ? 1 : -1);
+        var ourSide = oursIdx >= 0 ? sides[oursIdx] : null;
+        /* The side batting first goes on top — from the TOSS as well as from
+           innings[0], so the two tiles change places the moment the toss lands rather
+           than waiting for the first ball. `battingFirst` prefers the innings when
+           there is one, and answers null for a division match (no toss in that feed),
+           leaving the baked order. */
+        var firstSide = window.WccChase ? WccChase.battingFirst(card, ourSide) : null;
+        if (firstSide && sides[0] && firstSide !== sides[0]) { teams.reverse(); sides.reverse(); }
+        var stale = staleCard(fx, card);
         return teams.map(function (team, i) {
-            var state = assess(card, ourSide ? sides[i] : null);
+            var state = assess(card, sides[i], ourSide, stale);
             var t = { tla: team.tla, ours: team.ours };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
             return t;
         });
     }
 
-    // ---- view selection -----------------------------------------------------
-    // The strip shows ONE match's context at a time. The ticker's featured match
-    // picks it, so the two chrome surfaces name the same game; standalone (or
-    // before the ticker speaks) it falls back to cycling the matches that have
-    // something live to show.
-    var VIEW_CYCLE_MS = 20000;
-    var cycleIdx = 0, cycleTimer = null;
+    /* ---- what the strip is showing -----------------------------------------
+       THE SCHEDULER PICKS, NOT THIS SURFACE. Under v1 the strip chose its own
+       subject — the ticker's `wcc-featured` relay when it spoke, and otherwise a
+       twenty-second cycle of its own — and chose its panel from the baked view's
+       mode, fixed for the day. Both are v2's business now: the subject is the showing
+       event's match and the panel is what that event's TYPE asks for, so the three
+       parts of the L describe one thing instead of three.
 
-    function viewHasContent(v) {
-        return (v.fixtures || []).some(function (fx) {
-            var c = cardFor(v, fx);
-            return !!c && (c.phase === 'live' || c.phase === 'break' || c.complete);
-        });
-    }
-    function pickView() {
-        if (!VIEWS.length) return null;
-        if (featuredPc != null) {
-            for (var i = 0; i < VIEWS.length; i++) {
-                if (String(VIEWS[i].pc_id) === String(featuredPc)) return VIEWS[i];
-            }
+       The relay and the cycle are gone with it. A surface with its own timer beside
+       an event-driven one drifts off it within a minute. */
+    var showing = null;      // the scheduler's current pick
+    var haveEvents = false;  // has an event stream ever spoken to us?
+
+    // Which baked view holds this event's match: ours by pc_id, the division's by
+    // finding the view whose fixture list contains it.
+    function viewForEvent(ev) {
+        var m = ev && ev.match; if (!m) return null;
+        var i;
+        if (m.pc_id != null) {
+            for (i = 0; i < VIEWS.length; i++)
+                if (String(VIEWS[i].pc_id) === String(m.pc_id)) return VIEWS[i];
         }
-        var live = VIEWS.filter(viewHasContent);
-        var pool = live.length ? live : VIEWS;
-        return pool[cycleIdx % pool.length];
+        if (m.match_id != null) {
+            for (i = 0; i < VIEWS.length; i++)
+                if ((VIEWS[i].fixtures || []).some(function (fx) {
+                    return String(fx.match_id) === String(m.match_id); })) return VIEWS[i];
+        }
+        return null;
+    }
+    function fixtureForEvent(view, ev) {
+        var m = ev && ev.match; if (!view || !m) return null;
+        var id = m.pc_id != null ? m.pc_id : m.match_id;
+        return (view.fixtures || []).filter(function (fx) {
+            return String(fx.match_id) === String(id); })[0] || null;
+    }
+    /* WHAT THIS SURFACE CAN ACTUALLY DRAW, which is the half of the panel decision
+       only the strip knows. `panelFor` walks the type's fallback chain against it, so
+       a type asking for something unavailable lands on the next best thing rather
+       than on an empty band. `form` and `profile` are both unbuilt, so they always
+       fall through today — by design, not by omission. */
+    function availFor(view, fx) {
+        var card = fx ? cardFor(view, fx) : null;
+        return {
+            ladder: !!(view && view.mode === 'league' && (view.teams || []).length),
+            score: !!(card && ((card.innings || []).length || card.complete)),
+            form: false,
+            profile: false
+        };
+    }
+    function panelFor(ev, view, fx) {
+        if (!window.WccLiveEvents) return view && view.mode === 'league' ? 'ladder' : 'score';
+        return WccLiveEvents.panelFor(ev.type, availFor(view, fx)).panel;
     }
 
     // ---- render -------------------------------------------------------------
@@ -550,30 +784,64 @@
 
     var lastKey = '';
 
+    /* THE SCORE PANEL: the match read top to bottom as itself — the side that
+       batted, the target they set, the side chasing it, then how that chase is going
+       (or, once it is over, how it went). Capped at the ten-tile height with a
+       spacer, so two tiles do not stretch to fill a column built for a division. */
+    function scorePanel(view, fx) {
+        var tiles = matchTiles(view, fx);
+        if (!tiles.length) return '';
+        var card = cardFor(view, fx);
+        var target = targetOf(card), stats = chaseStats(card), used = tiles.length;
+        var body = tile(tiles[0]);
+        if (target != null) { body += statTile(target, 'Target', !!(card && card.complete)); used++; }
+        body += tiles.slice(1).map(tile).join('');
+        if (stats) { var ct = chaseTiles(stats); body += ct.html; used += ct.count; }
+        return body + '<div class="spacer" style="flex:' + Math.max(1, 10 - used) + '"></div>';
+    }
+
     function render() {
-        var view = pickView();
-        if (!view) { root.classList.remove('show'); lastKey = ''; return; }
-        var tiles = view.mode === 'friendly' ? friendlyTiles(view) : leagueTiles(view);
-        if (!tiles.length) { root.classList.remove('show'); lastKey = ''; return; }
-        // Same tiles for both views; the friendly view caps them at the 10-tile
-        // height, then fills the space below with the chase panel (2nd innings) or an
-        // empty spacer, both soaking up the remaining flex share.
-        var body;
-        if (view.mode === 'friendly') {
-            // Reads top-to-bottom as the match itself: the side that batted, the
-            // target they set, the side chasing it, then how that chase is going
-            // (or, once it's over, how it went).
-            var card = liveByPc[String(view.pc_id)];
-            var target = targetOf(card), stats = chaseStats(card), used = tiles.length;
-            body = tile(tiles[0]);
-            if (target != null) { body += statTile(target, 'Target', !!(card && card.complete)); used++; }
-            body += tiles.slice(1).map(tile).join('');
-            if (stats) { var ct = chaseTiles(stats); body += ct.html; used += ct.count; }
-            body += '<div class="spacer" style="flex:' + Math.max(1, 10 - used) + '"></div>';
+        /* NO PICK, NO CHROME. The scheduler found nothing above the floor, which is
+           the honest state of an empty afternoon — the same collapse the ticker does,
+           and the whole reason "nothing" became sayable in v2.
+
+           Only once an event stream has actually spoken, though: a page whose engine
+           is older than itself (the asset-cache-skew trap) or the standalone
+           `/live-strip/?sim=…` harness, which fabricates the two feeds but no events,
+           would otherwise show an empty column for ever. Those fall through to the
+           first view on its baked panel, which is what that page is for — looking at
+           tiles, not at scheduling. */
+        var ev = showing, view, fx, panel;
+        if (ev) {
+            view = viewForEvent(ev);
+            fx = fixtureForEvent(view, ev);
+            panel = view ? panelFor(ev, view, fx) : 'none';
+        } else if (haveEvents) {
+            root.classList.remove('show'); lastKey = ''; return;
         } else {
-            body = tiles.map(tile).join('');
+            view = VIEWS[0] || null;
+            fx = view ? (view.fixtures || [])[0] : null;
+            panel = view ? (view.mode === 'league' ? 'ladder' : 'score') : 'none';
         }
-        var html = body;
+        if (!view) { root.classList.remove('show'); lastKey = ''; return; }
+
+        var body = '';
+        if (panel === 'ladder') {
+            var rows = leagueTiles(view);
+            body = rows.length ? rows.map(tile).join('') : '';
+        } else if (panel === 'score') {
+            body = scorePanel(view, fx);
+        }
+        /* 'none' leaves the band to the footer alone — an event with no match behind
+           it, or one whose match this strip has no view for. Deliberately not a
+           collapse: the L is still describing something, and pulling the column out
+           from under the tile would break the frame mid-sentence. */
+        if (!body && panel !== 'none') { root.classList.remove('show'); lastKey = ''; return; }
+
+        // The panel fills whatever is left above the footer, which is anchored to the
+        // bottom. That way the edge that MOVES as the panel's content changes is its
+        // top — furthest from the corner the eye is reading.
+        var html = body + footer(view, ev);
         if (html === lastKey) return;   // nothing changed — leave the DOM (and its transitions) alone
         lastKey = html;
         var before = tilePositions();
@@ -594,12 +862,17 @@
             (d.matches || []).forEach(function (m) { if (m.pc_id != null) liveByPc[String(m.pc_id)] = m; });
             render();
         } else if (d.type === 'wcc-league') {
+            lastLeague = d;
             (d.matches || []).forEach(function (m) { if (m.match_id != null) leagueById[String(m.match_id)] = m; });
             render();
-        } else if (d.type === 'wcc-featured') {
-            // The ticker naming its current match. Null/absent → back to cycling.
-            var pc = d.pc_id == null ? null : String(d.pc_id);
-            if (pc !== featuredPc) { featuredPc = pc; render(); }
+        } else if (d.type === 'wcc-events') {
+            /* THE SCHEDULER'S ANSWER — which event the whole L is describing. The
+               strip takes its subject and its panel from this and nothing else.
+               `showing` null is a real answer (the chrome collapses), which is why
+               the flag is set before the null check rather than on a truthy pick. */
+            haveEvents = true;
+            showing = d.showing || null;
+            render();
         } else if (d.type === 'wcc-clock') {
             setHeld(!!d.held);
         }
@@ -608,27 +881,17 @@
     // paints without waiting a whole poll cycle (same handshake as the ticker).
     try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
     try { window.parent.postMessage({ type: 'wcc-league-request' }, '*'); } catch (e) {}
+    try { window.parent.postMessage({ type: 'wcc-events-request' }, '*'); } catch (e) {}
     try { window.parent.postMessage({ type: 'wcc-clock-request' }, '*'); } catch (e) {}
 
-    // Cycle only matters while nothing is telling us what's featured.
-    function startCycle() {
-        if (cycleTimer) return;
-        cycleTimer = setInterval(function () {
-            if (featuredPc != null) return;
-            cycleIdx++;
-            render();
-        }, VIEW_CYCLE_MS);
-    }
-    /* A held clock stops the view cycle, for the same reason it stops the ticker's:
-       the rotation is this surface's own timer and owes nothing to the feed, so a
-       screen described as held would otherwise keep changing which division it was
-       showing. Only the simulator can hold the clock. */
+    /* A HELD CLOCK. There is no view cycle left to stop — the strip's twenty-second
+       rotation went with the conversion, since what is on the band is now the
+       scheduler's pick and a second timer beside it would only drift. So this stops
+       what CSS is animating on its own, the ladder's FLIP transitions above all, and
+       a held screen is actually still. Only the simulator can hold the clock. */
     function setHeld(held) {
         document.documentElement.classList.toggle('clock-held', held);
-        if (held) { if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null; } }
-        else startCycle();
     }
-    startCycle();
 
     render();
 

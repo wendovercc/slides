@@ -300,11 +300,16 @@
                                   showing.match.division].filter(Boolean).join(' · ');
             nowWhy.textContent = (d.holding ? 'holding · ' : '') + (d.reason || '');
             /* Only what the table below does not already carry. Score and interest are
-               in the highlighted row, so repeating them here says nothing twice, and the
-               countdown to the end of the dwell was the last ticking number left on a
-               surface meant to be read rather than watched. The dwell itself stays: it
-               is a property of the event, and it is nowhere else. */
-            nowNum.innerHTML = '<b>' + Math.round(showing.dwell / 100) / 10 + 's</b> dwell';
+               in the highlighted row, so repeating them here says nothing twice.
+               THE HOLD IS NO LONGER A NUMBER TO PRINT: an event stays up while it is
+               still the best thing above the floor, so how long it has left is the
+               highlighted row's score falling towards `floor` — which is on screen and
+               moving. What is left worth stating is the MINIMUM it will be up for,
+               which for a clip is the length of the footage (the one thing here that
+               really is a duration) and otherwise the floor on how briefly anything
+               may appear. */
+            nowNum.innerHTML = '<b>' + Math.round(showing.dwell / 100) / 10 + 's</b> ' +
+                (showing.clip ? 'of footage' : 'min.');
         } else {
             // Collapsed. Say WHY, because "nothing is worth a screen" and "nothing has
             // happened" are different states and the difference is the model working.

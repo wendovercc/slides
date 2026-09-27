@@ -135,10 +135,51 @@
         };
     }
 
+    /* WHO BATS FIRST — 'home', 'away', or null when nothing yet knows.
+     *
+     * Shared because THREE surfaces have to give the same answer and they reach it
+     * from different places: the strip's tiles want a bat or a ball glyph, the
+     * match-day board orders its two zones by it, and the event extractor describes
+     * an innings by it. Two of them were already deriving it separately, and both
+     * were assuming the home side until a ball was scored.
+     *
+     * THE TOSS IS THE POINT OF THIS. Until now batting order was only knowable from
+     * innings[0], so for the half hour between the toss and the first ball every
+     * surface showed a guess — the home side on top, no bat/bowl glyphs anywhere —
+     * while the one fact that settles it was sitting in the feed unread.
+     *
+     * NO NAME MATCHING AND NO TEAM ID, neither of which the toss carries. `is_wendover`
+     * says whether WE won it and `decision` says what the winner chose, and those two
+     * booleans are enough: we bat first exactly when winning and electing to bat
+     * agree. `ourSide` then maps that onto the home/away axis every other surface
+     * binds on.
+     */
+    function battingFirst(card, ourSide) {
+        var inns = (card && card.innings) || [];
+        /* An innings is the authority once there is one: the feed delivers them in
+         * batting order, so innings[0]'s side batted first by construction. */
+        if (inns.length) {
+            var i = inns[0];
+            if (typeof i.is_home === 'boolean') return i.is_home ? 'home' : 'away';
+            if (i.team_batting_id && card.home_team_id) {
+                return String(i.team_batting_id) === String(card.home_team_id) ? 'home' : 'away';
+            }
+            return null;
+        }
+        var t = card && card.toss;
+        if (!t || typeof t.is_wendover !== 'boolean' || !t.decision) return null;
+        if (ourSide !== 'home' && ourSide !== 'away') return null;
+        // Did the side that won the toss choose to bat, and are they us?
+        var choseBat = /^bat/i.test(String(t.decision).trim());
+        var weBat = (t.is_wendover === choseBat);
+        return (weBat === (ourSide === 'home')) ? 'home' : 'away';
+    }
+
     window.WccChase = {
         resourcePct: resourcePct,
         ballsOf: ballsOf,
         allotmentOvers: allotmentOvers,
-        chaseState: chaseState
+        chaseState: chaseState,
+        battingFirst: battingFirst
     };
 })();

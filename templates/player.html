@@ -608,8 +608,19 @@ window.addEventListener('resize', applyDebugScale);
 // interactive player offers a live button on the bar, and a press pins the choice
 // for the session (`_livePinned` below). A wall builds no bar, so it can never be
 // pinned and keeps exactly the behaviour described above.
-const LIVE_HIDE_DEBOUNCE_MS = 12 * 60 * 1000;
-let _chromeShown = false, _chromeHideTimer = null;
+/* HOW LONG A QUIET SPELL HAS TO BE BEFORE THE BAND IS PUT AWAY. Twelve minutes when
+   the latch was driven by the feed, where the question was "is there cricket today"
+   and the answer changed twice a day. It is now driven by the scheduler, which goes
+   quiet between events all afternoon, so the number has to be picked against the
+   real gaps instead.
+   Measured over thirty minutes of ordinary play across eleven matches, collapsed
+   gaps ran to a median of 30s and a longest of 75s — and to 30s once the floor types
+   were given a dwell worth the name. Two minutes clears every one of them, so the
+   band stays up through a passage of play and comes down a couple of minutes after
+   the cricket actually stops. Twelve minutes did that too, but it also held an empty
+   L on the wall for a quarter of an hour after the last result. */
+const LIVE_HIDE_DEBOUNCE_MS = 2 * 60 * 1000;
+let _chromeShown = false;
 /* The reader's own answer, once they have given one: null until a press, then true
    or false for the rest of the session. It is what makes the latch below a DEFAULT
    rather than the state — see WccPlayer.setLiveToggle for why an unattended screen
@@ -639,30 +650,79 @@ function applyLiveChrome(on) {
     // be re-measured, which is not something a resize will tell the player about.
     if (window.WccPlayer && WccPlayer.relayout) WccPlayer.relayout();
 }
+/* WHAT KEEPS THE CHROME UP IS THE SCHEDULER, NOT THE FEED.
+ *
+ * It used to be `liveHasContent` — does the feed hold a match that is live, at a
+ * break, or complete. That is a v1 question and it has one answer all evening:
+ * `complete` never goes back to false, so once the last game finished the latch
+ * could never retract and the L stayed on the wall until the daily reload. The bar
+ * and the strip cleared themselves (nothing above the floor, so nothing to draw) and
+ * what was left was an empty matte L wrapped round a slide that was still retracted
+ * to make room for it. Clearing, but never put away.
+ *
+ * The honest signal is the one the surfaces inside the L are already using: is the
+ * scheduler showing anything. Nothing to show, nothing to make room for.
+ *
+ * STILL STICKY, and it has to be. Between events the answer is legitimately "no" for
+ * minutes at a time — the floor types only fire on the over — and growing the slide
+ * layer back and forth across those gaps would reflow the wall every few seconds.
+ * So going UP is immediate and coming DOWN waits out a long quiet spell.
+ *
+ * MEASURED ON THE SCHEDULER'S CLOCK, not with a timer. A `setTimeout` is real time,
+ * and under the match-day simulator an afternoon passes in a couple of minutes — so
+ * a twelve-minute timeout would never fire in a session and the retraction could not
+ * be looked at at all. The engine rebroadcasts every second regardless of mode, so
+ * the quiet spell is a subtraction against `WccClock`: it advances with the simulated
+ * day, and stops dead while the clock is held, which is what "held" should mean. */
+let _liveShowing = false;      // does the scheduler have a pick?
+let _liveEvents = false;       // has an event stream ever spoken to this page?
+let _liveContent = false;      // v1's question, still the button's signal
+let _quietSince = null;        // when the scheduler last went quiet, on WccClock
+function liveClockNow() { return window.WccClock ? WccClock.now() : Date.now(); }
+
+function updateLiveChrome() {
+    // A press takes the wheel. The latch stops driving, but the button stays
+    // truthful about whatever it last applied.
+    if (_livePinned !== null) return;
+    /* UP: something to show. Or — for a page served newer than its cached engine,
+       which would never hear `wcc-events` at all — v1's answer, so an asset-cache
+       skew degrades to the old behaviour rather than to a chrome that never appears
+       (see the asset-cache-skew note). */
+    if (_liveShowing || (!_liveEvents && _liveContent)) {
+        _quietSince = null;
+        if (!_chromeShown) applyLiveChrome(true);
+        return;
+    }
+    if (!_chromeShown) return;
+    if (_quietSince == null) _quietSince = liveClockNow();
+    if (liveClockNow() - _quietSince >= LIVE_HIDE_DEBOUNCE_MS) applyLiveChrome(false);
+}
+
+// The scheduler's answer, straight from the engine — which posts to its own window
+// as well as to the frames, so the player hears it without being a frame.
+window.addEventListener('message', (e) => {
+    const d = e.data;
+    if (!d || d.type !== 'wcc-events') return;
+    _liveEvents = true;
+    const showing = !!d.showing;
+    if (showing !== _liveShowing) { _liveShowing = showing; _quietSince = showing ? null : liveClockNow(); }
+    updateLiveChrome();
+});
+
 function onLiveState(feed) {
-    const content = liveHasContent(feed);
+    _liveContent = liveHasContent(feed);
+    updateLiveChrome();
     // The button's EXISTENCE is the day's signal, so it is offered on first content
-    // and never withdrawn by a quiet spell — only by the portrait swap (below).
+    // and never withdrawn by a quiet spell — only by the portrait swap (below). It
+    // stays on the FEED rather than on the scheduler: the question it answers is "is
+    // there cricket today", which a gap between events does not change.
     // Gating it on the feed rather than on LIVE_FEED_ON keeps a dead control off the
     // bar on the six days a week with no cricket on it, which matters on a bar that
     // is already the widest thing on a landscape phone.
-    // AFTER the latch below, not before: the button is offered with the state it is
+    // AFTER the latch above, not before: the button is offered with the state it is
     // meant to be showing, which on a fresh load is a chrome that is going up in the
     // same tick.
-    // A press takes the wheel. The latch keeps running (so the button stays truthful
-    // about a debounce that expires), it just stops driving.
-    if (_livePinned === null) {
-        if (content) {
-            if (_chromeHideTimer) { clearTimeout(_chromeHideTimer); _chromeHideTimer = null; }
-            if (!_chromeShown) applyLiveChrome(true);
-        } else if (_chromeShown && !_chromeHideTimer) {
-            _chromeHideTimer = setTimeout(() => {
-                _chromeHideTimer = null;
-                applyLiveChrome(false);
-            }, LIVE_HIDE_DEBOUNCE_MS);
-        }
-    }
-    if (content) offerLiveToggle();
+    if (_liveContent) offerLiveToggle();
 }
 /* Offer the bar's live button.
    ON BOTH SURFACES NOW. It used to be withdrawn in portrait because the thing it
@@ -695,7 +755,7 @@ function syncLiveToggle() {
         on: _chromeShown,
         onToggle: (want) => {
             _livePinned = want;
-            if (_chromeHideTimer) { clearTimeout(_chromeHideTimer); _chromeHideTimer = null; }
+            _quietSince = null;
             // The player has already flipped its own button; this keeps `_liveSynced`
             // honest so a later poll doesn't think it has work to do.
             _liveSynced = want ? 'on' : 'off';

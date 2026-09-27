@@ -83,9 +83,9 @@
      * so the simulator can freeze and step time independently of data arriving (see
      * live-clock.js). Absent module → the wall clock, exactly as before. */
     function clockNow() { return window.WccClock ? WccClock.now() : Date.now(); }
-    // A tick that just re-broadcasts the scheduler's answer, so a surface that shows
-    // events sees one expire without waiting for the next poll — the dwell clock runs
-    // faster than the poll clock.
+    // The scheduler is re-asked on this tick as well as on every poll: freshness
+    // decays between polls, so a pick can fall below the floor with no new data —
+    // see the note on `tick` in live-events.js.
     var EVENT_TICK_MS = opts.eventTickMs || 1000;
     var EVENT_CAP = opts.eventCap || 60;
 
@@ -98,17 +98,17 @@
           // The scheduler's verdict: what to show, until when, and why it won.
           showing: d.event || null, until: d.until, holding: !!d.holding, reason: d.reason || null,
           // Its working, for the inspector slide — the ranking IS the algorithm, and
-          // being unable to see it is what makes weights impossible to tune.
-          // `at_pick` rides along so a surface can say which row's numbers are the
-          // ones that won rather than the ones that are current.
+          // being unable to see it is what makes weights impossible to tune. Every
+          // row's numbers are live now, the showing one included: it holds its place
+          // by still outscoring the rest, so watching it fall is watching the
+          // decision that will hand the band on.
           ranked: d.ranked.slice(0, 40).map(function (r) {
             return { id: r.ev.id, score: Math.round(r.score * 10) / 10,
                      freshness: Math.round(r.freshness * 100) / 100,
                      novelty: Math.round(r.novelty * 100) / 100,
-                     superseded: !!r.superseded,
-                     at_pick: !!r.at_pick };
+                     superseded: !!r.superseded };
           }),
-          // The winning score, kept out of the ranking so the band can show it plainly.
+          // The showing event's own figures, so a band can print them plainly.
           picked: d.picked ? { score: Math.round(d.picked.score * 10) / 10,
                                freshness: Math.round(d.picked.freshness * 100) / 100,
                                novelty: Math.round(d.picked.novelty * 100) / 100 } : null,
@@ -168,6 +168,9 @@
         var now = clockNow();
         var cfg = {
           byId: cfgById,
+          // The baked division fixtures, so an event about somebody else's match can
+          // name the clubs and the ground the lean card never carries.
+          leagueById: leagueCfgById,
           /* Lets the extractor's clip join reach back past this poll — footage lags
            * the scorecard, so the wicket it belongs to was extracted a poll or two
            * ago and lives in the store, not in this batch. Newest first, this match
@@ -430,17 +433,12 @@
       try { e.source.postMessage(Object.assign({ type: 'wcc-live', status: lastStatus }, last || {}), '*'); } catch (err) {}
     });
 
-    // Featured-match relay: the ticker announces which match its current segment
-    // belongs to, and the other chrome surfaces (the strip's ladder) follow it, so
-    // the two never drift onto different games on their own cadences. The parent is
-    // just the hub — it holds no opinion about what's featured.
-    window.addEventListener('message', function (e) {
-      var d = e.data;
-      if (!d || d.type !== 'wcc-featured') return;
-      framesOf().forEach(function (f) {
-        try { if (f && f.contentWindow && f.contentWindow !== e.source) f.contentWindow.postMessage(d, '*'); } catch (err) {}
-      });
-    });
+    /* THE FEATURED-MATCH RELAY IS GONE. It carried `wcc-featured` from the ticker to
+     * the strip, so the two chrome surfaces could not drift onto different games on
+     * their own cadences. Both now render the scheduler's pick from `wcc-events`, so
+     * they cannot drift apart in the first place, and a message from one to the other
+     * about what it is showing would be a third account of a fact they already share.
+     * Removed with the strip's conversion to the event stream. */
 
     // --- League loop: the day's OTHER matches, polled SLOWLY and broadcast as
     // `wcc-league`. Independent of the WCC loop above — its own cadence, endpoint,
@@ -451,6 +449,17 @@
     var leagueEndpoint = opts.leagueEndpoint || endpoint.replace('state.json', 'league.json');
     var leagueConfigUrl = opts.leagueConfigUrl || '/live-league.json';
     var leagueIds = null, leagueLast = null, leagueTimer = null;
+    /* THE BAKED FIXTURE ROW PER LEAGUE MATCH, kept rather than thrown away. This
+     * config was already being fetched for its match ids alone, while carrying the
+     * club names, the competition and the GROUND — the things the lean PC card does
+     * not have and an event describing a match needs to say where it is being
+     * played. Same idea as `cfgById` does for our own matches from live-config. */
+    var leagueCfgById = {};
+    function indexLeagueRows(rows) {
+      (rows || []).forEach(function (m) {
+        if (m && m.match_id != null) leagueCfgById[String(m.match_id)] = m;
+      });
+    }
 
     // Pass ?m= the resolved ids (works pre-deploy + shares the Worker cache key);
     // a bare URL only if the config gave us nothing, letting the Worker's own config drive.
@@ -511,6 +520,9 @@
       cfgReady = Promise.resolve();
       pcs = opts.matches || [];
       leagueIds = opts.leagueMatches || [];
+      // A caller supplying its own ids skips the config fetch, so it hands the rows
+      // over too when it has them — the simulator does, having read the same file.
+      indexLeagueRows(opts.leagueRows);
       poll();
       leaguePoll();
       return handle;
@@ -521,6 +533,7 @@
     fetch(leagueConfigUrl, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (cfg) {
+        indexLeagueRows(cfg && cfg.matches);
         leagueIds = ((cfg && cfg.matches) || []).map(function (m) { return m.match_id; })
           .filter(function (id) { return id != null; });
       })

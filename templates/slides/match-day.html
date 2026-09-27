@@ -1049,6 +1049,39 @@
         for (var i = 0; i < inns.length; i++) if (oursInn(inns[i], weHome)) return i;
         return -1;
     }
+    /* IS ZONE 1 OURS? — the board's whole ordering question, in one place.
+       `WccChase.battingFirst` answers it off innings[0] when there is one and off the
+       TOSS before that; the home side remains the assumption only while neither
+       exists. Shared with the strip, so the ladder's bat/bowl glyphs and this board's
+       zone order cannot disagree about who is in. */
+    function battingFirstOurs(m, weHome) {
+        var ourSide = weHome ? 'home' : 'away';
+        var first = window.WccChase ? WccChase.battingFirst(m, ourSide) : null;
+        return first ? (first === ourSide) : weHome;
+    }
+    /* Put each side in its zone: crest, club, designation — and the FORM, which is
+       baked markup rather than a runtime value and so has to be captured before it is
+       moved. Captured once per tile, in the order the build laid it down (zone 1 is
+       the home side), and stashed on the element so a later repaint deals from the
+       original rather than from whatever the last one happened to leave there. */
+    function placeSides(el, firstOurs, weHome) {
+        var us = el.getAttribute('data-us') || '', them = el.getAttribute('data-them') || '';
+        if (!el._form) {
+            var bakedOurs = weHome ? 'z1' : 'z2', bakedThem = weHome ? 'z2' : 'z1';
+            el._form = { us: f(el, bakedOurs + '-form').innerHTML,
+                         them: f(el, bakedThem + '-form').innerHTML };
+        }
+        for (var z = 0; z < 2; z++) {
+            var k = 'z' + (z + 1);
+            var mine = z === 0 ? firstOurs : !firstOurs;
+            setTeam(f(el, k + '-team'), mine ? us : them);
+            setTeam(f(el, k + '-desig'),
+                    el.getAttribute(mine ? 'data-us-team' : 'data-them-team') || '');
+            setCrest(f(el, k + '-zone'), f(el, k + '-crest'),
+                     el.getAttribute(mine ? 'data-us-crest' : 'data-them-crest') || '');
+            f(el, k + '-form').innerHTML = mine ? el._form.us : el._form.them;
+        }
+    }
     /* BOTH SIDES' VERDICTS on one of our matches, `{ us, them }`.
 
        The rich feed states the outcome PER TEAM — rv.mjs `teams[].outcome`, off RV's
@@ -1139,9 +1172,7 @@
            zone's form line, no apertures and no score. Set rather than assumed —
            applyMatch runs on every poll, and a tile that has been painted once must
            be able to come back here (a feed that loses a match mid-afternoon is a
-           feed we must not leave showing a frozen scoreboard). The zones are NOT
-           reordered on the way: batting order is not known until an innings is, and
-           the baked form belongs to the side the build put in the zone. */
+           feed we must not leave showing a frozen scoreboard). */
         for (var pz = 0; pz < 2; pz++) {
             var pk = 'z' + (pz + 1);
             f(el, pk + '-form').hidden = scoring;
@@ -1152,9 +1183,26 @@
         }
         /* THE CREST CONNECTOR JOINS THE SYMMETRIC STATES ONLY — see `.sb-vs`. Nothing
            is being played until there is a scored innings, so here the tile is in one
-           of them and the baked crests are still the ones on show. */
+           of them. */
         var sb = f(el, 'board');
-        if (!scoring) { sb.classList.remove('playing'); return; }
+        if (!scoring) {
+            /* BUT THE ZONES STILL REORDER, because the toss knows the batting order
+               before a ball does. This used to return here with the comment "batting
+               order is not known until an innings is" — true only while nothing read
+               the toss. Now the side batting first comes up to zone 1 the moment it
+               is settled, which is half an hour of the afternoon the board previously
+               spent showing a guess (the home side, always).
+
+               Everything that identifies a side has to travel with it, the FORM
+               included: leave the baked form where it is and zone 1 ends up showing
+               one club's crest over the other's five results. Crest, club and
+               designation are already runtime-placed from `data-us-*`/`data-them-*`;
+               the form is baked markup, so it is captured once, in the order the
+               build laid it down, and dealt back out per zone. */
+            placeSides(el, battingFirstOurs(m, weHome), weHome);
+            sb.classList.remove('playing');
+            return;
+        }
 
         /* WHICH ZONE IS WHICH SIDE: BATTING ORDER, and it does not change all
            afternoon. `innings` arrives in batting order, so innings[0]'s side owns
@@ -1166,7 +1214,7 @@
            chase, while zone 1 states the innings it closed. A decided match has no
            apertures anywhere, and no zone takes the slack either: the two result
            lines stack at the top of the tile with the spare height below them. */
-        var firstOurs = inns.length ? oursInn(inns[0], weHome) : weHome;
+        var firstOurs = battingFirstOurs(m, weHome);
         var decided = !!(m && m.complete);
         var boardZone = decided ? -1 : Math.max(0, Math.min(1, inns.length - 1));
         var usCrest = el.getAttribute('data-us-crest') || '';

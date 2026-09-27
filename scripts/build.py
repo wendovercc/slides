@@ -3883,10 +3883,14 @@ def _strip_league_view(ev, our_team_id, by_comp):
     return {
         "mode": "league",
         "pc_id": ev["pc_id"],
-        # The featured XI + division, echoing the ticker's gold flag so the two
-        # chrome surfaces read as one.
+        # The featured XI + division, for the strip's own FOOTER — the band directly
+        # above the gold tile that now names the match, the tile having been given
+        # over to the event type (see live-ticker.html). `name_short` is the same
+        # shortener the gold flag used when the flag was doing this job, and for the
+        # same reason: the footer is that identical 8vw band.
         "team_label": ev.get("team_name") or "",
         "name": ev.get("competition") or "",
+        "name_short": _competition_short(ev),
         "win_points": win_points,
         # Whether TVCL Win/Lose scoring applies — the only points system we know
         # (Match Rules §9). Off for any other league, which just means the ladder
@@ -3917,6 +3921,7 @@ def _strip_friendly_view(ev, our_team_id):
         "pc_id": ev["pc_id"],
         "team_label": ev.get("team_name") or "Friendly",
         "name": ev.get("competition") or "",
+        "name_short": _competition_short(ev),
         "teams": [ours, opp],
         "fixtures": [{"match_id": ev["pc_id"], "ours": True,
                       "team_ids": [our_team_id, opp_id],

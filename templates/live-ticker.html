@@ -29,13 +29,31 @@
         }
         .ticker-bar.show { opacity: 1; }
 
-        /* The gold flag, bottom-left: the header for the WHOLE live chrome, not just
-           the ticker — the strip stands directly above it and has no header of its
-           own. Its width is pinned to the live band (the strip's width: this iframe
-           spans the stage, so `--live-band` vw lands exactly under the strip), so the
-           strip's gold spine runs down into this tile's right edge and the ticker's
-           gold top border runs off its left — one continuous L. Keep --live-band in
-           step with the players'. */
+        /* The gold tile, bottom-left: THE EVENT TYPE. Its width is pinned to the live
+           band (the strip's width: this iframe spans the stage, so `--live-band` vw
+           lands exactly under the strip), so the strip's gold spine runs down into
+           this tile's right edge and the ticker's gold top border runs off its left —
+           one continuous L. Keep --live-band in step with the players'.
+
+           IT USED TO NAME THE MATCH — the featured XI over its division — and stood in
+           as the header for the whole chrome, the strip above it having none of its
+           own. That was the wrong occupant for the slot twice over. The content did not
+           fit: `is-long` exists only because "U11 Incredibles" over "TVCL Div 6C" has to
+           shrink to survive 8vw, so the brightest block on the screen was shrinking its
+           type to say the least urgent of the three things. And it answered the wrong
+           question: at ten feet the gold is read first, so it should say WHAT JUST
+           HAPPENED, not whose. The type is also a short closed vocabulary — TOSS,
+           WICKET, SIX, RESULT, RAIN — which fits on one line at full size.
+
+           It makes the corner the hinge of both readings of the L: along the bottom,
+           WICKET → the description; up the side, WICKET → what it did to the match. And
+           with v1's nine-second cycle gone, the tile flipping is the cheapest signal
+           that the screen CHANGED rather than drifted.
+
+           Whose match it is moves to the strip's own bottom band, directly above this
+           tile — see live-strip.html. Bottom rather than top so that the attribution
+           lands on both paths out of the corner instead of stranded 90vh away at the
+           far end of one. */
         .tick-live {
             --live-band: 8vw;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -46,25 +64,20 @@
                whatever the label turns out to be. */
             overflow: hidden;
         }
-        /* The XI label, with the live dot riding INLINE at the head of the text —
-           not as a flex sibling — so a two-line name ("U12" / "HURRICANES") keeps
-           the dot on its first line instead of leaving it stranded beside a block.
-           Clamped to two lines; the division (when there is one) sits beneath. */
+        /* The type label, with the live dot riding INLINE at the head of the text —
+           not as a flex sibling — so a two-word type ("MATCH" / "FINISHED") keeps the
+           dot on its first line instead of leaving it stranded beside a block.
+           Clamped to two lines. */
         .tick-live-label { font-size: var(--t-sm); letter-spacing: 0.1em;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
             overflow: hidden; }
-        /* Long names — "Friendly XI", "U12 Hurricanes", "U11 Incredibles" — step down
-           a size and shed most of the tracking. The binding constraint is the longest
-           WORD, which can't be broken: at this size an 11-character one still fits the
-           band's ~7.2vw of content width. Applied by flagClass() below, on the label's
-           actual shape rather than a fixed list of team names. */
+        /* Long labels — "MATCH FINISHED", "FIVE WICKETS" — step down a size and shed
+           most of the tracking. The binding constraint is the longest WORD, which
+           can't be broken: at this size an 11-character one still fits the band's
+           ~7.2vw of content width. Applied by isLongLabel() below, on the label's
+           actual shape rather than a fixed list. The type vocabulary is short enough
+           that this should now be rare, but "Match finished" still trips it. */
         .tick-live.is-long .tick-live-label { font-size: 0.85vw; letter-spacing: 0.03em; }
-        .tick-live-sub { font-size: var(--t-xs); font-weight: 700; letter-spacing: 0.06em;
-            color: rgba(15,35,70,0.75);
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden; }
-        .tick-live-sub:empty { display: none; }
-        .tick-live.is-long .tick-live-sub { font-size: 0.8vw; }
         .tick-live i { display: inline-block; vertical-align: 0.04em;
             width: 0.8vw; height: 0.8vw; margin-right: 0.4vw;
             border-radius: 50%; background: #b3261e; }
@@ -96,6 +109,10 @@
         .tick-seg .lbl { color: var(--muted); font-size: var(--t-sm); text-transform: uppercase; letter-spacing: 0.06em; }
         /* Provisional-result note — matches today.html's .prov (muted, not uppercase). */
         .tick-seg .prov { color: var(--muted); font-weight: 400; }
+        /* The event's supporting clause — the scoreline a wicket left behind, the
+           match a result belongs to. Muted, because the headline is the news and this
+           is what qualifies it. */
+        .tick-seg .det { color: var(--muted); font-weight: 400; }
         /* A whole-segment sentence rather than a row of data parts. On the wall it
            behaves like any other segment (one clipped line); in portrait it wraps
            and the band grows to it. */
@@ -159,7 +176,6 @@
            already had that ground and that colour; it only needed the arrow. */
         html.portrait .tick-live::after {
             content: '\2192'; font-size: var(--t-xs); font-weight: 400; opacity: 0.85; }
-        html.portrait .tick-live-sub { display: none; }
         html.portrait .tick-live-label,
         html.portrait .tick-live.is-long .tick-live-label {
             -webkit-line-clamp: 1; white-space: nowrap; letter-spacing: 0.08em;
@@ -196,7 +212,8 @@
         html.portrait .tick-seg .bat,
         html.portrait .tick-seg .num,
         html.portrait .tick-seg .lbl { white-space: nowrap; }
-        html.portrait .tick-seg .prose { white-space: normal; }
+        html.portrait .tick-seg .prose,
+        html.portrait .tick-seg .det { white-space: normal; }
         /* Body copy, not display type: same family, weight and size as `.pf-body`.
            The wall's emphasis spans (team/score at 900, batter at 700) come back to
            400 with it, so the line reads as one sentence rather than a scoreboard. */
@@ -227,7 +244,6 @@
     <div id="ticker" class="ticker-bar">
         <div id="tick-live" class="tick-live is-live">
             <span class="tick-live-label"><i></i><span id="tick-live-text">Live</span></span>
-            <span id="tick-live-sub" class="tick-live-sub"></span>
         </div>
         <div class="tick-body">
             <div id="seg-a" class="tick-seg on"></div>
@@ -236,17 +252,36 @@
     </div>
 
 <script>
+/* THE BAR RENDERS ONE EVENT — the scheduler's current pick — and nothing else.
+ *
+ * v1 cycled segments built from the latest poll: a scoreline, a last wicket, a break
+ * word, every one of them nine seconds whether it was "Wendover 4/0" or a hat-trick.
+ * That is the wrong unit for a glance across a room. Under v2 the engine
+ * differentiates the feed into events, ranks them and answers one question — what
+ * should be on screen — and this bar draws that answer for exactly as long as the
+ * event's own dwell says. No cycle, no timer of its own, and "nothing" is a real
+ * answer: below the floor the pick is null and the bar goes away rather than looping
+ * stale scorelines at an empty afternoon.
+ *
+ * The split across the L (docs/live-events.md) gives this surface the TEXT and the
+ * TYPE and nothing else:
+ *     gold tile  the event type          TOSS
+ *     bar        the event description   Chalfont St Peter elected to bat
+ *     strip      the match it happened in, and whose it is
+ *
+ * So the bar no longer says which match it is and no longer loads live-config.json to
+ * find out — `showing.match` carries the team and division already, and the strip is
+ * the surface that shows them.
+ */
 (function () {
     var bar = document.getElementById('ticker');
     var liveEl = document.getElementById('tick-live');
     var liveLabel = document.getElementById('tick-live-text');
-    var liveSub = document.getElementById('tick-live-sub');
     var segs = [document.getElementById('seg-a'), document.getElementById('seg-b')];
-    var CYCLE_MS = 9000;
-    /* The phone's docked row. Two differences from the wall, both from
-       docs/portrait-decks.md ("Live on the phone"): a type scale that tracks the
-       bar's height rather than a wall's width (see the stylesheet), and EVENT-FIRST
-       segment order below. */
+    /* The phone's docked row. The difference from the wall is a type scale that
+       tracks the bar's height rather than a wall's width (see the stylesheet).
+       docs/portrait-decks.md's other portrait rule — EVENT-FIRST segment order — is
+       now moot and got its wish: there is only ever the event. */
     var PORTRAIT = /(^|[?&])portrait($|[=&])/.test(location.search);
     if (PORTRAIT) document.documentElement.classList.add('portrait');
     /* `?tickerdemo` — a long prose segment appended to the cycle, for looking at how
@@ -260,134 +295,11 @@
         'standing, after Harrington and Jackson put on 82 for the fourth wicket to ' +
         'drag the chase back from 61 for 3.';
 
-    var segments = [];    // current list of {label, html, live} segments
-    var idx = 0;          // which segment is showing
     var face = 0;         // which of the two layers is currently 'on'
-    var timer = null;
-    var lastKey = '';     // avoid restarting the cycle when content hasn't changed
-    var lastFeatured;     // last pc_id announced to the chrome (undefined = never)
-    var lastFeed = null;  // last feed, so we can re-render once the team map resolves
-
-    // pc_id -> our team label ("1st XI"/"2nd XI"), so the left flag names the match
-    // the current segment belongs to instead of a generic "Live". Same-origin config
-    // the daily build writes next to the player; a miss falls back to Live/Break.
-    // Club NAMES no longer come from here — the feed carries them per innings
-    // (`club`) and per result (`result_club`), which is authoritative and needs no
-    // string surgery on the team designation.
-    // The competition rides alongside, as the flag's subtitle: with no header on the
-    // strip above it, this tile names the division for both surfaces. Already
-    // shortened to fit the band by the build ("TVCL Div 6C" — see
-    // _competition_short), and blank for anything without one (friendlies, cups).
-    var PC_TEAM = {}, PC_DIV = {};
-    fetch('/live-config.json', { cache: 'no-store' })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (cfg) {
-            ((cfg && cfg.matches) || []).forEach(function (m) {
-                if (m.pc_id == null) return;
-                PC_TEAM[String(m.pc_id)] = m.team_name || null;
-                PC_DIV[String(m.pc_id)] = m.competition_short || m.competition || null;
-            });
-            if (lastFeed) render(lastFeed);   // relabel a feed that painted before the map loaded
-        })
-        .catch(function () {});
+    var lastKey = '';     // what's drawn, so an unchanged pick doesn't re-crossfade
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-    function currentInnings(m) { var a = (m && m.innings) || []; return a.length ? a[a.length - 1] : null; }
-    function batHtml(b, ours) {
-        return '<span class="bat' + (ours ? ' ours' : '') + '">' + esc(b.name) + ' <span class="num">' + (b.runs || 0) +
-            ' (' + (b.balls || 0) + ')</span><span class="star">*</span></span>';
-    }
-    // Spell out dismissals now there's room: "c Smith b Jones" -> "caught Smith,
-    // bowled Jones"; "b Jones" -> "bowled Jones"; whole-phrase ones pass through.
-    // The special cases below are all real RV output, not hypotheticals:
-    //   "c & b M Robinson"        caught and bowled — the fielder IS the bowler
-    //   "lbw  b T Duff"           note the double space RV emits after lbw
-    //   "ro (H Godden,J Roan)"    run-outs are abbreviated 'ro', never "run out"
-    function expandHow(how) {
-        var s = String(how || '').trim().replace(/\s+/g, ' ');
-        if (!s || /^(run out|not out|retired|hit wicket|timed out|obstruct|handled)/i.test(s)) return s;
-        // Run out, with whoever RV credited: "ro (A,B)" -> "run out (A, B)".
-        var ro = s.match(/^ro\b\s*(?:\((.*)\))?$/i);
-        if (ro) return 'run out' + (ro[1] ? ' (' + ro[1].split(',').map(function (n) { return n.trim(); }).join(', ') + ')' : '');
-        // Caught and bowled: one name, said once.
-        var cb = s.match(/^c\s*&\s*b\s+(.*)$/i);
-        if (cb) return 'caught and bowled ' + cb[1];
-        // lbw: the trailing "b X" is the bowler's credit, exactly as in "c X b Y",
-        // so it expands the same way. Matched explicitly only because the generic
-        // rule below would leave the stray space RV puts after "lbw".
-        var lbw = s.match(/^lbw\s+b\s+(.*)$/i);
-        if (lbw) return 'lbw, bowled ' + lbw[1];
-        return s.replace(/^c\s+/i, 'caught ').replace(/^st\s+/i, 'stumped ')
-                .replace(/^b\s+/i, 'bowled ').replace(/\sb\s+/i, ', bowled ');
-    }
-
-    // Build the cycle of segments (each tagged with the match's flag label + live
-    // state) for the live/break/decided matches in the feed.
-    function buildSegments(feed) {
-        var shown = (feed && feed.matches || []).filter(function (m) { return m.phase === 'live' || m.phase === 'break' || m.complete; });
-        var out = [], anyLive = false;
-        shown.forEach(function (m) {
-            var team = m.pc_id != null ? PC_TEAM[String(m.pc_id)] : null;
-            // Decided match → a result segment (provisional until finalised), no live lines.
-            if (m.complete) {
-                // `result_club` is the result already phrased with the winning club's
-                // name (the Worker owns that, since it owns the feed's quirks).
-                var res = m.result_club || m.result || m.leader_text || m.score_text || '';
-                if (res) out.push({ label: team || 'Result', live: false, pc: m.pc_id,
-                    html: '<span class="team">' + esc(res) + '</span>' + (m.final ? '' : '<span class="prov"> · to be confirmed</span>') });
-                return;
-            }
-            anyLive = true;
-            var isBreak = m.phase === 'break';
-            var flag = team || (isBreak ? 'Break' : 'Live');
-            var inn = currentInnings(m);
-            var oc = '';
-            var score = null, wicket = null;
-            // Score + at-crease batsmen, together in one segment (dot-separated).
-            if (inn) {
-                // The batting side's club name straight from the feed — no guessing
-                // which club a team name belongs to. Both sides read white (no gold
-                // hero on the live scoreline).
-                var sideName = inn.club || inn.side || m.home || '';
-                var parts = ['<span class="team' + oc + '">' + esc(sideName) + '</span>' +
-                    '<span class="score' + oc + '">' + inn.runs + '/' + inn.wickets + '</span>' +
-                    '<span class="ov">(' + esc(inn.overs) + ' ov)</span>'];
-                (inn.at_crease || []).forEach(function (b) { parts.push(batHtml(b, false)); });
-                score = { label: flag, live: !isBreak, pc: m.pc_id, html: parts.join('<span class="sep">·</span>') };
-            } else if (m.score_text) {
-                score = { label: flag, live: !isBreak, pc: m.pc_id, html: '<span class="team">' + esc(m.score_text) + '</span>' };
-            }
-            // Last wicket — player name styled like the at-crease batters (.bat),
-            // the runs/dismissal muted, for a consistent read across segments.
-            var w = inn && inn.last_wicket;
-            if (w) wicket = { label: flag, live: !isBreak, pc: m.pc_id,
-                html: '<span class="lbl">Last wkt</span><span class="bat' + oc + '">' + esc(w.name) + '</span>' +
-                    '<span class="num">' + (w.runs != null ? ' ' + w.runs : '') + (w.how ? ' — ' + esc(expandHow(w.how)) : '') + '</span>' };
-            /* EVENT-FIRST ON THE PHONE, score-first on the wall. A wall is ambient
-               and the standing score is what someone glancing up wants; a phone band
-               costs viewport on every step and is only worth it when it is telling
-               you something, so the last wicket leads and the score is what it falls
-               back to. Same segments either way — only the order differs, so nothing
-               is hidden from either surface. */
-            if (PORTRAIT) { if (wicket) out.push(wicket); if (score) out.push(score); }
-            else          { if (score) out.push(score); if (wicket) out.push(wicket); }
-            // Break, if any.
-            if (isBreak && m.break_desc) out.push({ label: flag, live: false, pc: m.pc_id, html: '<span class="lbl">' + esc(m.break_desc) + '</span>' });
-        });
-        // The flag's subtitle, tagged on here rather than read at show time so a
-        // config that lands after the first feed still changes the render key and
-        // repaints (see render()).
-        out.forEach(function (s) { s.div = s.pc != null ? (PC_DIV[String(s.pc)] || '') : ''; });
-        if (DEMO && out.length) {
-            var d = out[0];
-            out.push({ label: d.label, div: d.div, live: d.live, pc: d.pc,
-                       html: '<span class="prose">' + esc(DEMO_TEXT) + '</span>' });
-        }
-        return { segments: out, anyLive: anyLive };
-    }
-
-    function stop() { if (timer) { clearInterval(timer); timer = null; } }
 
     /* Tell the player how tall we came out. An iframe does not size to its content,
        so the dock's height is OUR measurement, sent out — see #live-dock. Sent after
@@ -406,11 +318,11 @@
     }
     window.addEventListener('resize', function () { lastH = 0; reportHeight(); });
 
-    // Does this label need the smaller flag type? Two ways to be too big for the
-    // band: too many characters overall, or a single word too long to break —
-    // "U12 Hurricanes" wraps happily but "HURRICANES" then has to fit on its own
-    // line. Junior sides ("U11 Incredibles") hit both. Deliberately a shape test,
-    // not a length-only one, since the label can also be "Result" or a break word.
+    // Does this label need the smaller tile type? Two ways to be too big for the
+    // band: too many characters overall, or a single word too long to break.
+    // Deliberately a shape test, not a length-only one. The type vocabulary is much
+    // kinder to the band than the team names it replaced — "Match finished" is the
+    // only one that still trips it.
     function isLongLabel(label) {
         var words = String(label || '').split(/\s+/);
         var longest = 0;
@@ -418,72 +330,66 @@
         return String(label || '').length > 9 || longest > 6;
     }
 
-    function showSeg(i) {
-        var seg = segments[i] || { label: '', div: '', html: '', live: false, pc: null };
+    /* THE SCHEDULER'S PICK, DRAWN. `showing` is the whole event record — see
+       live-events.js — and this surface takes two things off it: the type, for the
+       gold tile, and the payload's text, for the bar. */
+    function show(ev) {
+        var text = DEMO ? DEMO_TEXT : ((ev.payload && ev.payload.headline) || '');
+        var detail = DEMO ? '' : ((ev.payload && ev.payload.detail) || '');
         var next = 1 - face;
-        segs[next].innerHTML = seg.html;
+        segs[next].innerHTML = '<span class="prose">' + esc(text) + '</span>' +
+            (detail ? '<span class="sep">·</span><span class="det">' + esc(detail) + '</span>' : '');
         segs[next].classList.add('on');
         segs[face].classList.remove('on');
         face = next;
-        // The flag names the match this segment belongs to, and pulses only while live.
-        liveLabel.textContent = seg.label;
-        liveSub.textContent = seg.div || '';
-        liveEl.classList.toggle('is-long', isLongLabel(seg.label));
-        liveEl.classList.toggle('is-live', !!seg.live);
-        // Tell the rest of the chrome which match is on show, so the strip beside us
-        // ladders THIS match's division instead of drifting on its own cycle. The
-        // player relays it to the other frames; standalone it simply goes nowhere.
-        if (seg.pc !== lastFeatured) {
-            lastFeatured = seg.pc;
-            try { window.parent.postMessage({ type: 'wcc-featured', pc_id: seg.pc }, '*'); } catch (e) {}
-        }
-        // Segments differ in length, so the band's height is a property of the one
-        // on show, not of the feed.
+        // THE TILE IS THE TYPE. Uppercased by the stylesheet, so the label reads as
+        // the table writes it.
+        liveLabel.textContent = ev.label || ev.type || '';
+        liveEl.classList.toggle('is-long', isLongLabel(ev.label || ev.type));
+        /* No `wcc-featured` relay any more. It existed so the strip could follow the
+           ticker's current match rather than cycling on its own; both surfaces now
+           read the same `wcc-events` broadcast, so a message from one to the other
+           about what it is showing is a third account of a fact they already share.
+           Removed with the strip's conversion. */
+        // Events differ in length, so on the phone the band's height is a property of
+        // the one on show.
         reportHeight();
     }
 
-    function render(feed) {
-        lastFeed = feed;
-        var built = buildSegments(feed);
-        if (!built.segments.length) { bar.classList.remove('show'); stop(); lastKey = ''; return; }
+    /* One event in, or none. NONE IS A REAL ANSWER and the bar goes away for it: the
+       scheduler found nothing above the floor, which is what an empty afternoon
+       actually is. v1 had no way to say this and looped stale scorelines instead. */
+    function render(d) {
+        var ev = d && d.showing;
+        if (!ev) { bar.classList.remove('show'); lastKey = ''; return; }
         bar.classList.add('show');
-        var key = built.segments.map(function (s) { return s.label + '|' + s.div + '|' + s.html; }).join('§');
-        if (key === lastKey) return;   // same content — let the running cycle continue
+        // Keyed on the EVENT, not on its text: the same event re-picked after its
+        // repeat window is the same thing on screen and must not re-crossfade, while
+        // a different event with identical wording (two matches, same score) must.
+        var key = ev.id;
+        if (key === lastKey) return;
         lastKey = key;
-        segments = built.segments;
-        idx = 0;
-        showSeg(0);
-        stop();
-        // Not while held — a repaint must not smuggle the rotation back in.
-        if (segments.length > 1 && !clockHeld) {
-            timer = setInterval(function () { idx = (idx + 1) % segments.length; showSeg(idx); }, CYCLE_MS);
-        }
+        show(ev);
     }
 
-    /* A HELD CLOCK STOPS THE CYCLE. The segment rotation is this bar's own timer and
-       owes nothing to the feed, so a held clock would otherwise leave the one surface
-       the hold is meant to make readable still flicking between segments every nine
-       seconds. On release the cycle is rebuilt from the current segment list.
+    /* A HELD CLOCK. The bar no longer has a timer to stop — the dwell is the
+       scheduler's and the engine stops broadcasting changes — so all this does now is
+       stop what CSS is animating on its own, the pulsing live dot above all. A screen
+       described as held has to actually be still, or the word means nothing.
        Production never sees this: only the simulator can hold the clock. */
-    var clockHeld = false;
     function setHeld(held) {
-        if (held === clockHeld) return;
-        clockHeld = held;
         document.documentElement.classList.toggle('clock-held', held);
-        if (held) stop();
-        else if (segments.length > 1 && !timer) {
-            timer = setInterval(function () { idx = (idx + 1) % segments.length; showSeg(idx); }, CYCLE_MS);
-        }
     }
 
     window.addEventListener('message', function (e) {
         var d = e.data;
-        if (d && d.type === 'wcc-live') render(d);
+        if (d && d.type === 'wcc-events') render(d);
         else if (d && d.type === 'wcc-clock') setHeld(!!d.held);
     });
-    // Ask the player's live engine for the last feed immediately (same handshake the
-    // today board uses), so the bar paints without waiting for the next poll.
-    try { window.parent.postMessage({ type: 'wcc-live-request' }, '*'); } catch (e) {}
+    // Ask the engine for its current answer immediately, so a bar that loads
+    // mid-dwell paints without waiting for the next tick (same handshake as the
+    // inspector slide's).
+    try { window.parent.postMessage({ type: 'wcc-events-request' }, '*'); } catch (e) {}
     try { window.parent.postMessage({ type: 'wcc-clock-request' }, '*'); } catch (e) {}
 })();
 </script>
