@@ -1,12 +1,17 @@
 # Live Events — the v2 model
 
-> Status: **substrate built, chrome not yet converted.** The event store, the
-> extractors, the interest model and the scheduler ship in
-> `assets/js/live-events.js` and run on every poll; the inspector slide
-> (`templates/slides/live-events.html`) renders them. The ticker, the context tile
-> and the strip still render *current state* and are untouched — converting them is
-> the next step. Companion to `docs/live-presentation.md` (the v1 surfaces this
-> replaces the innards of) and `docs/match-highlights.md` (the clips it absorbs).
+> Status: **built, and the chrome runs on it.** The event store, the extractors, the
+> interest model and the scheduler ship in `assets/js/live-events.js`; the ticker
+> (`templates/live-ticker.html`), the gold tile and the strip (`templates/live-strip.html`)
+> all render the scheduler's pick, and the player's chrome latch follows it. The
+> inspector slide (`templates/slides/live-events.html`) renders the working.
+>
+> **What is not finished is the writing.** Only `toss` and `match_started` have had
+> their text and their panel written *for* the L-frame; every other type renders on the
+> generic default and is waiting its turn — see [Open questions](#open-questions).
+>
+> Companion to `docs/live-presentation.md` (the v1 surfaces this replaced the innards
+> of) and `docs/match-highlights.md` (the clips it absorbs).
 
 ## Why
 
@@ -21,7 +26,8 @@ So the feed stops being the thing we render and becomes the thing we
 Three consequences fall straight out of the change, and they are the point of it:
 
 - **A fixed cycle is gone.** Nine seconds was spent equally on "Wendover 4/0" and
-  on a hundred. Dwell now comes from the event.
+  on a hundred. How long something stays up is now a consequence of how much it is
+  worth — there is no duration to set (see [How long a pick stays up](#how-long-a-pick-stays-up)).
 - **"Nothing" becomes sayable.** When no event is worth a screen the chrome
   collapses, instead of looping stale scorelines at an empty afternoon.
 - **The news flash stops being a separate feature.** An event that carries footage
@@ -50,7 +56,7 @@ shown_at      when the chrome last showed it; null = never   (+ shown_count)
 interest      0..n, fixed at extraction: how much this deserves a screen
 payload       { headline, detail, … } — what it takes to render
 clip          { id, url, event, duration } or null
-dwell         ms, derived from the payload or the clip
+dwell         ms — the MINIMUM it will be up for, not how long it lasts
 ```
 
 ### The three timestamps
@@ -92,55 +98,85 @@ still gets the screen it deserves:
 
 ## The type table
 
-`base` is interest before context. `ttl` is how long it stays news. `repeat` is how
-long before an already-shown event may be shown again (null = never).
+`base` is interest before context. `ttl` is how long it stays news — and therefore,
+since nothing else holds it there, roughly how long it can hold the band. `repeat` is
+how long after it *leaves* the screen before it may come back (null = never).
+`fade` is what each showing costs it (default 0.45). `panel` is what the strip shows
+while it is up.
 
-| type | base | ttl | repeat | source |
-|---|---|---|---|---|
-| `hundred` | 92 | 15m | 7m | batter's runs crossing 100 |
-| `five_for` | 90 | 15m | 7m | bowler's wickets crossing 5 |
-| `match_finished` | 88 | 45m | 5m | `complete` false→true, and `final` false→true |
-| `abandoned` | 84 | 45m | 10m | result text matching abandon/no result/wash |
-| `innings_closed` | 74 | 15m | 5m | a new innings appears — **this is when a target exists** |
-| `wicket` | 70 | 5m | 3m | `wickets` moving, described by `last_wicket` |
-| `fifty` | 64 | 8m | 5m | batter's runs crossing 50 |
-| `ladder_shift` | 60 | 15m | 7m | **announced by the strip** (see below) |
-| `rain_break` | 56 | 30m | 10m | `break_desc` matching rain/weather/wet/shower |
-| `six` | 52 | 4m | 3m | batter's `sixes` counter moving |
-| `probability_shift` | 48 | 7m | 5m | chase model's `p` moving ≥ 0.15 between polls |
-| `toss` | 40 | 30m | never | `toss` appearing |
-| `four_clip` | 36 | 4m | never | `fours` moving — earns a screen mainly with footage |
-| `innings_update` | 22 | 7m | never | every 5th over |
-| `ball_clip` | 20 | 3m | never | a clip nothing else claims |
-| `score_update` | 12 | 3m | never | every whole over, our matches only |
+| type | base | ttl | repeat | panel | source |
+|---|---|---|---|---|---|
+| `hundred` | 92 | 15m | 7m | profile | batter's runs crossing 100 |
+| `five_for` | 90 | 15m | 7m | profile | bowler's wickets crossing 5 |
+| `match_finished` | 88 | 45m | 5m | ladder | `complete` false→true, and `final` false→true |
+| `abandoned` | 84 | 45m | 10m | ladder | result text matching abandon/no result/wash |
+| `innings_closed` | 74 | 15m | 5m | score | a new innings appears — **this is when a target exists** |
+| `wicket` | 70 | 5m | 3m | score | `wickets` moving, described by `last_wicket` |
+| `fifty` | 64 | 8m | 5m | profile | batter's runs crossing 50 |
+| `ladder_shift` | 60 | 15m | 7m | ladder | **announced by the strip** (see below) |
+| `rain_break` | 56 | 30m | 10m | score | `break_desc` matching rain/weather/wet/shower |
+| `six` | 52 | 4m | 3m | score | batter's `sixes` counter moving |
+| `probability_shift` | 48 | 7m | 5m | score | chase model's `p` moving ≥ 0.15 between polls |
+| `match_started` | 44 | 15m | 90s *(fade 0.7)* | ladder | a division match's `phase` → `live` |
+| `toss` | 40 | 30m | 90s *(fade 0.7)* | form | `toss` appearing |
+| `four_clip` | 36 | 4m | never | score | `fours` moving — earns a screen mainly with footage |
+| `innings_update` | 22 | 7m | never | score | every 5th over |
+| `ball_clip` | 20 | 3m | never | score | a clip nothing else claims |
+| `score_update` | 12 | 3m | never | score | every whole over, our matches only |
 
 The last two rows are **the floor, and they are not pretending to be news**: they
 are what keeps a screen truthful when nothing has happened for ten overs. Their
 interest is low enough that any real event outranks them.
 
-### Supersession — a stale snapshot is wrong, not merely old
+**`match_started` is the one type that exists because a surface changed.** A division
+match going live turns its square on the match-day board over to "In play" and puts a
+mark on both its tiles in the ladder, and the stream used to say nothing about either.
+Its panel is the ladder, and not as a curatorial choice — the event *is* a ladder
+repaint, so the strip is showing the thing that just changed. It is detected as a
+transition, below the `!prev` branch, and guarded on `!complete`: a card that arrives
+late and jumps straight to a result must not announce a start an hour after the fact.
 
-`score_update` and `innings_update` describe **current state**, so a newer one does not
-merely outrank its predecessor, it makes it **false**. "Chalfont 9/0 (2 ov)" is not old
-news once 17/0 lands; it is a wrong score, and a surface showing it is lying to the room
-whatever its freshness works out to. Adding one of these retires every earlier one of
-the same type for the same match: `superseded` events score **0** and can never be
-picked, and they are the first thing evicted when the store fills, being owed nothing.
+### Retirement — a stale snapshot is wrong, not merely old
 
-**Incidents never supersede**, and the distinction matters: a wicket is still a true
-account of a wicket an hour later, and a second wicket does not unmake the first. Only
-snapshots retire — exactly the set the table above already calls the floor.
+Some events do not merely outrank their predecessors, they make them **false**.
+"Chalfont 9/0 (2 ov)" is not old news once 17/0 lands; it is a wrong score, and a
+surface showing it is lying to the room whatever its freshness works out to. A retired
+event scores **0**, can never be picked, is the first thing evicted when the store
+fills, and **loses the band at once** if it is the one on screen.
 
-**A dwell protects an event, not a falsehood.** The hold exists so a clip is not cut off
-mid-wicket by a six landing elsewhere; but if what is on screen has since been
-superseded, holding it keeps a wrong score up on purpose, so a superseded pick loses the
-screen at once rather than serving out its dwell.
+**It is not only a type retiring its own kind.** This began as "a score update
+supersedes the previous score update", which is true but far too narrow: once we are
+reporting a score for a match, that match's "In play" and its toss have both stopped
+being news about it — the screen has visibly moved on from the state they describe. So
+each type names what it retires **within the same match** (`RETIRES` in
+`live-events.js`), and a type retiring its own kind is just the commonest row:
+
+| a new… | retires, in that match |
+|---|---|
+| `match_started` | `toss` |
+| `score_update`, `innings_update` | `toss`, `match_started`, and both snapshot types |
+| `innings_closed` | `toss`, `match_started`, and both snapshot types |
+| `match_finished`, `abandoned` | all of the above, plus `probability_shift` |
+
+**Incidents are never retired**, and the distinction matters: a wicket is still a true
+account of a wicket an hour later, a second wicket does not unmake the first, and a
+result does not unmake either. Only descriptions of a state the match has since left
+are in the table.
+
+**Retirement is not the same as novelty zero, and the two must stay apart.** They both
+end in a score of nothing, but novelty is about what the *room* has seen and recovers,
+while retirement is about what is *true* and does not. Three behaviours need to tell
+them apart: novelty is deliberately exempt for the event on screen (that exemption is
+what lets a pick hold its place), so a retired incumbent expressed as novelty would
+never hand over; eviction ranks retired ahead of merely-shown; and the inspector
+strikes retired rows through while merely dimming low-scoring ones, because "no longer
+true" and "not interesting enough" are different things to be told.
 
 **Time and data must land together.** Announcing a clock step before the poll it belongs
 to had the scheduler decide against a store that did not yet hold that poll's events — so
-it picked the previous over's score, started its dwell, and was then holding a score the
-next instant made obsolete. The simulator advances the clock quietly
-(`WccClock.advance(ms, quiet)`) and lets the ingest broadcast the end state once.
+it picked the previous over's score and was then holding a score the next instant made
+obsolete. The simulator advances the clock quietly (`WccClock.advance(ms, quiet)`) and
+lets the ingest broadcast the end state once.
 
 ### Interest, and why context cannot promote
 
@@ -170,41 +206,94 @@ One question, asked every tick: **what should be on screen?**
 score = interest × freshness × novelty
 
 freshness  1 while new, → 0 across the type's ttl, squared so the tail is shallow
-novelty    1 if never shown; 0 inside the repeat window; 0.45^shown_count after it
+novelty    1 if never shown, or if it is the event currently on screen;
+           0 inside the repeat window after it left; then fade^shown_count
 ```
 
 - **Below `SHOW_FLOOR` (8), nothing is shown and the chrome collapses.** The floor is
   what makes an empty afternoon read as empty instead of as a loop.
-- **An event holds the screen for its whole dwell.** Re-deciding every tick would cut
-  a clip off mid-wicket because a six landed elsewhere.
+- **An event holds the band because it is still the best thing above the floor** — not
+  for a duration of its own. See below; this is the change that made the model simple.
 - The inspector renders the **whole ranking**, not just the winner — a ranking you
-  cannot see is a ranking you cannot tune.
-- **The showing event reports the numbers it won with**, not current ones. Being shown
-  sets `shown_at`, which drops novelty to zero, so the live figures for the current pick
-  are always `N=0, score=0` — making the one row you most want to understand the one row
-  that tells you nothing. `tick` captures the winning `{score, freshness, novelty}`
-  before it marks the event, returns them as `picked`, and `rankedForDisplay` substitutes
-  them into that row. The substitution re-sorts, or the row sinks to the bottom on its
-  post-mark zero and falls out of the capped list the engine ships. The row carries
-  `at_pick` for a consumer that cares; the inspector does not annotate it, because the
-  highlighted row already *is* the marker — "picked" and "showing the values it was
-  picked on" are the same fact.
+  cannot see is a ranking you cannot tune. Every row's numbers are live, the showing
+  one included, so watching a pick fall towards the floor is watching the decision
+  that will hand the band on.
 
-  The inspector prints these through a `factor()` helper rather than trimming the leading
-  zero off `toFixed(2)`: that shortcut turned **1.00 into ".00"**, exactly what 0.00
-  rendered as, so the two ends of the scale meant opposite things and printed the same.
-  `1` and `0` now say so plainly and fractions keep the short `.85` form.
+  The inspector prints factors through a `factor()` helper rather than trimming the
+  leading zero off `toFixed(2)`: that shortcut turned **1.00 into ".00"**, exactly what
+  0.00 rendered as, so the two ends of the scale meant opposite things and printed the
+  same. `1` and `0` now say so plainly and fractions keep the short `.85` form.
 
-### Dwell
+### How long a pick stays up
 
-Two regimes, and the event's own content picks which:
+**Mostly this is not a duration at all.** An event is put up because it is the best
+thing above the floor and it stays up until either its own freshness decays it below
+the floor or something outscores it. There is no separate number to tune, which is the
+point: how long a wicket sits there is a consequence of what a wicket is *worth* and
+how long it stays news, and both of those are already in the type table. Wanting a
+score to hold for three minutes is therefore a statement about its `base` and its
+`ttl`, made in the one place all the other such statements are made.
 
-- **Footage runs for as long as the footage runs** — clip duration + 2.5s, a beat
-  either side.
-- **Text runs for as long as it takes to read** — 55ms/char, clamped to 4–14s.
-- **…with per-type floors.** Reading time is the wrong measure for a short sentence
-  that matters: "Wendover won by 3 wickets" is read in two seconds and deserves to
-  sit there anyway. `match_finished` and `hundred` floor at 9s, a wicket at 6s.
+This replaced an explicit per-event `dwell` — reading time at 55ms/char with per-type
+floors — which existed for a reason that has gone. **Picking an event used to stamp
+`shown_at` and zero its novelty**, so without a hold it would have lost the screen on
+the very next tick. `shown_at` is now stamped when an event **leaves**, so the repeat
+window measures time *off* the screen, which is what "how long before it may be shown
+again" always meant.
+
+Three things still override the raw score, and each is there for a stated reason.
+
+**Footage runs to its end.** A clip is not a caption that can be swapped mid-sentence:
+the slideshow has given way to it, and cutting it off mid-wicket because a six landed
+elsewhere is worse than being a few seconds late to the six. Clip length plus a beat
+either side.
+
+**Nothing may appear for an instant** (`MIN_SHOW_MS`, 10s). Decisions are taken
+whenever the clock moves, and the two feeds ingest on different cadences, so without a
+floor on how briefly something can be up the band would blink.
+
+**The incumbent gives ground the longer it holds** (`SHARE_MS`, 18s — its standing
+halves every 18 seconds of *screen* time). This one is not obvious and was found by
+measuring. Under a plain "highest score holds" rule **the freshest event squats**:
+everything waiting is by definition older and so less fresh, which means it can never
+outscore the incumbent and only gets the band when the incumbent falls through the
+floor. A division's eight matches all starting at one o'clock would announce the last
+of them and then sit on it for seven minutes. The discount applies **only when
+comparing against the alternatives, never against the floor** — so a queue of
+comparable events takes turns, while an event with no rival keeps the band until it
+genuinely stops being worth one. Measured, eight starts now get three passes each over
+about six and a half minutes.
+
+And one thing cuts a pick short: **retirement**. A hold protects an event, never a
+falsehood.
+
+### Why it is asked every tick, not on every poll
+
+Tempting, and wrong: the store's *membership* only changes when a poll ingests, but
+the *scores* do not. Freshness decays continuously, so the answer can change with no
+new data at all — the pick can fall below the floor, two events with different ttls
+can swap as they decay at different rates, and a repeat window expiring can make
+something eligible again. Deciding only on ingest leaves an event on screen after it
+has stopped being worth one, for as long as a poll interval: fifteen seconds in play,
+thirty while a result settles, two minutes on an idle feed.
+
+**It cannot flap**, which is what made a poll-cadence gate look necessary. An event
+that loses the band is stamped `shown_at` there and then, which drops its novelty to
+zero for its whole repeat window — so whatever displaced it cannot be displaced
+straight back by it. `MIN_SHOW_MS` covers the rest.
+
+### Repetition, and why `fade` is per type
+
+`fade` is what each showing costs an event's standing: 0.45 by default, so "shown
+once, now worth under half". Right for news, which is diminished by having been said.
+
+**Some types are not diminished that fast.** Around one o'clock a division's matches
+all start and a club's XIs all toss, and there is very little else on; going round
+them twice more is better than collapsing. At 0.45 that is arithmetically impossible
+however the other dials are set — a third pass needs `interest × 0.45² ≥ 8`, i.e. an
+interest of 40, i.e. a base above `innings_closed` for a match that has merely begun.
+The decay is the binding constraint, not `base` and not `ttl`, so it is the one that
+has to be a per-type property. `toss` and `match_started` fade at 0.7.
 
 ## The clock
 
@@ -244,8 +333,15 @@ surface).
 - **`extractLive`** diffs two `wcc-live` polls — the rich RV feed, so wickets with
   names, per-batter milestones, bowling figures, breaks, results, clips.
 - **`extractLeague`** diffs two `wcc-league` polls — deliberately thin, because
-  PC-API is thin: a result, an innings closing, a coarse scoreline. A chrome that
-  only looks right on the rich feed breaks on five of the six matches it shows.
+  PC-API is thin: a match going live, a result, an innings closing, a coarse
+  scoreline. A chrome that only looks right on the rich feed breaks on five of the
+  six matches it shows.
+- **Both are given the baked configs**, because the cards alone cannot name things.
+  `cfg.byId` is `live-config.json` keyed by `pc_id` — our team name, the opposition,
+  the division, the start time. `cfg.leagueById` is `live-league.json` keyed by
+  `match_id` — the division's clubs, competition and **ground**, none of which the
+  lean PC card carries. The engine was already fetching that file for its match ids
+  and discarding the rest.
 - **`prev` null yields no change events.** Everything in the first poll of a session
   already happened before we were watching, and announcing a morning's wickets at
   once is the bug that guards against. Standing *facts* (the toss, a result already
@@ -253,6 +349,9 @@ surface).
 - **A later start is not a first sighting.** A match beginning at three o'clock has
   been in the feed since breakfast as a fixture with no toss, so its toss arrives on
   an ordinary poll; it is detected as `toss` appearing, not by the `!prev` branch.
+  `match_started` sits below that branch for the same reason in reverse: a match
+  already live when we first poll started before we were watching, and announcing a
+  one o'clock start at four is exactly what the rule exists to prevent.
 
 ### Clips join events; they are not events
 
@@ -279,6 +378,248 @@ takes it like any other event.
 **That wiring does not exist yet.** The simulator stands in for it, which is enough
 to design the scheduling against — what matters is that a ladder move *competes*
 with a wicket for the screen, not where the number came from.
+
+## Splitting a showing event across the surfaces
+
+> James's design direction, 2026-09-24; **built 2026-09-27** (`b26d181`).
+
+The L-frame is **one presentation of one event**, not three renderers that happen to
+be on at the same time. When the scheduler picks an event, its parts are distributed
+by *kind of information*, and each surface always does the same job:
+
+| surface | carries |
+|---|---|
+| **Gold tile** — bottom left | the **type**: what kind of thing just happened |
+| **Ticker** — the bottom bar | the **text**: the event description |
+| **Strip** — the side bar | **one panel**, chosen by the type — over a **footer** naming whose match it is |
+| **Flash** — the slide's box | the **footage**, when the event has any |
+
+Read out of the corner it is one sentence either way: along the bottom, `WICKET` →
+"Harrington bowled Duff 62"; up the side, `WICKET` → the chase it just dented, over
+"1st XI · TVCL Div 6C".
+
+### The tile carries the type, and that is a change from v1
+
+It used to name the match — the featured XI over its division — and stood in as the
+header for the whole chrome, the strip above it having none of its own. That was the
+wrong occupant for the slot twice over.
+
+**The content never fit.** `is-long` existed only because "U11 Incredibles" over
+"TVCL Div 6C" has to shrink to survive 8vw, so the brightest block on the screen was
+shrinking its type to say the least urgent of the three things. The type is a short
+closed vocabulary — TOSS, WICKET, SIX, RESULT, RAIN — which fits on one line at full
+size.
+
+**And it answered the wrong question.** At ten feet the gold is read first, so it
+should say *what happened*, not *whose*. With v1's nine-second cycle gone, the tile
+flipping is also the cheapest available signal that the screen **changed** rather than
+drifted.
+
+It sharpens when the match-day board is the slide underneath: the board already shows
+the team, the division and all three scores in far more detail than 8vw can carry, so
+a tile repeating that is dead space — while the one thing the board cannot say is
+*which of those matches just moved*.
+
+### Whose match it is moved to the strip's footer
+
+The strip takes back the header the tile was standing in for — but at the **bottom**,
+in the band directly above the tile. James's call, and the reasons are structural:
+
+- at the top of a full-height column it sits the better part of a screen away from the
+  tile and the bar it belongs with, and reads as a separate object;
+- at the bottom the attribution lands on **both** reading paths out of the corner,
+  rather than stranded at the far end of one;
+- it puts the naming block at the terminus of the gold spine, where the L actually
+  joins;
+- and the panel's *moving* edge becomes its top — furthest from where the eye is.
+
+Fixed height and `flex-shrink: 0` like `.panel-cap`, so ten league tiles lose a little
+height rather than the footer being squeezed. Our match names the XI over the
+division; somebody else's names the division alone, because which two clubs is
+answered by the panel's own marked tiles and two club names have never fitted 8vw.
+Fed by a baked `name_short` — the same `_competition_short` written for this exact
+band when the flag was carrying it.
+
+### The strip has panels, and the event type picks one
+
+A chase position and a league ladder **never share the band**. The strip shows one
+panel at a time, named by the type in the table above. The set today:
+
+| panel | shows | state |
+|---|---|---|
+| `score` | the two sides, batting first on top, plus target and chase tiles | built |
+| `ladder` | the division ordered by position, this match's sides marked | built |
+| `form` | how the two sides have been going — five results each | **unbuilt** |
+| `profile` | the player an event is about | **unbuilt** |
+| `none` | the footer alone | — |
+
+**Availability overrides the request, through a fallback chain.** A friendly has no
+league table, a division match has no baked form, and player profiles do not exist, so
+each panel is a *preference* with a chain behind it, walked until something can
+actually be drawn. That is also how the grey areas resolve themselves without a
+special case: a toss asks for `form`, form is only baked for our own teams, so a
+league toss lands on the ladder — which is what it wanted anyway.
+
+**The strip supplies the availability**, because only it knows whether it has a baked
+division for this match or a card with innings in it. `panelFor(type, avail)` in
+`live-events.js` walks the chain; `PANELS` holds the chains.
+
+`panel: 'none'` is deliberately **not** a collapse: the L is still describing
+something, and pulling the column out from under the tile would break the frame
+mid-sentence.
+
+### What the conversion deleted
+
+Worth recording, because each was load-bearing under v1:
+
+- the ticker's `buildSegments`, its nine-second cycle, and its `live-config.json`
+  fetch — `showing.match` carries the team and division already;
+- the strip's twenty-second view cycle;
+- the **`wcc-featured` relay** (ticker → the engine as hub → strip), which existed so
+  the two surfaces could not drift onto different games on their own cadences. They
+  read the same broadcast now, so they cannot.
+
+## The two event types written for the frame
+
+Everything else renders on the generic default — headline, muted detail, the type's
+panel — and is waiting its turn.
+
+### `toss`
+
+> "Denham elected to bat. Wendover will take to the field from 13:00."
+
+**The tile carries the noun, so the sentence must not.** RV's ready-made `toss.text`
+is "Denham CC won the toss and elected to bat", which with `TOSS` beside it says toss
+twice and spends the front of the line getting to the only part that is news.
+
+**The second sentence is the other side's half of the same fact.** A toss decides what
+*both* teams are about to do, and saying only the winner's choice leaves the reader to
+work out the consequence — which is the part that says what they are about to watch.
+Electing to bat sends the other side to the **field**; electing to bowl sends them to
+the **crease**.
+
+**Both clubs come from `live-config`, not from the toss object** — `our_club`,
+`opposition` and `time`, selected between by `is_wendover`. That names the two sides
+in one consistent style, and sidesteps matching `winner_club` against the card's
+home/away, which is the name-join trap `live-strip.html` warns about at length. Club
+names are shortened by `dropCC()`, a port of build.py's `drop_cc`, so a club is named
+on the L exactly as the match-day board names it a few centimetres away.
+
+Every part degrades: no config → the winner's choice alone; no start time → the
+sentence without it; no `is_wendover` → no second sentence; no decision → RV's own
+phrasing.
+
+### `match_started`
+
+> "High Wycombe are hosting Maidenhead & Bray at London Road."
+
+"Hosting" rather than "v", because home and away is the only thing worth knowing about
+a fixture nobody has bowled a ball in, and it reads as news where a fixture line reads
+as a listing.
+
+**The ground needed a seam that was almost already there.** The PC card is
+deliberately thin — no clubs, no ground — but the engine was *already fetching*
+`/live-league.json` for its match ids and throwing the rest away. It now keeps the
+rows and passes them to the extractor as `cfg.leagueById`, the same way `cfgById`
+enriches our own matches from `live-config`. The simulator hands its copy over as
+`leagueRows`, since supplying ids skips that fetch. The ground is dropped when it
+merely repeats the home club, and the whole clause when there is none.
+
+## The toss moves three surfaces at once
+
+One shared answer — **`WccChase.battingFirst(card, ourSide)`** — because the strip and
+the match-day board must not disagree about who is in. It prefers `innings[0]` when
+there is one (the feed delivers innings in batting order) and reads the **toss**
+before that.
+
+**No name matching and no team id**, neither of which the toss carries: `is_wendover`
+says whether we won it and `decision` says what the winner chose, and we bat first
+exactly when those two agree. `ourSide` maps that onto the home/away axis every other
+surface binds on.
+
+- **The strip's ladder** gains bat and ball glyphs *before a ball is bowled*. Until
+  now the role came only from the last innings in the card, so between the toss and
+  the first ball both tiles sat blank — the same state as a feed saying nothing —
+  while the feed in fact knew exactly who was about to bat.
+- **The match-day board** reorders its zones so the side batting first is on top. That
+  path used to `return` early with the comment "batting order is not known until an
+  innings is", true only while nothing read the toss.
+
+**The trap there was the form.** Crest, club and designation were already
+runtime-placed from `data-us-*`/`data-them-*`, but the form is *baked markup*
+belonging to whichever zone the build put it in — so a naive swap gives you one club's
+crest over the other's five results. `placeSides()` captures it once per tile in build
+order and deals it back out.
+
+## The strip and the board must agree about freshness
+
+The strip never loaded `live-status.js`, so `assess()` had **no freshness input at
+all** — there was no path by which age could reach it. Two consequences, and the
+second was a real disagreement rather than a resolution gap:
+
+- **The silent dot meant nothing.** It appeared for anything unscored, so a game yet
+  to start looked identical to one in play with an unscored card.
+- **Stale scores were laddered.** The board withdraws a division score at 30 minutes
+  (`↻ 40m`); the strip showed a lean, a fill, *and* fed a stale win probability into
+  the ghost arrows and the projected order — still forecasting the table from a score
+  the board had already decided not to trust.
+
+Both now follow the board's own rule, reached the same way `paintSquare` reaches it
+(`observe` / `band` / `closed`, against the feed's own `generated_at`). Three idle
+states matching the board's three classes:
+
+| state | board says | ladder shows |
+|---|---|---|
+| not in the feed at all | *(silent)* | no mark |
+| pre — not started | `Awaiting` | no mark |
+| live, nobody scoring | `In play` | **• dot** |
+| live, scored | `In play` | bat/bowl glyph |
+| live, scored, stale | `↻ 40m` | **• dot** (withdrawn) |
+| no feed | `No feed` | no mark |
+| complete | `Result` | fill (lean) |
+
+Withdrawing to the dot settles the ladder for free: with no `p` on the row,
+`expectedPoints` falls back to neutral and `if (r.final || r.idle) return` skips the
+ghost, so nothing rides a score we have just said we do not trust.
+
+**Only for other clubs.** The board keeps *our* score up and reports its age beside
+it, because our feed carries the scorer's own cursor and a five-minute band; with-
+drawing ours on the ladder would be the strip overruling the board. A **closed**
+innings is exempt from all of it — nothing can change it, so there is nothing to be
+stale about.
+
+## Putting the chrome away
+
+The player's latch used to key off `liveHasContent(feed)` — does the feed hold a match
+that is live, at a break, or complete. That is a v1 question with one answer all
+evening, because `complete` never goes back to false: once the last game finished the
+band could never retract, so an empty L sat on the wall until the daily reload. The
+surfaces inside it cleared correctly; the frame around them did not.
+
+It now latches on **`showing`**. Nothing to show, nothing to make room for.
+
+**Still sticky, and it has to be.** Between events the answer is legitimately "no" for
+tens of seconds, and growing the slide layer back and forth across those gaps would
+reflow the wall. Up is immediate; down waits out a quiet spell. Measured, collapsed
+gaps during ordinary play run to about 30 seconds, so the spell is **two minutes** —
+it bridges every gap in play and puts the band away a couple of minutes after the
+cricket actually stops. (It was twelve, which also worked but held an empty L for a
+quarter of an hour after the last result.)
+
+**Measured on `WccClock`, not with a `setTimeout`.** A timeout is real time, and the
+simulator runs an afternoon in a couple of minutes — so a twelve-minute timer would
+never fire in a session and the retraction could not be looked at at all. The engine
+rebroadcasts every second regardless of mode, so the quiet spell is a subtraction
+against the scheduler's clock: it advances with the simulated day and stops dead while
+the clock is held.
+
+An engine too old to broadcast `wcc-events` falls back to the v1 answer, so an
+asset-cache skew degrades to the old behaviour rather than to a chrome that never
+appears.
+
+One consequence worth knowing: on a fresh load mid-innings the chrome stays down until
+the first event, which can be up to an over. That is the doctrine working as written —
+nothing has happened since we started watching — but it is a visible change from v1.
 
 ## Testing it: the match-day simulator
 
@@ -320,9 +661,9 @@ scheduler thinks "now" is are all functions of it, so there is one thing to move
 
 `c` goes to the moment the scheduler next changes its mind about what to **show**, and it
 is the one to watch the chrome against. It is a different question from `e`, which goes to
-the next thing that *happens*, and the two come apart constantly: a wicket arriving
-mid-dwell waits its turn, a dwell expiring with nothing new promotes something from ten
-minutes ago, and a superseded pick loses the screen with no new event at all. None of it
+the next thing that *happens*, and the two come apart constantly: a wicket arriving inside
+the minimum show time waits its turn, an incumbent giving ground promotes something from
+ten minutes ago, and a retired pick loses the screen with no new event at all. None of it
 can be worked out in advance — it depends on the store's state at the instant it is asked
 — so the day is **run** until it happens.
 
@@ -333,10 +674,11 @@ thing took a second and a half of staring. Capped at an hour of quiet so a dead 
 cannot silently run to the end of the day, and cancelled by any other key. The HUD's
 **chrome:** line names the current pick, so a stop says what it stopped on.
 
-It also stops on the chrome **collapsing**: between events the dwell expires with nothing
-above `SHOW_FLOOR` and the answer is honestly empty, which is a change worth seeing rather
-than one to skip. Expect two stops per event, one either side. Plain play now stops at the
-end of the day rather than running on into an empty evening.
+It also stops on the chrome **collapsing**: when nothing is above `SHOW_FLOOR` the answer
+is honestly empty, which is a change worth seeing rather than one to skip. Plain play stops
+at the end of the day rather than running on into an empty evening. (Collapses are much
+rarer than they were before the floor types held properly — on a three-match day with a
+division behind it the band is occupied about 92% of the time.)
 
 **`b`, not `,`.** The comma is already prev-slide on the hardware this is driven from — it
 is not in `player-core.js`, it arrives from outside the page — so the two fought exactly
@@ -362,8 +704,8 @@ Check the two lists against each other before adding a key.
 Data arriving and time passing used to be separate controls, because a poll was **one
 over** while the model was told that poll had taken **fifteen seconds** — sixteen times
 out. Out it had to be: a poll that aged the day by four minutes would have expired a
-wicket's three-minute repeat window before the next one arrived, and every dwell and ttl
-would have looked broken. But two clocks on one screen is one clock too many to reason
+wicket's three-minute repeat window before the next one arrived, and every ttl would have
+looked broken. But two clocks on one screen is one clock too many to reason
 about, and the discrepancy was the reason there were two.
 
 So the compression is gone. An over takes four minutes of sim time and **each feed is
@@ -423,11 +765,13 @@ moving, so it stops all of it:
 - **The deck stops advancing** (`WccPlayer.setPlaying(false)`), so it cannot walk off
   the thing you were reading. The previous play state is remembered — resuming must not
   start a deck that was already paused.
-- **The ticker's segment cycle and the strip's view cycle stop.** Those are the
-  surfaces' own timers and owe nothing to the feed, so they would otherwise keep
-  rotating through a stopped screen. The engine broadcasts `wcc-clock`; each surface
-  clears its interval and sets a `clock-held` class that pauses CSS animations too —
-  the pulsing live dot included.
+- **CSS animations stop.** The ticker's segment cycle and the strip's view cycle went
+  with the conversion — what is on the band is the scheduler's pick now, and a second
+  timer beside it would only drift — so what is left to stop is what CSS is animating
+  on its own: the pulsing live dot, the ladder's FLIP transitions. The engine
+  broadcasts `wcc-clock` and each surface sets a `clock-held` class.
+- **The chrome's own retraction stops**, because its quiet spell is measured on the
+  same clock (see [Putting the chrome away](#putting-the-chrome-away)).
 
 **"Held" is not the same question as "manual".** The clock is manual for the whole
 simulated run now, so `isManual()` can no longer tell a stopped day from a running one —
@@ -626,214 +970,91 @@ nonsense.
 
 `live-events`, in the Match Day deck (`content/slideshows/live.json`), right after
 the two senior live-match slides. It renders the `wcc-events` broadcast: the
-scheduler's pick at the top (with **why** it won and its dwell), then every event
-newest-first with all three timestamps, interest, freshness, novelty and score. Rows
-below the floor are dimmed — those are events the chrome will not show. Superseded rows
-are struck through; the current pick is highlighted, and shows the numbers it won with.
+scheduler's pick at the top (with **why** it won), then every event newest-first with
+all three timestamps, interest, freshness, novelty and score. Rows below the floor are
+dimmed — those are events the chrome will not show. Retired rows are struck through;
+the current pick is highlighted.
+
+**Every row's numbers are live, the showing one included.** It used to substitute the
+figures the pick had *won* with, because being picked stamped `shown_at` and zeroed
+its novelty — making the one row you most wanted to understand the one row that told
+you nothing. Novelty no longer touches the event on screen, so the live figures are
+both honest and the interesting thing to watch: a pick decaying towards `floor` is the
+handover about to happen.
+
+The band prints a **minimum** rather than a hold, because there is no longer a hold to
+print: for a clip that is the length of the footage (the one thing here that really is
+a duration), otherwise the floor on how briefly anything may appear.
 
 Nothing is baked into it, so it is honestly empty on a day with no cricket.
 
-### Next: the showing block becomes a preview of the L-frame
-
-**This is the next piece of work.** The "showing" block currently says *which* event won.
-It should also say **what each of the three surfaces would do with it** — the ticker's
-text, the strip's panel (which one, and its contents), the gold tile's context line —
-rendered from the split described below.
-
-The point is to get the decomposition right **before** moving the production chrome onto
-v2. With it, the per-type panel mapping stops being a thing to reason about and becomes a
-thing to look at: hold the clock, step a whole simulated day, and read off what the
-L-frame would have said for a toss, a four, a rain break and a ladder shift in turn.
-Getting that wrong in the inspector costs a keypress; getting it wrong in the chrome
-costs a match day.
-
-## Splitting a showing event across the three surfaces
-
-> James's design direction, recorded 2026-09-24. **Not built** — this is the shape the
-> chrome conversion should take, and it supersedes the working assumption in open
-> question 2 below.
-
-The L-frame is **one presentation of one event**, not three renderers that happen to be
-on at the same time. When the scheduler picks an event, its parts are distributed by
-*kind of information*, and each surface always does the same job:
-
-| surface | carries |
-|---|---|
-| **Ticker** — the bottom bar | the **text**: the event description |
-| **Strip** — the side bar | the **match score / chase position** |
-| **Gold tile** — bottom left | the **context**: the Wendover team, or the league/division |
-
-Worked through for a `ladder_shift`, which is the case that shows why the split is by
-kind and not by surface:
-
-- **ticker** — the description: *"Wendover CC up 2 places to 4th"*
-- **strip** — the league ladder position
-- **gold tile** — the league/division
-
-So the strip is not a second scoreboard with its own opinion; it shows *this* event's
-match. The tile names *whose* it is. The ticker says what happened. **The three parts of
-the L-frame work in tandem to best describe the event being presented** — that is the
-whole rule, and everything below follows from it.
-
-### The strip has panels, and the event type picks one
-
-A chase position and a league ladder **never share the band**. The strip shows one panel
-at a time, and which one is a property of the **event type**:
-
-| showing | strip shows |
-|---|---|
-| a four, a six, a wicket | the match score / chase position |
-| a ladder shift | the league ladder |
-
-**This is an open set, not a pair.** The real question a panel answers is *what best
-completes this event*, and for some events the answer is neither of the two that exist
-today — because the score is not interesting, or does not yet exist at all:
-
-- **At the toss there is no score.** A chase panel reading 0/0 off nought overs is worse
-  than useless. **Previous match form** — how the two sides have been going — is the
-  thing that actually frames a toss, and the data is already baked (`form` in
-  `player_stats_this_season.json`, five results a team, already on the tale of the tape
-  and the next-match slide).
-- **A new batter or a new bowler** (open question 5) wants that player's profile, not a
-  scoreline; the event is about a person.
-
-So the panel set will grow, and the type table is where each type says which one it
-wants. Designing it as a binary now would be designing in the thing that has to be
-undone first.
-
-**The grey area, deliberately unsettled:** for a *league* match there are event types
-that could reasonably go more than one way — a toss, a rain break, a five-over innings
-update. The ladder may be the more useful thing to have up during those, with the score
-carried by the ticker's text instead. That is a per-type choice to be made by looking at
-it, not reasoned out in advance, and the inspector plus the simulator are how to look at
-it.
-
-#### NOTED, NOT BUILT: the toss and the INNINGS START are both events we want
-
-Two early events are missing, and they are missing for different reasons. Neither is built
-— the production feed is deliberately untouched for now — but the second is much the
-cheaper and has the stronger claim.
-
-**1. An innings starting is a real change to the league ladder, not just a good moment for
-it.** The strip's bat/bowl glyph is derived from the *last* innings in the card
-(`live-strip.html:321`):
-
-```js
-if (!inns.length) return { idle: 'nodata' };
-var cur = inns[inns.length - 1];
-var batting = inningsSide(card, cur) === side;
-var out = { role: batting ? 'bat' : 'bowl' };
-```
-
-So an innings appearing repaints the ladder twice over:
-
-- **the first innings** — the two tiles go from *no glyph at all* (`idle: 'nodata'`) to a
-  bat and a ball. The match visibly comes alive in the standings.
-- **the second innings** — both glyphs swap, *and* the tiles gain a lean and a certainty
-  where the first innings gave them `certainty = 0` ("a role, no lean"), because a chase
-  now exists to have an opinion about. The fill changes, not just the corner.
-
-That makes it the clearest case yet for the ladder as a panel: the event *is* a ladder
-repaint, so showing the ladder is not a curatorial choice about what best completes the
-event — it is showing the thing that just changed.
-
-**It needs no new feed field and no Worker change.** Both extractors already see it and
-both say nothing:
-
-- `extractLive` has the seam and discards it — `var pinn = matchInnings(pi, inn, ii);
-  if (!pinn) return;` (`live-events.js:401`). An innings with no previous counterpart is
-  skipped, and that is precisely the signal.
-- `extractLeague` already detects a new innings appearing, as `mi.length > pi.length &&
-  pi.length` — note the `&& pi.length`, which deliberately excludes the *first* innings
-  from being read as a closure.
-
-**The sharp point: for a limited-overs match, the first innings closing and the second
-innings starting are the same instant.** `innings_closed` already fires there, and fires
-*because* the new innings appeared. So an `innings_start` event would duplicate it on the
-second innings and is genuinely novel only on the **first** — which is to say, the event
-worth adding is *the match has started*. What is distinct about the second innings is not
-the event but the panel: the chase becomes real, and the existing `innings_closed` can
-carry that.
-
-**2. The toss**, which is the one blocked on the feed. For our own matches it already
-exists. For the division it does not, at two silent layers: `pc.mjs normaliseMatch()` does
-not carry a toss field into the league card, and `extractLeague` has no toss branch. The
-data is there — `match_detail.json`, the same endpoint the league feed already calls,
-carries `toss_won_by_team_id` and a ready-made `toss` sentence, and `fetch_fixtures.py`
-(~line 359) reads both for our matches today.
-
-**Its open question is timeliness, not availability.** PC-API's live-score is coarse and
-patchy for other clubs (see the league-wide-today work), and it is not known whether `toss`
-populates at toss time or only when the scorer submits — possibly after the match. A toss
-arriving at seven in the evening would be treated as news, since a standing fact appearing
-on an ordinary poll is detected as the field appearing and `MAX_BACKDATE` clamps its age to
-fifteen minutes regardless. `scripts/probe_live.py` against a couple of other clubs'
-fixture ids mid-afternoon would settle it. The innings-start route sidesteps the question
-entirely, which is another reason to reach for it first.
-
-**And it wants a different panel from the innings start.** At the toss there is no score
-and no innings, so the ladder is the honest answer for a league match and previous-match
-form for ours (above). At the first innings start there is a ladder that has just changed.
-Two nearby events, two different panels — a useful pair to settle the per-type panel
-mapping against, and both of them reachable in the simulator with `c`.
-
-One weighting note for whenever this is built: a league toss clears the floor comfortably
-— interest is `round(40 × 0.55) = 22` against a `SHOW_FLOOR` of 8 — so six divisions' worth
-of tosses and first innings would genuinely compete for the screen around one o'clock
-rather than being quietly dropped. Where a `match_started` sits relative to `toss` (40) and
-`innings_closed` (74) is a decision to take at the inspector, not in advance.
-
-Two consequences worth stating now:
-
-- **The panel is a per-type property**, so it most likely belongs in the type table
-  alongside `base` / `ttl` / `repeat` rather than in the strip's own code — one place
-  where "what does the whole L-frame do for this kind of event" is answered, and one
-  place to add a panel to when a new kind of event wants one.
-- **Availability overrides the request.** A friendly, a cup tie or a junior game has no
-  league table, so a type asking for the ladder falls back to the chase position; a team
-  with no form recorded falls back likewise. The strip already behaves this way for the
-  ladder, which is where the two-tile chase view came from. Every panel needs its
-  fallback stated, not just its trigger.
-
-**Two things already point this way**, which is part of why the split is the natural
-one:
-
-- the gold tile is *already* context-only — team name with the division as its subtitle
-  (`.tick-live` in `templates/live-ticker.html`), fed from `live-config.json`;
-- the strip *already* renders a chase position rather than a ladder for a match with no
-  league behind it — the two-tile friendly view with its runs / balls / wickets / required
-  rate tiles. That is the beginning of "score and chase position live in the strip",
-  built for a different reason.
-
-What this changes when the conversion happens: the ticker loses `buildSegments` and its
-nine-second cycle and renders whatever the scheduler hands it; the strip keeps its tile
-grammar but takes **which match it is showing** from the event rather than from its own
-cycle (the `wcc-featured` relay already does exactly this, so the mechanism exists); and
-the tile keeps doing what it does, driven by the event's `match` rather than by the
-ticker's current segment.
-
-**But not yet.** The order of work is: put this decomposition in the inspector's showing
-block first (see above), settle the per-type panel mapping against a stepped simulated
-day, and only then move the production chrome onto it.
+> An earlier plan had the showing block become a preview of the L-frame decomposition,
+> so the panel mapping could be settled before the chrome moved. James called that off
+> in favour of converting the chrome directly and walking the event types one at a
+> time against the real surfaces — which is what happened.
 
 ## Open questions
 
-1. **Which events take over the screen.** Footage currently means takeover. Every
-   wicket clip pausing the slideshow may be too much; `six` + `wicket` only, or a
-   minimum gap between takeovers, are both one constant away.
-2. **Which strip panel each event type asks for, and what the panel set is.** *The
-   frame is settled* (see above): the strip takes its subject from the showing event and
-   shows exactly one panel. Open is the mapping in the middle — a four clearly wants the
-   score and a ladder shift the ladder, but a toss, a rain break or a five-over update on
-   a league match could sensibly show either — and the set itself, which is not just
-   those two: a toss wants **recent form**, a new batter wants a **player profile**.
-   Also open: what the strip does for an event with no match behind it at all.
-3. **The weights are a starting position**, deliberately spread so the *ordering
-   between tiers* is the claim rather than any exact number. The inspector exists to
-   argue with them.
-4. **`score_update` volume.** Every whole over of every match of ours is the floor
-   keeping the chrome alive; 200-odd in a day is a lot of store for events almost
-   none of which will be shown. Capping or collapsing them per match is untested.
-5. **Player profiles on a new batter / new bowler** (see `docs/live-presentation.md`
-   and the `project_player_profiles` memory) are two more event types waiting on an
-   unbuilt feature.
+**1. The remaining event types have not been written for the L-frame.** Only `toss`
+and `match_started` have had their text and their panel thought about; `wicket`,
+`six`, `four_clip`, `innings_closed`, `match_finished`, `abandoned`, `rain_break`,
+`probability_shift`, `hundred`/`fifty`/`five_for`, `ladder_shift` and `score_update`
+all render on the generic default. Walking them **one at a time** against the
+simulator is the way this has gone and the way it should continue.
+
+**2. Some type labels are written for a table, not for an 8vw block.** The tile
+renders `TYPES[].label`, so `match_finished` puts "MATCH FINISHED" in the corner where
+"RESULT" belongs. Probably wants a separate tile label per type.
+
+**3. `score_update` for another club can never be shown**: `round(12 × 0.55) = 7`
+against a `SHOW_FLOOR` of 8. A division's coarse scoreline is excluded by arithmetic
+rather than by a decision. Ours holds about 33 seconds uncontested.
+
+**4. The live dot has lost its meaning.** It pulsed for "this match is in play"; beside
+a type label it is decoration, and it is wrong beside `RESULT`.
+
+**5. `No feed` has no mark of its own on a tile**, so a failed fetch now looks like a
+game not yet started — the honest half of a bad choice, since the alternative was to
+keep asserting a game was in play. The `aged` band (10–30 min) has nowhere to live
+either: the board shows the score with a `↻ 14m` chip and a tile has no chip. Both
+would be answered by a third mark in the bottom-left slot — a hollow dot to the filled
+one.
+
+**6. Which events take over the screen.** Footage currently means takeover. Every
+wicket clip pausing the slideshow may be too much; `six` + `wicket` only, or a minimum
+gap between takeovers, are both one constant away.
+
+**7. The weights are still a starting position**, and now they do more work than they
+did: with `dwell` gone, `base` and `ttl` together decide how long something holds the
+band as well as whether it gets it. The inspector exists to argue with them.
+
+**8. Occupancy on a one-match day.** Measured over thirty minutes of ordinary play:
+92% with three of ours plus a division, 77% with a single match and gaps up to two
+minutes. Time-sharing buys variety at some cost in occupancy — `SHARE_MS` is the dial
+— and a single-fixture Sunday is the case to look at before calling it settled.
+
+**9. `ladder_shift` still has no real source.** The strip owns the ladder and is meant
+to call `WccLive.handle.addLadderMove(move)` when a move commits; that wiring does not
+exist and the simulator stands in. What matters for the model is that a ladder move
+*competes* with a wicket for the screen, not where the number came from.
+
+**10. The `form` and `profile` panels are unbuilt**, so both always fall through their
+chains. `form` is the smaller job — the data is baked (`form` in
+`player_stats_this_season.json` for ours, `opposition_form` on the fixture for
+today's opponent, five results each) but is not carried into the strip's views, and
+**no form exists for a division club we do not play**, so it can only ever be an
+our-match panel. `profile` waits on the unbuilt player-profiles feature (see
+`docs/live-presentation.md` and the `project_player_profiles` memory).
+
+**11. A league `toss` does not exist.** `pc.mjs normaliseMatch()` carries no toss
+field and `extractLeague` has no toss branch, so `toss` is an our-matches-only event
+today. The data is there — `match_detail.json` carries `toss_won_by_team_id` and a
+ready-made sentence — and **the open question is timeliness, not availability**: it is
+not known whether `toss` populates at toss time or only on scorer submission, possibly
+after the match. A late one would read as news, since `MAX_BACKDATE` clamps its age to
+fifteen minutes. `scripts/probe_live.py` against a couple of other clubs' fixture ids
+mid-afternoon would settle it.
+
+**12. `score_update` volume.** Every whole over of every match of ours is the floor
+keeping the chrome alive; 200-odd in a day is a lot of store for events almost none of
+which will be shown. Capping or collapsing them per match is untested.
