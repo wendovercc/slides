@@ -106,12 +106,14 @@
             return { id: r.ev.id, score: Math.round(r.score * 10) / 10,
                      freshness: Math.round(r.freshness * 100) / 100,
                      novelty: Math.round(r.novelty * 100) / 100,
+                     coverage: Math.round(r.coverage * 100) / 100,
                      superseded: !!r.superseded };
           }),
           // The showing event's own figures, so a band can print them plainly.
           picked: d.picked ? { score: Math.round(d.picked.score * 10) / 10,
                                freshness: Math.round(d.picked.freshness * 100) / 100,
-                               novelty: Math.round(d.picked.novelty * 100) / 100 } : null,
+                               novelty: Math.round(d.picked.novelty * 100) / 100,
+                               coverage: Math.round(d.picked.coverage * 100) / 100 } : null,
           /* THE TAIL OF THE STORE, NOT ALL OF IT. This message crosses into every
            * slide iframe once a second, and a structured clone of four hundred events
            * five times a second is real work on a Pi. Sixty is comfortably more than

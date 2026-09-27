@@ -97,10 +97,31 @@
             opacity: 0; transition: opacity 0.35s ease;
         }
         .tick-seg.on { opacity: 1; }
-        /* Both sides read white on the live scoreline — no gold hero. */
+        /* THE SCORELINE, IN THE MATCH-DAY BOARD'S GRAMMAR. A score on the band and a
+           score on the tile a few centimetres above it are the same fact, so they
+           are typed the same way: the club in white, the figure in gold because gold
+           is the scoreline everywhere on this wall, the overs a rung smaller and blue
+           because they qualify the score rather than being part of it. See `.sq-runs`
+           and `.sq-ov` in templates/slides/match-day.html, which these mirror.
+           (They replace a v1 pairing that read both sides in white — that was a
+           scoreline naming two teams at once, which this is not.) */
         .tick-seg .team { font-weight: 900; color: var(--text); }
-        .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--text); }
-        .tick-seg .ov { color: var(--muted); font-size: var(--t-sm); }
+        .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--accent); }
+        .tick-seg .ov { font-weight: 400; font-size: var(--t-sm); color: var(--light-blue); }
+        /* The parts above sit inside ONE span rather than being flex children of the
+           segment, so they are separated by an ordinary word space instead of the
+           segment's 0.8vw gap — "9/0 (1 ov)" is a phrase, not three columns. */
+        .tick-seg .line { font-weight: 400; color: var(--text); }
+        /* WHICH PHRASE GIVES WAY WHEN THE LINE IS TOO LONG, and it must not be the
+           ends. The scoreline is what the glance is for and the third phrase is the
+           club that would otherwise go unnamed all afternoon; the middle clause —
+           a dismissal's particulars, a burst of boundaries — is the expendable one,
+           so it is the only shrinkable item and it ellipsises inside itself.
+           Without this the segment simply clipped its own right-hand end, which is
+           exactly where the newest information sits. */
+        .tick-seg > .line, .tick-seg > .tail, .tick-seg > .sep { flex: 0 0 auto; }
+        .tick-seg > .det { flex: 0 1 auto; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tick-seg .bat { font-weight: 700; color: var(--text); }
         /* Shared by at-crease batters and the last-wicket line so player names read
            the same everywhere; the trailing figures/dismissal stay muted. */
@@ -110,9 +131,14 @@
         /* Provisional-result note — matches today.html's .prov (muted, not uppercase). */
         .tick-seg .prov { color: var(--muted); font-weight: 400; }
         /* The event's supporting clause — the scoreline a wicket left behind, the
-           match a result belongs to. Muted, because the headline is the news and this
-           is what qualifies it. */
-        .tick-seg .det { color: var(--muted); font-weight: 400; }
+           match a result belongs to. Quieter than the headline, because the headline
+           is the news and this only qualifies it.
+           DIMMED WHITE, NOT `--muted`: on this bar `--muted` IS `--light-blue`, and
+           since the overs took that blue as a scoreline part it had started reading
+           as a colour with a meaning. The supporting clause is plain prose and should
+           recede by weight alone, so it steps down in brightness and keeps the hue of
+           the text it follows. */
+        .tick-seg .det { color: rgba(255, 255, 255, 0.72); font-weight: 400; }
         /* A whole-segment sentence rather than a row of data parts. On the wall it
            behaves like any other segment (one clipped line); in portrait it wraps
            and the band grows to it. */
@@ -330,15 +356,46 @@
         return String(label || '').length > 9 || longest > 6;
     }
 
+    /* THE HEADLINE, MARKED UP — when the payload says how.
+       Most events hand the band a sentence, which is one span of prose and needs no
+       more. A SCORELINE is not a sentence: "High Wycombe 9/0 (1 ov)" is a club, a
+       figure and the overs that qualify it, and those three are typed differently
+       here exactly as they are on the match-day board. So a payload may carry
+       `parts` — [{ cls, text }] — and this turns them into spans; `headline` stays
+       on the payload as the flat form every other surface (the flash, the inspector)
+       reads, and as the fallback here.
+
+       The class is WHITELISTED rather than written through. The payload is built
+       from feed data, and a stylesheet class is the one place a renderer can be
+       talked into something by a string it did not write. */
+    var PART_CLS = { team: 1, score: 1, ov: 1, det: 1, num: 1, star: 1, lbl: 1, prov: 1 };
+    function partsHtml(parts, fallback, cls) {
+        if (!parts || !parts.length) return '<span class="prose">' + esc(fallback) + '</span>';
+        return '<span class="' + (cls || 'line') + '">' + parts.map(function (p) {
+            var cls = PART_CLS[p && p.cls] ? p.cls : '';
+            return '<span class="' + cls + '">' + esc(p && p.text) + '</span>';
+        }).join(' ') + '</span>';
+    }
+
     /* THE SCHEDULER'S PICK, DRAWN. `showing` is the whole event record — see
        live-events.js — and this surface takes two things off it: the type, for the
        gold tile, and the payload's text, for the bar. */
     function show(ev) {
-        var text = DEMO ? DEMO_TEXT : ((ev.payload && ev.payload.headline) || '');
-        var detail = DEMO ? '' : ((ev.payload && ev.payload.detail) || '');
+        var p = DEMO ? {} : (ev.payload || {});
+        var text = DEMO ? DEMO_TEXT : (p.headline || '');
+        var detail = DEMO ? '' : (p.detail || '');
+        var parts = DEMO ? null : p.parts;
+        /* THE THIRD PHRASE — whose bowlers these are. Its club is drawn in the SAME
+           strong type as the batting side in the headline, because they are the same
+           kind of thing (a club, named) and the eye should pair them across the line;
+           the state behind it stays muted like any other supporting clause. Carried
+           as parts rather than text for exactly that reason. */
+        var tail = DEMO ? null : (p.tail_parts || (p.tail
+            ? [{ cls: 'det', text: p.tail }] : null));
         var next = 1 - face;
-        segs[next].innerHTML = '<span class="prose">' + esc(text) + '</span>' +
-            (detail ? '<span class="sep">·</span><span class="det">' + esc(detail) + '</span>' : '');
+        segs[next].innerHTML = partsHtml(parts, text) +
+            (detail ? '<span class="sep">·</span><span class="det">' + esc(detail) + '</span>' : '') +
+            (tail ? '<span class="sep">·</span>' + partsHtml(tail, '', 'tail') : '');
         segs[next].classList.add('on');
         segs[face].classList.remove('on');
         face = next;

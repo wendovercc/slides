@@ -77,10 +77,10 @@
        `--row-scale` can absorb: rows are lost off the bottom rather than drawn over
        the slide's own furniture. */
     .table { min-height: 0; overflow: hidden; }
-    /* type · match · headline · happened · received · shown · I · F · N · score */
+    /* type · match · headline · happened · received · shown · I · F · N · C · score */
     .ev-grid {
         display: grid;
-        grid-template-columns: 6.5vw 5.5vw 1fr 6vw 4.2vw 4.2vw 3vw 3vw 3vw 4vw;
+        grid-template-columns: 6.5vw 5.5vw 1fr 6vw 4.2vw 4.2vw 3vw 3vw 3vw 3vw 4vw;
         gap: 0 0.45vw; align-items: baseline;
     }
     .col-headers {
@@ -185,6 +185,7 @@
                 <span class="col-num">I</span>
                 <span class="col-num">F</span>
                 <span class="col-num">N</span>
+                <span class="col-num">C</span>
                 <span class="col-num">Score</span>
             </div>
             <div id="rows"></div>
@@ -329,7 +330,7 @@
         emptyEl.hidden = list.length > 0;
         rowsEl.hidden = list.length === 0;
         rowsEl.innerHTML = list.slice(0, shownCount).map(function (ev) {
-            var r = byId[ev.id] || { score: 0, freshness: 0, novelty: 0 };
+            var r = byId[ev.id] || { score: 0, freshness: 0, novelty: 0, coverage: 1 };
             var h = happened(ev, now);
             var cls = ['ev-grid', 'row'];
             if (showing && ev.id === showing.id) cls.push('showing');
@@ -341,7 +342,8 @@
                 '<span class="who ' + (ev.match.ours ? 'ours' : 'other') + '">' +
                     esc(ev.match.ours ? (ev.match.team || 'Ours') : (ev.match.division || 'League')) + '</span>' +
                 '<span class="what">' + esc(ev.payload.headline || '') +
-                    (ev.payload.detail ? ' <span class="det">' + esc(ev.payload.detail) + '</span>' : '') + '</span>' +
+                    (ev.payload.detail ? ' <span class="det">' + esc(ev.payload.detail) + '</span>' : '') +
+                    (ev.payload.tail ? ' <span class="det">· ' + esc(ev.payload.tail) + '</span>' : '') + '</span>' +
                 '<span class="t' + (h.unknown ? ' unknown' : '') + '">' + esc(h.text) + '</span>' +
                 '<span class="t">' + ago(now - ev.received_at) + '</span>' +
                 '<span class="t' + (ev.shown_at ? '' : ' never') + '">' +
@@ -349,13 +351,17 @@
                 '<span class="num">' + ev.interest + '</span>' +
                 '<span class="num">' + factor(r.freshness) + '</span>' +
                 '<span class="num">' + factor(r.novelty) + '</span>' +
+                /* Coverage is 1 for everything that is not the floor, and a column of
+                   1.00s is noise — so it is shown only where it is doing something. */
+                '<span class="num">' + (r.coverage > 1.005 ? factor(r.coverage) : '') + '</span>' +
                 '<span class="num score">' + (r.score >= 10 ? Math.round(r.score) : r.score.toFixed(1)) + '</span>' +
             '</div>';
         }).join('');
 
-        legendEl.innerHTML = '<b>score = I × F × N</b> · floor ' + (d.floor || 0) +
+        legendEl.innerHTML = '<b>score = I × F × N × C</b> · floor ' + (d.floor || 0) +
             ' · <b>I</b> interest · <b>F</b> freshness (decays from when it happened)' +
             ' · <b>N</b> novelty (0 = shown too recently)' +
+            ' · <b>C</b> coverage (climbs while this match goes unshown)' +
             ' · struck through = superseded' +
             (list.length > shownCount ? ' · ' + (list.length - shownCount) + ' older not shown' : '');
     }

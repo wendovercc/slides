@@ -93,7 +93,7 @@ still gets the screen it deserves:
 |---|---|---|---|---|
 | `match_finished` | 60m ago | just now | 0.44 | yes — lagging scorer, real news to us |
 | `match_finished` | 60m ago | 60m ago | 0.00 | no — genuinely old |
-| `six` | 60m ago | just now | 0.00 | no — late footage is not news |
+| `wicket` | 60m ago | just now | 0.00 | no — a backfilled collapse is not news |
 | `wicket` | 2m ago | just now | 0.36 | yes |
 
 ## The type table
@@ -111,22 +111,196 @@ while it is up.
 | `match_finished` | 88 | 45m | 5m | ladder | `complete` false→true, and `final` false→true |
 | `abandoned` | 84 | 45m | 10m | ladder | result text matching abandon/no result/wash |
 | `innings_closed` | 74 | 15m | 5m | score | a new innings appears — **this is when a target exists** |
-| `wicket` | 70 | 5m | 3m | score | `wickets` moving, described by `last_wicket` |
+| `wicket` | 70 | 5m | 3m | score | **one per dismissal** — the batter rows, not `last_wicket` |
 | `fifty` | 64 | 8m | 5m | profile | batter's runs crossing 50 |
 | `ladder_shift` | 60 | 15m | 7m | ladder | **announced by the strip** (see below) |
 | `rain_break` | 56 | 30m | 10m | score | `break_desc` matching rain/weather/wet/shower |
-| `six` | 52 | 4m | 3m | score | batter's `sixes` counter moving |
 | `probability_shift` | 48 | 7m | 5m | score | chase model's `p` moving ≥ 0.15 between polls |
 | `match_started` | 44 | 15m | 90s *(fade 0.7)* | ladder | a division match's `phase` → `live` |
 | `toss` | 40 | 30m | 90s *(fade 0.7)* | form | `toss` appearing |
-| `four_clip` | 36 | 4m | never | score | `fours` moving — earns a screen mainly with footage |
-| `innings_update` | 22 | 7m | never | score | every 5th over |
+| `match_break` | 26 | 10m | never | score | `break_desc` appearing that is *not* the weather |
 | `ball_clip` | 20 | 3m | never | score | a clip nothing else claims |
-| `score_update` | 12 | 3m | never | score | every whole over, our matches only |
+| `score_update` | 12 | 9m | never | score | every whole over (ours), every changed scoreline (division) |
 
 The last two rows are **the floor, and they are not pretending to be news**: they
 are what keeps a screen truthful when nothing has happened for ten overs. Their
 interest is low enough that any real event outranks them.
+
+### One event per thing that happened — and where that stops
+
+**Every wicket is its own event**, so a poll that brings three of them queues three
+and the band shows them in turn. This used to be one event with `(+2 more this over)`
+hung off it, which was wrong twice over: it is not an *over*, it is the gap between
+two polls — under a scorer syncing in lumps that is twenty minutes and can span half
+an innings — and it threw away two dismissals in order to describe a third.
+
+The card carries a **row per batter** (RV's `PlayerPerfs`), so a dismissal is "this
+name had not been given out last time and has been now", which holds however many
+polls were missed. Each event states the score that wicket left, from that batter's
+own fall-of-wicket figure. Only the **latest** wicket takes the card's current
+scoreline *and its over number*: the over is the one thing a fall figure does not
+carry, and for the newest wicket the card's reading is a few balls old at most, while
+an earlier one would be borrowing an over that belongs to a later ball. A feed whose
+rows cannot be reconciled with the wicket count falls back to one event for the batch.
+
+**The dismissal clause is scorecard notation**: `b`, `ct`, `lbw`, `st`, `ro`, `c&b`
+for the dismissals anyone meets in a season, words for the rare ones, and no "for" —
+a scorecard writes `B Duff b Vane 0` and that is the notation a reader has already
+seen on the board and in the app. The abbreviations are what paid for naming the
+bowler's club.
+
+**The bowler's club is possessive, never `by`.** In cricket's grammar `by` attaches to
+the *fielder*: "ct 17 by W Vane" says W Vane took the catch when he bowled it, and
+catches are most dismissals. The em-dash clause attributes the wicket without claiming
+how it was taken. A club already plural takes the bare apostrophe — `Great Missenden
+Pelicans’ K Samaradiwakara`. The word "bowler" is dropped to pay for the club and the
+figures carry that meaning anyway; it comes back only when the side cannot be resolved,
+since a bare name after a dash would be anybody.
+
+Measured against the real fixture list, with the ticker clipping near 88 characters:
+typical 65, a catch 68, and the worst club we play (`Buckland & Aston Clinton`) 85 —
+where the previous, club-less wording was 73.
+
+**Only the latest wicket quotes the bowler's figures.** `inn.bowling` is his running
+total at *this poll*, not at the ball that got this batter, so a backfilled wicket
+reading "W Vane 3–9" beside a correctly historical "9/1" contradicts itself. The truth
+is not inferable either: his wicket count at that point is derivable from the batch,
+but his runs are not — the card gives a running total and never says when the runs
+went. So a backfilled wicket names the bowler and stops. Same rule the scoreline
+follows.
+
+**An innings' first poll is not a blank**, and this was a real silence. `matchInnings`
+has nothing to pair a brand-new innings with, and "no previous innings, so skip the
+lot" threw away everything that had happened in it — on our own matches, the whole of
+the first over. A wicket in over one simply never existed, and the first thing the band
+said about the match was "Wendover 10/1 (2 ov)", announcing a wicket it had never
+reported.
+
+**A match being new is a different thing from an innings being new**, and only the
+first is a reason for silence. A match we have never polled is handled far above by the
+`!prev` branch, which is what stops a device joining at four o'clock reciting the
+afternoon. Inside the innings loop we have been watching, so an innings appearing is
+news that happened on our watch: it is diffed against an **empty innings**, as though
+we had seen it start at 0/0.
+
+With one guard. A scorer can publish an innings late and hand us a card already deep
+into it, and enumerating a collapse the room never saw is a recital, not news. Past
+`NEW_INNINGS_MAX_WICKETS` (3) it stays quiet and lets the next over's score line speak.
+Only wickets and the score line are at stake either way: the boundary and milestone
+rules already require a batter seen in the previous card, so they cannot fire off an
+empty one.
+
+**Sequencing needed no new machinery.** Same-match events with equal interest and
+equal freshness are exactly what the incumbent's time-share discount already handles
+— it is how a division's eight tosses take turns. Wickets are incidents, so they never
+retire each other, and pushing them in fall order makes the ranking's tie-break
+(insertion order, since same-poll events share a `received_at`) show them in the order
+they fell. Measured: three wickets get about ten seconds each — `MIN_SHOW_MS`, since
+equal scores mean the incumbent yields as soon as it is allowed to — and the last one
+then keeps the band.
+
+### There is no `four` or `six` event
+
+Both were removed, and the reasoning generalises. A boundary is a **counter** on the
+batter, and a counter cannot say *when*: the event's `happened_at` was the poll
+bracket, so a lumpy sync raised a SIX tile for a shot played twenty minutes earlier
+and freshness — which prices news by when it happened — had no way to know. The
+counters are not even reliable about *how many*: against one real scorecard the
+highlight feed had 58 fours to the batters' 55 and 17 sixes to their 13, because a
+boundary in byes is not a batter's four and scorers' boundary columns drift.
+
+So the boundary became a **clause on the score** instead (`boundaryClause`). Nothing
+is lost and the dishonesty goes: the score is current by construction, and the
+boundaries qualify it rather than claiming a moment of their own.
+
+```
+Wendover 60/1 (6 ov)  ·  J Harrington 38, two fours and a six  ·  Denham to bat
+Wendover 56/1 (6 ov)  ·  Two fours  ·  Denham to bat
+Wendover 75/1 (10 ov) ·  J Harrington 45, three fours  ·  Denham to bat
+```
+
+Three rules inside it:
+
+- **No time claim at all.** This briefly said "in that over" when the innings had
+  advanced by exactly six balls — true whenever it fired, but it fired by *accident*:
+  the score line only goes out on a whole over while the previous poll lands wherever
+  the 15-second timer put it, so a six-ball delta is a coincidence of poll timing and
+  not a fact about the cricket. A phrase that appears on one over and not the next,
+  for reasons invisible in the ground, reads as a bug.
+- **The batter is named only when he hit all of them.** Two batters sharing a burst
+  get the count and no name: "two fours for J Harrington" when one was his partner's
+  is a small lie nobody would ever catch.
+- **Name and total first, then the shots** — matching the dismissal clause, which is
+  already name-then-figure.
+
+A boundary row from the highlight feed does **not** re-raise one of these events
+either. Footage of a boundary is a REPLAY, which is its own surface; letting an
+unclaimed row raise a `four` would bring the type back through the side door on the
+streamed match only — the one place the inconsistency would be hardest to spot.
+
+**A third phrase names the bowling side**, on `score_update` and `wicket`, first
+innings only: `· Chenies & Latimer to bat`, with the club in the **batting team's own
+strong type** and the state muted behind it. It was the one thing the band never said
+— a wicket named who got him, a score said where they were, and on a wall showing
+three of our XIs at once neither said which club was bowling. It replaced a
+possessive club inside the dismissal clause, which paid for the name twice over in the
+phrase least able to afford it.
+
+It is first innings only because "to bat" is only true there; in a chase the fielding
+side has already batted and the same words would be a plain falsehood.
+
+**Both feeds carry it.** The division's card is thinner in every other respect — no
+batters, no bowlers, no dismissals — but it names both clubs and says which is
+batting, which is all this phrase needs. One wall, one way of writing a score.
+
+**The middle clause is the one that gives way.** With three phrases a long line
+overflows, and the segment used to clip its own right-hand end — losing the newest
+information and the club. The scoreline and the tail are now fixed flex items and only
+the middle clause shrinks, ellipsising inside itself: a dismissal's particulars are
+what a reader can most afford to lose.
+
+**The score's clause is chosen in one order**, ranked by how much a reader would miss
+it: (1) the boundaries just hit — the only candidate that is *news* rather than
+standing context, and the reason the floor event is worth a screen during a passage of
+play; (2) the chase, once two innings exist, because "need 47 from 60" is the state of
+the match; (3) the fixture and division — but only when there is no third phrase, since on a
+first innings that phrase is already naming the other side.
+
+**The floor stands down when the poll already said the score.** A wicket, a four and a
+six all lead with the scoreline now, so one landing on an over boundary used to produce
+the same sentence twice from one poll — and the second was the weaker of the two, since
+the incident says what *happened* while the floor says only where they are. Worse, the
+floor line is added *after* the incident, so it was never retired by it: once the
+incumbent's time-share discount bit, the band dropped the wicket and repeated its
+scoreline with a duller clause. The floor exists to fill silence, and an over that
+produced a wicket was not silent.
+
+**Boundaries are not events at all any more** — see below. The reason they could not
+be split is the same reason they could not stand alone: the feed. A wicket has a
+row; a boundary has only a **counter** on the batter (`fours`, `sixes`). A jump from 1
+to 3 says two of them happened somewhere in the gap and nothing about their scores,
+their overs or their order, so emitting two events off one observation would be
+inventing a ball we were never told about. The honest unit is the burst: one event
+that says how many — `W Fairhead moves on to 15 (2 fours)` — with the batter's total
+carrying the rest. Per-ball boundary events need per-ball data, which today exists
+only for a **streamed** match, where the clip carries its own over and ball.
+
+`score_update`'s `ttl` is deliberately longer than the gap between two of them. A
+snapshot is retired by its own successor, so the **only** way an old one survives is
+that no newer score exists — in which case it is still the best truth we have. At
+three minutes it died between overs and left the coverage rule with nothing current
+to lift.
+
+**There is no `innings_update` any more**, and the way it died is worth recording.
+It was a second, heavier snapshot every fifth over, and its purpose was a *coverage*
+rule — make sure every match gets a score on screen from time to time — expressed as
+a type weight. It bought that badly: it never fired for the division at all, it
+lifted a match that had just been on screen exactly as much as one unshown for twenty
+overs, and counting in overs meant rain or a slow over rate suspended the guarantee
+precisely when it mattered. It also carried a second, unrelated job — a non-weather
+`break_desc` was written as an `innings_update`, which is where the name came from
+and why it described neither job. The coverage rule now lives in the scheduler and
+the break has its own type.
 
 **`match_started` is the one type that exists because a surface changed.** A division
 match going live turns its square on the match-day board over to "In play" and puts a
@@ -154,9 +328,15 @@ each type names what it retires **within the same match** (`RETIRES` in
 | a new… | retires, in that match |
 |---|---|
 | `match_started` | `toss` |
-| `score_update`, `innings_update` | `toss`, `match_started`, and both snapshot types |
-| `innings_closed` | `toss`, `match_started`, and both snapshot types |
+| `score_update` | `toss`, `match_started`, the previous `score_update` |
+| `innings_closed` | those, plus `match_break` |
 | `match_finished`, `abandoned` | all of the above, plus `probability_shift` |
+
+**A wicket retires a score but is not retired by one**, which is the one asymmetry in
+the table. Its scoreline is stamped to the ball it fell on, so it reads as where that
+wicket left them rather than as a claim about now, and a later whole-over total makes
+it older rather than false. It is also an incident: it happened, and the incident rule
+is what stops a routine snapshot deleting it.
 
 **Incidents are never retired**, and the distinction matters: a wicket is still a true
 account of a wicket an hour later, a second wicket does not unmake the first, and a
@@ -203,12 +383,40 @@ in all but name. A first innings has no honest answer and reads as middling (0.3
 One question, asked every tick: **what should be on screen?**
 
 ```
-score = interest × freshness × novelty
+score = interest × freshness × novelty × coverage
 
 freshness  1 while new, → 0 across the type's ttl, squared so the tail is shallow
 novelty    1 if never shown, or if it is the event currently on screen;
            0 inside the repeat window after it left; then fade^shown_count
+coverage   1 for everything but the floor; for a floor event, climbs from 1 to
+           1 + COVERAGE_LIFT as its match goes unmentioned for COVERAGE_MS
 ```
+
+### Coverage — nobody goes unmentioned
+
+The rule is *"no match goes longer than this without a score on the wall"*, and that
+is a claim about a **match** and a **clock**, not about a kind of event — which is why
+saying it as a type weight went wrong (see `innings_update` above). Two dials, both
+meaning what they say: `COVERAGE_MS` (20 minutes — about five overs at a club over
+rate, but counted in the units the room experiences) and `COVERAGE_LIFT` (2, i.e. up
+to 3×).
+
+The lift is what carries a snapshot over the floor at all. A division score is worth
+**7** against a floor of **8**, so unaided it can never take the band; fully neglected
+it reaches 21, which clears the floor and still sits below anything that is actually
+news. One of ours goes 12 → 36.
+
+It is a **multiplier on the score, not a bonus on the interest**, and that matters:
+freshness and retirement still multiply through, so coverage can only ever promote a
+score that is *current and true*. A match whose scorer has gone quiet produces no new
+snapshot, nothing gets lifted, and the honest outcome is that we say nothing about it.
+
+It is measured from the later of *when that match was last on the band* and *when we
+first heard of it*, so a device joining mid-afternoon does not treat every match as
+starved at once. It is stamped when any event for the match **leaves** the band, not
+just a score: the rule is about the match being mentioned, so a wicket satisfies it
+too. Showing a match therefore resets its own clock — a busy match is never padded
+and a quiet one is picked up without anyone having to list it.
 
 - **Below `SHOW_FLOOR` (8), nothing is shown and the chrome collapses.** The floor is
   what makes an empty afternoon read as empty instead of as a loop.
@@ -263,6 +471,23 @@ comparing against the alternatives, never against the floor** — so a queue of
 comparable events takes turns, while an event with no rival keeps the band until it
 genuinely stops being worth one. Measured, eight starts now get three passes each over
 about six and a half minutes.
+
+**The challenger must clear the floor too, and for a long time it did not.** The floor
+was tested against `rows[0]` and against the incumbent, but `rows[0]` is usually the
+incumbent itself — so all that established was that the band was worth holding at all,
+never that the next in line deserved it. `share` halves every 18 seconds, so after a
+minute or two the incumbent's *discounted* standing drops below any old thing in the
+store and the band was handed to it. Reproduced against the real store: a wicket at
+interest 70 decaying 70 → 44.8, then a league `score_update` scoring **4.9** taking
+the screen off it at +90s. The rival scan now skips anything under the floor; with no
+eligible rival the incumbent simply holds, and it still loses the band the moment its
+*own* raw score falls through, which is what makes the chrome collapse rather than
+reach for the next thing down.
+
+Two things follow. The floor had been leaky for **every** low-interest type, not just
+that one. And the gap measurements that tuned the chrome's retraction (below) were
+taken while the leak was live, so the wall was being kept awake by filler it should
+never have shown.
 
 And one thing cuts a pick short: **retirement**. A hold protects an event, never a
 falsehood.
@@ -352,6 +577,159 @@ surface).
   `match_started` sits below that branch for the same reason in reverse: a match
   already live when we first poll started before we were watching, and announcing a
   one o'clock start at four is exactly what the rule exists to prevent.
+
+### What a diff of two RV polls can actually tell us
+
+Verified against real payloads (`scripts/probe_live.py <pc_id> --raw`, a 2026 league
+match and a junior friendly), not against the simulator — which differs from RV in
+ways that flattered the extractor twice, see below.
+
+**The fields RV gives us, per poll**
+
+| level | fields |
+|---|---|
+| match | `scores_updated` (the scorer's cursor), `status_id`, `is_live_score`, `was_live_scored`, `match_break_id`/`match_break_desc`, `score_text`, `leader_text`, `toss_won_by`, `batted_first`, `follow_on`, `matchStreams[].MatchStreamHighlights` |
+| team | `result_id`/`result_type_text`, `won_toss`, `points`, `match_score_text` |
+| innings | `runs`, `wickets`, `overs_bowled` (decimal, `32.1` = 32 overs 1 ball), `extras` + `byes`/`leg_byes`/`wides`/`no_balls`/`penalty_runs`, `close_type_id`, `innings_number`/`innings_order`, `CBalls` |
+| batting perf | `runs`, `balls`, `fours`, `sixes`, `number` (batting position), `dismissal_id`, `dismissal_text`, `dismisser1_id`, `dismisser2_id`, `fow`, `fow_order`, `minutes`, `player_id`, `times_out`, `inst_num` |
+| bowling perf | `overs`, `maidens`, `runs`, `wickets`, `wides`, `no_balls`, `dot_balls`, `consec_wkts`, `unassis_wkts`, `number` (bowling order), `player_id` |
+
+**Known exactly, from the diff alone**
+
+- The change in the innings' runs, wickets and overs.
+- **Which** batters are newly out, **how** (`dismissal_text`, the scorer's own words),
+  for how many, off how many balls, and **at what score** (`fow`).
+- The **order** the wickets fell in — by `fow`, ascending. Not by `fow_order`, see below.
+- Per-batter deltas in `runs`, `balls`, `fours`, `sixes`. So "two fours since the last
+  poll" is an exact count, not an estimate.
+- Per-bowler deltas in `overs`, `runs`, `wickets`, `maidens`, `dot_balls`, `wides`,
+  `no_balls` — so we know exactly who bowled during the interval and what it cost them.
+- Whether the scorer synced at all (`scores_updated` moving), which is the stall detector.
+- Breaks, an innings closing, the toss, the result.
+
+**Bounded, but not exact**
+
+- *The over a wicket fell in.* Bounded by the interval — it fell after the previous
+  poll's `overs_bowled` and at or before this one's — and no tighter. With several
+  wickets in one interval, `fow` orders them inside that bound but cannot place them.
+- *When anything happened in clock terms.* The bracket is `[previous scores_updated,
+  this scores_updated]`, and that is the honest width. It collapses to seconds on a
+  live-scored match and opens to half an hour on a scorer syncing in lumps.
+
+**Not knowable at all**
+
+- *The ball a wicket fell on.* `fow` is a score, not a position. `CBalls` on the
+  innings looks like where ball-by-ball would live and was **null in both matches**.
+- *When a boundary happened, or in what order.* Fours and sixes are **counters** on
+  the batter, with no row, no score and no position of their own. A jump from 1 to 3
+  says two happened somewhere in the interval and nothing else — which is why
+  boundaries are emitted as one burst event that states the count, while wickets are
+  emitted one apiece.
+- *Whether a four came before or after a wicket in the same interval.*
+- *Extras ball by ball* — only the innings totals move.
+
+**Two traps the simulator hid**, both found by probing and both now handled:
+
+- **`dismissal_id` means the opposite of the obvious.** RV: `0` = has not batted,
+  **`1` = not out**, `14` = retired not out, `2`/`3`/`4`/`6` = caught/lbw/bowled/run
+  out. A truthiness test reads every not-out batter as a wicket. The simulator numbers
+  it the other way round (`0` = not out), so nothing ever looked wrong. `isOut()`
+  decides on the **wording** instead, which both shapes agree on.
+- **`fow_order` is usually null.** Two dismissals out of eleven in the league match,
+  none at all in the friendly — while the simulator fills it in for everybody. Fall
+  order is derived by sorting on `fow`; `fow_order` is kept only as the tie-break for
+  two wickets at the same score, which is exactly the case it was populated for.
+
+**Worth a live probe, because it would change the model.** `minutes` (minutes at the
+crease) is populated in the completed league match and null in the friendly. If it
+populates *during* play it is the missing timing signal: the interval between two
+wickets is the incoming batter's `minutes`, which would let a backfilled wicket be
+placed in time instead of estimated from the run rate. Needs a probe against a match
+actually in progress to settle.
+
+**One gap this does not close.** All of the above is **raw RV**. The client sees the
+**Worker's** mapped shape (`rv.mjs`), which is not in this repo, so which of these
+fields survive the mapping — and under what names — cannot be checked from here. The
+extractor is written to accept both shapes (`dismissal_text` or `how`, RV's numbering
+or the simulator's) rather than assume.
+
+Two things are known about that mapping from an earlier probe, and are worth reading
+before re-deriving any of this: rv.mjs already **normalises `fall[].order` to the
+wicket number** (it is not `fow_order`), and it resolves dismissal ids to names,
+emitting `out_kind` and a resolved `fielder`. Which also means **the bowler is a
+structural field** — `dismisser2_id` — where `bowlerOf()` here parses him out of the
+scorer's `how` string with a regex. That should probably become the id.
+
+### Ball rows are read as data, and we do not wait for them
+
+`MatchStreamHighlights` is the **only per-ball source RV has**. Verified complete
+across all 96 rows of a real streamed match: `over_no`, `ball_no`, `dt_utc`,
+`innings_id`, `batter_id`, `bowler_id` and `metric` were populated on every one. A
+wicket row is self-sufficient — `metric` is the **wicket ordinal**,
+`dismissed_batter_id` was set on 15/15 — and `1004`/`1005` rows are milestones (metric
+100/200/300 for the team total, 50 for a player fifty).
+
+**Coverage against that match's scorecard:** wickets exact (6/6 and 9/9); boundaries
+*higher* in the highlights — 58 fours to the batters' 55, 17 sixes to their 13 —
+because a boundary in byes is not a batter's four and scorers' boundary counters
+drift. So the row is authoritative for *an event happening*; the scorecard stays
+authoritative for the score.
+
+**One endpoint, one poll.** `matchStreams` rides in the same match JSON as the
+scorecard, so this is not two feeds on two cadences — it is publication latency
+inside Frogbox. Slowing our poll would make a row more likely to have landed by the
+time we see the scorecard move, but only by delaying the score by the same amount:
+making the wall late in order to caption a boundary.
+
+**So the scorecard triggers and the row corrects, afterwards.** A row does three jobs,
+none of which involves holding anything back:
+
+1. **It stamps the true instant.** `happened_at` is otherwise the poll bracket, which
+   is honest but can be half an hour wide and is simply wrong when a card arrives
+   late. `dt_utc` collapses it to a point, so freshness prices the incident by when it
+   actually happened. This amends an event **even once shown** — unlike the footage
+   join — because correcting *when* something happened changes nothing that was said.
+2. **It dates the ball** — `over`/`ball` are kept on the event record.
+3. **It surfaces balls the scorecard never reported**, which is where those surplus
+   boundaries land. They become events in the house grammar rather than the feed's own
+   sentence: `Wendover 36/0 (7 ov) · D Cleary four off F Nelson (6.2)`.
+
+**Why a boundary burst is still not split per ball.** It looks like the rows should
+let `(2 fours)` become two events, and they cannot — because the scoreline at a given
+ball is **not recoverable**. The rows carry boundaries and wickets and never the
+singles between them, so two split events would carry the same current scoreline and
+the same running total and read identically on the band. The burst stays the unit
+until there is a reason for the two lines to differ. The per-ball stream's real home
+is the replay surface and the ball-events pipeline, which already consume it.
+
+**Unmeasured, and it decides one open question.** Nobody has timed the lag between a
+ball and its row appearing. It is cheap to log on a live Saturday — `dt_utc` against
+the poll that first carries the row — and it is the number that says whether a
+one-poll grace on a boundary burst would buy anything.
+
+### A payload may say how it is typed
+
+Most events hand the band a sentence, which is one span of prose. A **scoreline** is
+not a sentence: "High Wycombe 9/0 (1 ov)" is a club, a figure and the overs that
+qualify it, and those three are typed differently — the club in white at 900, the
+figure in **gold** because gold is the scoreline everywhere on this wall, the overs a
+rung smaller and blue because they qualify the score rather than being part of it.
+That is `.sq-runs` and `.sq-ov` on the match-day board, mirrored: a score on the band
+and a score on the tile a few centimetres above it are the same fact and are typed the
+same way.
+
+So a payload may carry `parts` — `[{cls, text}]` — which the ticker renders as spans,
+with `headline` alongside as the flat form every other reader wants (the flash, the
+inspector, a log line) and as the fallback. The third phrase carries `tail_parts` the
+same way. Classes are **whitelisted** in the renderer: a payload is built from feed
+data, and a stylesheet class is the one place a renderer can be talked into something
+by a string it did not write.
+
+Events also carry **`who`** — the player the event is about. It exists because the clip
+join used to match a name against the *headline*, which was right while a wicket's
+headline was "C Godden 2, lbw b Vane"; once the headline became the scoreline that test
+could never match again, and every clip would have attached to the first candidate
+event regardless of whose it was.
 
 ### Clips join events; they are not events
 
@@ -486,7 +864,14 @@ panel — and is waiting its turn.
 
 ### `toss`
 
-> "Denham elected to bat. Wendover will take to the field from 13:00."
+> `Denham elected to bat` · `Wendover will take the field from 13:00`
+
+**Two phrases, not two sentences.** That is the band's grammar — the headline is the
+news, the detail qualifies it, and the renderer sets the dot between them. Written as
+full stops it was the one event on the wall punctuating itself, which read as a caption
+rather than as a line of the same ticker. The split falls where the fact does: the
+winner's choice is the news, what it means for the other side is the consequence, which
+is exactly what the muted half is for. ("take the field", not "take *to* the field".)
 
 **The tile carries the noun, so the sentence must not.** RV's ready-made `toss.text`
 is "Denham CC won the toss and elected to bat", which with `TOSS` beside it says toss
@@ -598,17 +983,36 @@ surfaces inside it cleared correctly; the frame around them did not.
 
 It now latches on **`showing`**. Nothing to show, nothing to make room for.
 
-**Still sticky, and it has to be.** Between events the answer is legitimately "no" for
-tens of seconds, and growing the slide layer back and forth across those gaps would
-reflow the wall. Up is immediate; down waits out a quiet spell. Measured, collapsed
-gaps during ordinary play run to about 30 seconds, so the spell is **two minutes** —
-it bridges every gap in play and puts the band away a couple of minutes after the
-cricket actually stops. (It was twelve, which also worked but held an empty L for a
-quarter of an hour after the last result.)
+**Empty means retracted, and it is no longer a sticky latch.** The wall must never
+carry an L with nothing in it: when the scheduler has no pick the bar hides itself and
+the strip has no panel to draw, so anything still standing is a matte frame wrapped
+round a shrunken slide, announcing a live surface that is not saying anything.
+
+The history is worth keeping, because both previous numbers looked reasonable and were
+both wrong. Twelve minutes came from the feed-driven question ("is there cricket
+today"), which changes twice a day. Two minutes came from measuring collapsed gaps — a
+median of 30s, a longest of 75s — and picking a number that cleared them all so the
+band rode through a passage of play. Both were answering *"how long a gap should the
+chrome sit through"*, and the answer to that is none: a gap **is** the chrome having
+nothing to say. (Those measurements were also taken while the floor was leaking, so
+the gaps were smaller than the real ones.)
+
+What is left is an **anti-flap guard, not a policy**: `LIVE_HIDE_DEBOUNCE_MS` is
+**6 seconds**, under the band's own `MIN_SHOW_MS`, so it can never hold an emptiness
+anyone reads as a state, and comfortably longer than the 0.7s retraction glide. It
+exists only because the two feeds ingest on separate timers and two polls can land a
+second apart.
+
+**The churn this exposes is real and is not that constant's to fix.** Snapshots arrive
+about one an over, so an ordinary over can leave a genuine gap and the L will come down
+for it. The answer is to keep something worth showing on the band — see *Coverage* —
+not to hold an empty frame up until the next event.
 
 **Measured on `WccClock`, not with a `setTimeout`.** A timeout is real time, and the
-simulator runs an afternoon in a couple of minutes — so a twelve-minute timer would
-never fire in a session and the retraction could not be looked at at all. The engine
+simulator runs an afternoon in a couple of minutes — so a long timer would never fire
+in a session and the retraction could not be looked at at all. It also means a **held**
+clock never retracts: parked at 13:10 to read the inspector, the subtraction stays at
+zero and the L stays up, which is the clock being held meaning what it says. The engine
 rebroadcasts every second regardless of mode, so the quiet spell is a subtraction
 against the scheduler's clock: it advances with the simulated day and stops dead while
 the clock is held.
@@ -627,16 +1031,43 @@ There is no live cricket most days and none at all out of season, so
 `assets/js/live-sim.js` is the whole day in a few minutes.
 
 ```
-python3 scripts/build.py
+WCC_SIM_MATCHES=1 WCC_SIM_LEAGUE=1 WCC_LIVE_ENABLED=1 python3 scripts/build.py
 cd site && python3 -m http.server 8000
 open 'http://localhost:8000/slideshow/live/?sim=matchday'
 ```
+
+**Build with the overrides, not without them** — and a day with no fixtures is exactly
+when that matters, not an excuse to skip them. The match-day board is baked at build
+time, so on an empty day a plain `build.py` produces a perfectly valid site with no
+matches in it: the board drops out of the live deck, `live-config.json` has nothing
+pollable, and the simulator has nowhere to land. A plain build in mid-session silently
+destroyed the day being tested and it is not recoverable, because `site/` is
+gitignored. See the two override sections below.
 
 **It arrives paused** at the start of the day with the first poll already on screen
 (the engine polls once on start, so there is a toss to look at). Nothing moves again
 until you ask it to — which is the state you want on arrival, rather than a running day
 you have to catch. Add **`&play`** to start it running, or **`&at=16:20`** to begin part
 way through the afternoon.
+
+### What the simulator is NOT honest about
+
+Worth knowing before trusting it for anything clip-shaped. `clipsUpTo` does not mirror
+`MatchStreamHighlights`; it is a stand-in written before we had a real sample:
+
+- **No fours at all** — only wickets and sixes, where a real streamed match produced 58
+  four rows against 17 six rows.
+- **`ball` is a constant** — `1` for a wicket, `3` for a six.
+- **`over` is interpolated** from the batter's fall-of-wicket score against the innings
+  total, so every one of a batter's sixes is dated to the same over, and a not-out
+  batter's are all dated "now".
+- **No bowler**, where the real row names one and carries `bowler_id`.
+
+None of that matters to the event stream today, since boundaries are no longer events
+and a wicket's own row only refines timing. It matters the moment anything is built on
+the replay surface. `playInnings` is already a real ball-by-ball engine and knows every
+ball's outcome — it simply discards it here — so the fix is in the adapter, and there
+is now a 96-row sample from a real streamed match to mirror field for field.
 
 ### One axis, and it is the day's own clock
 
@@ -997,18 +1428,22 @@ Nothing is baked into it, so it is honestly empty on a day with no cricket.
 
 **1. The remaining event types have not been written for the L-frame.** Only `toss`
 and `match_started` have had their text and their panel thought about; `wicket`,
-`six`, `four_clip`, `innings_closed`, `match_finished`, `abandoned`, `rain_break`,
-`probability_shift`, `hundred`/`fifty`/`five_for`, `ladder_shift` and `score_update`
-all render on the generic default. Walking them **one at a time** against the
+`innings_closed`, `match_finished`, `abandoned`, `rain_break`, `probability_shift`,
+`hundred`/`fifty`/`five_for`, `ladder_shift` and `match_break` all render on the
+generic default. `score_update` and `wicket` have now been written — club, gold
+figure, blue overs, then a clause: the boundaries just hit, the chase's terms, who is
+still to bat, or the dismissal in scorecard notation. Walking them **one at a time** against the
 simulator is the way this has gone and the way it should continue.
 
 **2. Some type labels are written for a table, not for an 8vw block.** The tile
 renders `TYPES[].label`, so `match_finished` puts "MATCH FINISHED" in the corner where
 "RESULT" belongs. Probably wants a separate tile label per type.
 
-**3. `score_update` for another club can never be shown**: `round(12 × 0.55) = 7`
-against a `SHOW_FLOOR` of 8. A division's coarse scoreline is excluded by arithmetic
-rather than by a decision. Ours holds about 33 seconds uncontested.
+**3. ~~`score_update` for another club can never be shown~~ — ANSWERED by coverage.**
+It was true and it was an accident: `round(12 × 0.55) = 7` against a `SHOW_FLOOR` of 8
+excluded a division's coarse scoreline by arithmetic rather than by a decision. The
+coverage multiplier is the decision — a division score stays out while its match is
+being covered and climbs past the floor when it is not.
 
 **4. The live dot has lost its meaning.** It pulsed for "this match is in play"; beside
 a type label it is decoration, and it is wrong beside `RESULT`.
@@ -1021,8 +1456,11 @@ would be answered by a third mark in the bottom-left slot — a hollow dot to th
 one.
 
 **6. Which events take over the screen.** Footage currently means takeover. Every
-wicket clip pausing the slideshow may be too much; `six` + `wicket` only, or a minimum
-gap between takeovers, are both one constant away.
+wicket clip pausing the slideshow may be too much; a minimum gap between takeovers is
+one constant away. This is also where the **REPLAY** direction lands: a clip is to
+become an event in its own right, with its own caption, score and team graphics —
+at which point `attachClip` is wrong rather than in need of tuning, since it folds
+footage into the incident instead.
 
 **7. The weights are still a starting position**, and now they do more work than they
 did: with `dwell` gone, `base` and `ttl` together decide how long something holds the

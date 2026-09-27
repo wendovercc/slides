@@ -608,18 +608,36 @@ window.addEventListener('resize', applyDebugScale);
 // interactive player offers a live button on the bar, and a press pins the choice
 // for the session (`_livePinned` below). A wall builds no bar, so it can never be
 // pinned and keeps exactly the behaviour described above.
-/* HOW LONG A QUIET SPELL HAS TO BE BEFORE THE BAND IS PUT AWAY. Twelve minutes when
-   the latch was driven by the feed, where the question was "is there cricket today"
-   and the answer changed twice a day. It is now driven by the scheduler, which goes
-   quiet between events all afternoon, so the number has to be picked against the
-   real gaps instead.
-   Measured over thirty minutes of ordinary play across eleven matches, collapsed
-   gaps ran to a median of 30s and a longest of 75s — and to 30s once the floor types
-   were given a dwell worth the name. Two minutes clears every one of them, so the
-   band stays up through a passage of play and comes down a couple of minutes after
-   the cricket actually stops. Twelve minutes did that too, but it also held an empty
-   L on the wall for a quarter of an hour after the last result. */
-const LIVE_HIDE_DEBOUNCE_MS = 2 * 60 * 1000;
+/* EMPTY MEANS RETRACTED. The wall must never carry an L with nothing in it: when the
+   scheduler has no pick the bar hides itself and the strip has no panel to draw, so
+   anything still standing is a matte frame wrapped round a shrunken slide, announcing
+   a live surface that is not saying anything. The slide gets its stage back.
+
+   This is therefore NOT a sticky latch any more, and the history is worth keeping
+   because the numbers look reasonable and were both wrong. Twelve minutes came from
+   the feed-driven question ("is there cricket today"), which changed twice a day. Two
+   minutes came from measuring the collapsed gaps — a median of 30s, a longest of 75s
+   — and picking a number that cleared them all, so that the band rode through a
+   passage of play. Both were answering "how long a gap should the chrome sit through",
+   and the answer to that is none: a gap IS the chrome having nothing to say.
+
+   (Those gap measurements were also taken while the floor leak was live — a
+   below-floor event could take the band off an incumbent, see the rival scan in
+   live-events.js — so the wall was being kept awake by filler it should never have
+   shown, and the gaps were smaller than the real ones.)
+
+   WHAT IS LEFT IS AN ANTI-FLAP GUARD, not a policy. The two feeds run on separate
+   timers and two ingests can land a second apart, so without a small floor the L
+   would tear down and rebuild between a pick and its successor. Six seconds is under
+   the band's own MIN_SHOW_MS, so it can never hold an emptiness anyone reads as a
+   state, and it is comfortably longer than the 0.7s retraction glide.
+
+   THE CHURN THIS EXPOSES IS REAL AND IS NOT THIS CONSTANT'S TO FIX. Snapshots arrive
+   about one an over while `score_update` stays news for three minutes, so an ordinary
+   over can leave a genuine gap and the L will now come down for it. The honest fix is
+   to keep something worth showing on the band — see the coverage discussion in
+   docs/live-events.md — not to hold an empty frame up until the next event. */
+const LIVE_HIDE_DEBOUNCE_MS = 6 * 1000;
 let _chromeShown = false;
 /* The reader's own answer, once they have given one: null until a press, then true
    or false for the rest of the session. It is what makes the latch below a DEFAULT
