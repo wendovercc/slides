@@ -280,6 +280,9 @@
              --sb-fig-sz  the score figure, bounded on both axes (see `.sb-num`)
              --res-h      the verdict badge's box: its own font-size at the
                           line-height 1.6 `.res` gives every one of them */
+        /* The crest's diameter, and with it the width of the gutter the two crests
+           stand in: the connector is centred on it and the lines under them clear it. */
+        --crest: calc(var(--t-md) * var(--tile-u) * 2);
         --sb-fig-sz: min(calc(var(--sb-w) * 0.5), calc(var(--sb-h) * 0.55));
         --res-h: calc(var(--t-sm) * var(--tile-u) * 1.6);
         --sb-line-h: max(var(--sb-fig-sz), var(--res-h)); }
@@ -300,7 +303,8 @@
        the slack: both sides sit as lines at the top of the tile and the spare height
        falls below the pair, which keeps the two results together rather than pushing
        them apart. */
-    .sb-zone { display: flex; flex-direction: column; gap: calc(0.4vh * var(--tile-h)); min-height: 0; }
+    .sb-zone { position: relative; display: flex; flex-direction: column;
+        gap: calc(0.4vh * var(--tile-h)); min-height: 0; }
     .sb-zone.board { flex: 1; }
     .sb-head { position: relative; flex-shrink: 0; display: flex; align-items: baseline;
         gap: calc(0.5vw * var(--tile-w)); white-space: nowrap; }
@@ -309,8 +313,7 @@
        overhanging the apertures below rather than pushing them down. Positioned,
        so it paints over the cells that come after it in the DOM. */
     .sb-crest { position: absolute; left: 0; top: 0; z-index: 1;
-        width: calc(var(--t-md) * var(--tile-u) * 2);
-        height: calc(var(--t-md) * var(--tile-u) * 2);
+        width: var(--crest); height: var(--crest);
         border-radius: 50%; object-fit: contain;
         background: #fff; padding: calc(0.3vh * var(--tile-u)); box-sizing: border-box; }
     .sb-crest[hidden] { display: none; }
@@ -323,7 +326,41 @@
     .sb-names { min-width: 0; display: flex; flex-direction: column; }
     .sb-zone.has-crest .sb-names,
     .sb-zone.has-crest .sb-form,
-    .sb-zone.has-crest .sb-line { padding-left: calc(var(--t-md) * var(--tile-u) * 2 + 0.6vw * var(--tile-w)); }
+    .sb-zone.has-crest .sb-line { padding-left: calc(var(--crest) + 0.6vw * var(--tile-w)); }
+
+    /* ── The two sides are ONE MATCH ──────────────────────────────────────
+       A hairline down the crest gutter from the top crest to the bottom one, with
+       a `v` on it: the tile is read DOWN, and two clubs stacked with a score each
+       are otherwise two tiles' worth of reading that happen to be adjacent. It is
+       the "Wendover vs Chalfont" line the head no longer carries, drawn instead of
+       written — in the gutter, where there is nothing to displace.
+
+       IT IS `.sq-rule`'s HAIRLINE, the divider the other-game tiles already put
+       between their two sides, stood on end. Two stubs and a glyph rather than one
+       rule with the `v` masking it: the tile's background is translucent over the
+       slide's gradient, so a chip painted behind the glyph would seam.
+
+       ON ZONE 1, hung from the bottom of its crest and reaching a gap's worth past
+       its own bottom edge — which is exactly zone 2's crest top, since the gap is
+       the only thing between them.
+
+       TWO STATES ONLY, pre-match and result: while a zone holds the apertures it
+       flexes tall, and a connector anchored to its bottom would run down the left of
+       the grid. Those are also the states where the two sides are symmetric, which
+       is when the cue has something to join. `.playing` is the feed's word for the
+       other one. And only where BOTH sides have a crest — one side missing its badge
+       leaves the rule pointing into an empty indent, so the build bakes
+       `.both-crests` and the feed keeps it honest when a side changes zone. */
+    .sb-vs { position: absolute; z-index: 0; pointer-events: none;
+        left: calc(var(--crest) / 2); transform: translateX(-50%);
+        top: var(--crest); bottom: calc(-0.8vh * var(--tile-h));
+        display: flex; flex-direction: column; align-items: center;
+        gap: calc(0.35vh * var(--tile-h));
+        font-size: calc(var(--t-xs) * var(--tile-u)); line-height: 1;
+        color: var(--muted); opacity: 0.55; }
+    .sb-vs::before, .sb-vs::after { content: ''; flex: 1; min-height: 0;
+        width: var(--hair); background: rgba(255,255,255,0.12); }
+    .sb:not(.both-crests) .sb-vs, .sb.playing .sb-vs { display: none; }
     /* The team under the club. IN FLOW, unlike the crest: it pushes the apertures down rather than hanging
        over them, which is why the `--sb-h` steps below are cut for it. Held open
        at one line when a side has no designation, so the two zones stay level. */
@@ -744,7 +781,8 @@
             <span class="ha{% if not ev.is_home %} away{% endif %}">{{ 'Home' if ev.is_home else 'Away' }}</span>
         </div>
         <div class="md-state">
-            <div class="sb" style="--sb-w: {{ {2: '4.2vw', 3: '5.6vw', 6: '9vw'}[m.span] }}">
+            <div class="sb{% if m.pre.home.crest and m.pre.away.crest %} both-crests{% endif %}"
+                 data-f="board" style="--sb-w: {{ {2: '4.2vw', 3: '5.6vw', 6: '9vw'}[m.span] }}">
                 {#- TWO ZONES IN BATTING ORDER — the side that batted FIRST on top, and
                     it stays there. Which is why both zones are built the same: the
                     working board belongs to whoever is batting NOW, so in the second
@@ -767,6 +805,9 @@
                 {% set side = m.pre.home if z == 1 else m.pre.away %}
                 <div class="sb-zone{% if side.crest %} has-crest{% endif %}"
                      data-f="{{ k }}-zone">
+                    {#- The connector between the two crests. On zone 1 only: it hangs
+                        from that crest and reaches down to the other. -#}
+                    {% if z == 1 %}<span class="sb-vs" aria-hidden="true">v</span>{% endif %}
                     <div class="sb-head">
                         <img class="sb-crest" data-f="{{ k }}-crest" src="{{ side.crest }}" alt=""
                              {% if not side.crest %}hidden{% endif %}>
@@ -1109,7 +1150,11 @@
                 f(el, pk + '-line').hidden = true;
             }
         }
-        if (!scoring) return;
+        /* THE CREST CONNECTOR JOINS THE SYMMETRIC STATES ONLY — see `.sb-vs`. Nothing
+           is being played until there is a scored innings, so here the tile is in one
+           of them and the baked crests are still the ones on show. */
+        var sb = f(el, 'board');
+        if (!scoring) { sb.classList.remove('playing'); return; }
 
         /* WHICH ZONE IS WHICH SIDE: BATTING ORDER, and it does not change all
            afternoon. `innings` arrives in batting order, so innings[0]'s side owns
@@ -1194,6 +1239,15 @@
             }
             setRes(f(el, k + '-res'), mine ? vs.us : vs.them, mine ? pUs : pThem);
         }
+        /* The connector, now the crests have been placed. `playing` is a zone holding
+           apertures — it flexes tall, and the connector is cut for two zones of the
+           same short shape. `both-crests` because the rule joins two badges: the feed
+           can move a crestless side into either zone, and a rule pointing into an
+           empty indent joins nothing. */
+        sb.classList.toggle('playing', !decided);
+        sb.classList.toggle('both-crests',
+            f(el, 'z1-zone').classList.contains('has-crest')
+            && f(el, 'z2-zone').classList.contains('has-crest'));
     }
 
     // ---- the division's other games -----------------------------------------
