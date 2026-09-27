@@ -825,7 +825,7 @@ panel at a time, named by the type in the table above. The set today:
 
 | panel | shows | state |
 |---|---|---|
-| `score` | the two sides, batting first on top, plus target and chase tiles | built |
+| `score` | the match as a vertical scoreboard — see below | built |
 | `ladder` | the division ordered by position, this match's sides marked | built |
 | `form` | how the two sides have been going — five results each | **unbuilt** |
 | `profile` | the player an event is about | **unbuilt** |
@@ -845,6 +845,270 @@ division for this match or a card with innings in it. `panelFor(type, avail)` in
 `panel: 'none'` is deliberately **not** a collapse: the L is still describing
 something, and pulling the column out from under the tile would break the frame
 mid-sentence.
+
+### The `score` panel is the scoreboard stood on its end
+
+> James's direction, 2026-09-27.
+
+The ticker is moving away from being a second scoreboard and towards a plain,
+non-technical headline. The figures do not disappear with it — they move to the strip,
+which already did this well for a run chase. So whenever the strip is **not** showing
+the ladder, the band carries the match's numbers and its state, read top to bottom.
+
+An **innings** is the unit, and it is always written the same way: the side, then its
+figures under it.
+
+| 1st innings | | 2nd innings | |
+|---|---|---|---|
+| | **crest + XI** | | **crest + XI** |
+| gold | Total | gold | Total |
+| gold | Wickets | gold | Wickets |
+| | Overs | | **crest + XI** |
+| | Run rate | gold | Total |
+| | **crest + XI** | gold | Wickets |
+| | TO BAT | | Overs |
+| | | | To win |
+| | | | Balls left |
+| | | | Req rate |
+
+**Gold is the score and nothing else** — total and wickets. Overs, rate and what's
+needed stay white. That is also what binds a team tile to its figures without a box or
+a tighter gap: the gold pair *is* the score line, so the eye groups the three rows
+without being told.
+
+### The scoreboard's team tile is a second dialect
+
+> James's direction, 2026-09-27.
+
+`tile(t, opt)` now draws in one of two dialects, and the difference is the whole of what
+the two panels are for. The **ladder** keeps every channel it had. The **scoreboard**
+(`opt.badge`) names its sides by **crest** and drops the other two identity channels:
+
+| channel | ladder | scoreboard | why |
+|---|---|---|---|
+| name | TLA | **crest over XI** | a scoreboard names two sides, and two it can name properly; ten of these down an 8vw column would be unreadable, and the ladder is about *position*, not identity |
+| our team | gold left bar | **dropped** | with two tiles and the footer naming the XI there is nothing left to pick out — and the bar was competing with the gold score figures for the column's one accent |
+| bat / bowl glyph | shown | **dropped** | the **layout** now says who is batting: each side sits above its own figures, and the lower block is the one with numbers still moving. A glyph is the third telling of it |
+| certainty fill | one per tile | **moved** — one per panel, on "To win" | see below |
+| provisional clock | shown | shown | "decided, not yet official" is a state nothing else on the surface reports |
+
+**The crest is baked, the TLA is its fallback.** `_club_crest()` in `build.py` resolves a
+club-name slug against `assets/images/crests/` — the localised badges `fetch_fixtures`
+already caches — and every strip team row carries a `crest` beside its `tla`. A club with
+no cached badge renders the abbreviation instead, which is exactly what `_team_tla`'s
+docstring has always called itself. On the division tables we play in that is currently
+21 crests out of 25 clubs, so the mixed state is the normal one, not an edge case.
+
+**Any Wendover side takes our own logo**, keyed on the slug and *not* on the `ours`
+flag: another Wendover XI in the same division is not our fixture but is still our
+badge. `/assets/images/wcc-logo.png` is not in `crests/` — that directory is opposition
+badges, and ours has never needed fetching.
+
+**Two lines: the crest, and the XI under it.** The crest *is* the club, so the label is
+not — "DENHAM CC" under the Denham badge is the same fact twice in a band with no room to
+spare. What a badge cannot say is *which* Denham side, and on a division afternoon that is
+the useful half.
+
+**The consequence, and it is deliberate:** in a 1st XI v 1st XI fixture both tiles read
+`1ST XI` and the crest is the only thing telling the two sides apart. That is the trade
+the crest was brought in to make.
+
+**Crest over label, not crest instead of label.** Four of the twenty-five clubs in our
+divisions have no cached badge, and a crest a viewer doesn't recognise is no worse off for
+being labelled. A crest-less club keeps the same tile and simply has no badge; the TLA is
+not printed over a spelt-out label, being the abbreviation *of* a club name.
+
+**The tile grows for it** (`--badge-flex`, 1.5 figure tiles' worth). A crest over a label
+will not read at a figure tile's height; the figures give up a little in exchange, being
+single numbers. `scorePanel` counts the same figure when it sizes the spacer, so the CSS
+token and the JS constant have to stay in step — one value in two languages.
+
+**`_desig_of()` is the other half of `_club_of()`**, splitting a league-table team name on
+` - `. Designations are not a closed set — alongside `1st XI` the tables carry
+`Saturday 2XI`, `Under 15 Spitfires` and `Under 10 - Hurricanes` — so it takes the whole
+tail rather than parsing a number out of it, and it requires spaces around the separator
+so a hyphenated club (`Chenies & Latimer`, `Winchmore Hill`) is never cut in half.
+
+**No designation is a real case**, and `badgeLabel()` holds the chain for it. Some tables
+name teams by club alone — the women's indoor softball division does — so there is no XI
+to print, and a bare crest with nothing under it says less than the club would. Our own
+row never falls that far: the build fills its `desig` from the fixture's own team name
+when the table has none. So that panel comes out asymmetric — `WOMEN'S SOFTBALL KITES`
+against `CHESHAM CC` — each side taking the best name it has.
+
+**The step-down is decided once per panel, from both labels.** Per tile, an "Under 15
+Spitfires" beside a "1st XI" would set the two sides of one scoreboard at two different
+type sizes, which reads as a mistake rather than as a fit. The scoreboard's bounds are
+also looser than the footer's — a smaller face with two lines to wrap into, about 14
+characters a line — so `tooWide` took its thresholds as arguments and the footer kept its
+own. An XI sails inside them; what does not is a junior designation or a club name
+standing in for a missing one.
+
+**White disc, contained** — `.tile.badge img`, the club's own idiom from `.sb-crest` and
+`.crest img`. The white is load-bearing rather than decorative: the cached badges are
+transparent PNGs drawn for light backgrounds, and several are dark line art that would
+vanish on the matte.
+
+### One swingometer, on "To win" — the board's arrangement
+
+> James's direction, 2026-09-27.
+
+The lean does not disappear from the scoreboard, it **moves**: off the two team tiles and
+onto the **"To win" figure**, one fill per panel. Which is exactly what the match-day
+board already does, and for the reason its own comment gives — that is "the one aperture
+that is about the outcome rather than the score".
+
+Two tiles leaning opposite ways is one fact told twice, in a column that is already
+carrying both sides' figures. Ten tiles each leaning is the ladder's whole point, so the
+ladder keeps it per tile.
+
+The channels are unchanged and now come out of one function, `fill(lean, certainty)`,
+because two places paint it:
+
+- **colour** = the lean, always the full outcome colour, never washed out;
+- **height** = the certainty, a band rising from the bottom, capped below 1 so a game
+  still being played never paints a full tile.
+
+**It is not mirrored and does not need to be.** The figure belongs to the side chasing,
+so the fill under it is theirs — the same argument the board makes for its aperture
+("'To win' only ever appears in the batting zone").
+
+**The two channels come straight off the chasing side's tile state** (`tiles[1]`, by
+construction), *not* from a second call into the chase model. `assess` has already priced
+that side — from `WccChase.chaseState` while the game runs, from the feed's own verdict
+once it is decided — and has already mirrored it onto the right side. Asking the model
+again would be a second opinion where the entire point of the shared module is that the
+ladder, the board and this tile give one.
+
+**That settles the result state for free, and differently from the board.** The board
+drops its apertures at the close and posts a verdict badge instead. The strip has no
+badge, so the tile keeps its fill and `assess` makes it a full one in the outcome's
+colour — certainty 1, which is what a decided match is. Without that, a finished match on
+the scoreboard would carry no outcome colour at all for the half hour it stays on screen.
+
+Between the innings there is no fill: `chaseState` needs two innings, so the To-bat
+slot's target figure stands on its own until the chase begins.
+
+`.cval` and `.clabel` became `position: relative; z-index: 1` to sit on top of the fill,
+the same fix the board needed for `.sb-cell > .sb-label, .sb-cell > .sb-num`.
+
+**Ten tiles in the second innings** — exactly the column the ladder is built for, so
+the panel fills the band with no spacer and no stretching. The first innings is seven,
+and the spacer takes the remaining three shares so the tiles keep the ladder's height.
+A `flex: 1` spacer beside ten `flex: 1` tiles would make every tile an eleventh of the
+column and put the panel visibly out of step with the ladder it shares the band with,
+so at ten the spacer is omitted outright rather than floored at one.
+
+**The side batting is always the lower block**, which is where the eye already is
+coming out of the corner. That falls out of `matchTiles` putting the side that batted
+first on top, and is why one ordering reads correctly in both innings.
+
+**The first innings keeps its overs; the closed one loses them.** During a chase the
+first block is total and wickets only — its overs are spent, and the figure that
+matters about a closed innings is what it set.
+
+### The panel is a scorebox, and the live figures are apertures in it
+
+> James's direction, 2026-09-27.
+
+The score panel's tiles sit in a **pale housing** (`.housing`) and the figures of the side
+**currently batting** are **sunk into dark apertures** in it. Which is the match-day
+board's scoreboard, in this column's terms — `--housing` is the colour the board's `.sb`
+sits on, and `--aperture` is its `.sb-cell` exactly: "digits sunk into a dark panel, as
+they are on a board: the figure is what carries, the housing recedes."
+
+**One dark tone does two of the board's jobs**, because here they coincide. The board has
+an aperture for a figure that is still moving (`.sb-cell`) *and* a recess for the side that
+is in (`.sq-bat`, "a recess is the same thing the scoreboard's apertures do with the
+figures that matter"). The figures still moving *are* the batting side's, so one tone says
+both.
+
+**The housing goes behind the tiles, not under the whole column** — that is the whole
+reason for it. Light shows through the gaps, so a run of batting tiles reads as **separate
+apertures in a scorebox** rather than one continuous recess. The first attempt put the dark
+shade straight onto the matte and got the continuous version, which is right for the
+board's `.sq-bat` (it bleeds full width on purpose) and wrong for a column of figures.
+`.housing` also carries padding, so the pale shows on all four sides of every aperture
+rather than only between them.
+
+**Both blocks are wrapped (`.blk`), only one is pale (`.blk.box`)**, and the off-box
+wrapper earns its place twice over. It carries no background, so the matte shows through it
+whole — tiles and gaps alike — and the side watching reads as one continuous dark region.
+Beyond that:
+
+- **No fourth shade.** Left as the column's own children, those tiles kept `.tile`'s
+  `rgba(255,255,255,0.06)`, which over the matte composites to `#172339` — a washed-out
+  grey-blue that is neither the matte (`#08152c`) nor the housing (`#162744`), and visibly
+  duller and darker than the pale it sits against. Three definite tones is the design; a
+  translucent wash of one of them is a fourth.
+- **One tile width.** The housing's padding insets its tiles, so an unwrapped block's tiles
+  were wider than the boxed block's by 0.4vh a side. Same wrapper, same padding, same
+  width, whichever block a tile is in.
+
+**And it wraps ONE BLOCK, not the panel: the innings on show.** The side not batting keeps
+the column's own matte. That is what makes the box mean something rather than being the
+panel's backdrop — pale is the innings being played, matte is the side watching it, and
+inside the pale the apertures are the figures still moving.
+
+It could not have been done the other way round, by tinting the bowling side's tiles dark
+inside a full-width housing: the matte and an aperture over the housing composite to within
+a couple of units of each other (`#08152c` against about `#0e192c`), so a dark bowling tile
+would have read as an aperture — the exact opposite of what it is.
+
+So `scorePanel` builds **two blocks**, a side's crest plus the figures belonging to it, each
+carrying its own share count. `box` is the innings on show, `other` is the side watching.
+Which one comes first never changes — the side that batted first is always on top — so the
+box simply **moves down the column at the innings break**: it is the upper block in the
+first innings, the lower one in the chase.
+
+**A pre-match card gets no box at all.** There are no figures to house, so both sides sit
+plainly on the matte, which is the state the tiles are already in.
+
+**And the tiles inside give up their own background: two shades, not three.** The board's
+note on its division heading is the precedent — "a container tint under a group of tiles
+that already have their own backgrounds was a third shade doing what the centring does for
+nothing." A settled figure therefore sits flush on the housing, which is also the board's
+own grammar for one (a closed innings is "stated on a line beneath", on the tile, not in an
+aperture). What still marks it settled is the dimmed value.
+
+**Outside the box:** the other side's tiles, the trailing spacer and the footer, all on the
+matte. So the box is exactly as tall as the innings on show, and the footer stays chrome
+instead of becoming the scoreboard's bottom edge. Each part takes its own shares, so every
+tile keeps the height it had when they were all the column's own children.
+
+**Only while an innings is open.** At the interval and at the close nobody is in, so
+nothing is sunk — the board's rule for `.sq-bat` ("not shown on a decided game"). The first
+innings sinks while it runs and comes up flush and settled the moment it closes; the chase
+then sinks in its place, taking the chase block with it, since those figures are the
+chasing side's too. Which makes the pair legible without a legend: **sunk means live
+figures, flush-and-dimmed means figures that cannot change.**
+
+**Settled figures read quieter** (`.stat-tile.done`): flatter base, dimmer value, and
+gold dimmed *as gold* rather than falling back to white, or a closed innings would stop
+looking like a score. Two things are settled — every figure of a finished match, under
+the `FINAL` caption, and a closed innings while the next one runs. Same treatment,
+because they mean the same thing: this number cannot change again. It is also what
+keeps the live half of a chase the brighter one.
+
+**Two tiles were dropped, each because it answered a question twice:**
+
+- `Target`, the panel's one figure under v1. The chase block's **To win** is the same
+  fact live (target minus what they have), and between the innings the To-bat slot
+  shows the target outright — a standing `Target` beside a falling `To win` was two
+  numbers for one question.
+- `Wkts left`. The chasing side's own `Wickets` tile now sits three rows up, and a
+  column carrying both "3 wickets" and "7 wkts left" makes the reader subtract twice to
+  check they agree. The scoreboard's figure wins, because it is the one a scoreboard
+  states.
+
+**The To-bat slot takes a figure once there is one.** While the first innings is
+running, "TO BAT" under the fielding side is the only true thing to write. Once that
+innings closes, the slot carries the **target** instead — the whole news of the
+interval, and otherwise unsaid until the chase begins.
+
+**A pre-match card writes no figures.** With the toss in and no ball faced the panel is
+the two sides and their glyphs, which is the honest state and the one the tiles are
+already in.
 
 ### What the conversion deleted
 

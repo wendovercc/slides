@@ -3028,18 +3028,6 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
     offline) and build_live_config (its match subset = the Worker's poll list)."""
     today_iso = _today().isoformat()
 
-    def opp_crest(club_name):
-        """Public path of an already-committed opposition crest (by club-name
-        slug), or None. Reuses the localised badges fetch_fixtures caches; no
-        scrape here — an away friendly with no cached crest just renders name-only."""
-        slug = re.sub(r"[^a-z0-9]+", "-", (club_name or "").lower()).strip("-")
-        if not slug:
-            return None
-        for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
-            if (ASSETS / "images" / "crests" / f"{slug}{ext}").exists():
-                return f"/assets/images/crests/{slug}{ext}"
-        return None
-
     def to_iso(s):
         try:
             return datetime.strptime(s, "%d/%m/%Y").date().isoformat()
@@ -3081,7 +3069,7 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 # Crests for the live innings scoreline — batting side picks ours
                 # or the opposition's by name at render time.
                 "our_crest": "/assets/images/wcc-logo.png",
-                "opp_crest": opp_crest(f.get("opposition_club_name") or f.get("opposition_team_name")),
+                "opp_crest": _club_crest(f.get("opposition_club_name") or f.get("opposition_team_name")),
             }
             events.append(m)
             if pc_id:
@@ -3782,6 +3770,30 @@ def build_live_ticker(env):
     print("  live-ticker overlay → /live-ticker/")
 
 
+# Our own badge. Not in `crests/` — that directory is the localised OPPOSITION
+# badges `fetch_fixtures` caches, and ours has never needed fetching.
+OUR_CREST = "/assets/images/wcc-logo.png"
+
+
+def _club_crest(club_name):
+    """Public path of a club's badge, by club-name slug, or None.
+
+    Reuses the localised badges `fetch_fixtures` caches; no scrape here, so a club
+    with no cached crest simply has none and its caller falls back to the name or
+    the TLA. Any Wendover side takes our own logo — every XI in the club shares it,
+    so this must not be keyed on "is this OUR fixture's team".
+    """
+    slug = re.sub(r"[^a-z0-9]+", "-", (club_name or "").lower()).strip("-")
+    if not slug:
+        return None
+    if slug.startswith("wendover"):
+        return OUR_CREST
+    for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"):
+        if (ASSETS / "images" / "crests" / f"{slug}{ext}").exists():
+            return f"/assets/images/crests/{slug}{ext}"
+    return None
+
+
 def _team_tla(club_name):
     """Short 2–4 char tag for a club (Frogbox-style), the ladder's crest fallback.
     Initials of the significant words; a single-word club takes its first 3 letters.
@@ -3799,6 +3811,23 @@ def _club_of(team_name):
     """Club portion of a league-table team name ('Maidenhead & Bray CC - 3rd XI'
     -> 'Maidenhead & Bray CC')."""
     return re.sub(r"\s*-\s*.*$", "", team_name or "").strip()
+
+
+def _desig_of(team_name):
+    """Designation portion of a league-table team name ('Maidenhead & Bray CC -
+    3rd XI' -> '3rd XI'), or '' when the name carries none.
+
+    The other half of `_club_of`, and it exists for the strip's scoreboard: the crest
+    names the club, so the tile under it names the TEAM. The two are separate lines
+    because the club is what a viewer recognises and the XI is what qualifies it —
+    the same split as the match-day board's `.sb-team` / `.sb-desig`.
+
+    Designations are not a closed set: alongside '1st XI' the tables carry
+    'Saturday 2XI', 'Sunday 1st XI' and similar, so this takes whatever follows the
+    separator rather than trying to parse a number out of it.
+    """
+    parts = re.split(r"\s+-\s+", team_name or "", maxsplit=1)
+    return parts[1].strip() if len(parts) > 1 else ""
 
 
 def _table_counts_today(raw, ev):
@@ -3850,9 +3879,24 @@ def _strip_league_view(ev, our_team_id, by_comp):
     teams = []
     for r in lt.get("values", []):
         club = _club_of(r.get("column_1"))
+        tid_raw = str(r.get("team_id") or "")
+        # The XI, which is what the scoreboard tile is labelled with. Some tables name
+        # teams by club alone (the women's indoor softball division), leaving nothing
+        # to label with — for OUR row the fixture knows it anyway, and for anyone
+        # else's the tile falls back to the club (see live-strip.html).
+        desig = _desig_of(r.get("column_1"))
+        if not desig and tid_raw == our_team_id:
+            desig = ev.get("team_name") or ""
         tid = str(r.get("team_id") or "")
         st = standings.get(tid) or {}
         teams.append({
+            # The crest is what the strip's SCOREBOARD names a side by; the TLA
+            # stays as its fallback (a club with no cached badge) and is what the
+            # ladder uses throughout — ten crests down an 8vw column would be
+            # unreadable, and the ladder is about position, not identity.
+            "crest": _club_crest(club),
+            # The scoreboard labels its two sides under their crests with the XI.
+            "desig": desig,
             "tla": _team_tla(club),
             # The club name is what the live feeds name a batting side by, so it's
             # the join key for "is this tile's team batting?" (team ids don't appear
@@ -3911,11 +3955,19 @@ def _strip_friendly_view(ev, our_team_id):
     provisional — the runtime puts the side that batted first on top once the feed
     says who did — and the chase panel fills the space below."""
     opp_id = str(ev.get("opposition_team_id") or "")
-    ours = {"tla": _team_tla(ev.get("our_club") or "Wendover CC"),
-            "club": ev.get("our_club") or "Wendover CC",
+    our_club = ev.get("our_club") or "Wendover CC"
+    ours = {"crest": _club_crest(our_club), "tla": _team_tla(our_club),
+            "club": our_club,
+            # Our own XI is named by the fixture rather than by a table row.
+            "desig": ev.get("team_name") or "",
             "team_id": our_team_id, "ours": True}
     opp_club = ev.get("opposition") or ev.get("opposition_team") or ""
-    opp = {"tla": _team_tla(opp_club), "club": opp_club, "team_id": opp_id, "ours": False}
+    # The crest is keyed on the CLUB, and a fixture's opposition can arrive as a
+    # team ("Denham CC - 2nd XI"), which would slug to nothing on disk. `club` itself
+    # stays as the feed wrote it — it is a join key for the scorecard's batting side.
+    opp = {"crest": _club_crest(_club_of(opp_club)), "tla": _team_tla(opp_club),
+           "club": opp_club, "desig": _desig_of(opp_club),
+           "team_id": opp_id, "ours": False}
     return {
         "mode": "friendly",
         "pc_id": ev["pc_id"],

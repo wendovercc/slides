@@ -17,6 +17,32 @@
             --rule: 1.875vw;
             /* Match the points badges elsewhere (--accent-win / --accent-loss). */
             --win: 45, 122, 45; --loss: 139, 26, 26;   /* rgb triples */
+            /* THE SCOREBOX AND ITS APERTURES — the match-day board's scoreboard, in
+               this column's terms.
+
+               `--housing` is what the board's `.sb` sits on: its match tile's
+               `rgba(255,255,255,0.05)` over the slide's navy, stated here as the colour
+               it composites to so the two surfaces match whatever each is layered on.
+               `--aperture` is the board's `.sb-cell` exactly — "digits sunk into a dark
+               panel, as they are on a board: the figure is what carries, the housing
+               recedes."
+
+               ONE DECLARATION DOES TWO OF THE BOARD'S JOBS HERE, because on this
+               surface they coincide: the board's aperture (`.sb-cell`, a figure that is
+               still moving) and its batting recess (`.sq-bat`, "a recess is the same
+               thing the scoreboard's apertures do with the figures that matter"). The
+               figures still moving ARE the batting side's, so one dark tone says both.
+
+               THE GAPS ARE THE HOUSING, which is the whole point of putting the pale
+               shade behind the tiles rather than under the whole column: light shows
+               around every dark tile, so a run of them reads as separate apertures in a
+               scorebox instead of one continuous recess. */
+            --housing: #162744; --aperture: rgba(0,0,0,0.35);
+            /* How many of a figure tile's shares a SCOREBOARD team tile takes: a
+               crest over a label needs more room than a single number. `scorePanel`
+               counts the same figure when it sizes the spacer, so the two cannot
+               drift — keep them in step. */
+            --badge-flex: 1.5;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
         html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
@@ -62,17 +88,83 @@
         .tla { position: relative; z-index: 1;
             font-size: 3.2vh; font-weight: 900; letter-spacing: 0.02em; text-align: center; }
 
+        /* THE SIDE, in the SCOREBOARD only (`.tile.badge`) — never in the ladder, where
+           ten of these down an 8vw column would be unreadable and position, not
+           identity, is the point. Two lines: the crest, and the TEAM under it.
+
+           THE CREST IS THE CLUB, so the label is not. Spelling out "Denham CC" under
+           the Denham badge is the same fact twice, in a band with no room to spare;
+           what the badge cannot say is WHICH Denham side, and on a division afternoon
+           that is the useful half. So the label is the XI alone — "1st XI",
+           "Under 15 Spitfires" — and the crest carries the club.
+
+           CREST OVER LABEL, not crest instead of label. Four of the twenty-five clubs
+           in our divisions have no cached badge, and a crest a viewer doesn't recognise
+           is no worse off for being labelled.
+
+           THE TILE GROWS FOR IT. Two stacked lines will not read at a figure tile's
+           height, so a badge tile takes `--badge-flex` shares of the column against a
+           figure tile's one. The figures give up a little height in exchange; they are
+           single numbers and can afford it. `scorePanel` counts the same constant when
+           it sizes the spacer, so a short panel still stops at the ladder's height. */
+        .tile.badge { flex: var(--badge-flex); flex-direction: column;
+            gap: 0.45vh; padding: 0.5vh 0.35vh; }
+        /* The club's own crest idiom, as `.sb-crest` and `.crest img` have it
+           everywhere else on the wall: contained in a white disc. The white is
+           load-bearing, not decoration — the cached badges are transparent PNGs drawn
+           for light backgrounds, and several are dark line art that would vanish on
+           the matte. `object-fit: contain` inside a square so a non-square badge is
+           never cropped or stretched. `flex-shrink: 0` so the name lines can never
+           squeeze it out of round. */
+        .tile.badge img { position: relative; z-index: 1; flex-shrink: 0;
+            width: 5.4vh; height: 5.4vh; border-radius: 50%; object-fit: contain;
+            background: #fff; padding: 0.4vh; box-sizing: border-box; }
+        /* The label. WRAPS TO TWO LINES rather than ellipsing on one: an XI is not
+           always "1st XI" — the junior tables carry "Under 15 Spitfires" and even
+           "Under 10 - Hurricanes", which at this size is wider than the band, and
+           "UNDER 10 - HURRICA…" is worse than the same thing on two lines. Clamped at
+           two so a pathological one cannot push the crest out of the tile. */
+        .bname { position: relative; z-index: 1; text-align: center;
+            font-size: 1.6vh; font-weight: 900; letter-spacing: 0.03em;
+            text-transform: uppercase; line-height: 1.1;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden; max-width: 100%; }
+        /* Long labels step down; the binding constraint is the longest WORD, which
+           cannot be broken. See badgeIsLong — the panel decides it for both tiles. */
+        .tile.badge.is-long .bname { font-size: 1.3vh; letter-spacing: 0; }
+
         /* Friendly view: the same tiles as the league view, but only two of them,
            each capped at the 10-tile height with empty space below (the spacer takes
            the remaining flex share). */
         .spacer { flex: 8; min-height: 0; }
 
-        /* Chase stats: one full-size tile per stat (same as a team tile), stacked
-           under the 2nd (chasing) tile during a run chase; value + label centred. */
+        /* FIGURE TILES: one full-size tile per number (same footprint as a team
+           tile), value over caption. These are what make the `score` panel a
+           vertical scoreboard — an innings is a team tile followed by its figures,
+           read top to bottom the way the ticker reads left to right. */
         .stat-tile { flex-direction: column; gap: 0.3vh; }
+        /* Positioned, like `.tla`, so the figure stays on top of its own swingometer
+           fill: an absolutely positioned child with `z-index: 0` would otherwise
+           paint over static siblings. Same fix as the board's
+           `.sb-cell > .sb-label, .sb-cell > .sb-num`. */
+        .cval, .clabel { position: relative; z-index: 1; }
         .cval { font-size: 3.4vh; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
         .clabel { font-size: 1.4vh; font-weight: 700; letter-spacing: 0.04em;
             text-transform: uppercase; color: rgba(255,255,255,0.6); }
+
+        /* THE SCORE ITSELF IS GOLD — total and wickets, and nothing else in the
+           column. Gold is the one accent here (see docs/design-conventions.md), so
+           it goes on the headline figure and the rest of the scoreboard — overs,
+           rate, what's needed — stays white. That is also what binds a team tile to
+           its two figures without a box or a tighter gap: the gold pair IS the
+           score line, so the eye groups them without being told. */
+        .stat-tile.gold .cval { color: var(--gold); }
+
+        /* A tile with a caption and no figure: "TO BAT" under the side yet to come
+           in. The label carries the whole tile, so it sits up from caption size and
+           brightness towards the team tiles it sits among. */
+        .stat-tile.note .clabel { font-size: 1.7vh; color: rgba(255,255,255,0.75);
+            letter-spacing: 0.08em; }
 
         /* THE FOOTER: whose match this panel is about, in the band directly above the
            gold tile.
@@ -126,16 +218,82 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 1.3vh; font-weight: 900; letter-spacing: 0.14em;
             text-transform: uppercase; color: rgba(255,255,255,0.5); }
-        /* Settled stats: a touch quieter than the live ones, under that caption. */
+        /* SETTLED FIGURES read quieter than live ones — a touch flatter, a touch
+           dimmer. Two things are settled: every figure of a finished match (under
+           the FINAL caption), and a CLOSED innings while the next one is running,
+           which is the first-innings block during a chase. Same treatment for both,
+           because they mean the same thing — this number cannot change again — and
+           it is what keeps the live half of a chase the brighter one. Gold dims as
+           gold; it must not fall back to white here, or a closed innings would stop
+           looking like a score. */
         .stat-tile.done { background: rgba(255,255,255,0.04); }
         .stat-tile.done .cval { color: rgba(255,255,255,0.78); }
+        .stat-tile.gold.done .cval { color: rgba(212,175,55,0.78); }
+
+        /* ── THE SCOREBOX ─────────────────────────────────────────────────────
+           The pale housing the score panel's tiles sit in, so the dark apertures read
+           as sunk into something. Only the score panel has one: the ladder is ten
+           equal tiles on the matte and has no scoreboard to be the housing OF.
+
+           IT WRAPS THE TILES, not the column. The matte still runs behind the footer
+           and behind the trailing spacer, so the scorebox is exactly as tall as the
+           match has figures to put in it — and the footer stays chrome rather than
+           becoming the bottom of the scoreboard.
+
+           PADDING, so the housing shows on all four sides of every aperture. Without
+           it the dark tiles bleed to the column's edges and the separation is only
+           horizontal.
+
+           AND THE TILES INSIDE IT GIVE UP THEIR OWN BACKGROUND. Two shades, not three:
+           the board's note on its division heading is the precedent — "a container tint
+           under a group of tiles that already have their own backgrounds was a third
+           shade doing what the centring does for nothing." So a settled figure sits
+           directly on the housing, which is also the board's own grammar for one (a
+           closed innings is "stated on a line beneath", on the tile, not in an
+           aperture). What still marks it as settled is the dimmed value. */
+        /* BOTH BLOCKS ARE WRAPPED, and only one of them is pale. The off-box wrapper
+           carries no background at all, so the column's matte shows through it whole —
+           tiles and gaps alike — and the side watching reads as one continuous dark
+           region. It exists for two reasons beyond that:
+
+           NO FOURTH SHADE. Left as the column's own children these tiles kept `.tile`'s
+           `rgba(255,255,255,0.06)`, which over the matte composites to #172339 — a
+           washed-out grey-blue that is neither the matte (#08152c) nor the housing
+           (#162744), and visibly duller and darker than the pale it sits against. Three
+           tones, each definite, is the whole design; a translucent wash of one of them
+           is a fourth.
+
+           AND ONE TILE WIDTH. The housing's padding insets its tiles, so an unwrapped
+           block's tiles were wider than the boxed block's by 0.4vh a side. Same wrapper,
+           same padding, same width — whichever block a tile is in. */
+        .blk { display: flex; flex-direction: column; gap: 0.4vh; min-height: 0;
+            padding: 0.4vh; }
+        .blk.box { background: var(--housing); }
+        .blk .tile, .blk .stat-tile.done { background: transparent; }
+        /* WHO IS IN — the aperture, on the figures of the side currently batting. It
+           has to out-specify the transparency above, which is why it is scoped to the
+           block too rather than standing on `.stat-tile.batting` alone. Apertures only
+           ever land in the pale block, since that is the one holding the innings on
+           show, so this needs no `.box` of its own.
+
+           ONLY WHILE AN INNINGS IS OPEN. At the interval and at the close nobody is in,
+           so nothing is sunk — the same rule the board states for `.sq-bat` ("not shown
+           on a decided game"). Which makes the pair legible without a legend: sunk means
+           live figures, flush-and-dimmed means figures that cannot change. */
+        .blk .stat-tile.batting { background: var(--aperture); }
 
         /* Our team: a thick gold bar down the tile's left edge. A real border, not
            an inset shadow: the tile now reaches the frame, so there is no gutter
            left to hang an outside bar in — and an INSET shadow would be painted
            under the .fill child and disappear as certainty rose. The border also
            holds the fill off it, since an absolutely positioned child resolves
-           against the padding box. */
+           against the padding box.
+
+           LADDER ONLY. In the ladder it answers "which of these ten is us", which is
+           the first thing a viewer wants from a division column. A scoreboard has
+           two sides and the footer has just named the XI, so there is nothing left to
+           pick out — and the bar was competing with the gold score figures for the
+           one accent the column is allowed. */
         .tile.ours { border-left: 0.6vh solid var(--gold); }
 
         /* Idle 'none' (no match): flatter base and a dimmed TLA so it recedes. */
@@ -220,25 +378,76 @@
     // high the fill rises, not its colour.
     function leanColour(lean) { return lean === 'win' ? 'rgb(45,122,45)' : 'rgb(139,26,26)'; }
 
-    function tile(t) {
+    /* THE SWINGOMETER, one span, two channels — the wall's one language for "who is
+       winning", shared with the ladder tile it came from and the match-day board's
+       `.sb-fill`:
+
+         FILL COLOUR  = the lean, always the full outcome colour, never washed out
+         FILL HEIGHT  = the certainty, a band rising from the bottom
+
+       Extracted because it is now painted in two places (a ladder tile, and the
+       scoreboard's "To win" figure) and those two must not drift apart. */
+    function fill(lean, certainty) {
+        var h = Math.round(Math.max(0, Math.min(1, certainty || 0)) * 100);
+        return '<span class="fill" style="height:' + h + '%;background:' + leanColour(lean) + '"></span>';
+    }
+
+    /* A TEAM TILE, in one of two dialects.
+       > James's direction, 2026-09-27.
+
+       The LADDER (default) is unchanged: TLA, gold bar on our own tile, bat/bowl
+       glyph for the live role. Ten rows in an 8vw column, where the job is position.
+
+       The SCOREBOARD (`opt.badge`) names its two sides by CREST and drops both of
+       the other identity channels:
+
+       - **the gold bar**, because with two tiles and the footer naming the XI there
+         is nothing left to pick out, and it was competing with the gold score figures
+         for the column's one accent;
+       - **the bat and ball glyphs**, because the LAYOUT now says who is batting —
+         each side sits above its own figures, and the lower block is the one with
+         numbers still moving. A glyph repeating that is the third telling of it.
+
+       - **the certainty fill**, which does not disappear but MOVES: the scoreboard
+         paints one swingometer, on its "To win" tile, exactly as the match-day board
+         paints one on its "To win" aperture. See `scorePanel`.
+
+       The provisional clock stays — "decided, not yet official" is a state nothing
+       else on the surface reports. */
+    function tile(t, opt) {
+        opt = opt || {};
+        /* The DIALECT, not "does this club have a badge". A crest-less side still gets
+           the taller tile and the name lines, so the two sides of a scoreboard are the
+           same shape whether or not both badges are cached — four of the twenty-five
+           clubs in our divisions are not. */
+        var badge = !!opt.badge;
         var cls = ['tile'];
-        if (t.ours) cls.push('ours');
+        if (badge) cls.push('badge');
+        // The panel decides this, not the tile — see badgeIsLong.
+        if (badge && opt.long) cls.push('is-long');
+        // The gold bar is a ladder channel; the scoreboard has no use for it.
+        if (t.ours && !opt.badge) cls.push('ours');
         if (t.idle === 'none') cls.push('idle-none');
         if (t.idle === 'nodata') cls.push('idle-nodata');
 
         var inner = '';
-        // Certainty fill first (sits behind the content).
-        if (t.lean) {
-            var h = Math.round(Math.max(0, Math.min(1, t.certainty || 0)) * 100);
-            inner += '<span class="fill" style="height:' + h + '%;background:' + leanColour(t.lean) + '"></span>';
-        }
+        /* Certainty fill first (sits behind the content) — LADDER ONLY. Ten tiles
+           each leaning is the ladder's whole point; two tiles leaning opposite ways
+           is one fact told twice, in a column that is already carrying both sides'
+           figures. The scoreboard paints it once instead, on "To win". */
+        if (t.lean && !opt.badge) inner += fill(t.lean, t.certainty);
         // Bottom-left slot: bat/bowl while in play, else a clock while the result is
-        // provisional (done, not yet published).
-        if (t.role && GLYPH[t.role]) inner += '<span class="role">' + GLYPH[t.role] + '</span>';
+        // provisional (done, not yet published). The scoreboard keeps only the clock.
+        if (t.role && GLYPH[t.role] && !opt.badge) inner += '<span class="role">' + GLYPH[t.role] + '</span>';
         else if (t.provisional) inner += '<span class="role">' + GLYPH.prov + '</span>';
-        // The tile shows the abbreviation; a chase (object) is rendered separately by
-        // the panel below, never on the tile.
-        inner += '<span class="tla">' + esc(t.tla) + '</span>';
+        /* THE SCOREBOARD: crest over label. The badge is skipped when the club has
+           none cached and the label stands on its own.
+           THE LADDER: the abbreviation, which is all an 8vw ten-tile column can hold.
+           A chase (object) is rendered separately by the panel below, never here. */
+        if (badge) {
+            if (t.crest) inner += '<img src="' + esc(t.crest) + '" alt="' + esc(t.tla) + '">';
+            inner += '<span class="bname">' + esc(badgeLabel(t)) + '</span>';
+        } else inner += '<span class="tla">' + esc(t.tla) + '</span>';
         // The arrow carries direction, the numeral how far — a one-place nudge and a
         // four-place surge are very different things, and the arrow alone hid that.
         // Bare arrow for a single place, so the common case stays quiet.
@@ -256,12 +465,40 @@
        clubs is answered by the panel's own tiles. Every view the strip holds today is
        one of OURS (the views are baked per Wendover match), so the second case only
        arrives when the strip starts taking its subject from the event stream. */
-    function isLongLabel(label) {
+    /* WHAT A SCOREBOARD TILE IS LABELLED WITH: the XI, because the crest above it has
+       already said the club and an 8vw band has no room to say it twice.
+
+       THE CLUB IS THE FALLBACK, not the label. Some tables name their teams by club
+       alone — the women's indoor softball division does — so there is no XI to print,
+       and a bare crest with nothing under it says less than the club would. Our own row
+       does not reach that far: the build fills its `desig` from the fixture's own team
+       name when the table has none. The TLA is the last resort, for a page old enough
+       to be served a view with neither field in it. */
+    function badgeLabel(t) { return t.desig || t.club || t.tla || ''; }
+
+    /* Does a label need the step-down? Two bounds, because a band this narrow is
+       constrained in two ways: the whole string over however many lines it may wrap
+       to, and the longest single WORD, which cannot be broken at all. */
+    function tooWide(label, maxChars, maxWord) {
         var longest = 0;
         String(label || '').split(/\s+/).forEach(function (w) {
             if (w.length > longest) longest = w.length;
         });
-        return String(label || '').length > 9 || longest > 6;
+        return String(label || '').length > maxChars || longest > maxWord;
+    }
+    // The footer's bounds: one line at 1.7vh, clamped to two.
+    function isLongLabel(label) { return tooWide(label, 9, 6); }
+    /* The SCOREBOARD tile's bounds, and deliberately looser than the footer's — it is
+       a smaller face with two lines to wrap into, which measures out at about 14
+       characters a line. An XI normally sails inside it ("1ST XI"); what does not is a
+       junior designation ("Under 15 Spitfires", "Under 10 - Hurricanes") or a club name
+       standing in for a missing one ("Penn & Tylers Green CC", longest word 10).
+
+       DECIDED ONCE FOR THE WHOLE PANEL, from BOTH labels. Per tile, an "Under 15
+       Spitfires" beside a "1st XI" would set the two sides of one scoreboard at two
+       different type sizes, which reads as a mistake rather than as a fit. */
+    function badgeIsLong(labels) {
+        return labels.some(function (n) { return tooWide(n, 22, 11); });
     }
     function footer(view, ev) {
         /* WHOSE MATCH, from the event when there is one. Ours names the XI over the
@@ -278,11 +515,38 @@
                '<span class="foot-div">' + esc(div) + '</span></div>';
     }
 
-    // One full-size stat tile (same footprint as a team tile): value over caption.
-    function statTile(val, label, done) {
-        return '<div class="tile stat-tile' + (done ? ' done' : '') + '">' +
+    /* One full-size figure tile (same footprint as a team tile): value over caption.
+       `gold` marks the score itself — total and wickets — and `done` marks a figure
+       that can no longer change (a closed innings, or any figure of a finished
+       match). See the CSS for what each channel means. */
+    function statTile(val, label, opt) {
+        opt = opt || {};
+        var cls = 'tile stat-tile' + (opt.gold ? ' gold' : '') + (opt.done ? ' done' : '') +
+                  (opt.batting ? ' batting' : '');
+        // `swing` is the scoreboard's one lean channel — see fill() and scorePanel().
+        var sw = opt.swing;
+        return '<div class="' + cls + '">' +
+               (sw && sw.lean ? fill(sw.lean, sw.certainty) : '') +
                '<span class="cval">' + esc(val) + '</span>' +
-               '<span class="clabel">' + label + '</span></div>';
+               '<span class="clabel">' + esc(label) + '</span></div>';
+    }
+    // A tile carrying a caption and no figure — "TO BAT" under the side still to come.
+    function noteTile(label) {
+        return '<div class="tile stat-tile note">' +
+               '<span class="clabel">' + esc(label) + '</span></div>';
+    }
+    /* Runs per over as the column writes every rate: one decimal always, so a whole
+       number doesn't jump the digits ("7" beside "6.8"). Null when no ball has been
+       bowled — there is no rate yet, and a 0.0 would assert one. */
+    function rateOf(runs, overs) {
+        var b = ballsOf(overs);
+        return b ? ((runs || 0) / (b / 6)).toFixed(1) : null;
+    }
+    /* Overs as the feed wrote them ("24.3" — the fraction is balls, not a decimal, so
+       it is never reformatted), with the column's empty-state dot when absent. */
+    function oversOf(inn) {
+        var o = inn && inn.overs;
+        return (o == null || o === '') ? '\u00b7' : String(o);
     }
 
     // The target the first innings set — shown once that innings is closed, sitting
@@ -295,20 +559,37 @@
         return (inns[0].runs || 0) + 1;
     }
 
-    // Chase stats as full-size tiles, stacked under the 2nd (chasing) tile. These
-    // OUTLIVE the match: once it's over the same three numbers say how it finished
-    // — what was still needed, with how many wickets and balls left — under a FINAL
-    // caption so they can't be misread as a chase still running. The required rate
-    // is the one live-only stat: there's nothing left to require it over.
-    // Returns {html, count} so the trailing spacer knows how many TILES were added
-    // (the caption is a fixed-height row, not a flex tile, so it doesn't count).
-    function chaseTiles(c) {
+    /* THE CHASE BLOCK, at the foot of the second-innings scoreboard: what is needed,
+       in how much, and at what rate. These OUTLIVE the match — once it's over the
+       same numbers say how it finished, under a FINAL caption so they can't be
+       misread as a chase still running. The required rate is the one live-only
+       figure: there's nothing left to require it over.
+
+       WICKETS LEFT IS NOT HERE ANY MORE. The chasing side's own `Wickets` tile sits
+       three rows up, and a column carrying both "3 wickets" and "7 wkts left" makes
+       the reader do the subtraction twice to check they agree. The scoreboard's
+       figure wins, because it is the one a scoreboard states.
+
+       THE SWINGOMETER RIDES THE FIRST OF THEM. `swing` is the chasing side's lean and
+       certainty, and this is the one tile in the column about the OUTCOME rather than
+       the score — which is exactly the match-day board's reasoning for putting its
+       one fill on its own "To win" aperture. It is not mirrored and does not need to
+       be: the figure belongs to the side chasing, so the fill under it is theirs.
+
+       Returns {html, count} so the trailing spacer knows how many TILES went in (the
+       caption is a fixed-height row, not a flex tile, so it doesn't count). */
+    function chaseTiles(c, swing, batting) {
         var html = c.done ? '<div class="panel-cap">Final</div>' : '';
-        html += statTile(c.runs, 'Runs left', c.done);
+        var o = { done: c.done, batting: batting };
+        // Live it is what they need; settled it is what was left when it ended, and
+        // "to win" would be asking for something that can no longer happen.
+        html += statTile(c.runs, c.done ? 'Runs left' : 'To win',
+                         { done: c.done, batting: batting, swing: swing });
         var n = 1;
-        if (c.balls != null) { html += statTile(c.balls, 'Balls left', c.done); n++; }
-        if (!c.done && c.rr != null) { html += statTile(c.rr, c.rr_label || 'Run rate'); n++; }
-        if (c.wkts != null) { html += statTile(c.wkts, 'Wkts left', c.done); n++; }
+        if (c.balls != null) { html += statTile(c.balls, 'Balls left', o); n++; }
+        if (!c.done && c.rr != null) {
+            html += statTile(c.rr, c.rr_label || 'Run rate', { batting: batting }); n++;
+        }
         return { html: html, count: n };
     }
 
@@ -693,7 +974,8 @@
         var stale = staleCard(fx, card);
         return teams.map(function (team, i) {
             var state = assess(card, sides[i], ourSide, stale);
-            var t = { tla: team.tla, ours: team.ours };
+            var t = { tla: team.tla, crest: team.crest, club: team.club,
+                      desig: team.desig, ours: team.ours };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
             return t;
         });
@@ -784,20 +1066,177 @@
 
     var lastKey = '';
 
-    /* THE SCORE PANEL: the match read top to bottom as itself — the side that
-       batted, the target they set, the side chasing it, then how that chase is going
-       (or, once it is over, how it went). Capped at the ten-tile height with a
-       spacer, so two tiles do not stretch to fill a column built for a division. */
+    /* THE SCORE PANEL — THE SCOREBOARD, STOOD ON ITS END.
+       > James's direction, 2026-09-27.
+
+       The ticker is moving away from being a second scoreboard and towards a plain
+       headline, so the figures come here instead: whenever the strip is not showing
+       the ladder, the band is the match's numbers and its state, read top to bottom.
+
+       An INNINGS is the unit, and it is always written the same way — the side, then
+       its figures under it:
+
+         1st innings              2nd innings
+         ---------------          ---------------
+         bat   TLA                bowl  TLA        the side that batted first,
+         gold  Total              gold  Total      now closed: total and wickets
+         gold  Wickets            gold  Wickets    only, since its overs are spent
+               Overs
+               Run rate           bat   TLA        the side chasing
+         bowl  TLA                gold  Total
+               TO BAT             gold  Wickets
+                                        Overs
+                                        To win     the chase block
+                                        Balls left
+                                        Req rate
+
+       Which is ten tiles in the second innings — exactly the column the ladder is
+       built for, so the panel fills the band without stretching or a spacer. The
+       first innings is seven, and the spacer takes the remaining three shares so the
+       tiles stay the ladder's height rather than growing to fit.
+
+       The batting side is the one with figures moving, and it is always the LOWER of
+       the two blocks — which is where the eye already is, coming out of the corner.
+       That falls out of `matchTiles` putting the side that batted first on top, and
+       is why the same ordering reads correctly in both innings.
+
+       WHY NO TARGET TILE. It was the panel's one figure under v1 and it is gone: the
+       chase block's "To win" is the same fact live (target minus what they have), and
+       between the innings the To-bat slot below shows the target outright. A standing
+       `Target` tile beside a falling `To win` was two numbers for one question. */
     function scorePanel(view, fx) {
         var tiles = matchTiles(view, fx);
         if (!tiles.length) return '';
+        /* The scoreboard's tile dialect (see tile()), carrying the one decision that
+           belongs to the panel rather than the tile: whether the names step down. */
+        var BADGE = { badge: true, long: badgeIsLong(tiles.map(badgeLabel)) };
         var card = cardFor(view, fx);
-        var target = targetOf(card), stats = chaseStats(card), used = tiles.length;
-        var body = tile(tiles[0]);
-        if (target != null) { body += statTile(target, 'Target', !!(card && card.complete)); used++; }
-        body += tiles.slice(1).map(tile).join('');
-        if (stats) { var ct = chaseTiles(stats); body += ct.html; used += ct.count; }
-        return body + '<div class="spacer" style="flex:' + Math.max(1, 10 - used) + '"></div>';
+        var inns = (card && card.innings) || [];
+        var done = !!(card && card.complete);
+        /* TWO BLOCKS, ONE PER SIDE, built separately because only one of them goes in
+           the scorebox — see the assembly at the end. A block is a side's crest tile
+           followed by whatever figures belong to it, and each carries its own share
+           count so the housing and the spacer can be sized from them. */
+        function block() { return { html: '', used: 0 }; }
+        function put(g, html, n) { g.html += html; g.used += (n == null ? 1 : n); }
+        /* A badge tile is worth `--badge-flex` figure tiles, and the spacer has to
+           count it that way or a short panel would reserve too much slack and the
+           tiles would come up short of the ladder's height. Kept in step with the
+           token by hand — it is one number in two languages. */
+        var BADGE_FLEX = 1.5;
+        function putTeam(g, t) { g.html += tile(t, BADGE); g.used += BADGE_FLEX; }
+        /* `inns` arrives in batting order, so the block for the innings ON SHOW is the
+           one that goes in the box and `other` is the side watching it. Which of the two
+           comes first on screen never changes — the side that batted first is always on
+           top — so the box moves down the column at the innings break. */
+        var box = block(), other = block(), boxFirst = true;
+
+        if (inns.length >= 2) {
+            /* SECOND INNINGS. The first block is settled by construction — a new
+               innings only exists because the previous one closed — so its figures
+               take the quieter treatment whether or not the match is over. */
+            var first = inns[0], cur = inns[inns.length - 1];
+            /* WHO IS IN, and it has to be an OPEN innings — at the close nobody is,
+               which is the board's rule for its own batting recess. So the chasing
+               side's figures sink while the game runs and come back up settled. */
+            var inNow = !done && !cur.closed;
+            // The side that batted first is now bowling, so its block is the one
+            // OUTSIDE the box — and it still comes first, being the side that batted
+            // first. The box is therefore the lower of the two.
+            boxFirst = false;
+            putTeam(other, tiles[0]);
+            put(other, statTile(first.runs || 0, 'Total', { gold: true, done: true }));
+            put(other, statTile(first.wickets || 0, 'Wickets', { gold: true, done: true }));
+            if (tiles[1]) putTeam(box, tiles[1]);
+            put(box, statTile(cur.runs || 0, 'Total', { gold: true, done: done, batting: inNow }));
+            put(box, statTile(cur.wickets || 0, 'Wickets', { gold: true, done: done, batting: inNow }));
+            put(box, statTile(oversOf(cur), 'Overs', { done: done, batting: inNow }));
+            var stats = chaseStats(card);
+            /* THE SWINGOMETER'S TWO CHANNELS COME STRAIGHT OFF THE CHASING SIDE'S
+               TILE, which is `tiles[1]` by construction (`matchTiles` puts the side
+               that batted first on top). Deliberately not a second call into the
+               chase model: `assess` has already priced this side — from
+               `WccChase.chaseState` while the game runs, from the feed's own verdict
+               once it is decided — and has already mirrored it onto this side. Asking
+               again would be a second opinion where the whole point is that the
+               ladder, the board and this tile give one.
+
+               It also settles the result state for free. The board drops its
+               apertures at the close and posts a verdict badge instead; the strip has
+               no badge, so the tile keeps the fill and `assess` makes it a full one in
+               the outcome's colour — certainty 1, which is what a decided match is. */
+            var chasing = tiles[1] || {};
+            if (stats) {
+                var ct = chaseTiles(stats, { lean: chasing.lean, certainty: chasing.certainty },
+                                    inNow);
+                put(box, ct.html, ct.count);
+            }
+        } else {
+            /* FIRST INNINGS, and the pre-match card too: with no innings at all
+               (the toss is in, nobody has faced a ball) there are no figures to
+               write, so the panel is the two sides and their glyphs — which is the
+               honest state, and the same one the tiles are already in. */
+            putTeam(box, tiles[0]);
+            if (inns.length) {
+                var f = inns[0];
+                var settled = f.closed || done, inFirst = !settled;
+                put(box, statTile(f.runs || 0, 'Total', { gold: true, done: settled, batting: inFirst }));
+                put(box, statTile(f.wickets || 0, 'Wickets', { gold: true, done: settled, batting: inFirst }));
+                put(box, statTile(oversOf(f), 'Overs', { done: settled, batting: inFirst }));
+                var rr = rateOf(f.runs, f.overs);
+                if (rr != null) put(box, statTile(rr, 'Run rate', { done: settled, batting: inFirst }));
+            }
+            if (tiles[1]) putTeam(other, tiles[1]);
+            /* THE SIDE STILL TO BAT. Once the first innings has closed the slot has
+               a figure to carry instead of a label — the target, which is the whole
+               news of the interval and is otherwise unsaid until the chase begins.
+               `targetOf` is null while they're still batting, which is exactly when
+               "TO BAT" is the only true thing to write. */
+            var target = inns.length ? targetOf(card) : null;
+            if (target != null) put(other, statTile(target, 'To win', {}));
+            else if (inns.length) put(other, noteTile('To bat'));
+        }
+        /* ASSEMBLY — AND ONLY ONE BLOCK GETS THE SCOREBOX.
+           > James's direction, 2026-09-27.
+
+           The housing is the pale shade the apertures are sunk into, and it goes around
+           the innings ON SHOW only. THE SIDE NOT BATTING KEEPS THE COLUMN'S OWN DARK
+           BLUE, which is what makes the box mean something rather than just being the
+           panel's backdrop: pale is the innings being played, matte is the side
+           watching it, and inside the pale the apertures are the figures still moving.
+
+           It could not have been done by tinting the bowling side's tiles dark instead.
+           The matte and an aperture over the housing composite to within a couple of
+           units of each other (#08152c against ~#0e192c), so a dark bowling tile would
+           have read as an aperture — the exact opposite of what it is.
+
+           THE HOUSING IS BEHIND THE GAPS, not just the tiles, which is the whole reason
+           it is a wrapper: light shows around every aperture, so a run of them reads as
+           separate apertures in a scorebox instead of one continuous recess.
+
+           OUTSIDE IT: the other side's tiles, the trailing spacer and the footer, all on
+           the matte. So the box is exactly as tall as the innings on show, and the
+           footer stays chrome instead of becoming the scoreboard's bottom edge.
+
+           Each part takes its own shares, so every tile keeps the height it had when
+           they were all the column's own children. The spacer takes whatever the
+           ladder's ten tiles would have had, so a short panel's tiles stay the ladder's
+           height instead of stretching. A full panel gets none at all — a flex:1 spacer
+           beside ten flex:1 tiles would make every tile an eleventh of the column and
+           put the whole panel out of step with the ladder it shares the band with. */
+        var r2 = function (n) { return Math.round(n * 100) / 100; };
+        /* No innings, no scorebox: a pre-match card has no figures to house, so neither
+           block is pale and both sides sit on the matte — which is the state the tiles
+           are already in. Both are still WRAPPED, so their tiles keep one width. */
+        function wrap(g, pale) {
+            return '<div class="blk' + (pale ? ' box' : '') + '" style="flex:' +
+                   r2(g.used) + '">' + g.html + '</div>';
+        }
+        var housed = wrap(box, !!(box.used && inns.length));
+        var out = boxFirst ? housed + wrap(other, false) : wrap(other, false) + housed;
+        var used = box.used + other.used;
+        if (used < 10) out += '<div class="spacer" style="flex:' + r2(10 - used) + '"></div>';
+        return out;
     }
 
     function render() {
@@ -828,7 +1267,9 @@
         var body = '';
         if (panel === 'ladder') {
             var rows = leagueTiles(view);
-            body = rows.length ? rows.map(tile).join('') : '';
+            // Wrapped, not passed bare: `map` would hand the INDEX to tile()'s
+            // second argument, which is now the dialect.
+            body = rows.length ? rows.map(function (r) { return tile(r); }).join('') : '';
         } else if (panel === 'score') {
             body = scorePanel(view, fx);
         }

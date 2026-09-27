@@ -167,16 +167,26 @@ The vertical partner of the ticker footer: the same player-owned chrome, showing
   = certainty, bat/bowl glyph = live role, clock = decided but not yet published,
   muted dot = match on but the feed is silent, dimmed tile = no match today, ghost
   arrow = a *pending* move the table hasn't taken yet.
-- A match with no ladder behind it (friendly, cup, junior) collapses to a **two-tile
-  view** that reads top-to-bottom as the match itself: the side that batted first,
-  the **target** they set (appearing the moment that innings closes), the side
-  chasing it, then full-size **chase stat tiles** — runs left / balls left /
-  required rate / wickets left.
-- Those chase stats **outlive the match**. Once it's decided the same numbers say
-  how it finished (what was still needed, with how many wickets and balls left)
-  under a **FINAL** caption, with the tiles a touch quieter. The caption carries the
-  meaning: muting alone would read as stale data rather than a settled result. The
-  required rate is the one live-only stat — there's nothing left to require it over.
+- Whenever the ladder is *not* what the band is carrying, the panel is the match as a
+  **vertical scoreboard**: each innings written as the side — the club **crest** over its
+  **XI** here, not a TLA — then its figures under it, total and wickets in gold, then
+  overs, rate and what the chase needs. The **innings on show** sits in a pale
+  **scorebox**, with the figures still moving sunk into dark apertures in it (the board's
+  own `.sb-cell` tone) — light shows through the gaps, so they read as separate apertures.
+  The side not batting keeps the column's matte, so pale means "the innings being played"
+  and the box moves down the column at the innings break. The scoreboard drops the gold our-team bar and the bat/bowl glyphs,
+  both of which the ladder keeps, and paints the win/lose **fill just once** — on the
+  "To win" figure, as the match-day board does on its "To win" aperture — rather than
+  under each side. The full layout, and
+  why each channel is where it is, is under "The `score` panel is the scoreboard stood
+  on its end" in **`docs/live-events.md`**. (Under v1 this was the friendly's
+  two-tile view — a match with no ladder behind it; v2 makes it a property of the
+  *event*, so any match can be drawn this way.)
+- Those figures **outlive the match**. Once it's decided the same numbers say how it
+  finished, under a **FINAL** caption, with the tiles a touch quieter. The caption
+  carries the meaning: muting alone would read as stale data rather than a settled
+  result. The required rate is the one live-only figure — there's nothing left to
+  require it over.
 - **IDEA, NOT BUILT — pair the bat/bowl glyphs by colour, so you can see who is playing
   whom.** The ladder is in league order, so the two sides of a fixture are almost never
   adjacent: with three or four games on in a division you can see who is batting, but not
