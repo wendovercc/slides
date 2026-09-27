@@ -16,13 +16,13 @@
 
     THREE PRESENTATIONS PER TILE — before, during, after — and the feed picks.
 
-    BEFORE a ball is scored each tile shows its PRE-MATCH panel: the home side's
-    crest, club, team and form top-left, the opposition's bottom-right, split by a
-    diagonal rule, all in the tape's vocabulary — and the square tiles name each
-    side's club over its team designation where their score will go. All of that is
-    overnight data, so it bakes; the board only takes over once there is a scored
-    innings to put on it, which is also what keeps an unscored match off it all
-    afternoon.
+    BEFORE a ball is scored each tile reads exactly as it will after stumps — the two
+    sides stacked, crest, club and team apiece — with a FORM LINE where the score line
+    will go: the tape's badges, behind a gold "Form", which is the one thing known
+    about a side overnight. The square tiles likewise name each side's club over its
+    team designation where their score will go. All of that bakes; the apertures only
+    appear once there is a scored innings to put in them, which is also what keeps an
+    unscored match off the board all afternoon.
 
     DURING, the working board: four apertures for the side batting, the other side's
     closed innings stated on a line beneath. In the second innings the fourth aperture
@@ -35,8 +35,11 @@
     crest, club, team, score, verdict — which is the Result panel's tale of the tape,
     stacked rather than set side by side. Nothing else moves: both heads stay exactly
     where they stood all afternoon, so a reader doesn't have to re-find either side to
-    read the result off the tile. It deliberately leaves space below the top zone,
-    which is the next piece of work.
+    read the result off the tile, and the spare height falls BELOW the pair rather than
+    between them, which keeps the two results together.
+
+    So ONE LAYOUT CARRIES ALL THREE, and only the line under each club changes: form,
+    then a score, then a score and a verdict.
 
     THE VERDICT BADGE is what every finished game wears, ours and the division's
     alike: the Result panel's badge in this board's own outcome colours — green or
@@ -76,11 +79,13 @@
     should read as the same surface. -#}
 {#- Form as badges, the tape's vocabulary at tile size. Only our own matches get
     these — see the note in the docstring about the division's other games. -#}
+{#- A SIDE WITH NO FORM SHOWS AN EMPTY LINE. The line still stands, because its
+    height is the tile's and not its content's — but "No form yet" is a sentence
+    where every other tile has figures, and it read as the loudest thing on a board
+    it is the least important thing on. -#}
 {% macro form_badges(form) %}
     {%- if form -%}
         <span class="fm">{% for r in form %}<span class="fm-b fm-{{ r }}">{{ r }}</span>{% endfor %}</span>
-    {%- else -%}
-        <span class="fm-none">No form yet</span>
     {%- endif -%}
 {% endmacro %}
 {% block styles %}
@@ -202,87 +207,63 @@
        `1fr` match row gave the tile — so it fills most of the tile without any
        of it being content-driven. */
     .md-state { flex: 1; min-height: 0; margin-top: calc(1.4vh * var(--tile-h)); display: flex; }
-    /* `display` beats the `hidden` attribute, so re-assert it — both the pre-match
-       panel and the board set one. */
+    /* `display` beats the `hidden` attribute, so re-assert it — the board sets one. */
     .md-state > [hidden] { display: none; }
 
     /* ── Before a ball is bowled ──────────────────────────────────────────
-       The live-match slide's Pre-match panel (_tape.html), cut down to a tile and
-       STACKED rather than set side by side: a tile is at its narrowest two of six
-       columns, which is not enough for two columns of its own. The wall has height
-       to spare here and width it hasn't.
+       THE SAME PRESENTATION AS THE RESULT, and for the same reason the result was
+       built that way: both zones read crest, club, team and then one line, so a
+       reader who has learnt the tile before the toss does not have to learn it
+       again at tea or after stumps. The tile's THREE STATES are then one layout
+       with one line swapped —
 
-       Everything else follows the tape. Crest in a white disc over a centred
-       stack, CLUB as the headline, the gold "Form" label over the badges — no
-       "vs", and no gold on our own name: gold belongs to the label, not to us.
+         before   the FORM LINE, the only thing we know about a side overnight
+         during   apertures on whoever is batting, a score line on the other
+         after    a score line each, with the verdict badge on it
 
-       The tape can leave the team designation to its slide header; this tile has
-       no header to leave it to, so the club name carries the team under it.
+       — so there is no separate pre-match panel to keep in step, and nothing moves
+       between the states but the line itself. The diagonally split panel that used
+       to stand here said the same things in a different arrangement, and the tile
+       changing shape at the first scored ball was the most visible thing about it.
 
-       THE SPLIT IS DIAGONAL. Home sits top-left, the opposition bottom-right, and
-       the tape's divider runs between them as a hairline from the BOTTOM-LEFT
-       corner to the TOP-RIGHT. It is drawn as one gradient rather than a rotated
-       element, and the direction is the easy thing to get backwards: a gradient's
-       colour bands run PERPENDICULAR to its own line, so the band we want — the
-       bottom-left-to-top-right diagonal — needs a gradient line along the other
-       one, `to bottom right`. CSS aims a corner keyword's gradient line so that
-       the perpendicular through the centre passes through the two neighbouring
-       corners, so the hard stop at 50% lands exactly on the corner-to-corner
-       diagonal whatever the tile's shape — 2 columns or 6, one row of squares or
-       three.
+       All of it is overnight data, so it bakes: the form line IS the baked paint. */
+    .sb-form { flex-shrink: 0; min-width: 0; overflow: hidden;
+        display: flex; align-items: center; gap: calc(0.5vw * var(--tile-w));
+        padding: calc(0.5vh * var(--tile-h)) 0;
+        height: var(--sb-line-h); box-sizing: content-box; }
+    /* The badges ride the right-hand end of the line, where the verdict badge sits on
+       the score line (`.sb-res`) — label left, squares right, one row. */
+    .sb-form .fm { margin-left: auto; flex-shrink: 0; }
+    /* THE LABEL IS A BADGE LETTER — same size and weight as the W and L in the
+       squares it names, which is the type it belongs with: it is a caption for
+       them, not a figure in its own right. The row does not answer to it either
+       way, since `.sb-form` is held at `--sb-line-h` whatever is on it. Gold,
+       because the label is the line's one piece of house accent.
 
-       EACH SIDE IS CENTRED ON ITS TRIANGLE, not docked in its corner. A stack in
-       the corner leaves the middle of the tile empty and the diagonal with nothing
-       either side of it; a box of two thirds in each dimension, pinned to the
-       corner with its content centred, puts each stack around (1/3, 1/3) and
-       (2/3, 2/3) — which are the two triangles' centroids — and lets it grow into
-       the space instead. All of it is known overnight, so it bakes. */
-    .md-pre { flex: 1; min-width: 0; min-height: 0; overflow: hidden; position: relative;
-        border-radius: var(--radius);
-        background: linear-gradient(to bottom right,
-            transparent 0 calc(50% - var(--hair)),
-            rgba(255,255,255,0.12) calc(50% - var(--hair)) calc(50% + var(--hair)),
-            transparent calc(50% + var(--hair)) 100%); }
-    .pre-side { position: absolute; width: 64%; height: 62%; overflow: hidden;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        text-align: center; gap: calc(0.55vh * var(--tile-u)); padding: 0 calc(0.4vw * var(--tile-w)); }
-    .pre-side.home { top: 0; left: 0; }
-    .pre-side.away { bottom: 0; right: 0; }
-
-    /* ONE SCALE KNOB for the whole panel, baked from how many rows of other-game
-       tiles the board needed — the same fact `--sb-h` is cut from, and for the
-       same reason: three rows leave the match tile about 23vh, and a stack sized
-       for a one-row day is half as tall again as that. */
-    .pre-crest { width: calc(5vh * var(--tile-u)); height: calc(5vh * var(--tile-u));
-        flex-shrink: 0; border-radius: 50%; object-fit: contain;
-        background: #fff; padding: calc(0.4vh * var(--tile-u)); box-sizing: border-box; }
-    .pre-club { max-width: 100%; font-size: calc(var(--t-md) * var(--tile-u));
-        font-weight: 900; line-height: 1.05;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* The line is HELD OPEN when the side has no designation — height 1.1em
-       against its own font-size is exactly one line. Not every league names its
-       teams (the women's indoor softball table is all bare club names), and a
-       side that drops the line would sit a line higher than the one opposite. */
-    .pre-team { max-width: 100%; font-size: calc(var(--t-xs) * var(--tile-u));
-        color: var(--muted); opacity: 0.8; line-height: 1.1; height: 1.1em;
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* The tape's `.stat-label` verbatim. */
-    .pre-label { font-size: calc(var(--t-xs) * var(--tile-u)); text-transform: uppercase;
-        letter-spacing: 0.1em; color: var(--accent); font-weight: 700; line-height: 1; }
+       A SHADE LARGER THAN THE BADGE LETTER'S OWN 0.6, and deliberately: gold on
+       navy reads lighter and smaller than white inside a filled square at the same
+       size, so nominally equal type doesn't look equal. This is the size at which
+       it does. */
+    .sb-flabel { flex-shrink: 0; font-size: calc(var(--res-h) * 0.72);
+        text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--accent); font-weight: 700; line-height: 1; }
 
     /* Form badges — the tape's `.badge` colours, sized for a tile. Square, so
        both dimensions are the same unit. */
     .fm { display: flex; gap: 0.35vh; }
     .fm-b { width: 1.9vh; height: 1.9vh; line-height: 1.9vh; text-align: center;
         border-radius: var(--radius-sm); font-size: var(--t-xxs); font-weight: 700; }
-    .md-pre .fm-b { width: calc(1.9vh * var(--tile-u)); height: calc(1.9vh * var(--tile-u));
-        line-height: calc(1.9vh * var(--tile-u)); font-size: calc(var(--t-xxs) * var(--tile-u)); }
+    /* THE FORM BADGE IS THE VERDICT BADGE'S HEIGHT — the same vocabulary in the same
+       place on the line: the squares a side's last games left it, then the square
+       this one leaves. */
+    .sb-form .fm-b { width: var(--res-h); height: var(--res-h); line-height: var(--res-h);
+        font-size: calc(var(--res-h) * 0.6); }
     .fm-W { background: var(--accent-win); color: #fff; }
     .fm-L { background: var(--accent-loss); color: #fff; }
     .fm-T { background: var(--accent-draw); color: #fff; }
     .fm-D { background: #444; color: #ccc; }
     .fm-A, .fm-C, .fm-NR { background: var(--accent-amber); color: #ffe; }
-    .fm-none { font-size: var(--t-xs); color: var(--muted); opacity: 0.4; }
+
     /* `--sb-h` is a CONSTANT, and that it can be is the point of scaling the
        spacer tiles: a board with three rows of them now hands the match row about
        43vh rather than 23, so the apertures no longer have to shrink as the day
@@ -290,7 +271,18 @@
        take it from — they carry two lines of type, and the figures are what the
        board is for. */
     .sb { --sb-h: 9vh; flex: 1; min-width: 0; min-height: 0;
-        display: flex; flex-direction: column; gap: calc(0.8vh * var(--tile-h)); }
+        display: flex; flex-direction: column; gap: calc(0.8vh * var(--tile-h));
+        /* THE LINE UNDER EACH CLUB IS ONE HEIGHT, whatever is on it: a score, a
+           score and a verdict, or a form sequence. Both `.sb-line` and `.sb-form`
+           are set to it exactly, so a pre-match tile's second side sits where a
+           finished tile's does and nothing moves as the afternoon fills the line in.
+           It is the tallest thing either line can hold:
+             --sb-fig-sz  the score figure, bounded on both axes (see `.sb-num`)
+             --res-h      the verdict badge's box: its own font-size at the
+                          line-height 1.6 `.res` gives every one of them */
+        --sb-fig-sz: min(calc(var(--sb-w) * 0.5), calc(var(--sb-h) * 0.55));
+        --res-h: calc(var(--t-sm) * var(--tile-u) * 1.6);
+        --sb-line-h: max(var(--sb-fig-sz), var(--res-h)); }
 
     /* TWO ZONES, ONE PER SIDE, each headed by the team it belongs to — which is
        why the tile no longer carries a "Wendover vs Chalfont" line of its own.
@@ -304,8 +296,10 @@
 
        `board` marks the zone holding the apertures, and so the zone that takes the
        tile's spare height; the other is a single line. The feed moves the class with
-       the innings. In the result state nothing holds apertures and it stays on zone
-       1, which is where the slack has been all along. */
+       the innings. In the result state nothing holds apertures, so NO zone claims
+       the slack: both sides sit as lines at the top of the tile and the spare height
+       falls below the pair, which keeps the two results together rather than pushing
+       them apart. */
     .sb-zone { display: flex; flex-direction: column; gap: calc(0.4vh * var(--tile-h)); min-height: 0; }
     .sb-zone.board { flex: 1; }
     .sb-head { position: relative; flex-shrink: 0; display: flex; align-items: baseline;
@@ -328,16 +322,16 @@
        the score read as belonging to the club named above it. */
     .sb-names { min-width: 0; display: flex; flex-direction: column; }
     .sb-zone.has-crest .sb-names,
+    .sb-zone.has-crest .sb-form,
     .sb-zone.has-crest .sb-line { padding-left: calc(var(--t-md) * var(--tile-u) * 2 + 0.6vw * var(--tile-w)); }
-    /* The team under the club, as the pre-match panel has it (`.pre-team`). IN
-       FLOW, unlike the crest: it pushes the apertures down rather than hanging
+    /* The team under the club. IN FLOW, unlike the crest: it pushes the apertures down rather than hanging
        over them, which is why the `--sb-h` steps below are cut for it. Held open
        at one line when a side has no designation, so the two zones stay level. */
     .sb-desig { max-width: 100%; font-size: calc(var(--t-xs) * var(--tile-u));
         color: var(--muted); opacity: 0.8; line-height: 1.1; height: 1.1em;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    /* The pre-match panel's `.pre-club` — same size, weight and case — so the
-       tile names its sides identically before and during the match. */
+    /* The club, and the tile's headline in every state — the head is the one part
+       of the tile that never moves. */
     .sb-team { min-width: 0; font-size: calc(var(--t-md) * var(--tile-u));
         font-weight: 900; line-height: 1.05;
         overflow: hidden; text-overflow: ellipsis; }
@@ -405,11 +399,11 @@
        comes and goes. */
     .sb-line { flex-shrink: 0; min-width: 0; overflow: hidden;
         display: flex; align-items: baseline; gap: calc(0.5vw * var(--tile-w));
-        padding: calc(0.5vh * var(--tile-h)) 0; }
+        padding: calc(0.5vh * var(--tile-h)) 0; height: var(--sb-line-h); box-sizing: content-box; }
     /* The scoreline itself: `.sq-runs` at board size. Gold, because gold is the
        scoreline everywhere on this board. */
     .sb-fig { font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums;
-        color: var(--accent); font-size: min(calc(var(--sb-w) * 0.5), calc(var(--sb-h) * 0.55)); }
+        color: var(--accent); font-size: var(--sb-fig-sz); }
     /* `.sq-ov` at board size: the supporting figure, smaller and blue. */
     .sb-ov { font-size: calc(var(--t-sm) * var(--tile-u)); font-weight: 400; color: var(--light-blue); }
     /* Yet to bat, and it says so where the score will go rather than beside the
@@ -420,7 +414,8 @@
         color: var(--muted); opacity: 0.6; }
     /* `hidden` is a UA rule, so anything this stylesheet gives a `display` to has
        to opt back in by hand. */
-    .sb-grid[hidden], .sb-line[hidden], .sb-line > [hidden] { display: none; }
+    .sb-grid[hidden], .sb-line[hidden], .sb-line > [hidden],
+    .sb-form[hidden] { display: none; }
     /* Gold is THE SCORELINE — runs and wickets together — because that is what it
        is on the other-game tiles, where `141/6` is one gold figure (.sq-runs).
        Overs and the contextual aperture stay white: they qualify the score, they
@@ -749,19 +744,7 @@
             <span class="ha{% if not ev.is_home %} away{% endif %}">{{ 'Home' if ev.is_home else 'Away' }}</span>
         </div>
         <div class="md-state">
-            <div class="md-pre" data-f="pre">
-                {% for where in ['home', 'away'] %}
-                {% set side = m.pre[where] %}
-                <div class="pre-side {{ where }}">
-                    {% if side.crest %}<img class="pre-crest" src="{{ side.crest }}" alt="">{% endif %}
-                    <div class="pre-club">{{ side.club }}</div>
-                    <div class="pre-team">{{ side.team }}</div>
-                    <div class="pre-label">Form</div>
-                    {{ form_badges(side.form) }}
-                </div>
-                {% endfor %}
-            </div>
-            <div class="sb" hidden data-f="board" style="--sb-w: {{ {2: '4.2vw', 3: '5.6vw', 6: '9vw'}[m.span] }}">
+            <div class="sb" style="--sb-w: {{ {2: '4.2vw', 3: '5.6vw', 6: '9vw'}[m.span] }}">
                 {#- TWO ZONES IN BATTING ORDER — the side that batted FIRST on top, and
                     it stays there. Which is why both zones are built the same: the
                     working board belongs to whoever is batting NOW, so in the second
@@ -774,13 +757,15 @@
                     board reparented by the feed would be the layout in two places.
                     Both zones bake both presentations; the feed shows one each.
 
-                    BAKED AS THE FIRST INNINGS, on the same home-bats-first assumption
-                    the rest of the tile makes: zone 1 has the apertures, zone 2 says
-                    "To bat". -#}
+                    BAKED AS THE PRE-MATCH STATE, which is the state every tile is in
+                    overnight: no apertures, no scores, each zone's FORM LINE showing.
+                    The feed puts the apertures up on whoever is batting once there is a
+                    scored innings — on the same home-bats-first assumption the rest of
+                    the tile makes until it knows better. -#}
                 {% for z in [1, 2] %}
                 {% set k = 'z%d' % z %}
                 {% set side = m.pre.home if z == 1 else m.pre.away %}
-                <div class="sb-zone{% if z == 1 %} board{% endif %}{% if side.crest %} has-crest{% endif %}"
+                <div class="sb-zone{% if side.crest %} has-crest{% endif %}"
                      data-f="{{ k }}-zone">
                     <div class="sb-head">
                         <img class="sb-crest" data-f="{{ k }}-crest" src="{{ side.crest }}" alt=""
@@ -790,7 +775,7 @@
                             <span class="sb-desig" data-f="{{ k }}-desig">{{ side.team }}</span>
                         </div>
                     </div>
-                    <div class="sb-grid" data-f="{{ k }}-grid"{% if z == 2 %} hidden{% endif %}>
+                    <div class="sb-grid" data-f="{{ k }}-grid" hidden>
                         <div class="sb-cell total"><span class="sb-label">Total</span><span class="sb-num blank" data-f="{{ k }}-total">·</span></div>
                         <div class="sb-cell wkts"><span class="sb-label">Wickets</span><span class="sb-num blank" data-f="{{ k }}-wkts">·</span></div>
                         <div class="sb-cell small"><span class="sb-label">Overs</span><span class="sb-num blank" data-f="{{ k }}-overs">·</span></div>
@@ -804,14 +789,22 @@
                     </div>
                     {#- THE ZONE'S SCORE LINE, for whenever it is not the one batting:
                         the innings it has closed, "To bat" before it has one, and the
-                        verdict badge on the right once the match is decided. Zone 1
-                        bakes it hidden (it holds the apertures); zone 2 bakes it as the
-                        pre-play state, waiting to bat. -#}
-                    <div class="sb-line" data-f="{{ k }}-line"{% if z == 1 %} hidden{% endif %}>
-                        <span class="sb-fig blank" data-f="{{ k }}-fig"{% if z == 2 %} hidden{% endif %}>·</span>
+                        verdict badge on the right once the match is decided. Baked
+                        hidden — before a ball there is no score to state, and the form
+                        line below stands in its place. -#}
+                    <div class="sb-line" data-f="{{ k }}-line" hidden>
+                        <span class="sb-fig blank" data-f="{{ k }}-fig">·</span>
                         <span class="sb-ov" data-f="{{ k }}-fov" hidden></span>
-                        <span class="sb-wait" data-f="{{ k }}-wait"{% if z == 1 %} hidden{% endif %}>To bat</span>
+                        <span class="sb-wait" data-f="{{ k }}-wait" hidden>To bat</span>
                         <span class="res sb-res" data-f="{{ k }}-res" hidden></span>
+                    </div>
+                    {#- THE FORM LINE, which is the score line's place before there is a
+                        score: the same line, in the same position under the same club
+                        name, carrying the one thing we do know about the side overnight.
+                        It goes the moment the tile has a scored innings to show, and
+                        never comes back — form is what you read while waiting. -#}
+                    <div class="sb-form" data-f="{{ k }}-form">
+                        {%- if side.form %}<span class="sb-flabel">Form</span>{{ form_badges(side.form) }}{% endif -%}
                     </div>
                 </div>
                 {% endfor %}
@@ -1101,8 +1094,21 @@
            pre-match panel stands, which is also what happens when a match is in
            the feed but nobody is scoring it. */
         var scoring = !!(cur && cur.runs != null);
-        f(el, 'pre').hidden = scoring;
-        f(el, 'board').hidden = !scoring;
+        /* NOTHING SCORED YET, so the tile stays on the state it was baked in: each
+           zone's form line, no apertures and no score. Set rather than assumed —
+           applyMatch runs on every poll, and a tile that has been painted once must
+           be able to come back here (a feed that loses a match mid-afternoon is a
+           feed we must not leave showing a frozen scoreboard). The zones are NOT
+           reordered on the way: batting order is not known until an innings is, and
+           the baked form belongs to the side the build put in the zone. */
+        for (var pz = 0; pz < 2; pz++) {
+            var pk = 'z' + (pz + 1);
+            f(el, pk + '-form').hidden = scoring;
+            if (!scoring) {
+                f(el, pk + '-grid').hidden = true;
+                f(el, pk + '-line').hidden = true;
+            }
+        }
         if (!scoring) return;
 
         /* WHICH ZONE IS WHICH SIDE: BATTING ORDER, and it does not change all
@@ -1113,10 +1119,11 @@
            What DOES move is the working board: it belongs to whoever is batting now,
            so it sits in zone 1 through the first innings and drops to zone 2 for the
            chase, while zone 1 states the innings it closed. A decided match has no
-           apertures anywhere, and the slack stays on zone 1. */
+           apertures anywhere, and no zone takes the slack either: the two result
+           lines stack at the top of the tile with the spare height below them. */
         var firstOurs = inns.length ? oursInn(inns[0], weHome) : weHome;
         var decided = !!(m && m.complete);
-        var boardZone = decided ? 0 : Math.max(0, Math.min(1, inns.length - 1));
+        var boardZone = decided ? -1 : Math.max(0, Math.min(1, inns.length - 1));
         var usCrest = el.getAttribute('data-us-crest') || '';
         var themCrest = el.getAttribute('data-them-crest') || '';
         var usTeam = el.getAttribute('data-us-team') || '';
