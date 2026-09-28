@@ -380,7 +380,7 @@
        carries, the housing recedes. `position: relative` because one aperture has a
        fill behind its figure — see `.sb-fill`. */
     .sb-cell { position: relative; min-width: 0; min-height: 0; overflow: hidden;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        display: flex; flex-direction: column-reverse; align-items: center; justify-content: center;
         gap: calc(0.3vh * var(--tile-h)); background: rgba(0,0,0,0.35); border-radius: var(--radius); }
     /* ── The swingometer ──────────────────────────────────────────────────
        THE STRIP'S LADDER TILE, on the one aperture that is about the outcome rather
@@ -405,10 +405,16 @@
     .sb-fill[data-v="win"] { background: var(--accent-win); }
     .sb-fill[data-v="loss"] { background: var(--accent-loss); }
     .sb-cell > .sb-label, .sb-cell > .sb-num { position: relative; z-index: 1; }
-    /* The label is painted above the aperture on the board itself, so it goes
-       above the figure here rather than beside it. Scaled on `--pre-u` like the
-       rest of the tile: left at a flat --t-xs it was 1.7vh of a 5vh cell on the
-       busiest day, which is most of the room the figure needed. */
+    /* UNDER THE FIGURE, not beside it and not above it: the figure is what the
+       aperture is for, so it takes the top of the cell and the caption sits below
+       naming it — the arrangement a scoreboard's painted panels use, and the one
+       the strip's stat tiles use, so the wall's two score surfaces agree. The DOM
+       keeps label-then-figure (it reads that way to anything that isn't the
+       stylesheet); `column-reverse` on `.sb-cell` puts it underneath.
+
+       Scaled on `--tile-u` like the rest of the tile: left at a flat --t-xs it was
+       1.7vh of a 5vh cell on the busiest day, which is most of the room the figure
+       needed. */
     .sb-label { font-size: calc(var(--t-xs) * var(--tile-u)); text-transform: uppercase;
         letter-spacing: 0.12em; color: var(--muted); opacity: 0.65; line-height: 1; }
     /* TWO KNOBS, BOTH BAKED, because the figure is bounded in both axes and the
@@ -817,7 +823,7 @@
                         </div>
                     </div>
                     <div class="sb-grid" data-f="{{ k }}-grid" hidden>
-                        <div class="sb-cell total"><span class="sb-label">Total</span><span class="sb-num blank" data-f="{{ k }}-total">·</span></div>
+                        <div class="sb-cell total"><span class="sb-label">Runs</span><span class="sb-num blank" data-f="{{ k }}-total">·</span></div>
                         <div class="sb-cell wkts"><span class="sb-label">Wickets</span><span class="sb-num blank" data-f="{{ k }}-wkts">·</span></div>
                         <div class="sb-cell small"><span class="sb-label">Overs</span><span class="sb-num blank" data-f="{{ k }}-overs">·</span></div>
                         {#- The fourth aperture is the contextual one: LAST MAN while the

@@ -10,6 +10,10 @@
     "Thames Valley Cricket League": "TVCL",
     "Bucks Cricket Competitions": "Bucks"
   },
+  "_comment_competition_abbr": "Short forms for a COMPETITION name, keyed by Play-Cricket's competition string, exact match, and applied before the league abbreviation is put in front of it. The build already shortens the common shapes on its own (Division -> Div, a trailing compass point to its initial, 'Indoor Softball' to 'Indoor'); this is for names with a form the club says that no rule would find. Written without the league, which is prepended: 'South Women's Indoor' becomes 'Bucks South Women's Indoor'.",
+  "competition_abbr": {
+    "Women's Indoor Softball - South": "South Women's Indoor"
+  },
   "_comment_live_poll_lead_minutes": "How long before the day's first start the live poll window opens (live-config.json poll_from) — scorers open a match and settle the toss before the first ball. The window always shuts at midnight, which is also the safeguard if the nightly build fails: a stale config's window has already closed. Outside the window no device touches live.wendovercc.org.",
   "live_poll_lead_minutes": 30,
   "_comment_fetches": "Per-source off switches for the build's fetch steps, keyed by the script name minus its fetch_ prefix. A fetch not listed here is ON — this map is only for turning something off, so adding a new source needs no config. The script itself honours the switch and exits cleanly, so the CI step stays listed in deploy.yml (the Actions UI still names it, and fetch_all.py --check-ci stays in step) and one boolean covers both CI and a local run. Use it when a source has gone quiet or hostile for a stretch — an off-season league, a site mid-redesign — rather than commenting out workflow steps.",

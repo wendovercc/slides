@@ -3194,18 +3194,83 @@ def live_poll_window(matches):
     return start.isoformat(timespec="minutes"), (day_start + timedelta(days=1)).isoformat(timespec="minutes")
 
 
+# Words in a competition name with a settled short form. Keyed lower-case; the
+# value is the spelling that goes on screen.
+_COMP_WORDS = {"division": "Div", "section": "Sec", "conference": "Conf",
+               "group": "Grp", "championship": "Champ", "premier": "Prem",
+               "tournament": "Cup", "competition": "Comp"}
+# A compass point at the END of a competition name is a section marker — "… -
+# South" — and initials to one letter. Only at the end: a league whose name starts
+# "North Bucks…" means the place, not a half of a table.
+_COMP_POINTS = {"north": "N", "south": "S", "east": "E", "west": "W",
+                "central": "C", "midlands": "Mid"}
+# Phrases that say the same thing twice. Indoor cricket IS softball — there is no
+# hard-ball indoor competition — so the word is carried by "Indoor" on its own.
+# > James, 2026-09-28.
+_COMP_PHRASES = [(re.compile(r"\bIndoor Softball\b", re.I), "Indoor")]
+# How wide the band will take before the league prefix is dropped. Measured in
+# characters because that is what the CSS clamp is really bounded by: the footer
+# and the gold flag give the division two lines of about a dozen characters, and
+# this is two full ones — a name at the limit wraps, it does not clip.
+_COMP_MAX = 28
+
+
+def _shorten_competition(name):
+    """A competition name in the width the live chrome actually has.
+
+    Four steps, each one only taken if the one before left it too long, so a name
+    that already fits is never mangled:
+
+      1. an AUTHORED override (`competition_abbr` in content/config.json), which
+         always wins — some names have a form the club says and no rule would find;
+      2. " - " is a separator, not a word, so it goes;
+      3. phrases that say the same thing twice (Indoor Softball → Indoor) and the
+         long words with settled short forms (Division → Div, Section → Sec);
+      4. a trailing compass point down to its initial (… South → … S), a pair of
+         them run together (… North West → … NW).
+
+    Unknown words are left exactly as they are. A competition nobody has thought
+    about comes out untidy, never wrong — which is the same bargain `league_abbr`
+    makes."""
+    s = (name or "").strip()
+    if not s:
+        return ""
+    authored = load_config().get("competition_abbr", {}).get(s)
+    if authored:
+        return authored
+    s = re.sub(r"\s*[-–—]\s*", " ", s)
+    for pat, rep in _COMP_PHRASES:
+        s = pat.sub(rep, s)
+    parts = s.split()
+    parts = [_COMP_WORDS.get(w.lower(), w) for w in parts]
+    # A PAIR first — "North West" is one section, not two — then a single point.
+    if len(parts) > 2 and parts[-1].lower() in _COMP_POINTS \
+            and parts[-2].lower() in _COMP_POINTS:
+        parts[-2:] = [_COMP_POINTS[parts[-2].lower()] + _COMP_POINTS[parts[-1].lower()]]
+    elif parts and parts[-1].lower() in _COMP_POINTS:
+        parts[-1] = _COMP_POINTS[parts[-1].lower()]
+    return " ".join(parts)
+
+
 def _competition_short(ev):
     """The competition as the live chrome's gold flag says it — "TVCL Div 6C".
 
     That flag is one live band wide (~138px at wall scale), so neither the league
     name nor "Division" fits: the league comes from the authored `league_abbr` map
-    (content/config.json) and "Division" is clipped to "Div". Degrades a step at a
-    time — an unmapped league drops to the division alone, a match with no division
-    to the league's short form, and one with neither to "" (the flag then shows the
-    XI only) — so a new competition is untidy, never broken."""
-    div = re.sub(r"\bDivision\b", "Div", (ev.get("competition") or "").strip())
+    (content/config.json) and the competition is put through `_shorten_competition`.
+    Degrades a step at a time — an unmapped league drops to the division alone, a
+    match with no division to the league's short form, and one with neither to ""
+    (the flag then shows the XI only) — so a new competition is untidy, never broken.
+
+    AND THE LEAGUE IS THE FIRST THING DROPPED when the pair still won't fit. The
+    division is the more specific half and the one a reader is actually looking for;
+    "Bucks" in front of a name that then clips mid-word buys nothing. Everything on
+    this surface is a cricket competition our club is playing in, so which league
+    is the most guessable part of the line."""
+    div = _shorten_competition(ev.get("competition"))
     lg = load_config().get("league_abbr", {}).get((ev.get("league_name") or "").strip(), "")
-    return " ".join(p for p in (lg, div) if p)
+    both = " ".join(p for p in (lg, div) if p)
+    return div if (lg and div and len(both) > _COMP_MAX) else both
 
 
 def build_live_config():
