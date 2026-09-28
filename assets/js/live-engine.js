@@ -3,7 +3,8 @@
  * The single-poller Worker (live.wendovercc.org) already collapses every device
  * to one upstream RV refresh per TTL; this is the *client* half: ONE poll loop
  * per player frame that broadcasts the normalised feed to every slide iframe as
- * a `wcc-live` message. Live-aware slides (today.html) render from it; the rest
+ * a `wcc-live` message. Live-aware slides (the match-day and live-match boards)
+ * render from it; the rest
  * ignore it. A slide viewed standalone self-polls instead — this never runs
  * there, so there's exactly one poller whether embedded or not.
  *
@@ -445,7 +446,7 @@
     // --- League loop: the day's OTHER matches, polled SLOWLY and broadcast as
     // `wcc-league`. Independent of the WCC loop above — its own cadence, endpoint,
     // cache key and config — because PC-API is result-granularity, not ball-by-ball
-    // (see the league-wide-today note). Ticker/strip/today render from it; others
+    // (see the league-wide-today note). Ticker/strip/boards render from it; others
     // ignore it. ------------------------------------------------------------------
     var LEAGUE_MS = opts.leagueMs || 300000;   // 5 min — matches the Worker LEAGUE_TTL
     var leagueEndpoint = opts.leagueEndpoint || endpoint.replace('state.json', 'league.json');

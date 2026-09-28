@@ -82,7 +82,7 @@ the window.
 
 **But backdating is bounded** (`MAX_BACKDATE`, 15 min). `scores_updated` comes from
 the scorer, and a scorer who stopped syncing an hour ago still yields a healthy poll
-— the trap `rv.mjs` already warns about for the today board's status column. Taken
+— the trap `rv.mjs` already warns about for a board's status column. Taken
 literally, every event from such a feed is born an hour old, scores zero, and the
 chrome collapses on a match day while we have in fact just learned all of it. The
 bound is longer than the newsy TTLs (an old six is stale either way, so footage
@@ -1500,7 +1500,7 @@ identities** and simulates those, from both configs:
 - `/live-league.json` → the division's match ids, clubs, competition, team ids and real
   start times, because **every surface that shows other clubs' matches pairs a card to a
   baked fixture by `match_id`** — the strip's ladder tiles via `cardFor`
-  (`leagueById[fx.match_id]`) and the today board via `LEAGUE_SCORES[o.match_id]`. An
+  (`leagueById[fx.match_id]`) and the match-day board via its baked other-game tiles. An
   invented id lights up neither: the cards arrive, match no row, and are dropped without
   a word. This is the single most confusing thing about testing those two surfaces.
 
@@ -1560,8 +1560,8 @@ other two, and three of the division's five, are the afternoons a board gets wro
 
 The freshness bands themselves live in `assets/js/live-status.js` (ours: 5 min of scorer
 silence; theirs: 10 min aged, 30 min stale, observed rather than reported because the PC
-feed carries no scorer cursor at all). Both boards read them, so the today board and the
-match-day board cannot give a different account of the same match.
+feed carries no scorer cursor at all). Every surface reads them, so no two of them can
+give a different account of the same match.
 
 Two things the simulator is deliberate about here:
 
@@ -1574,7 +1574,7 @@ Two things the simulator is deliberate about here:
 ### Simulating a league match day
 
 The division needs one thing our own matches do not: **a baked fixture list**, because the
-today board's other-games rows and the ladder's other tiles are baked and the feed only
+match-day board's other-game tiles and the ladder's other tiles are baked and the feed only
 decorates them. `live-league.json` and `ev.league.others` both come from
 `content/data/fetched/league_today.json`, and `_load_league_today` discards that file
 outright if its `date` is not the build's date — so a stale file is the same as no file.
@@ -1630,13 +1630,12 @@ second game as well, which is not a day anyone could have. Excluded by team id w
 table row has one, since a club can have two sides in a division and only one of them is
 playing us.
 
-#### A caveat about the example day: TWO Wendover teams in ONE division
+#### A note about the example day: TWO Wendover teams in ONE division
 
 `2026-10-04` is an unusual fixture list — Women's Softball **Hawks (10:15)** and **Kites
-(11:45)**, both in competition `142917` — and **the today board does not handle that well
-today.** `attach_league_context` hangs a `league` block off *each* match event, so the
-division's other games are baked under both cards and the board lists them twice, while the
-one game in that division a viewer would most want alongside the Hawks — the Kites' — is
+(11:45)**, both in competition `142917`. `attach_league_context` hangs a `league` block off
+*each* match event, so the division's other games are baked under both cards, while the one
+game in that division a viewer would most want alongside the Hawks — the Kites' — is
 absent from both, because our own club is excluded from "other games" by definition:
 
 ```
@@ -1644,10 +1643,10 @@ Women's Softball Hawks → others: ['990291700']
 Women's Softball Kites → others: ['990291700']
 ```
 
-**Noted for the production today-board revisit, not fixed here** — it is a pre-existing
-board issue, nothing to do with the simulator, and it would be the wrong thing to patch
-from inside a test harness. Worth knowing while testing on this date, though: a duplicated
-other-games list is the board, not the feed.
+**The match-day board handles this at the layout, not the feed** — `match_day_layout`
+bands by DIVISION rather than by fixture, so the two sides share one band and everyone
+else's games are listed once. Worth knowing while testing on this date: the doubled
+`others` in the baked data is `attach_league_context`, not the simulator.
 
 One run passes through every state worth seeing: a toss, a
 first innings, a target set, a chase turning both ways, fifties, a **hundred** and a
@@ -1663,8 +1662,11 @@ nonsense.
 
 ## The inspector slide
 
-`live-events`, in the Match Day deck (`content/slideshows/live.json`), right after
-the two senior live-match slides. It renders the `wcc-events` broadcast: the
+`live-events`, in the **Live Test** deck (`content/slideshows/live-test.json`) — the
+match-day board and the inspector, and nothing else. It is deliberately NOT in the Match
+Day deck and the deck declares no `homepage_rank`, so it reaches neither the homepage nor
+a screen rotation: it is an instrument for us, not something the wall should ever show.
+Reach it at `/slideshow/live-test/?sim=matchday`. It renders the `wcc-events` broadcast: the
 scheduler's pick at the top (with **why** it won), then every event newest-first with
 all three timestamps, interest, freshness, novelty and score. Rows below the floor are
 dimmed — those are events the chrome will not show. Retired rows are struck through;

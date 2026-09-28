@@ -341,7 +341,7 @@
         field: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><rect x="6" y="7" width="1.9" height="13" rx="0.95"/><rect x="11.05" y="7" width="1.9" height="13" rx="0.95"/><rect x="16.1" y="7" width="1.9" height="13" rx="0.95"/><rect x="5.4" y="5.3" width="6.3" height="1.6" rx="0.8"/><rect x="12.3" y="5.3" width="6.3" height="1.6" rx="0.8"/></g></svg>'
     };
     // Club name only — drop the team designation after it (the header already
-    // names the team). Mirrors today.html's clubOnly + build's tc-name convention.
+    // names the team). Mirrors build's tc-name convention.
     function clubOnly(name) {
         var s = String(name == null ? '' : name).trim();
         // The club portion ends at its "CC"/"Cricket Club" suffix — drop any team

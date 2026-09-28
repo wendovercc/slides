@@ -72,11 +72,10 @@
 
     Bands are keyed by DIVISION, not by fixture. That's what lets one band show
     the whole division — including a second Wendover side in it — rather than
-    repeating an identical "other games" list under each of our two teams, which
-    is what the today board does today.
+    repeating an identical "other games" list under each of our two teams.
 
-    Sidebar layout, as the today board — this is a data-dense board and the two
-    should read as the same surface. -#}
+    Sidebar layout — this is a data-dense board and it should read as the same
+    surface as the other live slides. -#}
 {#- Form as badges, the tape's vocabulary at tile size. Only our own matches get
     these — see the note in the docstring about the division's other games. -#}
 {#- A SIDE WITH NO FORM SHOWS AN EMPTY LINE. The line still stands, because its
@@ -141,9 +140,9 @@
        else to go on a line already carrying a ground and a Home/Away pill. So the
        two share one slot, the time standing until the feed has something better.
 
-       ONE TOKEN, and the vocabulary is assets/js/live-status.js, shared with the
-       today board: two boards on this wall must not give a different account of the
-       same match. The colours are that board's too.
+       ONE TOKEN, and the vocabulary is assets/js/live-status.js, shared with every
+       other live surface: two of them on this wall must not give a different account
+       of the same match. The colours are shared too.
 
        Weight 900 like the time it replaces — it is a headline, not an annotation. */
     .md-status { font-weight: 900; letter-spacing: 0.06em; }
@@ -162,15 +161,15 @@
         border-radius: var(--radius); padding: 0.1vh 0.45em;
         background: rgba(60,180,80,0.3); border: var(--hair) solid rgba(60,180,80,0.5); }
     .ha.away { background: rgba(180,100,40,0.3); border-color: rgba(180,100,40,0.5); }
-    /* Inverted location badge (navy on gold), the today board's `.loc-badge`
-       verbatim. Not uppercased: the name is a GROUND, and it should read the way
-       it's written on a signpost. `text-transform` has to be re-asserted because
-       the meta row it sits in uppercases everything else on the line. Unlike the
-       today board it takes no max-width — the tile is two, three or six columns
-       wide, so the tile is the bound and the badge ellipsises inside it. */
+    /* Inverted location badge (navy on gold). Not uppercased: the name is a
+       GROUND, and it should read the way it's written on a signpost.
+       `text-transform` has to be re-asserted because the meta row it sits in
+       uppercases everything else on the line. It takes no max-width — the tile is
+       two, three or six columns wide, so the tile is the bound and the badge
+       ellipsises inside it. */
     /* ── Streamed on YouTube ─────────────────────────────────────────────
-       THE GLYPH ALONE. The today board can afford "▶ Streamed" in a card
-       subtitle; a two-column tile's meta row already carries a ground name and a
+       THE GLYPH ALONE. A roomier surface can afford "▶ Streamed" in words;
+       a two-column tile's meta row already carries a ground name and a
        Home/Away pill, and the play button is the one badge on this wall that needs
        no word — everyone knows it. Parked with the badges at the right end, left
        of the ground, per the tile-stack idiom.
@@ -179,7 +178,7 @@
        appears. Gold is the house accent and stays the house accent; this is not
        decoration but a logo, and a gold or white play button would read as one of
        our own badges rather than as "this is on YouTube". It is also the wall's
-       established live-video colour (the today board's LIVE pill, the feed
+       established live-video colour (the LIVE pill, the feed
        badge's ● Live), so it lands in a family rather than alone.
 
        Sized in `em` off the meta row's inherited type, so it shrinks with the tile
@@ -601,9 +600,8 @@
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     /* Gold for the figure, as the headline metric is everywhere else. */
     .sq-runs { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--accent); }
-    /* Overs are the smaller blue supporting figure, as on the today board — and
-       a rung smaller again here, because "123/4 (32.4 ov)" has to clear a ~10vw
-       tile. */
+    /* Overs are the smaller blue supporting figure, as everywhere — and a rung
+       smaller again here, because "123/4 (32.4 ov)" has to clear a ~10vw tile. */
     .sq-ov { font-size: calc(var(--t-xs) * var(--sq-u)); font-weight: 400; color: var(--light-blue); margin-left: 0.3vw; }
     /* Before the game is scored the team designation stands where the score will
        go — no form badges here, because we have no form for a club we don't play.
@@ -911,7 +909,7 @@
     "To win" aperture's swingometer. Both shared with the live strip's ladder, so the
     two surfaces price one result — and one chase — the same way. -#}
 {#- The status vocabulary (● Live / Break / ↻ 14m / Result / …), shared with the
-    today board so the two never give a different account of the same match. -#}
+    other live surfaces so they never give a different account of the same match. -#}
 <script src="/assets/js/live-status.js?v={{ asset_version }}"></script>
 <script src="/assets/js/tvcl-points.js?v={{ asset_version }}"></script>
 <script src="/assets/js/live-chase.js?v={{ asset_version }}"></script>{% endif %}
@@ -921,7 +919,7 @@
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
     // Build flag AND a provisioned device — an unkeyed device presents exactly as
     // if live_enabled were false (no polling, no updates), since the feed is
-    // unreachable to it anyway. Mirrors the today board and LIVE_ON in the players.
+    // unreachable to it anyway. Mirrors LIVE_ON in the players.
     var LIVE_ENABLED = {{ 'true' if live_enabled else 'false' }}
         && !!(window.WccLiveKey && window.WccLiveKey.get());
     var PCS = {{ (slide._pc_ids or []) | tojson }};
@@ -971,8 +969,7 @@
         if (url) img.setAttribute('src', url);
         head.classList.toggle('has-crest', !!url);
     }
-    // The site's innings format: "172 ao", "220/4 dec", "141/6" — the today board's
-    // scoreHtml, as text.
+    // The site's innings format: "172 ao", "220/4 dec", "141/6" — as text.
     function scoreText(inn) {
         if (!inn || inn.runs == null) return '';
         var w = inn.wickets == null ? 0 : inn.wickets;
@@ -1278,8 +1275,8 @@
                     lbl.textContent = 'Last man';
                     setSwing(f(el, k + '-ctx-fill'), null);
                     // `runs` on last_wicket is the batter's own score. Guarded rather
-                    // than assumed: the today board only ever reads name/how/fow off
-                    // it, so a feed without it must blank the aperture, not print
+                    // than assumed: the rest of the wall only ever reads name/how/fow
+                    // off it, so a feed without it must blank the aperture, not print
                     // "undefined".
                     var lw = zoneInn && zoneInn.last_wicket;
                     setNum(ctx, lw && lw.runs != null ? lw.runs : null);
@@ -1305,8 +1302,8 @@
     }
 
     // ---- the division's other games -----------------------------------------
-    // Card contract = live-worker/src/pc.mjs buildLeagueState, as the today board
-    // reads it: { matches: [{ match_id, complete, home_team_id,
+    // Card contract = live-worker/src/pc.mjs buildLeagueState:
+    // { matches: [{ match_id, complete, home_team_id,
     // innings: [{ team_batting_id, runs, wickets, overs, declared }] }] }.
     function applyLeague(matches, envelope) {
         lastLeague = envelope || null;

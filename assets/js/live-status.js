@@ -4,10 +4,10 @@
  * The question every board has to answer beside a score is "how current is this?",
  * and the honest answers are few: it's live, it's paused, the scorer has gone
  * quiet, it's finished, nobody is scoring it, we can't reach the feed. Those words
- * were first worked out on the today board; the match-day board needs the same
- * ones, and two boards on one wall giving a different account of the same match
- * would be worse than either account alone. So the vocabulary lives here and the
- * templates only place it.
+ * have to read the same on every surface — the match-day board, the live-match
+ * slides, the ticker and the strip. Two of them on one wall giving a different
+ * account of the same match would be worse than either account alone. So the
+ * vocabulary lives here and the templates only place it.
  *
  * TWO FEEDS, TWO KINDS OF TRUTH, and this is the whole reason the module has two
  * entry points rather than one:

@@ -464,7 +464,7 @@
             var at = (ev.happened_at && ev.happened_at[1]) || ev.received_at;
             /* ...but only so far back. `happened_at` comes from the SCORER's cursor,
              * and a scorer who stopped syncing an hour ago still yields a healthy poll
-             * (the trap rv.mjs already warns about for the today board's status). Taken
+             * (the trap rv.mjs already warns about for a board's status). Taken
              * literally, every event from such a feed is born an hour old, scores zero
              * and the chrome collapses on a match day — while we in fact just learned
              * all of it and the room has seen none of it.

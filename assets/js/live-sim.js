@@ -581,7 +581,7 @@
                 /* WHAT STATE THE MATCH IS IN, as rv.mjs derives it: a break_desc IS
                  * phase 'break' there (derivePhase), and a simulator that set the
                  * description without the phase left every consumer's break case
-                 * untested — which is how the today board's BREAK badge came to have
+                 * untested — which is how a board's BREAK badge came to have
                  * never fired in a simulated afternoon. */
                 var breakDesc = rainNow(cfg, ms) ? 'Rain delay'
                               : (!complete && inBreak ? 'Innings break' : null);
@@ -1406,8 +1406,8 @@
      *
      * This matters more than it looks: BOTH surfaces that show other clubs' matches pair
      * a league card to a BAKED FIXTURE BY MATCH ID — the strip's ladder tiles through
-     * `cardFor` (`leagueById[fx.match_id]`) and the today board through
-     * `LEAGUE_SCORES[o.match_id]`. Invented ids therefore light up nothing at all: the
+     * `cardFor` (`leagueById[fx.match_id]`) and the match-day board through its own
+     * baked other-game tiles. Invented ids therefore light up nothing at all: the
      * cards arrive, match no row, and are silently dropped. Exactly the problem the
      * live-match slides' baked pc_ids have, and the same answer.
      *

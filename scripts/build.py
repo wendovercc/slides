@@ -2824,8 +2824,8 @@ def add_minutes(time_str, minutes):
 def recurring_events_on(d):
     """config.recurring_events falling on date `d` — the club's standing weekly
     fixtures of the non-cricket kind (the Members Bar). Hardcoded until CS365 can
-    be asked for opening times. Feeds both the context calendar (which decides the
-    audience) and the today board (which tells people it's on)."""
+    be asked for opening times. Feeds the context calendar, which decides the
+    audience."""
     out = []
     for ev in load_config().get("recurring_events", []):
         if ev.get("from") and d < date.fromisoformat(ev["from"]):
@@ -3133,7 +3133,7 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
 
 def _todays_events():
     """Today's events assembled from the committed data files — the shared source
-    for every live surface built outside the today slide (live-config, live-strip),
+    for every live surface built outside the slide build (live-config, live-strip),
     so they can't disagree about what's on today."""
     teams_by_id = load_teams()
     locs = json.loads((CONTENT / "locations.json").read_text()).get("locations", [])
@@ -3396,11 +3396,10 @@ def _with_sim_fixtures(all_fixtures):
 def _sim_league_today():
     """INVENT today's other league matches, from the COMMITTED league tables.
 
-    `WCC_SIM_LEAGUE=1` only, and the point of it is this: the today board's other-games
-    rows and the strip's ladder tiles are BAKED, not fed. Both pair a live card to a baked
-    fixture *by match id* (today.html's `LEAGUE_SCORES[o.match_id]`, live-strip.html's
-    `cardFor`), so the match-day simulator cannot light either one up on its own, however
-    good the feed it produces — there is nothing for a score to attach to. This is the
+    `WCC_SIM_LEAGUE=1` only, and the point of it is this: the match-day board's other-games
+    tiles and the strip's ladder tiles are BAKED, not fed. Both pair a live card to a baked
+    fixture *by match id* (live-strip.html's `cardFor`), so the match-day simulator cannot
+    light either one up on its own, however good the feed it produces — there is nothing for a score to attach to. This is the
     missing half, and it needs no PC-API call and no season: every division we play in has
     a committed `league_table_<comp>.json`, which is a list of the clubs in it and their
     real team ids. The only fiction is who plays whom, and when.
@@ -3540,13 +3539,13 @@ def _league_standings(comp_id):
 
 
 def attach_league_context(events, teams_by_id):
-    """Enrich each WCC match event on the today board with its league context: the
-    parent league name, the day's OTHER matches in that division, and — when the
-    committed league table is available — each side's standing, a point-difference
-    to Wendover, and a swing-game flag. Purely additive: a missing table or
-    league-today file just leaves the league name + division with no standings.
-    Called only on the today slide (NOT inside todays_events) so live-config.json —
-    the Worker's poll list — stays lean."""
+    """Enrich each WCC match event with its league context: the parent league name,
+    the day's OTHER matches in that division, and — when the committed league table
+    is available — each side's standing, a point-difference to Wendover, and a
+    swing-game flag. Purely additive: a missing table or league-today file just
+    leaves the league name + division with no standings. Called only on the slides
+    that need it (NOT inside todays_events) so live-config.json — the Worker's poll
+    list — stays lean."""
     by_comp = _load_league_today()
     for ev in events:
         if ev.get("type") != "match":
@@ -3599,7 +3598,7 @@ def attach_league_context(events, teams_by_id):
 # three without a remainder: whatever number of our matches the board is carrying,
 # every match tile is the same whole number of columns wide (6, 3 or 2) and every
 # division's span is a whole number too. A fourth fixture is dropped rather than
-# squeezed — the today board remains the complete schedule.
+# squeezed.
 MATCH_DAY_COLUMNS = 6
 MATCH_DAY_MAX_MATCHES = 3
 # Grid rows: the division heading, the match tiles, then the other games.
@@ -4229,7 +4228,12 @@ def build_live_events_slide(env, slide_meta):
     a day with no cricket and comes alive under the simulator:
 
         python3 scripts/build.py
-        open 'http://localhost:8000/slideshow/live/?sim=matchday'
+        open 'http://localhost:8000/slideshow/live-test/?sim=matchday'
+
+    IT IS AN INSTRUMENT, NOT A WALL SLIDE, and the only deck that carries it is
+    `content/slideshows/live-test.json` — which has no `homepage_rank`, so it is
+    neither offered on the homepage nor in any screen rotation. Keep it out of the
+    Match Day deck: a room full of people does not want the scheduler's arithmetic.
 
     Always emitted when live is on — it has no fixtures to depend on, unlike the
     live-match set — and marked `_live` so a device with no access key drops it like
@@ -4587,26 +4591,10 @@ def build_slides(env):
         if slide.get("template") == "video":
             build_video_slide(slide)
 
-        # Today board: bake the whole day's club activity (all teams' matches +
-        # training) into the slide so it renders statically (offline / no-feed) —
-        # the live feed only enriches the match rows.
-        if slide.get("template") == "today":
-            training, all_fx, loc_lookup, loc_names = load_schedule_data()
-            slide["_events"] = todays_events(
-                teams_by_id, training, all_fx, loc_lookup, loc_names,
-                _load_yt_broadcasts(), _load_live_seed())
-            attach_league_context(slide["_events"], teams_by_id)
-            # Nothing on today → nothing to say. The slide is still built and stays
-            # available to any deck that wants it; it's the slideshow entry that opts
-            # out, via skip_when_empty (see build_slideshows). The today board needs
-            # no team/section gating — it's the whole club's day — so an empty day is
-            # the only reason a screen wouldn't show it.
-            slide["_empty"] = not slide["_events"]
-
-        # Match-day board: the same day, arranged as a grid of our matches with
-        # their divisions banded underneath. Deliberately separate from the today
-        # board — that one is the whole club's schedule, this one is the state of
-        # up to three matches. Both bake from todays_events so they can't disagree.
+        # Match-day board: the day arranged as a grid of our matches with their
+        # divisions banded underneath — the state of up to three matches. Bakes
+        # from todays_events so it renders statically (offline / no-feed) and the
+        # live feed only enriches the match rows.
         if slide.get("template") == "match-day":
             training, all_fx, loc_lookup, loc_names = load_schedule_data()
             events = todays_events(
@@ -4625,9 +4613,8 @@ def build_slides(env):
             # does not fit the cell that leaves.
             slide["_other_rows"] = max([b["other_rows"] for b in slide["_bands"]] or [0])
             slide["_date"] = _today().strftime("%A %-d %B")
-            # No match today and the board has nothing to be about — the today
-            # board still carries training and the bar. Decks opt out with
-            # skip_when_empty rather than the slide vanishing everywhere.
+            # No match today and the board has nothing to be about. Decks opt out
+            # with skip_when_empty rather than the slide vanishing everywhere.
             # The pollable ids on the board, for the standalone self-poll path.
             slide["_pc_ids"] = [m["pc_id"] for m in slide["_matches"] if m.get("pc_id")]
             slide["_empty"] = not slide["_matches"]
@@ -5528,7 +5515,7 @@ def _resolve_deck(entries, slide_meta, sets, default_panel_duration, today_iso,
         if meta.get("_skip"):
             continue
         # Opt-in per deck: drop a slide that built with no data behind it (e.g.
-        # the today board on a day with nothing on). Other decks still carry it.
+        # the match-day board on a day with nothing on). Other decks still carry it.
         if entry.get("skip_when_empty") and meta.get("_empty"):
             print(f"  {label}: '{entry_slug}' has no content — skipped")
             continue

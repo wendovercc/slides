@@ -1,0 +1,13 @@
+{
+  "title": "Live Test",
+  "description": "Testing deck: the match-day board next to the raw event stream. Deliberately has no homepage_rank — it is not offered on the homepage and no screen rotation carries it.",
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "match-day"
+    },
+    {
+      "slug": "live-events"
+    }
+  ]
+}

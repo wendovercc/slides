@@ -6,9 +6,6 @@
   "refresh_interval_seconds": 300,
   "slides": [
     {
-      "slug": "today"
-    },
-    {
       "slug": "match-day",
       "skip_when_empty": true
     },
@@ -17,9 +14,6 @@
     },
     {
       "slug": "live-match-2nd-xi"
-    },
-    {
-      "slug": "live-events"
     },
     {
       "slug": "live-match-friendly-xi"
