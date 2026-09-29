@@ -53,15 +53,90 @@
     // It names which panel the side bar should be showing while this event is on —
     // see the L-frame decomposition below.
     var TYPES = {
+        /* A HAT-TRICK — the rarest thing in a league season and the top of the table.
+         * Above a hundred and a five-for because both of those are an afternoon's work
+         * and this is three deliveries. See `trackSpells` for why it can be claimed
+         * from a scorecard diff at all. */
+        hat_trick:         { base: 94, ttl: 900000,  repeat: 420000, label: 'Hat-trick',      panel: 'profile' },
         hundred:           { base: 92, ttl: 900000,  repeat: 420000, label: 'Hundred',        panel: 'profile' },
         five_for:          { base: 90, ttl: 900000,  repeat: 420000, label: 'Five wickets',   panel: 'profile' },
         match_finished:    { base: 88, ttl: 2700000, repeat: 300000, label: 'Match finished', panel: 'ladder' },
         abandoned:         { base: 84, ttl: 2700000, repeat: 600000, label: 'Abandoned',      panel: 'ladder' },
         innings_closed:    { base: 74, ttl: 900000,  repeat: 300000, label: 'Innings closed', panel: 'score' },
+        /* A PARTNERSHIP PASSING A MARK — every fifty, and ONE type for all of them.
+         *
+         * It was two types, `stand_fifty` and `stand_hundred`, which stopped dead at a
+         * hundred: a stand of 150 or 200 raised nothing at all. Adding a type per fifty
+         * is the wrong shape, and a 150 stand under a tile reading CENTURY STAND is
+         * worse — so the tile says the noun (PARTNERSHIP), the sentence says the figure
+         * (it already did: "153 together in 22 overs"), and `magnitude` carries the
+         * difference. The `team_total` pattern, for the same reason.
+         *
+         * See `standMarkMagnitude` for where each mark lands. A fifty stand sits just
+         * under an individual fifty and a hundred stand above a wicket — one man's
+         * hundred is still the bigger claim, because a scorecard remembers it and does
+         * not remember the stand he was half of. */
+        stand:             { base: 64, ttl: 600000,  repeat: 300000, label: 'Partnership',    panel: 'score' },
+        /* THE LAST PAIR TOGETHER — nine down, and everything that happens now is the end
+         * of the innings one way or the other. It is a consequence of a wicket, like
+         * `new_batsman`, but a much larger one: an arrival changes who is batting where
+         * this changes what the rest of the innings can be.
+         *
+         * Below a `wicket` (70) because the wicket that made it is the news and this is
+         * what follows from it, and it is handed `tension` — nine down chasing 47 is a
+         * completely different line from nine down at 300, and the chase model already
+         * knows which. */
+        last_pair:         { base: 54, ttl: 480000,  repeat: null,   label: 'Last pair',      panel: 'score' },
+        /* A COLLAPSE — three wickets inside six overs. It sits just above `wicket`,
+         * and the reason it outranks the thing it is made of is that the aggregate is
+         * the story: each of those three has already had its own line at 70, and what
+         * none of them said is that the innings is falling over. Rare enough that it
+         * cannot crowd the band. */
+        collapse:          { base: 72, ttl: 720000,  repeat: 300000, label: 'Collapse',       panel: 'score' },
+        /* TWO IN TWO — the only event on the wall that looks FORWARD. Everything else
+         * the band says has happened; this one says what is about to be bowled, which
+         * is why it outranks a wicket and why it is the one type whose truth can expire
+         * on a ball we never see.
+         *
+         * So it is built to die young. `ttl` is two minutes, `repeat` is null, and the
+         * real guard is a RETRACTION: the moment he bowls again without the third, the
+         * extractor un-says it (see `retire_only`). The ttl is only the backstop for a
+         * bowler who is taken off, or rain, or an innings that ends on it.
+         *
+         * The tile states the fact and the bar states what it means — TWO IN TWO over
+         * "T Duff 2-14 · on a hat-trick" — because the tile saying "ON A HAT-TRICK"
+         * would leave the sentence nothing to add. */
+        on_a_hat_trick:    { base: 76, ttl: 120000,  repeat: null,   label: 'Two in two',     panel: 'profile' },
         wicket:            { base: 70, ttl: 300000,  repeat: 180000, label: 'Wicket',         panel: 'score' },
         fifty:             { base: 64, ttl: 480000,  repeat: 300000, label: 'Fifty',          panel: 'profile' },
         ladder_shift:      { base: 60, ttl: 900000,  repeat: 420000, label: 'Ladder move',    panel: 'ladder' },
         rain_break:        { base: 56, ttl: 1800000, repeat: 600000, label: 'Rain',           panel: 'score' },
+        /* THE PASSAGE OF PLAY CHANGING CHARACTER — the two events a scoreboard can
+         * never show. It displays a number going up; it cannot say that the number has
+         * started going up FASTER, or stopped.
+         *
+         * The charge outranks the squeeze because a burst is something happening and a
+         * squeeze is something not happening — but the squeeze is barely lower, since
+         * a side scoring at one an over for six overs is the match being won by the
+         * bowling side and nothing else on the wall reports it.
+         *
+         * Both are incidents: "they added 44 in four overs" stays true afterwards, so
+         * neither is retired. What stops them repeating is not the ranking but the
+         * disjoint-window rule in the extractor — see `surgeAt`. */
+        /* A WICKET MAIDEN — six balls for nothing and a man out, which is the best
+         * over a bowler bowls short of a hat-trick. Below the wicket itself on purpose:
+         * the dismissal has already had its own line at 70, and what this adds is that
+         * the over around it was also flawless. `magnitude` carries the difference
+         * between one wicket and two, which is where this type earns being one type —
+         * a double-wicket maiden lands in the wicket's own tier. */
+        wicket_maiden:     { base: 56, ttl: 420000,  repeat: 240000, label: 'Wicket maiden',  panel: 'profile' },
+        charge:            { base: 52, ttl: 360000,  repeat: 240000, label: 'Charge',         panel: 'score' },
+        /* MAIDENS ON THE TROT — the squeeze told through one bowler, and priced level
+         * with it for that reason. Three is the threshold: one maiden is an ordinary
+         * over in league cricket and two is a good spell going well, but three
+         * consecutive overs for nothing is the fielding side taking the game over. */
+        maiden_run:        { base: 50, ttl: 480000,  repeat: 300000, label: 'Maiden overs',   panel: 'profile' },
+        squeeze:           { base: 50, ttl: 480000,  repeat: 300000, label: 'Squeeze',        panel: 'score' },
         probability_shift: { base: 48, ttl: 420000,  repeat: 300000, label: 'Swing',          panel: 'score' },
         /* A DIVISION MATCH GETTING UNDER WAY. Every state change should be announced,
          * and this was the one the stream stayed silent through: the board's squares
@@ -93,6 +168,46 @@
          * The windows are short because the fade does the limiting: `base` and `ttl`
          * together mean a league start can clear the floor about twice and a toss
          * about three times, after which they drop out whatever the window says. */
+        /* THE STREAM COMING ONLINE — the one event on the wall that is not news about
+         * the cricket at all. It is an invitation: this game can be WATCHED, and here
+         * is where. That is why it outranks a match merely starting, and why it fades
+         * slowly and comes back — an invitation nobody was in the room for is an
+         * invitation nobody got, where a wicket announced to an empty room has at
+         * least happened.
+         *
+         * `ttl` is long for the same reason. A viewer has to fetch a phone, find the
+         * channel and settle; twenty minutes is the window in which acting on it is
+         * still worth doing, where a toss is stale in five.
+         *
+         * Panel is the SCORE, because by the time the stream is up there is a match to
+         * show and the question a viewer asks next is what they would be watching. */
+        stream_started:    { base: 46, ttl: 1200000, repeat: 300000, fade: 0.7, label: 'Stream', panel: 'score' },
+        /* A TEAM TOTAL PASSING A HUNDRED — and the one type on the band whose headline
+         * figure is ALREADY on the strip, in gold, larger. It is here because the
+         * crossing is a moment and a scoreboard only shows a state: the strip says
+         * 203/4 and can never say they have just gone past two hundred.
+         *
+         * It pays for itself by naming the men who built it, which the strip cannot do
+         * at all — and where it cannot (the division's card carries no batters) the line
+         * leans entirely on the crossing. That is the weakest case on the wall and it is
+         * deliberately priced as such.
+         *
+         * ONE TYPE FOR EVERY MARK, with `magnitude` doing the ordering: a hundred in a
+         * league innings is routine and three hundred is a monster, so 100 lands near
+         * `match_started` and 200 or more just under an individual fifty. The tier cap
+         * means a 300 cannot climb past a fifty, which is the right shape — a total is
+         * the side's afternoon and a fifty is one man's. */
+        team_total:        { base: 50, ttl: 480000,  repeat: 300000, label: 'Team total',     panel: 'score' },
+        /* CLOSING IN ON A MILESTONE — the second forward-looking type, and a far safer
+         * one than `on_a_hat_trick`. "He needs six for his fifty" stays true for a dozen
+         * balls where a hat-trick ball is answered by the next delivery, so it needs no
+         * retraction machinery: the milestone itself retires it, a wicket retires it, and
+         * the ttl outlives neither.
+         *
+         * Below the milestone it anticipates, necessarily, and `magnitude` keeps the two
+         * marks apart — approaching a fifty sits by a match starting, approaching a
+         * hundred just under the fifty it is not yet. */
+        approaching:       { base: 46, ttl: 300000,  repeat: null,   label: 'Closing in',     panel: 'profile' },
         match_started:     { base: 44, ttl: 900000,  repeat: 90000, fade: 0.7, label: 'In play', panel: 'ladder' },
         toss:              { base: 40, ttl: 1800000, repeat: 90000, fade: 0.7, label: 'Toss', panel: 'form' },
         /* PLAY HAS STOPPED, AND NOT FOR THE WEATHER — an innings break, drinks, tea.
@@ -103,7 +218,51 @@
          * Below the toss and well below `rain_break`: the covers coming on is a
          * different order of news from the players coming off for tea, because one
          * threatens the game and the other is the game going to plan. */
+        /* A NEW BATTER AT THE CREASE — the first type that exists because a PERSON
+         * changed rather than a number did.
+         *
+         * It sits just under `match_started` and well under `wicket`, because it is
+         * usually a consequence of one: the dismissal is the news and this is what
+         * followed from it a minute later. What makes it worth a screen of its own is
+         * the situation rather than the arrival — a number four walking out at 12/2,
+         * or the last recognised batter in with forty still needed — and the
+         * scheduler already prices that through the match's `tension`.
+         *
+         * `repeat: null` because a batter comes in once. The ttl is short for the
+         * same reason: "X is in" stops being news the moment he has faced a few
+         * overs, and after that the score line speaks for both of them. */
+        new_batsman:       { base: 36, ttl: 300000,  repeat: null,   label: 'Batter in',      panel: 'profile' },
+        /* A SPELL ENDING — the only individual event on the wall that comes with a
+         * finished story attached. A hundred and a five-for are milestones a player
+         * passes through; a spell is a thing with a beginning, a middle and figures.
+         *
+         * Above `new_batsman` for that reason and below `fifty`, because four tight
+         * overs is a smaller piece of an afternoon than a half-century. What actually
+         * decides whether one reaches the wall is `magnitude`, which the extractor
+         * sets from the wickets in it — a wicketless spell scores 26 and a three-for
+         * 50, which is the spread the type wants and the reason it is one type rather
+         * than two. */
+        spell_ended:       { base: 40, ttl: 480000,  repeat: null,   label: 'Spell',          panel: 'profile' },
+        /* AND A SPELL BEGINNING — a bowling change, which is the captain's half of
+         * the contest and the one thing the band has never said about the fielding
+         * side. Lower than the ending because it is an arrival rather than a result;
+         * the same relationship `new_batsman` has to a wicket. */
+        spell_started:     { base: 30, ttl: 300000,  repeat: null,   label: 'Change',         panel: 'profile' },
+        /* THE THREE LABELS ABOVE ARE WRITTEN FOR THE TILE, not for this table, and
+         * they are the first ones that were. `isLongLabel` in live-ticker.html steps
+         * the gold block's type down past nine characters or a seven-letter word, so
+         * "New batter" and "Spell over" would both have shrunk the brightest thing on
+         * the wall to say something a shorter word says as well: BATTER IN, SPELL,
+         * CHANGE. CHANGE is the bowling change the line then names — the tile carries
+         * the noun and the sentence does the rest, which is the rule the toss set. */
         match_break:       { base: 26, ttl: 600000,  repeat: null,   label: 'Break',          panel: 'score' },
+        /* AND PLAY STARTING AGAIN, which is the only place the length of a stoppage
+         * can be stated: while they are off we know when it began and not when it will
+         * end, and a duration that grows on screen is a clock, not a line. Priced a
+         * shade above the break itself — a ground that has been sitting under covers
+         * for half an hour wants to be told the covers are off.
+         * > James's direction, 2026-09-29. */
+        play_resumed:      { base: 40, ttl: 600000,  repeat: null,   label: 'Play resumes',   panel: 'score' },
         ball_clip:         { base: 20, ttl: 180000,  repeat: null,   label: 'Ball',           panel: 'score' },
         /* THE FLOOR, and now the only snapshot type there is. `ttl` is deliberately
          * longer than the gap between two of them: a snapshot is retired by its own
@@ -143,7 +302,15 @@
         match_started:  ['toss'],
         // A score is being reported: the match is plainly started and plainly tossed,
         // and any earlier score for it is now simply wrong.
-        score_update:   ['toss', 'match_started', 'score_update'],
+        /* AND THE INNINGS THAT CLOSED, AND ANY BREAK. A score line only goes out when
+         * the innings has advanced by a whole over, so by the time one exists the
+         * players are plainly back on and the previous innings is plainly history —
+         * both of which the band was leaving on screen for the rest of their ttl.
+         * "Wendover 248/9 · Target 249" beside a chase already 40 for 1 is a state the
+         * match has left, which is exactly what this table is for.
+         * > James spotted this one, 2026-09-29. */
+        score_update:   ['toss', 'match_started', 'score_update',
+                         'innings_closed', 'match_break', 'rain_break', 'play_resumed'],
         /* A WICKET CARRIES A SCORE, so it retires the same things a score does: it
          * leads with the scoreline the wicket left behind, and once that is on the
          * wall the match's toss, its "In play" and any earlier running total all
@@ -154,15 +321,83 @@
          * total does not make it false, only older, which is freshness's business
          * rather than retirement's. It is also an INCIDENT: it happened, and the
          * incident rule is what stops a routine snapshot deleting it. */
-        wicket:         ['toss', 'match_started', 'score_update'],
+        /* AND IT RETIRES THE LAST ARRIVAL. "T Denham is in" describes the pair at
+         * the crease, and a wicket has just broken that pair — one of the two named
+         * in it has gone. It is not merely older, it is a sentence about a state the
+         * match has left, which is exactly what this table is for.
+         *
+         * Same-poll ordering makes this safe rather than lucky: the wickets are
+         * pushed before the batters loop runs, so a wicket landing with the arrival
+         * that FOLLOWED it retires the previous one and leaves the new one standing. */
+        /* A STAND IS A PAIR STILL TOGETHER, so the wicket that separates them makes
+         * the line FALSE, not merely old: "J Harrington and W Fairhead · 53 together"
+         * beside a board showing the next man in is the room being lied to. This is
+         * the retirement test exactly — a description of a state the match has left —
+         * and it is why a stand is not an incident the way a wicket is.
+         *
+         * A bigger mark retires the smaller one for the same reason: the same two men
+         * on 104 together make "53 together" a wrong number, not an old one. */
+        /* A MAN OUT IN THE FORTIES makes "needs six for his fifty" false, not old, so the
+         * wicket takes the approach with it.
+         *
+         * KNOWN OVER-REACH: `RETIRES` is per match, so this also retires the OTHER
+         * batter's approach, which is still perfectly true. It costs that event the rest
+         * of its time on the band and never puts a wrong sentence on screen, where the
+         * alternative — not retiring — leaves the band telling a room that a man who is
+         * walking off needs six more. Two batters approaching marks at once is rare;
+         * being wrong in public about one of them is not worth the trade. */
+        /* AND THE TENTH WICKET UNMAKES THE LAST PAIR. They are not together any more;
+         * they are all out, and `innings_closed` is about to say so.
+         *
+         * The wicket that CREATES the last pair does not retire it, because the wickets
+         * block runs first in the extractor and the retirement only reaches events
+         * already in the store. */
+        wicket:         ['toss', 'match_started', 'score_update', 'new_batsman', 'stand',
+                         'innings_closed', 'match_break', 'rain_break', 'play_resumed',
+                         'approaching', 'last_pair'],
+        // He got there: the anticipation has been answered by the best possible result.
+        fifty:          ['approaching'],
+        hundred:        ['approaching'],
+        /* A BIGGER MARK RETIRES THE SMALLER ONE, which one type expresses better than
+         * two did: the same pair on 153 make "104 together" a wrong number, whatever
+         * marks the two lines happened to be about. */
+        stand:          ['score_update', 'stand'],
+        /* A PASSAGE IS AN INCIDENT — it happened, and a later one does not unmake it,
+         * so none of the three appears in anybody's retirement list. They retire the
+         * routine snapshot for the usual reason: once the band has said what the last
+         * four overs were worth, "where they are" is the duller half of it. */
+        /* THE THIRD BALL TOOK A WICKET, so "on a hat-trick" has been answered and must
+         * go — the retraction below handles the other answer. */
+        hat_trick:      ['score_update', 'on_a_hat_trick'],
+        on_a_hat_trick: ['score_update'],
+        /* A BIGGER MARK RETIRES A SMALLER ONE: "200 up" is a wrong number once they are
+         * past three hundred, the same reasoning a century stand retires its fifty.
+         * Scoped per match as always, which here is exactly right — both sides' totals
+         * in one match are the same running story and the older one is the stale half. */
+        team_total:     ['score_update', 'team_total'],
+        wicket_maiden:  ['score_update'],
+        /* A LONGER RUN RETIRES A SHORTER ONE — "three in a row" is a wrong number once
+         * it is four, the same reasoning a century stand retires its fifty.
+         *
+         * KNOWN SCOPE LIMITATION: `RETIRES` is per MATCH, so a second bowler's run of
+         * maidens would retire the first bowler's, which is not false, only earlier. It
+         * costs an event a little of its time on the band, it needs two bowlers with
+         * three consecutive maidens each inside one ttl to happen at all, and the
+         * alternative is a per-person retirement scope that nothing else wants. */
+        maiden_run:     ['score_update', 'maiden_run'],
+        charge:         ['score_update'],
+        squeeze:        ['score_update'],
+        collapse:       ['score_update'],
         // An innings closing settles every running figure for that innings.
-        innings_closed: ['toss', 'match_started', 'score_update', 'match_break'],
+        play_resumed:   ['match_break', 'rain_break'],
+        innings_closed: ['last_pair', 'toss', 'match_started', 'score_update', 'match_break',
+                         'new_batsman', 'spell_started'],
         // And a verdict settles everything that described the game in progress —
         // but not its wickets, its sixes or its hundreds, which happened.
-        match_finished: ['toss', 'match_started', 'score_update', 'match_break',
-                         'probability_shift'],
-        abandoned:      ['toss', 'match_started', 'score_update', 'match_break',
-                         'probability_shift']
+        match_finished: ['last_pair', 'toss', 'match_started', 'score_update', 'match_break',
+                         'probability_shift', 'new_batsman', 'spell_started'],
+        abandoned:      ['last_pair', 'toss', 'match_started', 'score_update', 'match_break',
+                         'probability_shift', 'new_batsman', 'spell_started']
     };
 
     // A league-other match matters less than one of ours — but NOT so much less
@@ -358,11 +593,11 @@
         return {
             type: ev.type,
             ticker: {
-                // The event description, as the bar's one line. `detail` is the
-                // supporting clause — the scoreline a wicket left behind, the match a
-                // result belongs to — and the bar shows it when it has the room.
+                // The event as ONE line. `parts` is the marked-up form the bar draws;
+                // `text` is the same line flat, for every other reader. There is no
+                // third field any more — see `say()`.
                 text: (ev.payload && ev.payload.headline) || '',
-                detail: (ev.payload && ev.payload.detail) || '',
+                parts: (ev.payload && ev.payload.parts) || null,
                 // Footage changes what showing MEANS: the slideshow gives way and the
                 // clip runs in the slide's box, with this same bar beside it.
                 clip: !!ev.clip
@@ -420,7 +655,7 @@
             ev.dwell = dwellFor(ev);
             // What this event retires in its own match — see RETIRES. Same match
             // only: a score in one game says nothing about the state of another.
-            var kill = RETIRES[ev.type];
+            var kill = ev.retires || RETIRES[ev.type];
             if (kill) {
                 for (var s = 0; s < events.length; s++) {
                     var old = events[s];
@@ -429,6 +664,11 @@
                     }
                 }
             }
+            /* A RETRACTION HAS DONE ITS WHOLE JOB, and it is not something to show. It
+             * is deliberately not remembered in `byId` either: it carries no id worth
+             * de-duplicating, and the extractor that raised it is one-shot by its own
+             * state (`_spells[..].on`). */
+            if (ev.retire_only) return null;
             byId[ev.id] = ev;
             events.push(ev);
             var mk = ev.match && ev.match.key;
@@ -738,14 +978,26 @@
                 out.push(event(type, ctx.key + ':' + id, ctx, when, now, payload, extra));
             };
 
+            /* SPELLS ARE TRACKED BEFORE ANYTHING IS DECIDED, and on every poll —
+             * including the first one, where the moves are thrown away. The map is
+             * the memory the next poll diffs against, so a poll that skipped it
+             * would lose a bowler's place in his spell and report the wrong figures
+             * when it ended. It rides on the card, exactly as `_received_at` does. */
+            var spell = trackSpells(p ? p._spells : null, m);
+            m._spells = spell.map;
+            // The over log rides on the card the same way, and for the same reason:
+            // the passage clause is a subtraction against where the innings stood
+            // several overs ago, which is memory no single poll holds.
+            carryDerived(p, m);
+
             if (!p) {
                 // First sighting. The toss is a standing fact worth announcing (it
                 // frames everything after it); a match already decided when we
                 // joined is the answer to "what happened?" and belongs on screen.
                 if (m.toss && m.toss.text) push('toss', 'toss', tossPayload(m, ctx));
                 if (m.complete) push('match_finished', 'result',
-                    { headline: m.result_club || m.result || 'Match finished',
-                      detail: m.final ? '' : 'to be confirmed' });
+                    say(resultParts(m.result_club || m.result || 'Match finished', m, ctx)
+                        .concat([SEP, det(m.final ? '' : 'to be confirmed')])));
                 return;
             }
             // A LATER START is not a first sighting. A match that begins at three
@@ -757,6 +1009,32 @@
                 push('toss', 'toss', tossPayload(m, ctx));
             }
 
+            /* --- THE STREAM COMING ONLINE. Detected as a transition, like the toss:
+             * a card with no stream marker last poll and one now.
+             *
+             * WHICH MARKER, in order of how much it actually proves. RV's stream object
+             * carries `recording_started_utc`, and probing a real streamed match shows
+             * it is ABSENT until the stream comes online and appears when it does —
+             * which is exactly the moment we want and the only field that means it
+             * outright (see the anchor retry loop in scripts/probe_live.py). A video id
+             * is the next best: it may be minted with a scheduled broadcast, but on a
+             * card that had none it is still new. And FOOTAGE PROVES A STREAM without
+             * naming it — a clip cannot exist without a camera — which is the backstop
+             * for a normalisation that passes neither field through.
+             *
+             * A CARD THAT CARRIES ITS STREAM ALL DAY YIELDS NOTHING, and that is the
+             * honest failure: there is no transition to find, so nothing is announced,
+             * rather than a stream being announced at whatever time we happened to
+             * start polling. Same rule `match_started` follows.
+             *
+             * Worth confirming against a real streamed fixture with
+             * `scripts/probe_live.py <pc_id> --raw` when one next comes round: the
+             * Worker's normalisation is what decides which of the three we get, and
+             * that is not visible from this repo. */
+            if (streamOf(m) && !streamOf(p)) {
+                push('stream_started', 'stream', streamPayload(m, ctx, cfg));
+            }
+
             var pi = p.innings || [], mi = m.innings || [];
 
             // A new innings in the list means the previous one closed — and in a
@@ -764,11 +1042,10 @@
             // useful thing the surface can say all afternoon.
             if (mi.length > pi.length && pi.length) {
                 var closed = mi[pi.length - 1] || pi[pi.length - 1];
-                push('innings_closed', 'inn' + pi.length + 'close', {
-                    headline: (closed.club || closed.side || '') + ' ' + closed.runs + '/' + closed.wickets +
-                              ' (' + closed.overs + ' ov)',
-                    detail: mi.length === 2 ? 'Target ' + ((closed.runs || 0) + 1) : 'Innings closed'
-                });
+                push('innings_closed', 'inn' + pi.length + 'close',
+                    say(scoreParts(dropCC(closed.club || closed.side || ''), closed)
+                        .concat([SEP, det(mi.length === 2
+                            ? 'Target ' + ((closed.runs || 0) + 1) : 'Innings closed', true)])));
             }
 
             mi.forEach(function (inn, ii) {
@@ -796,6 +1073,11 @@
                  * wickets and the score line are at stake either way: the boundary and
                  * milestone rules already require a batter we saw before, so they
                  * cannot fire off an empty previous card. */
+                // Whether this innings was in the PREVIOUS card at all, captured before
+                // the synthesis below replaces the answer. The team milestone needs it:
+                // a crossing is a transition, and an innings we are seeing for the
+                // first time crossed all of its marks before we were watching.
+                var watched = !!pinn;
                 if (!pinn) {
                     if ((inn.wickets || 0) > NEW_INNINGS_MAX_WICKETS) return;
                     pinn = { runs: 0, wickets: 0, overs: '0', batters: [], bowling: [],
@@ -805,6 +1087,11 @@
                 // Who is batting and who is waiting — once per innings, because every
                 // scoreline this block writes names the same two sides.
                 var sides = sidesOf(m, ctx, inn);
+                /* HOW FAR THE INNINGS MOVED IN THIS POLL, read once at the top because
+                 * three things below need it: the floor's over boundary, the over log,
+                 * and — the reason it moved up here from the floor — whether a wicket
+                 * was watched closely enough to say WHEN it fell. */
+                var ob = balls(inn.overs), pb = balls(pinn.overs);
                 /* HAS THIS POLL ALREADY STATED THE SCORE? A wicket, a four and a six
                  * all now lead with the scoreline, so when one of them lands on an
                  * over boundary the floor's own line is the same sentence twice — and
@@ -813,9 +1100,6 @@
                  * exists to fill SILENCE; an over that produced a wicket was not
                  * silent. See the score line at the foot of this block. */
                 var saidScore = false;
-                // Whose bowlers these are — one phrase for the whole line, first
-                // innings only. See toBatTail.
-                var tail = toBatTail(sides, mi);
 
                 // --- wickets. A poll can span more than one, and only the last is
                 // described in the feed — so say that one and count the rest, rather
@@ -859,6 +1143,12 @@
                  * the muted clause behind it. The clause is the dismissal in one
                  * sentence: who, how, for how many, and who got him with what figures. */
                 var dw = (inn.wickets || 0) - (pinn.wickets || 0);
+                /* WHERE THE LATEST WICKET FELL, stamped before anything is said about
+                 * it. `wide` is the poll's own honesty: more than two overs of cricket
+                 * in one reading and the over count on this card is not where the
+                 * wicket fell, so the stand it started will be stated without a
+                 * length. See logFall. */
+                if (dw > 0) logFall(m, ii, inn.wickets || 0, ob, ob - pb > 12, inn);
                 var fell = dw > 0 ? newDismissals(pinn, inn) : [];
                 if (dw > 0 && fell.length === dw) {
                     fell.forEach(function (d, di) {
@@ -871,13 +1161,17 @@
                         var at = di === fell.length - 1
                             ? { runs: inn.runs, wickets: inn.wickets, overs: inn.overs }
                             : { runs: d.fow, wickets: d.order };
-                        var dsc = scoreParts(sides.bat || dropCC(side), at);
-                        push('wicket', 'i' + ii + 'w' + d.order, {
-                            headline: dsc.headline, parts: dsc.parts,
-                            detail: dismissalText(d, inn, di === fell.length - 1),
-                            tail: tail && tail.text, tail_parts: tail && tail.parts,
-                            who: d.name, fielder: d.fielder || null
-                        }, { tension: ctx.tension });
+                        var dlast = di === fell.length - 1;
+                        push('wicket', 'i' + ii + 'w' + d.order,
+                            /* EVERY WICKET THE SAME SHAPE. A backfilled one used to
+                             * carry the score it left, on the argument that it
+                             * describes a position the strip is no longer showing —
+                             * but it read as a different KIND of line a minute after
+                             * the last one, which is worse than a missing figure.
+                             * > James's direction, 2026-09-29. */
+                            say(wicketParts(d, inn, sides, ctx, dlast, standEnded(d, inn, dlast)),
+                                { who: d.name, fielder: d.fielder || null }),
+                            { tension: ctx.tension });
                         saidScore = true;
                     });
                 } else if (dw > 0) {
@@ -886,46 +1180,249 @@
                     // event for the batch, saying honestly what it cannot separate.
                     var w = inn.last_wicket;
                     var also = dw > 1 ? ' (+' + (dw - 1) + ' more since the last update)' : '';
-                    var wsc = scoreParts(sides.bat || dropCC(side), inn);
-                    push('wicket', 'i' + ii + 'w' + inn.wickets, {
-                        headline: wsc.headline, parts: wsc.parts,
-                        detail: dismissalText(w, inn, true) + also,
-                        tail: tail && tail.text, tail_parts: tail && tail.parts,
-                        who: w && w.name || '', fielder: w && w.fielder || null
-                    }, { tension: ctx.tension });
+                    push('wicket', 'i' + ii + 'w' + inn.wickets,
+                        say(wicketParts(w, inn, sides, ctx, true, null, also),
+                            { who: w && w.name || '', fielder: w && w.fielder || null }),
+                        { tension: ctx.tension });
                     saidScore = true;
+                }
+
+                /* --- NINE DOWN, AND THE LAST PAIR TOGETHER. Placed with the other
+                 * consequences of a wicket, and tested as a STATE rather than as the
+                 * ninth wicket falling: on that poll the man coming in has faced
+                 * nothing, so there is no pair to name yet. `creasePair` requires both
+                 * of them to have faced something — the same rule `new_batsman` uses,
+                 * and the right one here too, since a pair is together once both are
+                 * batting. `onceOnly` is what turns a standing state into one sentence.
+                 *
+                 * Nine wickets is the last pair only if there IS a pair: a side batting
+                 * a man short is all out at nine, and requiring two men at the crease is
+                 * what tells the difference without having to know the squad size. */
+                var pairSaid = {};
+                if ((inn.wickets || 0) === 9 && !inn.closed && !m.complete) {
+                    var lastTwo = creasePair(inn);
+                    if (lastTwo.length === 2 && onceOnly(m, ii, 'last_pair')) {
+                        push('last_pair', 'i' + ii + 'last',
+                             lastPairPayload(lastTwo, inn, mi, sides, ctx),
+                             { ours: isOurPlayer(ctx, sides.bat), tension: ctx.tension });
+                        /* AND THE ARRIVAL BELOW STANDS DOWN FOR THESE TWO. The last-pair
+                         * line names the incoming man and what he has, so "K Eleven to the
+                         * crease" a line later is the same moment said twice — and the
+                         * smaller half of it, since the pair line says what the arrival
+                         * MEANS. Suppressed at emission rather than by retirement because
+                         * the arrival is pushed after this and a retirement only reaches
+                         * events already in the store. */
+                        lastTwo.forEach(function (b) { pairSaid[b.name] = true; });
+                    }
                 }
 
                 // --- milestones, per batter, by name. `batters` is the full card, so
                 // this catches a fifty reached by someone already dismissed by the
                 // time we polled.
                 var pbat = byName(pinn.batters);
+                // Whose milestone this poll already carried. The stand below reads it:
+                // one passage of play should not be announced twice.
+                var milestoned = {};
                 (inn.batters || []).forEach(function (b) {
                     var was = pbat[b.name];
                     if (!was) return;
                     [[100, 'hundred'], [50, 'fifty']].forEach(function (pair) {
                         var mark = pair[0], type = pair[1];
                         if ((was.runs || 0) < mark && (b.runs || 0) >= mark) {
-                            push(type, 'i' + ii + mark + b.name, {
-                                headline: b.name + ' ' + b.runs + (b.balls ? ' (' + b.balls + ')' : ''),
-                                detail: mark === 100 ? 'Hundred for ' + side : 'Fifty for ' + side,
-                                who: b.name
-                            });
+                            /* WHOSE MILESTONE decides both how much is said and how
+                             * much it is worth. The match being ours does not make the
+                             * batter ours — their opener reaching fifty against us is
+                             * the same diff — so the club test goes through to the
+                             * interest as well, where it takes the ordinary
+                             * other-club discount. Their hundred still outranks our
+                             * fifty; our fifty outranks theirs. */
+                            var mine = isOurPlayer(ctx, sides.bat);
+                            milestoned[b.name] = true;
+                            push(type, 'i' + ii + mark + b.name,
+                                 milestonePayload(b, mark, inn, sides, ctx, mine), { ours: mine });
                         }
                     });
+                    /* --- AND CLOSING IN ON ONE. Same loop, same `was` guard: a batter we
+                     * are meeting for the first time entered the forties before we were
+                     * watching, and the approach is a transition like every other.
+                     *
+                     * The higher mark is tested first, so a batter who arrives in the
+                     * nineties from the eighties is closing in on a hundred and not on a
+                     * fifty he passed an hour ago.
+                     *
+                     * `< mark` is what keeps this out of the milestone's way: a blow that
+                     * takes him from 44 to 52 crossed the window and the mark in one, and
+                     * the `fifty` above has already said the only thing worth saying. */
+                    if (!isOut(b)) {
+                        APPROACH_MARKS.some(function (mark) {
+                            var lo = mark - APPROACH_WINDOW;
+                            if ((was.runs || 0) >= lo) return false;
+                            if ((b.runs || 0) < lo || (b.runs || 0) >= mark) return false;
+                            var near = isOurPlayer(ctx, sides.bat);
+                            push('approaching', 'i' + ii + 'near' + mark + b.name,
+                                 approachPayload(b, mark, inn, sides, ctx),
+                                 { ours: near, magnitude: approachMagnitude(mark) });
+                            return true;
+                        });
+                    }
                 });
+
+                /* --- A BATTER ARRIVING. Detected on his FIRST BALL FACED, not on
+                 * his appearing in the card: RV lists the whole squad with a
+                 * `number` of 99 until they bat, and the worker's normalisation of
+                 * that is not something the band should be reading tea leaves from.
+                 * A runs/balls counter moving off zero is unambiguous on any shape of
+                 * card, and it is the same kind of claim the boundaries make — a
+                 * difference between two stated numbers.
+                 *
+                 * It also puts the sentence in a better place. The arrival fires a
+                 * poll or two after the dismissal that caused it rather than in the
+                 * same breath, so the band says the wicket, then says who walked out
+                 * to face the next one — which is the order the ground saw it in.
+                 *
+                 * THE OPENERS ARE NOT AN ARRIVAL. At 0/0 nobody has come IN; they
+                 * have started, and the toss and the first score line have that
+                 * covered. So it takes a wicket to have fallen, which is also what
+                 * makes the line worth reading: a batter is only news when the
+                 * situation he walks into is.
+                 *
+                 * And not off a synthesised innings either. The empty previous card
+                 * that `!pinn` builds makes every batter look brand new, so a late
+                 * publishing scorer would announce both not-out batters as arrivals
+                 * — the same recital the wicket guard above exists to prevent. */
+                if ((pinn.batters || []).length && (inn.wickets || 0) >= 1) {
+                    (inn.batters || []).forEach(function (b) {
+                        if (!b || !b.name || isOut(b) || !(b.runs || b.balls)) return;
+                        if (pairSaid[b.name]) return;       // the last pair said it
+                        var before = pbat[b.name];
+                        if (before && (before.runs || before.balls)) return;
+                        var mine = isOurPlayer(ctx, sides.bat);
+                        push('new_batsman', 'i' + ii + 'in' + b.name,
+                             arrivalPayload(b, inn, sides, ctx, mine),
+                             { ours: mine, tension: ctx.tension });
+                    });
+                }
+
+                /* --- A STAND REACHING A MARK. Sits after the personal milestones
+                 * because that is the order of the claim: a man's fifty is the bigger
+                 * half of the same passage of play, and same-poll events are shown in
+                 * insertion order.
+                 *
+                 * NOT IN THE SAME POLL AS A WICKET. The stand is measured from the
+                 * last fall, so a poll that brought a wicket is comparing two
+                 * different pairs' stands and the crossing would be an artefact of
+                 * the arithmetic rather than something that happened. Wickets
+                 * unchanged is the whole test.
+                 *
+                 * AND NOT OFF A SYNTHESISED PREVIOUS CARD either — the empty one the
+                 * `!pinn` branch builds makes any stand look like it was just built,
+                 * so a late-publishing scorer would announce a fifty partnership put
+                 * together before we were watching. The same guard the arrival and the
+                 * boundary rules use: we must have seen this innings before.
+                 *
+                 * ONE MARK PER POLL. A gap wide enough to cross both is wide enough
+                 * that only the bigger one is worth saying. */
+                var standNow = partnershipRuns(inn), standWas = partnershipRuns(pinn);
+                if (standNow != null && standWas != null && (pinn.batters || []).length &&
+                    (inn.wickets || 0) === (pinn.wickets || 0)) {
+                    var spair = creasePair(inn);
+                    /* NOT IN THE SAME BREATH AS A PERSONAL MILESTONE — but only when
+                     * it really is the same fact. A stand of 54 with fifty of them to
+                     * one man IS his fifty, and his is the bigger claim of the two,
+                     * being the one a scorecard keeps. A man who reaches fifty across
+                     * three partnerships on the same poll as this pair reach theirs is
+                     * a coincidence of arithmetic, and suppressing that would lose a
+                     * real event to an accident — which is what a first cut of this
+                     * rule did, on both test innings.
+                     *
+                     * So the test is his SHARE of this stand, and it is only applied
+                     * when we can prove it. `standShare` is null when the fall log
+                     * cannot answer, and an unproven share suppresses nothing. */
+                    /* THE HIGHEST MARK CROSSED, and only that one. A poll wide enough
+                     * to take a stand from 40 to 105 is wide enough that "fifty
+                     * together" would be a wrong number the moment it went up. */
+                    var smark = spair.length
+                        ? Math.floor(standNow / STAND_MARK) * STAND_MARK : 0;
+                    if (smark && standWas < smark) {
+                        var hogged = spair.some(function (b) {
+                            var sh = milestoned[b.name] ? standShare(m, ii, inn, b) : null;
+                            return sh != null && sh >= smark;
+                        });
+                        if (!hogged) {
+                            var smine = isOurPlayer(ctx, sides.bat);
+                            push('stand', 'i' + ii + 'st' + (inn.wickets || 0) + '_' + smark,
+                                 standPayload(spair, standNow, standBalls(m, ii, inn, ob),
+                                              inn, sides, ctx),
+                                 { ours: smine, tension: ctx.tension,
+                                   magnitude: standMarkMagnitude(smark) });
+                        }
+                    }
+                }
 
                 // --- a bowler's fifth
                 var pbowl = byName(pinn.bowling);
                 (inn.bowling || []).forEach(function (bw) {
                     var was = pbowl[bw.name];
                     if (was && (was.wickets || 0) < 5 && (bw.wickets || 0) >= 5) {
-                        push('five_for', 'i' + ii + '5w' + bw.name, {
-                            headline: bw.name + ' ' + bw.wickets + '\u2013' + bw.runs,
-                            detail: 'Five wickets in ' + bw.overs + ' overs'
-                        });
+                        // The bowler's side is the one NOT batting, which `sidesOf`
+                        // already resolved for the scoreline above.
+                        var his = isOurPlayer(ctx, sides.other);
+                        push('five_for', 'i' + ii + '5w' + bw.name,
+                             fiveForPayload(bw, inn, sides, ctx, his), { ours: his });
                     }
                 });
+
+                /* --- A TEAM TOTAL PASSING A HUNDRED. Above the passage family and the
+                 * floor because it is a plainer fact than either: a number went past a
+                 * round number, which needs no window and no baseline.
+                 *
+                 * Deliberately NOT gated on a whole over. It is the crossing that is the
+                 * news and the ball it happened on is the one the ground cheered, so a
+                 * poll mid-over says it then rather than waiting for the over to end.
+                 *
+                 * `watched` is the guard every transition here needs: an innings we had
+                 * not seen before this poll crossed its marks off-screen, and a card
+                 * published late would otherwise recite them. */
+                if (watched && !inn.closed && !m.complete) {
+                    var mark = teamMarkCrossed(pinn, inn, mi);
+                    if (mark) {
+                        var mmine = isOurPlayer(ctx, sides.bat);
+                        push('team_total', 'i' + ii + 'team' + mark,
+                             teamMarkPayload(mark, inn, sides, mmine, atHome(sides, m, ctx), mi, ctx),
+                             { ours: mmine,
+                               /* A HUNDRED IS ROUTINE AND THREE HUNDRED IS A MONSTER, and
+                                * one type covers both — so the mark itself is the
+                                * magnitude. 100 lands near a match starting, 200 and up
+                                * just under an individual fifty, and the tier cap stops
+                                * any total climbing past one. */
+                               magnitude: teamMarkMagnitude(mark) });
+                    }
+                }
+
+                /* --- THE PASSAGE OF PLAY, when it has changed character. Last of
+                 * the real events and directly above the floor, which is also where it
+                 * belongs in the reading: it is the floor's own arithmetic promoted to
+                 * news when it crosses a threshold.
+                 *
+                 * WHICH IS WHY IT STANDS THE FLOOR DOWN. The score line's clause is
+                 * the passage clause — the same subtraction over the same overs — so an
+                 * over that produced a charge would say "44 in the last 4 overs" twice
+                 * from one poll, the second time with the duller half of it. Same rule
+                 * the wicket already follows, and the same reason.
+                 *
+                 * Only on a whole over, like the floor: the window is measured in overs
+                 * and a mid-over reading would compare part of one with the whole of
+                 * another. */
+                if (ob > pb && ob % 6 === 0 && !m.complete) {
+                    var sg = surgeAt(m, ii, inn, ob);
+                    if (sg && surgeFresh(m, ii, sg.face, ob, sg.balls)) {
+                        var sgmine = isOurPlayer(ctx, sides.bat);
+                        push(sg.face, 'i' + ii + sg.face + ob,
+                             surgePayload(sg, inn, sides, sgmine, ctx, mi),
+                             { tension: ctx.tension });
+                        saidScore = true;
+                    }
+                }
 
                 /* --- the floor. Not news and not pretending to be: it is what keeps
                  * a screen truthful when nothing has happened for ten overs, and its
@@ -940,29 +1437,93 @@
                  * overs, and counting in overs meant rain or a slow over rate
                  * suspended the guarantee precisely when it mattered. The rule is now
                  * stated where it belongs, as `coverage` in the scheduler. */
-                var ob = balls(inn.overs), pb = balls(pinn.overs);
-                if (ob > pb && ob % 6 === 0 && !saidScore) {
-                    var delta = sinceLastPoll(pinn, inn, ob, pb);
-                    var ov = ob / 6;
-                    /* ONE SENTENCE FOR A SCORE, whichever feed it came off. Our own
-                     * matches know more than the division's — who is in, on what —
-                     * but a band that wrote our score one way and somebody else's
-                     * another made the two read as different kinds of news when they
-                     * are the same kind. So the over-by-over line is the league line:
-                     * club, figure, overs, and who is still to bat.
-                     *
-                     * The at-crease pair has left the band altogether. It was saying
-                     * the same two names every over whether or not they had changed,
-                     * and the division has no equivalent to offer — so the strip's
-                     * score panel is where a reader looks for who is in. */
-                    var osc = scoreParts(sides.bat || dropCC(side),
-                                         { runs: inn.runs, wickets: inn.wickets, overs: ov });
-                    push('score_update', 'i' + ii + 'ov' + ov, {
-                        headline: osc.headline, parts: osc.parts,
-                        detail: scoreDetail(m, ctx, sides, mi, delta),
-                        tail: tail && tail.text, tail_parts: tail && tail.parts
-                    });
+                /* THE OVER LOG IS KEPT WHETHER OR NOT A LINE GOES OUT, because it is
+                 * not a record of what we SAID, it is a record of where the innings
+                 * stood at each whole over — which is what the passage clause
+                 * subtracts. Logging it inside the `!saidScore` gate would mean an
+                 * over that produced a wicket left no anchor behind it, and the next
+                 * five overs would be measured from the wrong ball. */
+                if (ob > pb && ob % 6 === 0) logOver(m, ii, ob, inn);
+                /* NOT ONCE THE MATCH IS OVER, which is the same rule the division's
+                 * scoreline follows above: a card that keeps being corrected after the
+                 * close would put a live-sounding line on the band beside a strip
+                 * showing FINAL. The incidents above are guarded by their own
+                 * freshness tests; these two describe an afternoon in progress. */
+                if (ob > pb && ob % 6 === 0 && !saidScore && !m.complete) {
+                    push('score_update', 'i' + ii + 'ov' + (ob / 6),
+                         scorePayload(m, ctx, sides, inn, ii, ob,
+                                      sinceLastPoll(pinn, inn, ob, pb), mi));
                 }
+            });
+
+            /* --- SPELLS. Emitted after the innings loop rather than inside it
+             * because the tracker walks the whole card in one pass — a spell is a
+             * fact about a bowler across polls, not about the diff of one innings.
+             * The innings and the sides are recovered from the move's own index. */
+            spell.moves.forEach(function (mv) {
+                var sinn = mi[mv.ii];
+                if (!sinn) return;
+                var ssides = sidesOf(m, ctx, sinn);
+                // A bowler belongs to the side that is NOT batting.
+                var his = isOurPlayer(ctx, ssides.other);
+                if (mv.kind === 'start') {
+                    push('spell_started', 'i' + mv.ii + 'spell' + mv.name + mv.now.balls,
+                         spellStartPayload(mv, sinn, ssides, ctx, his), { ours: his });
+                    return;
+                }
+                var end = spellEndPayload(mv, sinn, ssides, ctx, his);
+                /* A SPELL IS THREE OVERS OR IT IS NOT A SPELL. Two is a look, and a
+                 * band that announced every bowler who had a look would be reporting
+                 * the over rate. The floor is on the SPELL's own overs, so a bowler
+                 * returning for one more over and being taken off again does not get
+                 * a line off the back of the six he bowled an hour ago. */
+                if (end.overs < 3) return;
+                push('spell_ended', 'i' + mv.ii + 'spellend' + mv.name + mv.now.balls,
+                     end.payload, { ours: his, magnitude: end.magnitude });
+            });
+
+            /* --- THREE IN THREE, and the ball before it. Out of the same tracker and
+             * for the same reason: a hat-trick is a fact about one bowler's deliveries
+             * across polls, which is not something the diff of a single innings can see.
+             *
+             * The `miss` strike is the RETRACTION — the hat-trick ball was bowled and
+             * did not take a wicket, so the sentence the band may still be holding has
+             * stopped being true. It carries no payload worth reading and never reaches
+             * a screen; `retire_only` is the whole point of it. */
+            spell.strikes.forEach(function (mv) {
+                var sinn = mi[mv.ii];
+                if (mv.kind === 'miss') {
+                    push('retraction', 'i' + mv.ii + 'nohat' + mv.name,
+                         say([]), { retires: ['on_a_hat_trick'], retire_only: true });
+                    return;
+                }
+                if (!sinn) return;
+                var ssides = sidesOf(m, ctx, sinn);
+                var his = isOurPlayer(ctx, ssides.other);
+                /* A MAIDEN, AND THE TWO THINGS THAT MAKE ONE WORTH SAYING. Ranked, not
+                 * both: a wicket maiden that completes three in a row is one over and
+                 * gets one line, and the run is the bigger half of it — so its payload
+                 * carries the wicket too. A lone wicketless maiden says nothing at all,
+                 * which is the right answer in a league where most bowlers manage one. */
+                if (mv.kind === 'maiden') {
+                    if (mv.run >= MAIDEN_RUN_NEWS) {
+                        push('maiden_run', 'i' + mv.ii + 'mdn' + mv.name + mv.now.balls,
+                             maidenRunPayload(mv, sinn, ssides, ctx), { ours: his });
+                    } else if (mv.wkts >= 1) {
+                        push('wicket_maiden', 'i' + mv.ii + 'wm' + mv.name + mv.now.balls,
+                             wicketMaidenPayload(mv, sinn, pi[mv.ii], ssides, ctx),
+                             { ours: his, magnitude: Math.min(1, mv.wkts * 0.4) });
+                    }
+                    return;
+                }
+                if (mv.kind === 'hat') {
+                    push('hat_trick', 'i' + mv.ii + 'hat' + mv.name + mv.now.balls,
+                         hatTrickPayload(mv, sinn, pi[mv.ii], ssides, ctx), { ours: his });
+                    return;
+                }
+                push('on_a_hat_trick', 'i' + mv.ii + 'two' + mv.name + mv.now.balls,
+                     onAHatTrickPayload(mv, sinn, ssides, ctx),
+                     { ours: his, tension: ctx.tension });
             });
 
             // --- a swing worth remarking on. The chase model is the authority on
@@ -976,33 +1537,45 @@
                     // Keyed on the MOVE, not on the clock: a second-resolution
                     // timestamp collides whenever two polls land in the same second.
                     push('probability_shift', 'swing' + Math.round(ps * 100) + '_' + Math.round(ns * 100),
-                        { headline: swingText(m, ps, ns),
-                          detail: 'Win probability ' + pct(ps) + ' → ' + pct(ns) },
+                        say(swingParts(m, ps, ns).concat(
+                            [SEP, det('Win probability ' + pct(ps) + ' \u2192 ' + pct(ns), true)])),
                         { magnitude: Math.min(1, d / 0.5) });
                 }
             }
 
-            // --- breaks, and the two ways an afternoon ends
+            /* --- breaks, and the two ways an afternoon ends.
+             *
+             * The sides are read off the innings in play, because the break line names
+             * the opposition like every other line — and a match in a break still has
+             * an innings, it is simply not moving. */
+            var bsides = mi.length ? sidesOf(m, ctx, mi[mi.length - 1]) : { bat: '', other: '' };
             if (m.break_desc && m.break_desc !== p.break_desc) {
                 var rain = /rain|weather|wet|shower/i.test(m.break_desc);
+                m._break_since = now;
                 push(rain ? 'rain_break' : 'match_break', 'break' + m.break_desc,
-                     { headline: m.break_desc, detail: matchTitle(m) });
+                     breakPayload(m, ctx, bsides));
+            } else if (m.break_desc) {
+                m._break_since = p._break_since || null;    // still off, same stoppage
+            } else if (p.break_desc && !m.complete) {
+                push('play_resumed', 'resume' + p.break_desc + (p._break_since || ''),
+                     resumePayload(m, ctx, bsides, p._break_since, now));
             }
             if (m.complete && !p.complete) {
                 var res = m.result_club || m.result || 'Match finished';
                 var aband = /abandon|no result|wash|cancel/i.test(res);
-                push(aband ? 'abandoned' : 'match_finished', 'result', {
-                    headline: res,
-                    detail: m.final ? matchTitle(m) : 'To be confirmed · ' + matchTitle(m)
-                });
+                push(aband ? 'abandoned' : 'match_finished', 'result',
+                    aband ? abandonedPayload(m, ctx)
+                          : say(resultParts(res, m, ctx)
+                                .concat([SEP, det(m.final ? '' : 'to be confirmed', true), SEP])
+                                .concat(fixtureParts(m, ctx))));
             }
             // Confirmation is its own small event: the surface has been hedging with
             // "to be confirmed" and can now stop.
             if (m.complete && p.complete && m.final && !p.final) {
-                push('match_finished', 'final', {
-                    headline: m.result_club || m.result || 'Result confirmed',
-                    detail: matchTitle(m) + ' · confirmed'
-                });
+                push('match_finished', 'final',
+                    say(resultParts(m.result_club || m.result || 'Result confirmed', m, ctx)
+                        .concat([SEP, det('confirmed', true), SEP])
+                        .concat(fixtureParts(m, ctx))));
             }
 
             /* --- clips. A clip is not an event of its own: it is footage OF one, so
@@ -1043,7 +1616,7 @@
                 /* A BOUNDARY ROW STOPS HERE. `four` and `six` are no longer event
                  * types — a counter cannot date a boundary and the scorers' counters
                  * drift, so the boundary lives as a clause on the score instead (see
-                 * boundaryClause). Letting an unclaimed row raise one anyway would
+                 * `scorePayload`). Letting an unclaimed row raise one anyway would
                  * bring them back through the side door, on the streamed match only,
                  * which is the one place the inconsistency would be hardest to spot.
                  * Footage of a boundary is a REPLAY, and that is its own surface. */
@@ -1079,19 +1652,25 @@
             var p = prevById[String(m.match_id)];
             var ctx = matchCtx(m, cfg, false);
             var when = [p ? (p._received_at || null) : null, now];
+            carryDerived(p, m);
             var push = function (type, id, payload, extra) {
                 out.push(event(type, ctx.key + ':' + id, ctx, when, now, payload, extra));
             };
             if (!p) {
                 if (m.complete) push('match_finished', 'result',
-                    { headline: m.result_club || m.result || 'Match finished', detail: ctx.division || matchTitle(m) });
+                    say(resultParts(m.result_club || m.result || 'Match finished', m, ctx)
+                        .concat([SEP]).concat(ctx.division
+                            ? [det(ctx.division)] : fixtureParts(m, ctx))));
                 return;
             }
             if (m.complete && !p.complete) {
                 var res = m.result_club || m.result || 'Match finished';
                 var aband = /abandon|no result|wash|cancel/i.test(res);
-                push(aband ? 'abandoned' : 'match_finished',
-                     'result', { headline: res, detail: matchTitle(m) + (ctx.division ? ' · ' + ctx.division : '') });
+                push(aband ? 'abandoned' : 'match_finished', 'result',
+                     aband ? abandonedPayload(m, ctx)
+                           : say(resultParts(res, m, ctx).concat([SEP])
+                                 .concat(fixtureParts(m, ctx))
+                                 .concat([SEP, det(ctx.division)])));
                 return;
             }
             /* THE MATCH GETTING UNDER WAY. The one state change the stream used to
@@ -1112,28 +1691,79 @@
             var pi = (p.innings || []), mi = (m.innings || []);
             if (mi.length > pi.length && pi.length) {
                 var closed = mi[pi.length - 1];
-                if (closed) push('innings_closed', 'inn' + pi.length + 'close', {
-                    headline: (closed.side || '') + ' ' + closed.runs + '/' + closed.wickets,
-                    detail: matchTitle(m)
-                });
+                if (closed) push('innings_closed', 'inn' + pi.length + 'close',
+                    say(scoreParts(dropCC(closed.side || ''), closed)
+                        .concat([SEP]).concat(fixtureParts(m, ctx))));
             }
             // The coarse scoreline, when it moves. One event per distinct scoreline
             // rather than per over — this feed has no over-by-over truth to offer.
+            /* A FINISHED MATCH HAS NO SCORE TO REPORT, only a result.
+             *
+             * The card does not stop moving when the game does: a scorer syncs the
+             * last over after the players have gone in, a correction lands an hour
+             * later, and the feed re-states the same innings with a run added. Each of
+             * those is a changed scoreline, and this block was turning it into "Tring
+             * Park are chasing The Lee" half an hour after Tring Park had lost.
+             *
+             * The completion branch above returns on the TRANSITION poll only, which is
+             * what hid this: the first poll after the result is guarded, every later
+             * one was not. A match that is over is over — the result is the news and it
+             * has its own type.
+             * > James spotted this one, 2026-09-29. */
             var last = mi[mi.length - 1], plast = pi[pi.length - 1];
-            if (last && (!plast || last.runs !== plast.runs || last.wickets !== plast.wickets)) {
+            if (!m.complete && last &&
+                (!plast || last.runs !== plast.runs || last.wickets !== plast.wickets)) {
                 var sides = sidesOf(m, ctx, last);
-                var sc = scoreParts(sides.bat, last);
-                /* The same third phrase as our own matches. The division's feed is
-                 * thinner in every other respect — no batters, no bowlers, no
-                 * dismissals — but it names both clubs and says which is batting,
-                 * which is all this phrase needs. One wall, one way of writing a
-                 * score. */
-                var ltail = toBatTail(sides, mi);
-                push('score_update', 'sc' + mi.length + '_' + last.runs + '_' + last.wickets, {
-                    headline: sc.headline, parts: sc.parts,
-                    detail: scoreDetail(m, ctx, sides, mi),
-                    tail: ltail && ltail.text, tail_parts: ltail && ltail.parts
-                });
+                /* THE LOG IS KEPT PER OBSERVATION HERE, not per over: this feed has no
+                 * over-by-over truth to offer and its over count arrives coarse and
+                 * patchy, so the anchor is wherever the last changed scoreline was
+                 * seen. The clause states the gap it actually measured, so an
+                 * irregularly sampled innings reads honestly — "34 in the last 6
+                 * overs" off two observations six overs apart is the same subtraction
+                 * as six consecutive ones. */
+                var lob = balls(last.overs);
+                if (lob) logOver(m, mi.length - 1, lob, last);
+                /* THE SAME MILESTONE, and the one place it says nothing the strip is not
+                 * already showing: this card carries no batters, so there is no clause to
+                 * name them with. It goes out anyway because the CROSSING is a moment and
+                 * a scoreboard only ever shows a state — but this is the thinnest line on
+                 * the wall and the `magnitude` on a first hundred keeps it near the floor.
+                 *
+                 * `plast` is the `watched` guard in this feed's terms: an innings that was
+                 * not in the previous card crossed its marks before we looked. */
+                /* AND IT HAS TO BE THE SAME INNINGS. `plast` is the previous card's LAST
+                 * innings, which is a different innings once the second has begun — and
+                 * a chase at 105 compared against a first innings of 80 would announce a
+                 * hundred we never watched arrive. The innings COUNT matching is what
+                 * makes the two figures comparable. */
+                var lprev = pi.length === mi.length ? plast : null;
+                if (lprev && !last.closed && !m.complete) {
+                    var lmark = teamMarkCrossed(lprev, last, mi);
+                    if (lmark) {
+                        push('team_total', 'i' + (mi.length - 1) + 'team' + lmark,
+                             teamMarkPayload(lmark, last, sides, false, atHome(sides, m, ctx), mi, ctx),
+                             { magnitude: teamMarkMagnitude(lmark) });
+                    }
+                }
+                /* THE DIVISION GETS THE PASSAGE FAMILY TOO, and it is the one place
+                 * this feed can hold its own: a charge, a squeeze and a collapse are
+                 * made of nothing but totals and overs, which is all its card carries.
+                 * Everything else the band says about a match — the people, the
+                 * dismissals, the spells — is ours alone, so these three are the only
+                 * events that let another club's afternoon be described rather than
+                 * merely scored.
+                 *
+                 * `surgeAt` does the honesty for us: this log is sampled per
+                 * observation, and a window that cannot be bounded near the length
+                 * asked for yields nothing. */
+                var lsg = lob ? surgeAt(m, mi.length - 1, last, lob) : null;
+                if (lsg && surgeFresh(m, mi.length - 1, lsg.face, lob, lsg.balls)) {
+                    push(lsg.face, 'sg' + mi.length + lsg.face + lob,
+                         surgePayload(lsg, last, sides, false, ctx, mi));
+                } else {
+                    push('score_update', 'sc' + mi.length + '_' + last.runs + '_' + last.wickets,
+                         scorePayload(m, ctx, sides, last, mi.length - 1, lob, null, mi));
+                }
             }
         });
         (next && next.matches || []).forEach(function (m) { m._received_at = now; });
@@ -1153,11 +1783,12 @@
         var dir = move.places > 0 ? 'up' : 'down';
         var n = Math.abs(move.places || 0);
         return event('ladder_shift', ctx.key + ':ladder' + move.club + move.to, ctx,
-            [move.since || null, now], now, {
-                headline: move.club + ' ' + dir + ' ' + n + (n === 1 ? ' place' : ' places') +
-                          ' to ' + ordinal(move.to),
-                detail: (move.division || ctx.division || '') + (move.reason ? ' · ' + move.reason : '')
-            }, { magnitude: Math.min(1, n / 3) });
+            [move.since || null, now], now,
+            say([team(dropCC(move.club)),
+                 det(dir + ' ' + n + (n === 1 ? ' place' : ' places') + ' to ' + ordinal(move.to)),
+                 SEP, det((move.division || ctx.division || '') +
+                          (move.reason ? ' \u00b7 ' + move.reason : ''), true)]),
+            { magnitude: Math.min(1, n / 3) });
     }
 
     // ---- helpers ------------------------------------------------------------
@@ -1171,10 +1802,26 @@
             happened_at: when && when[1] != null ? [when[0], when[1]] : [null, now],
             received_at: now,
             shown_at: null, shown_count: 0,
-            interest: interestOf(type, { ours: ctx.ours, clip: !!extra.clip,
+            /* `extra.ours` OVERRIDES THE MATCH. Almost every event belongs to the
+             * match and takes its side from it, but an event about a PERSON belongs
+             * to that person's club — and on our own feed both sides' players arrive
+             * through the same diff. An opposition hundred is somebody else's news
+             * happening in our match, and should be priced as such. */
+            interest: interestOf(type, { ours: extra.ours == null ? ctx.ours : !!extra.ours,
+                                         clip: !!extra.clip,
                                          tension: extra.tension, magnitude: extra.magnitude }),
             payload: payload || {},
-            clip: extra.clip || null
+            clip: extra.clip || null,
+            /* A PER-EVENT RETIREMENT LIST, overriding the type's. Almost nothing needs
+             * it: what an event makes false is a property of its KIND, which is why
+             * `RETIRES` is a table. The exception is the retraction below, which has no
+             * kind of its own because it is not an event about the cricket. */
+            retires: extra.retires || null,
+            /* A RETRACTION: something the band has said has stopped being true and
+             * nothing has replaced it. It retires and is then thrown away, because
+             * "T Duff did not take a hat-trick after all" is not news and must never
+             * reach a screen. The store drops it in `add`. */
+            retire_only: !!extra.retire_only
         };
     }
     // Everything a surface needs to say WHICH match an event belongs to, resolved
@@ -1194,8 +1841,21 @@
             match_id: ours ? null : id,
             team: c.team_name || (ours ? 'Wendover' : (lr.home_club_name || m.home || '')),
             opponent: c.opposition || (ours ? (m.away || '') : (lr.away_club_name || m.away || '')),
-            division: c.competition_short || c.competition ||
-                      m.competition || lr.competition_name || '',
+            /* THE SHORT FORM FIRST — from EITHER config, before either raw name.
+             *
+             * `competition_short` is the build's own shortener ("TVCL Div 6C") and is
+             * now stamped on the league rows as well as ours, so the same division is
+             * labelled the same way whoever is playing in it.
+             *
+             * ORDER IS THE WHOLE POINT HERE, and getting it wrong is what this fixed.
+             * Ranked by config first — ours, then the league's, then the card — a raw
+             * `c.competition` beat a shortened `lr.competition_short`, and the
+             * simulator indexes its league fixtures into `byId` as well as
+             * `leagueById` (live-sim.js buildDay), so on the wall every division match
+             * said "Division 6C" while the strip beside it said "TVCL Div 6C". Rank by
+             * the SHAPE of the answer instead: every short form, then every long one. */
+            division: c.competition_short || lr.competition_short ||
+                      c.competition || m.competition || lr.competition_name || '',
             title: matchTitle(m),
             // Not carried onto the event record — only the text builders want them.
             home_club: lr.home_club_name || m.home || '',
@@ -1241,11 +1901,10 @@
         return st ? st.p : null;
     }
     function pct(p) { return Math.round(p * 100) + '%'; }
-    function swingText(m, was, now) {
+    function swingParts(m, was, now) {
         var inns = m.innings || [];
-        var chasing = (inns[1] && (inns[1].club || inns[1].side)) || '';
-        var up = now > was;
-        return chasing + (up ? ' back in it' : ' losing their grip');
+        var chasing = dropCC((inns[1] && (inns[1].club || inns[1].side)) || '');
+        return [team(chasing), det(now > was ? 'back in it' : 'losing their grip')];
     }
     /* THE TOSS, and the first type phrased for the L-frame rather than for a bar
      * standing on its own.
@@ -1281,7 +1940,7 @@
             // A toss we cannot attribute to a side: say what we can and no more.
             winner = dropCC(t.winner_club || t.winner || '');
         }
-        if (!winner || !t.decision) return { headline: t.text || 'Toss', detail: '' };
+        if (!winner || !t.decision) return say([det(t.text || 'Toss')]);
 
         /* THE SECOND SENTENCE IS THE OTHER SIDE'S HALF OF THE SAME FACT. A toss
          * decides what BOTH teams are about to do, and saying only the winner's
@@ -1308,23 +1967,172 @@
          * footer names our XI and its division, and the ladder beside it marks the two
          * sides with bat and ball. A third statement of the same fact is the thing the
          * split exists to stop. */
-        var head = winner + ' elected to ' + String(t.decision).trim();
-        var det = '';
-        if (other) {
-            /* The scheduled start, when the build knew one. No guard on it having
-             * passed: a toss is shown once and its ttl is half an hour, so "from
-             * 13:00" is only ever read within a few minutes of being true. */
-            det = other + ' will take the ' + (bat ? 'field' : 'crease') +
-                  (ctx.start_time ? ' from ' + ctx.start_time : '');
-        }
-        return { headline: head, detail: det };
+        /* The scheduled start, when the build knew one. No guard on it having
+         * passed: a toss is shown once and its ttl is half an hour, so "from 13:00"
+         * is only ever read within a few minutes of being true. */
+        /* "WON THE TOSS AND ELECTED TO", in full. The sentence was cut to the
+         * decision alone because the gold tile says TOSS beside it — but the tile is
+         * going back to the team and the division before this ships, and "Denham
+         * elected to bat" standing on its own is a line with a word missing.
+         * > James's direction, 2026-09-29. */
+        return say([team(winner),
+                    det('won the toss and elected to ' + String(t.decision).trim()),
+                    SEP, team(other),
+                    det(other ? 'will take the ' + (bat ? 'field' : 'crease') +
+                        (ctx.start_time ? ' from ' + ctx.start_time : '') : '', true)]);
     }
-    /* A DIVISION MATCH STARTING, said as a sentence rather than a scoreline —
-     * "High Wycombe are hosting Maidenhead & Bray at London Road".
+    /* WHY THEY ARE OFF, IN THE WORDS OF THE THING THAT STOPPED IT.
      *
-     * "Hosting" rather than "v" because home and away is the only thing worth
-     * knowing about a fixture nobody has bowled a ball in yet, and it reads as news
-     * where a fixture line reads as a listing.
+     *   Rain has stopped play v Denham
+     *   Tea at High Wycombe hosting Maidenhead & Bray
+     *   Play is held up for an injury v Denham
+     *
+     * The line used to be the feed's own label over the fixture — "Rain delay ·
+     * Wendover v Denham" — which reads as a status field rather than as news, and
+     * needed the gold tile to make sense of it.
+     *
+     * THE FEED'S TEXT IS A SCORER'S FREE CHOICE. RV asks for a reason from a list with
+     * an "Other" on the end, so the vocabulary below is a set of patterns over a
+     * string we do not control, and anything it does not recognise goes out in the
+     * scorer's own words rather than being forced into a sentence that might be wrong.
+     * DELAYED vs STOPPED comes from the scorer too: "rain delay" is his word for it,
+     * and where he has not said, play has stopped.
+     *
+     * A MATCH OF OURS TAKES THE OPPOSITION TAG and somebody else's takes the fixture,
+     * which is the same rule the rest of the band follows. (The division's PC feed
+     * carries no break at all today, so that half is written for a feed we may yet
+     * get rather than one we have.)
+     * > James's direction, 2026-09-29. */
+    var BREAK_WORDS = [
+        [/rain|shower|wet|weather|covers/i, 'Rain has $ play'],
+        [/bad light|light/i,                'Bad light has $ play'],
+        [/injur|medical|blood/i,            'Play is held up for an injury'],
+        [/ground|pitch|outfield/i,          'Play is held up on the ground'],
+        [/tea/i,                            'Tea'],
+        [/lunch/i,                          'Lunch'],
+        [/drinks/i,                         'Drinks'],
+        [/innings/i,                        'Innings break']
+    ];
+    function breakWords(desc) {
+        var t = String(desc || '').trim();
+        if (!t) return 'Play has stopped';
+        for (var i = 0; i < BREAK_WORDS.length; i++) {
+            if (BREAK_WORDS[i][0].test(t)) {
+                return BREAK_WORDS[i][1].replace('$', /delay/i.test(t) ? 'delayed' : 'stopped');
+            }
+        }
+        return t;
+    }
+    // Where it is happening: the opposition for one of ours, the fixture for anybody
+    // else's — "at High Wycombe hosting Maidenhead & Bray".
+    function whereParts(m, ctx, sides) {
+        if (ctx.ours) return clubTag(ctx, '', oppositeOf(ctx, sides), 'v', 'v');
+        var h = dropCC((ctx && ctx.home_club) || (m && m.home) || '');
+        var a = dropCC((ctx && ctx.away_club) || (m && m.away) || '');
+        return (h && a) ? [det('at'), team(h), det('hosting'), team(a)] : [];
+    }
+    // The club on the other side of the fixture from us, whichever of the two is
+    // batting — a break is not about an innings, so it cannot read the side off one.
+    function oppositeOf(ctx, sides) {
+        if (!sides) return '';
+        if (sides.bat && !isOurPlayer(ctx, sides.bat)) return sides.bat;
+        return (sides.other && !isOurPlayer(ctx, sides.other)) ? sides.other : '';
+    }
+    function breakPayload(m, ctx, sides) {
+        return say([det(breakWords(m.break_desc))].concat(whereParts(m, ctx, sides)));
+    }
+    /* AND HOW LONG IT COST, which is the one figure a ground actually discusses while
+     * it waits. Measured from when WE first saw the break rather than from a time the
+     * feed states — it states none — so it is a floor on the real figure, and a poll
+     * lands every fifteen seconds, which makes the floor a tight one. Nothing is said
+     * when the break began before we were watching. */
+    function resumePayload(m, ctx, sides, since, now) {
+        var mins = since ? Math.round((now - since) / 60000) : 0;
+        return say([det('Play resumes')].concat(whereParts(m, ctx, sides))
+                   .concat(mins > 0
+                       ? [SEP, det(mins + ' minute' + (mins === 1 ? '' : 's') + ' lost')] : []));
+    }
+
+    /* A MATCH CALLED OFF, AND WHAT THE TWO SIDES GOT FOR IT.
+     *
+     *   Match abandoned at Hurley v Maidenhead Royals  ·  7 points each
+     *
+     * The line was the feed's own word for it ("Abandoned") over the fixture, which
+     * read as a label on a listing rather than as news — and it left out the only
+     * thing anybody in the division wants to know, which is the points. A washout is
+     * seven each under TVCL Win/Lose (Match Rules §9), and `tvcl-points.js` is the one
+     * copy of that arithmetic on the client: the strip prices its ladder off it and
+     * the match-day board badges finished games with it.
+     *
+     * GATED ON THE COMPETITION, as every caller of that port must be — seven points is
+     * a TVCL number, and an indoor or a Traditional division does not work that way.
+     * Guarded on the port being loaded at all, because the asset cache can serve this
+     * page a script it has not got yet; without it the line simply stops after the
+     * fixture, which is what it said before.
+     * > James's direction, 2026-09-29. */
+    function abandonedPayload(m, ctx) {
+        var pts = '';
+        if (/tvcl/i.test(ctx.division || '') && window.WccPoints) {
+            var p = WccPoints.tvcl((m && m.innings) || [], 'abandoned');
+            if (p && p[0] === p[1]) pts = p[0] + ' points each';
+        }
+        return say([det('Match abandoned at')].concat(fixtureParts(m, ctx))
+                   .concat([SEP, det(pts)]));
+    }
+    /* IS THIS CARD SAYING A STREAM IS RUNNING? Returns a stable marker rather than a
+     * boolean, so a card can be compared with the one before it. See the call site for
+     * why the three signals are ranked the way they are. */
+    function streamOf(m) {
+        if (!m) return null;
+        var s = m.stream || (m.matchStreams && m.matchStreams[0]) || null;
+        var began = (s && (s.recording_started_utc || s.recording_start_utc)) ||
+                    m.recording_started_utc || m.stream_started_at || null;
+        if (began) return 'rec:' + began;
+        var vid = (s && (s.video_id || s.youtube_video_id)) || m.video_id || null;
+        if (vid) return 'vid:' + vid;
+        if (m.streamed) return 'flag';
+        // Footage cannot exist without a camera.
+        if ((m.clips || []).length) return 'clips';
+        return null;
+    }
+
+    /* THE STREAM IS UP.
+     *
+     *   Wendover v Denham in TVCL Div 6C is being live streamed  ·  @WendoverCricketClub
+     *
+     * The fixture, not a scoreline: at the moment a stream comes online the match may
+     * be four minutes old, and a viewer deciding whether to go and watch wants to know
+     * WHICH GAME, not what the score is. The division rides in the same clause for the
+     * same reason it does on a match starting — on a wall showing three of our sides
+     * there is otherwise nothing to say which one this is.
+     *
+     * THE HANDLE IS ITS OWN GROUP, and it is the only part of the line that is an
+     * instruction rather than a statement. It comes from live-config, once, rather
+     * than from each fixture — see `_youtube_channel` in build.py.
+     *
+     * NOT IN THE CLUB TYPE, though it contains the club's name. The heavy weight on
+     * this wall means "a club, as one of the sides in a match", and it is already
+     * doing that twice in this very line; a third strong block on the end made the
+     * channel read as a third team. It is an address, so it recedes to the supporting
+     * type and lets the fixture keep the emphasis.
+     * > James's direction, 2026-09-28. */
+    function streamPayload(m, ctx, cfg) {
+        var yt = (cfg && cfg.youtube) || {};
+        var handle = String(yt.handle || '').replace(/^@/, '');
+        return say(fixtureParts(m, ctx)
+            .concat([det(ctx.division ? 'in ' + ctx.division : ''),
+                     det('is being live streamed'),
+                     SEP, det(handle ? '@' + handle : '')]));
+    }
+
+    /* A DIVISION MATCH STARTING, said as a sentence rather than a scoreline —
+     * "High Wycombe are playing Maidenhead & Bray at London Road".
+     *
+     * A SENTENCE rather than "v" because it reads as news where a fixture line reads
+     * as a listing. It was "are hosting", which said home and away in one word; the
+     * ground clause says that plainly when the feed carries one, and "playing" is the
+     * word a person would use.
+     * > James's direction, 2026-09-29.
      *
      * THE GROUND IS OPTIONAL AT EVERY LEVEL. It is a real PC field that
      * fetch_league_fixtures reads, but it is frequently null — and the invented
@@ -1333,15 +2141,123 @@
      * since "High Wycombe are hosting X at High Wycombe CC" tells nobody anything. */
     function startedPayload(ctx) {
         var home = dropCC(ctx.home_club), away = dropCC(ctx.away_club);
-        if (!home || !away) return { headline: 'Match under way', detail: '' };
+        if (!home || !away) return say([det('Match under way')]);
         var ground = String(ctx.ground || '').trim();
         var repeats = ground && dropCC(ground).toLowerCase().indexOf(home.toLowerCase()) === 0;
-        return {
-            headline: home + ' are hosting ' + away + (ground && !repeats ? ' at ' + ground : ''),
-            // Nothing: the tile says IN PLAY and the strip's ladder names the
-            // division, so a third clause would be the same fact a third time.
-            detail: ''
-        };
+        /* THE DIVISION IS NAMED, in the chrome's own short form. The strip's ladder
+         * is beside it, but the ladder is ten tiles of abbreviations and does not
+         * say which competition they are — so on a wall showing three divisions at
+         * once "High Wycombe are playing Maidenhead & Bray" was a fixture with no
+         * league attached. It is part of the same sentence rather than a group of
+         * its own: "in TVCL Div 6C" completes the clause, where a dot before it
+         * would make it a second fact.
+         * > James's direction, 2026-09-28. */
+        return say([team(home), det('are playing'), team(away),
+                    det(ground && !repeats ? 'at ' + ground : ''),
+                    det(ctx.division ? 'in ' + ctx.division : '')]);
+    }
+
+    /* ---- ONE LINE, ONE LIST ---------------------------------------------------
+     *
+     * A payload used to carry three phrases in three fields — `headline`, `detail`,
+     * `tail`, each with an optional `_parts` twin — and the renderer drew them in that
+     * order with a dot between. Three boxes bought exactly two things: which phrase
+     * gives way when the line is too long, and separators the payload never has to
+     * punctuate for itself. It did NOT buy any distinction of meaning, and the moment
+     * the middle clause needed marked-up parts too (a club there must be set in the
+     * heavy type like every other club on this wall) all three became the same thing
+     * with different names.
+     *
+     * So there is one `parts` list. A part is `{ cls, text }`; `{ sep: true }` ends a
+     * group and draws the dot; `shrink: true` marks the group that may ellipsise. The
+     * two things the three fields were for survive intact, said once each, and a line
+     * that wants to be a sentence rather than three columns can simply be one — which
+     * is the direction the band is going.
+     *
+     * `headline` is still written, because it is what every OTHER reader wants: the
+     * inspector's row, the simulator's HUD, a log line. It is derived here rather than
+     * typed out beside the parts, so the flat form and the marked-up one cannot drift.
+     *
+     * The list is NORMALISED on the way in — empty parts dropped, then leading,
+     * trailing and doubled separators collapsed. That is what lets a builder write
+     * `[score, SEP, maybeClause, SEP, maybeTail]` without checking whether the middle
+     * one came out empty, which is most of what the old builders spent their length on. */
+    var SEP = { sep: true };
+    function say(parts, extra) {
+        var clean = [], group = [];
+        function flush() {
+            if (!group.length) return;
+            if (clean.length) clean.push(SEP);
+            clean = clean.concat(group);
+            group = [];
+        }
+        (parts || []).forEach(function (x) {
+            if (!x) return;
+            if (x.sep) { flush(); return; }
+            if (x.text == null || String(x.text) === '') return;
+            group.push(x);
+        });
+        flush();
+        var out = { parts: clean, headline: textOf(clean) };
+        if (extra) { for (var k in extra) { if (extra[k] != null) out[k] = extra[k]; } }
+        return out;
+    }
+    // The flat form of a parts list: a word space inside a group, the band's own dot
+    // between them. What the inspector, the HUD and every log line read.
+    function textOf(parts) {
+        var out = [], group = '';
+        // A part beginning with punctuation continues the one before it and takes no
+        // space in front of it — the renderer's own rule (`glue` in live-ticker.html),
+        // kept in step so the flat form and the marked-up one read the same.
+        function add(t) { group += (group && !/^[,;:.!?)\u2019']/.test(t) ? ' ' : '') + t; }
+        (parts || []).forEach(function (x) {
+            if (!x) return;
+            if (x.sep) { if (group) out.push(group); group = ''; return; }
+            if (x.text == null || String(x.text) === '') return;
+            add(String(x.text));
+        });
+        if (group) out.push(group);
+        return out.join(' \u00b7 ');
+    }
+    // Shorthand for the two parts almost every line is built out of.
+    function team(t) { return t ? { cls: 'team', text: t } : null; }
+    function det(t, shrink) { return t ? { cls: 'det', text: t, shrink: !!shrink } : null; }
+
+    /* A FIXTURE, with both clubs in the type a club is set in.
+     * `matchTitle` writes "Wendover CC v Chenies & Latimer CC" for ids and logs; this
+     * is the same fact for the band — CCs dropped, as the match-day board drops them,
+     * and each club a part of its own so it takes the heavy weight. */
+    function fixtureParts(m, ctx, extra) {
+        var h = dropCC((ctx && ctx.home_club) || (m && m.home) || '');
+        var a = dropCC((ctx && ctx.away_club) || (m && m.away) || '');
+        if (!h || !a) return [det(matchTitle(m)), det(extra)];
+        return [team(h), det('v'), team(a), det(extra)];
+    }
+
+    /* THE RESULT SENTENCE, with its club lifted out of it.
+     *
+     * RV hands us one string — "Wendover CC won by 5 wickets" — and the club inside it
+     * has to be set like a club. There is no marked-up form in the feed, so the name
+     * is matched off the FRONT of the sentence against the two clubs we already know
+     * are playing, longest first so "Wendover CC" wins over "Wendover".
+     *
+     * No match means no split, and the sentence goes out as prose: a result we cannot
+     * take apart is still a result, and guessing where a club name ends inside
+     * somebody else's sentence is how you end up with "Wend" in bold. */
+    function resultParts(text, m, ctx) {
+        var t = String(text || '').trim();
+        if (!t) return [];
+        var names = [(ctx && ctx.home_club) || (m && m.home) || '',
+                     (ctx && ctx.away_club) || (m && m.away) || ''];
+        names = names.filter(Boolean);
+        names = names.concat(names.map(dropCC));
+        names.sort(function (a, b) { return b.length - a.length; });
+        for (var i = 0; i < names.length; i++) {
+            if (names[i] && t.toLowerCase().indexOf(names[i].toLowerCase()) === 0) {
+                return [team(dropCC(names[i])), det(t.slice(names[i].length).trim())];
+            }
+        }
+        return [det(t)];
     }
 
     /* A SCORELINE, AS THE MATCH-DAY BOARD WRITES ONE.
@@ -1358,11 +2274,9 @@
      * sometimes carries a total and no over count, and "(0 ov)" would be a claim
      * about the innings rather than a gap in the feed. */
     function scoreParts(club, inn) {
-        var score = (inn.runs || 0) + '/' + (inn.wickets || 0);
-        var ov = inn.overs != null && inn.overs !== '' ? '(' + inn.overs + ' ov)' : '';
-        var parts = [{ cls: 'team', text: club }, { cls: 'score', text: score }];
-        if (ov) parts.push({ cls: 'ov', text: ov });
-        return { parts: parts, headline: club + ' ' + score + (ov ? ' ' + ov : '') };
+        return [team(club), { cls: 'score', text: (inn.runs || 0) + '/' + (inn.wickets || 0) },
+                inn.overs != null && inn.overs !== ''
+                    ? { cls: 'ov', text: '(' + inn.overs + ' ov)' } : null];
     }
 
     /* WHO IS BATTING AND WHO IS WAITING. Both feeds, because both write the same
@@ -1391,59 +2305,13 @@
         return { bat: bat || home, other: '' };
     }
 
-    /* THE SUPPORTING CLAUSE ON A SCORELINE, one rule for both feeds.
-     *
-     * On a FIRST innings it is the other side, still to bat — which is the fact a
-     * glance at "9/0 (1 ov)" is missing, and it names the opposition at the same
-     * time. It is only true of a first innings: once the second is under way "yet to
-     * bat" is false, and until there is a target to quote the honest fallback is the
-     * fixture and its division. */
-    /* THE SCORE'S SUPPORTING CLAUSE, and the order it is chosen in.
-     *
-     * Four things can want the one clause, so they are ranked by how much the reader
-     * would miss them:
-     *
-     *   1. WHAT JUST HAPPENED. A burst of boundaries is the only candidate that is
-     *      news rather than standing context, and it is the whole reason the floor
-     *      event is worth a screen at all in a passage of play.
-     *   2. THE CHASE. Once there are two innings, "need 47 from 60" is the state of
-     *      the match and beats naming anybody.
-     *   3. WHO IS STILL TO BAT, on a first innings — the fact a bare scoreline is
-     *      missing, and it names the opposition while it is at it.
-     *   4. THE FIXTURE. Nothing has happened and there is nothing to chase: say whose
-     *      game this is and let the tile carry the rest. */
-    function scoreDetail(m, ctx, sides, inns, delta) {
-        inns = inns || [];
-        var burst = boundaryClause(delta);
-        if (burst) return burst;
-        /* A CHASE STATES ITS OWN TERMS. Once there are two innings the interesting
-         * fact is not who is batting but what is left to do, and the chase model
-         * already holds it. Both feeds get this: the model needs two innings and a
-         * total, which a PC card carries as readily as an RV one — it is only the
-         * balls-remaining half that needs an allotment, and that is omitted rather
-         * than guessed when the allotment is unknown (see live-chase.js). */
-        if (inns.length === 2) {
-            var st = window.WccChase ? WccChase.chaseState(inns) : null;
-            if (st) {
-                return 'Need ' + st.runs + (st.balls != null ? ' from ' + st.balls + ' balls' : '') +
-                       ', ' + st.wkts + ' wickets left';
-            }
-        }
-        // Nothing has happened and there is nothing to chase. On a first innings the
-        // tail is already naming the other side, so a clause here would be the same
-        // fact twice; without one, fall through to the fixture.
-        if (toBatTail(sides, inns)) return '';
-        // The fixture, named the way the first phrase names a club — a band that
-        // wrote "Wendover" and "Wendover CC v Aston Clinton CC" in the same breath
-        // would be using two conventions one line apart.
-        var h = dropCC(ctx.home_club || m.home || ''), a = dropCC(ctx.away_club || m.away || '');
-        var title = h && a ? h + ' v ' + a : (h || a || matchTitle(m));
-        return title + (ctx.division ? ' \u00b7 ' + ctx.division : '');
-    }
-
     /* A club without its trailing "CC" — "Denham CC" -> "Denham". The port of
      * build.py's `drop_cc`, so a club is named on the L-frame exactly as the
      * match-day board names it a few centimetres away. */
+    function atHome(sides, m, ctx) {
+        var home = dropCC((ctx && ctx.home_club) || (m && m.home) || '');
+        return !!(home && sides && sides.bat === home);
+    }
     function dropCC(name) {
         if (!name) return '';
         var out = String(name).trim().replace(/\s+(CC|C\.C\.?|Cricket Club)$/i, '');
@@ -1493,24 +2361,25 @@
      * after the last " b ", and a run-out has none. His figures are then looked up in
      * the innings' own bowling card by name, and omitted rather than guessed if he is
      * not on it. */
-    /* THE SCORECARD'S OWN ABBREVIATIONS for the five dismissals anyone sees in a
-     * season — `b`, `ct`, `lbw`, `st`, `ro` — and the words for the rest.
+    /* HOW HE WENT, IN THE WORD A PERSON WOULD USE — "bowled", "caught", "lbw".
      *
-     * Not only brevity, though brevity is what paid for the bowler's club a line
-     * below: this is the notation a reader has already met on the board, the app and
-     * every scorecard they have looked at, so "B Duff b 0" needs no translating. The
-     * rare ones stay spelled out because nobody has a shorthand for them ready, and
-     * they are rare enough to cost nothing.
+     * This was the scorecard's own shorthand (`b`, `ct`, `st`, `ro`), on the argument
+     * that it is notation every reader has already met. It is, and "B Duff b 0" still
+     * has to be translated by anyone glancing up from the other side of a room —
+     * which is the whole audience. The words cost three characters and read as a
+     * sentence, which is what this line now is.
      *
-     * "for" goes with them: a scorecard writes "B Duff b Vane 0", and "b for 0" is
-     * neither the notation nor English. */
+     * THE BOWLER IS NOT IN IT. "c Smith b Jones" carries the fielder and the bowler,
+     * and the bowler has his own phrase at the end of the line with his figures on
+     * it; naming him twice was what the shorthand was buying room for.
+     * > James's direction, 2026-09-29. */
     var HOW_WORDS = [
-        [/^c\s*&\s*b\s/i, 'c&b'],
+        [/^c\s*&\s*b\s/i, 'caught and bowled'],
         [/^lbw\b/i,         'lbw'],
-        [/^c\s/i,           'ct'],
-        [/^st\s/i,          'st'],
-        [/^b\s/i,           'b'],
-        [/^ro\b|^run out/i, 'ro'],
+        [/^c\s/i,           'caught'],
+        [/^st\s/i,          'stumped'],
+        [/^b\s/i,           'bowled'],
+        [/^ro\b|^run out/i, 'run out'],
         [/^hit wicket/i,    'hit wicket'],
         [/^retired/i,       'retired'],
         [/^timed out/i,     'timed out'],
@@ -1524,11 +2393,54 @@
         }
         return '';
     }
+    /* AND WHO DID IT — the fielder, for the three dismissals that have one.
+     *
+     * A catch, a stumping and a run-out are somebody's work, and on a club's own wall
+     * that somebody is the half of the wicket the scorecard remembers and nobody says
+     * out loud. The bowler has had his name on every wicket line all afternoon; this
+     * is the only place the man in the field gets his.
+     *
+     * TAKEN OUT OF THE SCORER'S PHRASE, which is where it is stated: "c Godden b Vane"
+     * is fielder-then-bowler and "ro (H Godden, J Roan)" is a list of them. The card's
+     * own `fielder` column is the fallback — RV populates it (see the dismissal
+     * probe) — and nothing is claimed when neither has anything.
+     * > James's direction, 2026-09-29. */
+    function fielderOf(how, fallback) {
+        var t = String(how || '').trim().replace(/\s+/g, ' ');
+        var ro = t.match(/^ro\b\s*\((.*)\)\s*$/i);
+        if (ro) {
+            return ro[1].split(',').map(function (n) { return n.trim(); })
+                        .filter(Boolean).join(', ');
+        }
+        // "c & b X" is the bowler catching his own: the fielder IS the bowler, and
+        // the word "caught and bowled" already says so.
+        if (/^c\s*&\s*b\s/i.test(t)) return '';
+        var m = t.match(/^(?:c|st)\s+(.+)$/i);
+        if (m) {
+            var name = m[1];
+            var b = name.lastIndexOf(' b ');
+            if (b >= 0) name = name.slice(0, b);
+            return name.trim();
+        }
+        return String(fallback || '').trim();
+    }
+    /* THE BOWLER'S NAME OUT OF THE SCORER'S PHRASE — the tail after the last " b ".
+     *
+     * THE LAST ONE, AND A LOWER-CASE ONE. It was the leftmost match of a
+     * case-INSENSITIVE " b ", and a fielder whose initial is B answers to that: "st B
+     * Duff b D Pardoe" put "Duff b D Pardoe" in the bowler's slot, name, abbreviation
+     * and all. A scorer writes the bowler's mark in lower case and it is always the
+     * last thing on the line, so both halves of the rule come from the notation rather
+     * than from the bug. `lastIndexOf` is case-sensitive, which is the point of it.
+     *
+     * "b Vane" with no preceding clause is the other shape, and the only one where the
+     * mark is at the front. */
     function bowlerOf(how) {
         var t = String(how || '').trim().replace(/\s+/g, ' ');
         if (/^ro\b|^run out/i.test(t)) return '';          // nobody's wicket
-        var m = t.match(/(?:^|\s)b\s+(.+)$/i);
-        return m ? m[1].trim() : '';
+        var i = t.lastIndexOf(' b ');
+        if (i >= 0) return t.slice(i + 3).trim();
+        return /^b\s/.test(t) ? t.slice(2).trim() : '';
     }
     function bowlerFigures(inn, name) {
         if (!name) return '';
@@ -1555,29 +2467,76 @@
      *
      * Same rule the scoreline already follows: the newest event takes the card's
      * current reading, the older ones state only what they can know. */
-    function dismissalText(w, inn, figures) {
-        if (!w || !w.name) return 'Wicket';
-        var word = howWord(w.how);
-        // No "out": the tile already says WICKET, and saying it twice in six words is
-        // the L-frame's one rule broken — the type says what happened, the bar says
-        // the particulars.
-        var out = w.name + (word ? ' ' + word : '') +
-                  (w.runs != null ? ' ' + w.runs : '');
-        var bowler = bowlerOf(w.how);
-        var figs = figures ? bowlerFigures(inn, bowler) : '';
-        /* NO CLUB HERE ANY MORE. It was named possessively in this clause — "ct 17 —
-         * Chenies & Latimer's W Vane 2-19" — which was correct but paid for the club
-         * twice, once for the name and once for the possessive, in the phrase least
-         * able to afford it. The third phrase names it once for the whole line.
-         *
-         * "bowler" comes back only when there are no figures. With them the word is
-         * redundant — nobody else on a card has a 1-6 beside their name — but a bare
-         * name after a dash, which is what a backfilled wicket leaves, would be
-         * anybody. */
-        if (bowler) {
-            out += ' \u2014 ' + (figs ? bowler + ' ' + figs : 'bowler ' + bowler);
+    /* A WICKET, AS A SENTENCE.
+     *
+     *   B Duff bowled for a duck  ·  W Vane 1–6 for Chenies & Latimer
+     *   C Godden caught for 17, ending a stand of 44  ·  W Vane 3–9 for Chenies & Latimer
+     *
+     * THE SCORELINE HAS GONE FROM THE FRONT. It used to lead — "Wendover 13/3 (3 ov) ·
+     * C Godden lbw 2 — W Vane 3–9 · Chenies & Latimer to bat" — from the v1 days when
+     * the band WAS the scoreboard. The strip is the scoreboard now, in figures a room
+     * can read, and it is a few centimetres away: what the band is for is the half the
+     * strip cannot hold, which is the person and what was done to him.
+     *
+     * SO THE TWO HALVES ARE THE TWO PEOPLE. The batter and how he went, then the
+     * bowler with his figures and whose bowlers these are. "for a duck" rather than
+     * "for 0", because that is what the ground says.
+     *
+     * THE STAND IT ENDED rides inside the batter's clause. A dismissal says who and
+     * how; the stand is what it DID to the match, and it is the one figure no
+     * scoreboard can show — the strip's numbers are a state, and a partnership exists
+     * only as the difference between two of them. It sits in the group marked
+     * `shrink`, so on a long line it is the first thing to give way.
+     *
+     * A BACKFILLED WICKET KEEPS ITS SCORE, as a third group: it is describing a
+     * position the match was in some overs ago and the strip is showing the position
+     * it is in now, so the two would silently contradict each other. The newest wicket
+     * needs no such thing — the strip agrees with it.
+     *
+     * The figures are the LATEST wicket's privilege for the reason `bowlerFigures`
+     * gives: `inn.bowling` is his running total at this poll, which is not what he had
+     * when he got an earlier man. Without them the word "bowler" comes back, since a
+     * bare name would otherwise be anybody's. */
+    function wicketParts(w, inn, sides, ctx, figures, stand, extra) {
+        if (!w || !w.name) return [det('Wicket')];
+        var word = howWord(w.how), by = fielderOf(w.how, w.fielder);
+        // "Caught BY M Peverell" — the scorecard writes "c Peverell b Vane" and drops
+        // the preposition, which in a sentence reads as the batter catching him.
+        var clause = (word || 'out') + (by ? ' by ' + by : '') +
+            (w.runs != null ? (w.runs === 0 ? ' for a duck' : ' for ' + w.runs) : '');
+        /* THE STAND IT ENDED, AND WHOSE IT WAS. No comma before it: the phrase is one
+         * breath — "bowled for 22 ending a stand of 44 for Denham" — and the club goes
+         * HERE rather than with the bowler, because this is the clause about the
+         * batting side. It is the shrinkable group, so a long line loses the stand
+         * before it loses either name.
+         * > James's direction, 2026-09-29. */
+        var standTag = [];
+        if (stand != null) {
+            clause += ' ending a stand of ' + stand;
+            standTag = clubTag(ctx, sides.bat, sides.other);
         }
-        return out;
+        if (extra) clause += extra;
+        var bowler = bowlerOf(w.how), figs = figures ? bowlerFigures(inn, bowler) : '';
+        var credit = bowler
+            ? (figs ? [{ cls: 'bat', text: bowler }, { cls: 'score', text: figs }]
+                    : [det('bowler'), { cls: 'bat', text: bowler }])
+            : [];
+        /* THE BOWLER'S CLUB, which is his own unless his own is ours — see `clubTag`.
+         * A run-out is nobody's wicket, so the group names the side that effected it
+         * instead; when that side is us it falls back to the fixture, which is the one
+         * thing the line would otherwise leave out. */
+        /* THE BOWLER'S CLUB — unless the stand clause has already named the batting
+         * side, in which case the line has its match identified and a second club is
+         * two names where one will do. */
+        if (credit.length && !standTag.length) {
+            credit = credit.concat(clubTag(ctx, sides.other, sides.bat));
+        } else if (!credit.length && !standTag.length) {
+            credit = (sides.other && !isOurPlayer(ctx, sides.other))
+                ? [team(sides.other), det('in the field')]
+                : clubTag(ctx, '', sides.bat);
+        }
+        return [{ cls: 'bat', text: w.name }, det(clause, true)]
+               .concat(standTag).concat([SEP]).concat(credit);
     }
     /* WHICH BATTERS FELL BETWEEN THESE TWO CARDS, in the order they went.
      *
@@ -1631,7 +2590,12 @@
      * The LATEST wicket needs no `fow`: it is written from the card's own current
      * scoreline. Only the backfilled ones must state the score they left, so only
      * they can force the caller back to the lumped event. */
-    function newDismissals(pinn, inn) {
+    /* EVERY DISMISSAL IN THE INNINGS, IN FALL ORDER. Split out of `newDismissals`
+     * because the hat-trick needs the same list for a different question — not "what is
+     * new" but "who were the last three out" — and two sorts of the same rows, ranked
+     * by the same three keys, would be two chances to disagree about the order of an
+     * innings. */
+    function dismissalsOf(inn, pinn) {
         var was = {};
         ((pinn && pinn.batters) || []).forEach(function (b) {
             if (b && b.name) was[b.name] = isOut(b);
@@ -1649,7 +2613,18 @@
                    (a.fow_order || 0) - (b.fow_order || 0) ||
                    (a.pos == null ? a.seq : a.pos) - (b.pos == null ? b.seq : b.pos);
         });
-        all.forEach(function (d, i) { d.order = i + 1; });
+        /* THE FALL BEFORE THIS ONE, which is what makes the stand it ended a
+         * subtraction rather than a guess: two fall-of-wicket figures, both stated by
+         * the scorer. The first wicket's predecessor is the start of the innings, so
+         * its `prev_fow` is 0 and the stand it ends is the opening one. */
+        all.forEach(function (d, i) {
+            d.order = i + 1;
+            d.prev_fow = i ? all[i - 1].fow : 0;
+        });
+        return all;
+    }
+    function newDismissals(pinn, inn) {
+        var all = dismissalsOf(inn, pinn);
         var out = all.filter(function (d) { return d.fresh; });
         // A backfilled wicket with no fall figure cannot state the score it left, so
         // the batch is not separable and the caller falls back.
@@ -1695,6 +2670,19 @@
     // because "seven fours" reads as prose where "7 fours" reads as a statistic.
     var COUNT_WORDS = ['no', 'a', 'two', 'three'];
     function countWord(n) { return COUNT_WORDS[n] || String(n); }
+    /* A COUNTED NUMBER, as against an introduced one. `countWord` says "a four" because
+     * one four is a thing that happened; "19 for a in the last 4 overs" is not English,
+     * and neither is "needs a for his fifty". A wicket column and a run gap are both
+     * read as plain numbers — "for one", "needs six".
+     *
+     * THESE RUN TO TEN where the boundary counts above stop at three, and the reason is
+     * what they count: a run gap and a wicket column are small by nature and land in
+     * the middle of a sentence ("needs six for a fifty", "have lost four for 12"),
+     * where a numeral reads as a statistic dropped into prose. A boundary count is
+     * already sitting beside a figure. */
+    var COUNTED_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six',
+                         'seven', 'eight', 'nine', 'ten'];
+    function countedWord(n) { return COUNTED_WORDS[n] || String(n); }
     function boundaryPhrase(f, s) {
         var parts = [];
         if (f > 0) parts.push(countWord(f) + ' four' + (f === 1 ? '' : 's'));
@@ -1702,52 +2690,1562 @@
         return parts.join(' and ');
     }
     function capitalise(t) { return t ? t.charAt(0).toUpperCase() + t.slice(1) : t; }
-    /* THE THIRD PHRASE: whose bowlers these are, said the only way a first innings
-     * lets us say it.
+
+    /* ---- THE SCORE LINE, WRITTEN AGAINST THE SCOREBOARD BESIDE IT -------------
      *
-     * The bowling side was the one thing the band never named. A wicket said who got
-     * him and a score said where they were, and neither said which club was doing the
-     * bowling — on a wall showing three of our XIs at once that is the difference
-     * between a fact and a puzzle. Carrying it in the dismissal clause worked but cost
-     * the length twice over, once for the club and once for the possessive.
+     * `score_update` is the FLOOR: it fires every over on every match we can see, and
+     * it is the one type that is not news. Under v1 the band WAS the scoreboard, so
+     * the line was the score — club, figure, overs — with a clause behind it. The
+     * strip is now the scoreboard stood on its end, and every group of that line is
+     * already on it, larger and better set: the figure and the overs are its gold
+     * apertures, "Denham to bat" is its TO BAT tile, "need 47 from 60" is its chase
+     * block, and the fixture is its two crest tiles over the division in the footer.
      *
-     * As its own phrase it is paid for once and reads as what it is: the club in the
-     * batting team's own strong type, the state in the muted type behind it.
+     * So the floor stopped repeating the numbers and took the half of a quiet over
+     * that the scoreboard cannot hold. The split is the one the two surfaces are for:
      *
-     * FIRST INNINGS ONLY, because "to bat" is only true there. In a chase the side
-     * fielding has already batted and the same words would be a plain falsehood; that
-     * innings gets its own phrasing when we come to it. */
-    function toBatTail(sides, inns) {
-        if (!sides || !sides.other) return null;
-        if ((inns || []).length !== 1) return null;
-        return { text: sides.other + ' to bat',
-                 parts: [{ cls: 'team', text: sides.other }, { cls: 'det', text: 'to bat' }] };
+     *   THE STRIP IS STATE — where they are, this second.
+     *   THE TICKER IS CHANGE — who is doing it, and how the last few overs have gone.
+     *
+     * A scoreboard has never named a person and cannot say what happened five overs
+     * ago; those are exactly what makes a routine over worth a line, and they are what
+     * a commentator says when nothing has happened: "Harrington settled on 38,
+     * Fairhead 15, 44 together."
+     *
+     *   J Harrington 38* and W Fairhead 15*  ·  44 together  ·  Wendover batting
+     *   High Wycombe  ·  34 for one in the last 5 overs
+     *
+     * THE LEAD IS THE MOST SPECIFIC ACTOR THE FEED CAN NAME. Our own card knows who
+     * is in, so the pair leads and the club falls to the tail, which is the
+     * individual family's rule (the strip footer says "1st XI" whoever is batting, so
+     * a bare pair of names could be either side's). The division's card has no
+     * batters at all, so the club is the most specific thing it has and it leads.
+     * One shape, filled as far as each feed allows — not two different sentences.
+     */
+
+    /* WHO IS IN. `at_crease` when the feed gives it, else the not-out batters who have
+     * faced something — which is what excludes the squad RV parks at `number` 99.
+     * Both or neither: one name and a blank is worse than the club.
+     *
+     * THE FEED'S OWN ANSWER IS TAKEN AS IT STANDS. `at_crease` names the two men in,
+     * so a non-striker who has not yet faced a ball is one of them — and at the top of
+     * an innings he is precisely the man the band is there to introduce. Filtering him
+     * out cost the first two overs of every innings their pair, which is where the
+     * introduction belongs. The faced-a-ball test survives on the DERIVED pool, where
+     * it is doing the other job: keeping RV's parked squad out of the sentence. */
+    function creasePair(inn) {
+        var at = ((inn && inn.at_crease) || []).filter(function (b) {
+            return b && b.name && !isOut(b);
+        });
+        if (at.length >= 2) return at.slice(0, 2);
+        var out = [];
+        ((inn && inn.batters) || []).forEach(function (b) {
+            if (!b || !b.name || isOut(b) || !(b.runs || b.balls)) return;
+            if (out.length < 2) out.push(b);
+        });
+        return out.length === 2 ? out : [];
     }
-    /* THE CLAUSE THE BOUNDARIES EARN, or nothing.
+    // A batter as the band writes one: the name, then the figure, with the star a
+    // scorecard puts on an innings still going. The star is the whole reason the
+    // figure is worth reading on this line — it says these two are the men in.
+    function batFig(b) {
+        return [{ cls: 'bat', text: b.name },
+                { cls: 'score', text: (b.runs || 0) + '*' }];
+    }
+    /* THE TWO MEN IN, AS ONE CLAUSE — "W Fairhead 12* and A Quill 5*".
      *
-     * This is what `six` and `four` used to be as events. They were removed because a
-     * counter cannot say WHEN a boundary was hit and the scorers' counters drift
-     * against what the camera saw — so a SIX tile could announce a shot played twenty
-     * minutes earlier and freshness had no way to know. As a clause on the score none
-     * of that arises: the score is current by construction, and the boundaries are
-     * qualified by it rather than claiming a moment of their own.
+     * The band's recurring tail. Nearly every line about our own matches now ends on
+     * it: the score, a bowling change, a milestone, a man approaching one, a charge.
+     * The reason is the split this pass is built on — the strip holds the STATE and
+     * the ticker says what is happening to it, and who is in with what against his
+     * name is the one piece of state no tile on the strip carries.
      *
-     * The batter is named only when one of them hit the lot; two batters sharing a
-     * burst get the count and no name, because "two fours for J Harrington" when one
-     * of them was his partner's is the kind of small lie nobody would ever catch. */
-    function boundaryClause(d) {
-        if (!d || (d.fours <= 0 && d.sixes <= 0)) return '';
-        /* NAME AND TOTAL FIRST, then what he did — "J Harrington 38, two fours and a
-         * six in that over". The other order put the time phrase after the running
-         * total ("…for J Harrington, on 24 in that over") where it read as though the
-         * 24 had been scored in the over. It also matches the dismissal clause, which
-         * is already name-then-figure. */
-        var phrase = boundaryPhrase(d.fours, d.sixes);
-        if (d.movers === 1 && d.who) {
-            return d.who + (d.whoRuns != null ? ' ' + d.whoRuns : '') + ', ' + phrase;
+     * Empty when the pair cannot be named, and `say()` drops the group, so a caller
+     * appends it without asking whether there is one. */
+    function pairParts(pair) {
+        // NO "AND". Four parts in two name-and-figure pairs read as a scorecard, which
+        // is what they are; the conjunction made them read as a sentence and cost the
+        // length of a word in the phrase most likely to be truncated.
+        // > James's direction, 2026-09-29.
+        return (pair && pair.length === 2)
+            ? batFig(pair[0]).concat(batFig(pair[1])) : [];
+    }
+    function pairOf(inn) { return pairParts(creasePair(inn)); }
+
+    /* THE PARTNERSHIP — runs added since the last wicket fell, which is the one figure
+     * of a settled passage of play that no surface on the wall carries.
+     *
+     * It is a subtraction of two numbers the feed states: the total now, and the total
+     * when the last man was out (`fow`, the score at the fall). Extras added while the
+     * two have been together belong in it, which is what a partnership means, so the
+     * team total is the right minuend.
+     *
+     * No wicket yet means the whole total IS the stand, and an opening partnership is
+     * the commonest thing this clause says.
+     *
+     * IT REFUSES TO GUESS. If the fall figures cannot account for every wicket — one
+     * of them null, a name that changed spelling — the highest `fow` we can see
+     * belongs to an EARLIER wicket and the stand would come out too big. Silence, and
+     * the passage clause takes the slot.
+     *
+     * Under ten runs it stands down. "3 together" is arithmetic, not a story, and a
+     * stand that young is better described by the over it is part of. */
+    /* WHICH PARTNERSHIP IT IS — "opening", "second wicket", "third wicket".
+     *
+     * A number of wickets down is a position; the partnership it names is a THING, and
+     * one every follower of the game already counts in these words. It costs a word
+     * over "batting partnership" and says something that word did not.
+     *
+     * Read off the wickets that have fallen, which is exact: nobody out is the opening
+     * stand, one down is the second-wicket stand. Past the tenth there is nothing to
+     * name, and the plain word takes over.
+     * > James's direction, 2026-09-29. */
+    var STAND_ORDINALS = ['opening', 'second wicket', 'third wicket', 'fourth wicket',
+                          'fifth wicket', 'sixth wicket', 'seventh wicket',
+                          'eighth wicket', 'ninth wicket', 'last wicket'];
+    function standName(inn) {
+        return STAND_ORDINALS[(inn && inn.wickets) || 0] || 'batting';
+    }
+    var STAND_MIN = 10;
+    function partnershipRuns(inn) {
+        if (!inn) return null;
+        var w = inn.wickets || 0;
+        if (!w) return inn.runs || 0;
+        var seen = 0, at = -1;
+        (inn.batters || []).forEach(function (b) {
+            if (!b || b.fow == null) return;
+            seen++;
+            if (b.fow > at) at = b.fow;
+        });
+        if (seen < w || at < 0) return null;
+        return Math.max(0, (inn.runs || 0) - at);
+    }
+
+    /* THE PASSAGE — what the last few overs have been worth, for a feed that cannot
+     * name anybody.
+     *
+     * Two stated whole-over totals, subtracted. That is all it is, and it is why the
+     * clause can make a claim about TIME where a boundary counter cannot: both ends
+     * of it are scores the scorer published, and the overs between them are the
+     * difference of two over counts. Nothing is inferred about any individual ball.
+     *
+     * The anchor is the newest log row at least `PASSAGE_BACK` overs old — five, which
+     * is about half an hour of a league afternoon and long enough for a rate to mean
+     * something. Early in an innings there is no row that old, so the oldest row is
+     * used instead provided it is two overs back; one over is the over that has just
+     * finished, and "6 in the last 1 over" is the ball-by-ball claim this clause
+     * exists to avoid making. */
+    var PASSAGE_BACK = 5, PASSAGE_MIN = 2, PASSAGE_KEEP = 60;
+    /* THE DERIVED MEMORY, carried from poll to poll on the card itself — the
+     * `_spells` and `_received_at` precedent. Two logs ride here:
+     *
+     *   `_passage`  where the innings stood at each whole over (the passage clause);
+     *   `_falls`    the over count we OBSERVED the last wicket at (a stand's length).
+     *
+     * Neither is in the feed. Both are records of what we have watched, which is the
+     * only honest place they can come from — and the reason each is guarded against
+     * the poll that watched too little of it. */
+    function carryDerived(p, m) {
+        m._passage = (p && p._passage) || {};
+        m._falls = (p && p._falls) || {};
+        m._surges = (p && p._surges) || {};
+        m._once = (p && p._once) || {};
+    }
+    /* A LATCH FOR A FACT THAT IS TRUE ONCE PER INNINGS.
+     *
+     * Most things here are transitions and need no memory: a crossing is a crossing.
+     * `last_pair` is not — "nine down" is a STATE, and it has to be tested as one because
+     * the poll the ninth wicket falls on does not yet have a pair to name (the new man
+     * has faced nothing). Testing the state on every poll and latching the answer says it
+     * once, on the first poll that can say it properly.
+     *
+     * The store's id de-duplication would hide a missing latch, exactly as it hid the
+     * repeating maiden — so the latch is here rather than left to the store. */
+    function onceOnly(m, ii, tag) {
+        var log = m._once || (m._once = {});
+        var seen = log[ii] || (log[ii] = {});
+        if (seen[tag]) return false;
+        seen[tag] = true;
+        return true;
+    }
+    function logOver(m, ii, ob, inn) {
+        var log = m._passage || (m._passage = {});
+        var row = log[ii] || (log[ii] = []);
+        // Same ball or earlier: nothing new to remember. A re-published card can
+        // arrive with the innings where it was, and a duplicate row would make the
+        // anchor arithmetic depend on how often we polled.
+        if (row.length && row[row.length - 1].b >= ob) return;
+        /* THE BOWLERS' FIGURES RIDE WITH THE SCORE, because a squeeze is told through
+         * them and a snapshot cannot say who has been bowling. Two totals subtracted
+         * gives a bowler's economy THROUGH THE WINDOW, which is the figure the event
+         * is about — his match economy is a different number and a duller one. Same
+         * arithmetic as the row itself, one level down. */
+        var bw = {};
+        ((inn && inn.bowling) || []).forEach(function (b) {
+            if (b && b.name) bw[b.name] = { b: balls(b.overs), r: b.runs || 0,
+                                            w: b.wickets || 0 };
+        });
+        row.push({ b: ob, r: inn.runs || 0, w: inn.wickets || 0, bw: bw });
+        if (row.length > PASSAGE_KEEP) row.shift();
+    }
+    function passageClause(m, ii, ob, inn) {
+        if (!ob) return '';
+        var row = ((m && m._passage) || {})[ii] || [];
+        /* NOT BACK PAST THE LAST THING WE SAID ABOUT THE PASSAGE. A charge or a squeeze
+         * has just announced four overs in its own tile; a floor line measuring six
+         * overs through the same passage restates it a minute later with the duller
+         * half of the same arithmetic. So the clause describes what has happened SINCE
+         * the band last described a passage, and where that leaves nothing to measure
+         * it says nothing and the fixture takes the slot.
+         *
+         * `surgeAt`'s own disjoint-window rule is the same idea one level up: neither
+         * surface should tell the same passage of play twice. */
+        var floor = 0, seen = ((m && m._surges) || {})[ii] || {};
+        Object.keys(seen).forEach(function (f) {
+            if (seen[f] > floor) floor = seen[f];
+        });
+        var want = ob - PASSAGE_BACK * 6, anchor = null;
+        for (var i = 0; i < row.length; i++) {
+            if (row[i].b <= want && row[i].b >= floor) anchor = row[i];
         }
-        return capitalise(phrase);
+        if (!anchor && row.length && row[0].b <= ob - PASSAGE_MIN * 6 && row[0].b >= floor) {
+            anchor = row[0];
+        }
+        /* The oldest row at or after the surge, when the two rules above have ruled
+         * everything out but there IS cricket since the announcement worth measuring.
+         * Without this the clause stays silent for a full five overs after every
+         * charge, which is the wrong end of the trade: the passage since is short, but
+         * it is what has happened. */
+        if (!anchor && floor) {
+            for (var j = 0; j < row.length; j++) {
+                if (row[j].b >= floor && row[j].b <= ob - PASSAGE_MIN * 6) { anchor = row[j]; break; }
+            }
+        }
+        if (!anchor) return '';
+        var db = ob - anchor.b;
+        if (db < PASSAGE_MIN * 6) return '';
+        var runs = (inn.runs || 0) - anchor.r, wk = (inn.wickets || 0) - anchor.w;
+        /* THE OVERS ARE WRITTEN AS A SCORECARD WRITES THEM — `oversWord`, so a gap of
+         * twenty-one balls is "3.3 overs" and not "3.5". The division's feed samples
+         * whenever its scoreline moves, so a part-over gap is the normal case there
+         * and a decimal would be a different number from the one it means. */
+        var over = ' in the last ' + oversWord(db);
+        // A maiden passage is a story of its own, and the only one this clause tells
+        // without a number to lead with.
+        if (runs <= 0 && !wk) return 'No runs' + over;
+        /* RUNS AND WICKETS AS A SCORE, not as prose. "30 for one in the last 5 overs"
+         * was reading as a team total rather than as a passage, and the wicket column
+         * vanished altogether when nobody was out — so a quiet passage and a passage
+         * that cost two wickets were told in the same shape. A scoreline says both in
+         * four characters, in the grammar the rest of the wall uses.
+         * > James's direction, 2026-09-29. */
+        return runs + '\u2013' + wk + over;
     }
+
+    /* WHERE THE LAST WICKET FELL — in OVERS, which is the one thing a fall-of-wicket
+     * figure does not carry. The feed states the score at the fall and never the over,
+     * so the only honest source is the over count on the card we were holding when the
+     * wicket appeared.
+     *
+     * THAT IS ONLY WORTH ANYTHING IF WE WERE WATCHING CLOSELY. At fifteen seconds a
+     * poll the card we see is within a ball or two of the fall; under a scorer syncing
+     * in lumps it can be overs late, and a stand's length measured from it would be
+     * plain wrong. So the log records how much cricket the poll itself spanned, and
+     * more than two overs marks the reading `wide` — after which the stand is stated
+     * in runs alone. A missing clause beats an invented number.
+     *
+     * Only the LATEST fall is kept. It is the only one a current stand is measured
+     * from, and the runs half of every stand comes from `fow` arithmetic instead,
+     * which needs no memory at all. */
+    function logFall(m, ii, wickets, ob, wide, inn) {
+        var log = m._falls || (m._falls = {});
+        /* WHAT THE MEN STILL IN HAD MADE AT THE FALL, which is what turns a batter's
+         * running total into his share of THIS stand. Without it "50 for him and 54
+         * for the pair" is unanswerable: his fifty may have been built across three
+         * partnerships, and the fact that both crossed on one poll is then a
+         * coincidence rather than the same event twice. */
+        var at = {};
+        ((inn && inn.batters) || []).forEach(function (b) {
+            if (b && b.name && !isOut(b)) at[b.name] = b.runs || 0;
+        });
+        log[ii] = { w: wickets, b: ob, wide: !!wide, at: at };
+    }
+    /* A BATTER'S SHARE OF THE STAND HE IS IN — his total now, less what he had when
+     * the last man went. Null when we cannot say, and the caller must then not claim
+     * it: an opening stand needs no log (nobody has been out, so his whole innings is
+     * the stand), and a man who walked in after the fall is not in the log at all,
+     * which is the same answer as zero. */
+    function standShare(m, ii, inn, b) {
+        if (!b) return null;
+        if (!(inn.wickets || 0)) return b.runs || 0;
+        var f = ((m && m._falls) || {})[ii];
+        if (!f || f.w !== (inn.wickets || 0) || !f.at) return null;
+        return Math.max(0, (b.runs || 0) - (f.at[b.name] || 0));
+    }
+    function standBalls(m, ii, inn, ob) {
+        if (!ob) return 0;
+        // Nobody is out: the stand is the innings, and the innings' own over count is
+        // its length. No memory required and nothing to be wrong about.
+        if (!(inn.wickets || 0)) return ob;
+        var f = ((m && m._falls) || {})[ii];
+        // The log must be describing THIS stand — the fall that started it — and must
+        // have been read closely enough to mean something.
+        if (!f || f.w !== (inn.wickets || 0) || f.wide) return 0;
+        return Math.max(0, ob - f.b);
+    }
+
+    /* A PARTNERSHIP REACHING A MARK — the first event on the wall about two players
+     * rather than one.
+     *
+     *   J Harrington and W Fairhead  ·  53 together in 8.2 overs  ·  Wendover 104/2
+     *
+     * The shape is the individual family's, with the pair where the person goes: who,
+     * the figure, what qualifies it, and the side with its total. What is new is the
+     * qualifier — a stand's LENGTH, which no surface on the wall carries and which is
+     * the difference between a counter-attack and an hour of survival.
+     *
+     * THE FIGURE IS THE STAND AS IT STANDS, not the mark. The tile says FIFTY STAND,
+     * so the sentence must not (the toss's rule), and by the time a poll catches it
+     * they are usually a few runs past — 53, which is the true number and is also the
+     * one the strip's own figures can be reconciled with.
+     *
+     * NO SPLIT OF THE CONTRIBUTIONS, though the card carries both. "34 and 19" beside
+     * "53 together" invites a reader to add them up and get a different number,
+     * because extras added while the two were in belong to the stand and to neither
+     * batter. The one place the arithmetic would be visibly wrong is the place it
+     * would be checked. */
+    /* EVERY FIFTY, AND WHERE EACH ONE LANDS. One type covers all of them with
+     * `magnitude` doing the ordering, exactly as `team_total` does — and the numbers are
+     * chosen against what they have to sit beside:
+     *
+     *   |  50 | 0.32 | 58 | just under an individual `fifty` (64)
+     *   | 100 | 0.52 | 79 | above a `wicket` (70), below a personal `hundred` (92)
+     *   | 150+| 0.72 | 80 | the tier cap
+     *
+     * The cap flattens 150 and 200 together, which is the right shape rather than a
+     * limitation: by then the stand is already the biggest thing in the match bar
+     * somebody's hundred, and a league afternoon rarely produces one.
+     *
+     * Note the floor is 0.32 and not zero. A magnitude of nothing puts the COMMONEST
+     * case at the bottom of the multiplier — the mistake the first cut of `team_total`
+     * made, which priced a first hundred at 20. */
+    var STAND_MARK = 50;
+    function standMarkMagnitude(mark) {
+        return Math.min(1, 0.32 + (mark / STAND_MARK - 1) * 0.2);
+    }
+    function standPayload(pair, stand, ballsTogether, inn, sides, ctx) {
+        // The score line's own shape, because it is the same fact grown big enough to
+        // be news: which partnership, what it has put on, and the two men in it.
+        var lead = [det(capitalise(standName(inn))), det('partnership of'),
+                    { cls: 'score', text: String(stand) }];
+        if (ballsTogether) lead.push(det('in ' + oversWord(ballsTogether), true));
+        return say(lead.concat(clubTag(ctx, sides.bat, sides.other))
+                       .concat([SEP]).concat(pairParts(pair)), { who: pair[0].name });
+    }
+    /* THE STAND A WICKET ENDED, for the dismissal clause — two fall figures
+     * subtracted, so it is exact for a backfilled wicket as much as for the newest
+     * one and needs none of the log above. The first wicket's predecessor is the
+     * start of the innings (`prev_fow` 0), so it ends the opening stand.
+     *
+     * Thirty is where it becomes worth saying. Below that the stand is not what the
+     * wicket did, and a clause reporting every eight-run partnership would be
+     * reporting the over rate again. */
+    var STAND_NEWS = 30;
+    function standEnded(d, inn, last) {
+        if (!d || d.prev_fow == null) return null;
+        var at = d.fow != null ? d.fow : (last ? (inn.runs || 0) : null);
+        if (at == null) return null;
+        var n = at - d.prev_fow;
+        return n >= STAND_NEWS ? n : null;
+    }
+
+    /* ---- THE PASSAGE OF PLAY, AS AN EVENT ------------------------------------
+     *
+     * Three faces of one idea, and the idea is the one thing a scoreboard structurally
+     * cannot show: it displays a number going up, and it can never say that the number
+     * has started going up FASTER, or has stopped, or that the innings is falling over.
+     * All three are subtractions of two published totals — the same arithmetic the
+     * passage clause already does on the floor line, promoted to news when it crosses
+     * a threshold worth a screen.
+     *
+     *   CHARGE    a burst: three or four overs well above the innings' own rate
+     *   SQUEEZE   the opposite: five or six overs well below it
+     *   COLLAPSE  three wickets inside six overs
+     *
+     * THE BASELINE IS THE INNINGS ITSELF, not a par rate for the league. "They have
+     * gone from four an over to nine" is the news; "they are scoring at nine" is a
+     * fact about the pitch. And it is measured up to the WINDOW'S START, never
+     * including the window, or a burst pollutes the baseline it is being judged
+     * against and every burst looks smaller than it is.
+     *
+     * A RATIO IS NOT ENOUGH ON ITS OWN. Two runs an over against one is a doubling and
+     * it is nothing, so each face carries an absolute floor as well — runs in the
+     * window for the charge, runs and a real baseline for the squeeze. The squeeze also
+     * requires a baseline worth squeezing: a side already scoring at two an over cannot
+     * be strangled.
+     *
+     * EACH FACE HAS ITS OWN WINDOW, because the three are not the same length of
+     * event. A burst is three overs; a drying-up needs five or six before it is real
+     * rather than one quiet over; a collapse is defined by its wickets and not by
+     * time at all.
+     *
+     * THE WINDOW MUST BE ROUGHLY THE ONE WE ASKED FOR. The division's log is per
+     * observation, so the nearest anchor to "three overs ago" can be twelve overs back
+     * — at which point the test means something else entirely and the sentence would be
+     * about a different passage of play. `slack` bounds it, and no anchor in range
+     * yields no event, which is the honest answer.
+     */
+    var SURGE = {
+        // want/slack in overs; `min_base` is the baseline sample a ratio needs
+        charge:   { want: 3, slack: 3, min_base: 5, ratio: 1.75, runs: 24, max_wkts: 1 },
+        squeeze:  { want: 5, slack: 3, min_base: 5, ratio: 0.45, runs: 12, base_rate: 4 },
+        collapse: { within: 6, wickets: 3 }
+    };
+    function rateOver(runs, balls) { return balls ? (runs || 0) / (balls / 6) : 0; }
+    // The NEWEST row at least `want` overs back, and no more than `slack` overs older
+    // than that — a window of about the length asked for.
+    function anchorBack(m, ii, ob, want, slack) {
+        var row = ((m && m._passage) || {})[ii] || [];
+        var hi = ob - want * 6, lo = ob - (want + slack) * 6, best = null;
+        for (var i = 0; i < row.length; i++) {
+            if (row[i].b <= hi && row[i].b >= lo) best = row[i];
+        }
+        return best;
+    }
+    // The OLDEST row within `within` overs — "has this happened recently", which is a
+    // different question from "how have the last five overs gone" and needs the other
+    // end of the log.
+    function anchorWithin(m, ii, ob, within) {
+        var row = ((m && m._passage) || {})[ii] || [];
+        var lo = ob - within * 6;
+        for (var i = 0; i < row.length; i++) {
+            if (row[i].b >= lo && row[i].b < ob) return row[i];
+        }
+        return null;
+    }
+    /* WHICH FACE, IF ANY. Ranked, because one window can answer to two of them: three
+     * wickets for eleven is both a collapse and a squeeze, and the collapse is the
+     * bigger thing to have happened. The charge cannot collide with either — it caps
+     * the wickets in its window, since a burst with three men out is not a burst. */
+    function surgeAt(m, ii, inn, ob) {
+        if (!ob || inn.closed) return null;
+        var runs = inn.runs || 0, wkts = inn.wickets || 0;
+        var c = SURGE.collapse, a = anchorWithin(m, ii, ob, c.within);
+        if (a && ob - a.b >= 6 && wkts - a.w >= c.wickets) {
+            return { face: 'collapse', runs: runs - a.r, wkts: wkts - a.w, balls: ob - a.b,
+                     anchor: a };
+        }
+        function windowed(cfg) {
+            var q = anchorBack(m, ii, ob, cfg.want, cfg.slack);
+            if (!q || q.b < cfg.min_base * 6) return null;
+            return { anchor: q, runs: runs - q.r, wkts: wkts - q.w, balls: ob - q.b,
+                     base: rateOver(q.r, q.b) };
+        }
+        var w = windowed(SURGE.charge);
+        if (w && w.wkts <= SURGE.charge.max_wkts && w.runs >= SURGE.charge.runs &&
+            rateOver(w.runs, w.balls) >= SURGE.charge.ratio * w.base) {
+            return { face: 'charge', runs: w.runs, wkts: w.wkts, balls: w.balls,
+                     anchor: w.anchor };
+        }
+        w = windowed(SURGE.squeeze);
+        if (w && w.base >= SURGE.squeeze.base_rate && w.runs <= SURGE.squeeze.runs &&
+            rateOver(w.runs, w.balls) <= SURGE.squeeze.ratio * w.base) {
+            // The anchor goes with it: the squeeze names the bowlers who did it, and
+            // they are a subtraction against that row (see `squeezeParts`).
+            return { face: 'squeeze', runs: w.runs, wkts: w.wkts, balls: w.balls,
+                     anchor: w.anchor };
+        }
+        return null;
+    }
+    /* ONE EVENT PER PASSAGE, NOT ONE PER OVER. A burst that runs for six overs answers
+     * the charge test on every one of them, and a band that said so would be reporting
+     * the same four overs four times.
+     *
+     * The rule is DISJOINT WINDOWS: the next one of a face may not fire until its own
+     * window has cleared the last. So two charges always describe two different
+     * passages of play, and the constant that decides it is the window itself rather
+     * than a cooldown invented beside it. The state rides with the other derived
+     * memory, per innings and per face. */
+    function surgeFresh(m, ii, face, ob, balls) {
+        var log = m._surges || (m._surges = {});
+        var seen = log[ii] || (log[ii] = {});
+        if (seen[face] != null && ob - seen[face] < balls) return false;
+        seen[face] = ob;
+        return true;
+    }
+    /* The shape is the family's: the side, the figure, what qualifies it. The charge
+     * and the squeeze share one sentence with different numbers, which is honest —
+     * they are the same measurement with the inequality turned round. The collapse
+     * leads with the wickets because that is what it is about.
+     *
+     * NO SCORE TAIL. The innings total is the strip's gold figure a few centimetres
+     * away, and this family exists precisely because the strip cannot say the rest.
+     *
+     * WHO GETS THE CREDIT DEPENDS ON THE FACE, and this is the whole point of the
+     * second clause. A charge and a collapse are the batters' — so the pair at the
+     * crease closes the line, whosever match it is (the lean that gave it only to ours
+     * left a division charge with nothing behind the figure at all). A SQUEEZE IS THE
+     * BOWLERS', and naming the two men in while saying they have scored nothing reads
+     * as an accusation; the news is the pair of bowlers who dried it up, with what
+     * they went for through the window.
+     * > James's direction, 2026-09-29. */
+    /* THE VERB IS THE EVENT. "Have added 24 in 3 overs" is the arithmetic and could
+     * be any of the three; "on a charge scoring 24 in 3 overs" is what happened, and
+     * it holds up with no gold tile over it to name the type. In a chase the verb
+     * changes again — a side "chasing 24 in 3 overs" is doing something to a target,
+     * not merely scoring.
+     *
+     * NO GOLD ON THE FIGURE. It is a passage's runs, not a total — see the gold rule
+     * on `batFig`. The same reason the squeeze's economies are in the plain type.
+     * > James's direction, 2026-09-29. */
+    function surgePayload(s, inn, sides, ours, ctx, inns) {
+        var chase = chasing(inns), over = ' in ' + oversWord(s.balls);
+        // The subject goes when the subject is us — the score line's rule, and for the
+        // same reason: the opposition tag below says which match this is.
+        var mine = isOurPlayer(ctx, sides.bat);
+        var subj = mine ? [] : [team(sides.bat || '')];
+        var lead = s.face === 'collapse'
+            ? subj.concat([det(mine ? 'Collapse losing' : 'collapse losing'),
+                           det(countedWord(s.wkts) + ' for ' + s.runs + over)])
+            : s.face === 'squeeze'
+                ? subj.concat([det(mine ? 'Being squeezed' : 'are being squeezed'),
+                               det((chase ? 'chasing ' : 'scoring ') + s.runs + over)])
+                : subj.concat([det(mine ? 'On a charge' : 'on a charge'),
+                               det((chase ? 'chasing ' : 'scoring ') + s.runs + over)]);
+        /* WHOSE PASSAGE IT IS. A charge is the batters' and a squeeze is the bowlers';
+         * a COLLAPSE is the bowlers' too — the men in are the ones it happened to, and
+         * naming them under the word "collapse" reads as an accusation where the
+         * wicket-takers' figures read as what did it. */
+        var pair = creasePair(inn);
+        var clause = s.face === 'charge' ? pairParts(pair) : bowlerParts(s, inn, s.face);
+        if (!clause.length && s.face === 'collapse') clause = pairParts(pair);
+        if (!clause.length && s.wkts && s.face !== 'collapse') {
+            clause = [det(countedWord(s.wkts) + ' down', true)];
+        }
+        return say(lead.concat(mine ? clubTag(ctx, '', sides.other) : [])
+                       .concat([SEP]).concat(clause),
+                   (s.face === 'charge' && pair.length) ? { who: pair[0].name } : null);
+    }
+    /* THE BOWLERS A PASSAGE BELONGS TO, and what to say about each.
+     *
+     *   squeeze    R Duff 1.2  F Pardoe 2.4 an over   — what they went for
+     *   collapse   W Vane 3–25  T Duff 1–9            — what they took
+     *
+     * Both are subtractions against the window's own anchor row, which is why they can
+     * be stated at all: a card carries a bowler's running total and never says when
+     * the runs were conceded, so his match economy through a quiet passage is mostly
+     * made of the overs before it. The FIGURES quoted for a collapse are his match
+     * figures, because a wicket-taker's figures are a total and that is the number a
+     * reader wants — but WHICH bowlers is still decided by the window.
+     *
+     * AN OVER EACH AT LEAST for the squeeze: a man who bowled two balls of it is not
+     * what happened, and an economy off two balls is noise. A collapse takes anyone
+     * who got a wicket in the window, which is the whole point of him being there.
+     * Empty for the division's feed, which carries no bowling at all. */
+    function bowlerParts(s, inn, face) {
+        var was = (s.anchor && s.anchor.bw) || null;
+        if (!was) return [];
+        var rows = [];
+        ((inn && inn.bowling) || []).forEach(function (b) {
+            if (!b || !b.name) return;
+            var w = was[b.name] || { b: 0, r: 0, w: 0 };
+            var db = balls(b.overs) - w.b, dr = (b.runs || 0) - w.r,
+                dw = (b.wickets || 0) - (w.w || 0);
+            if (face === 'collapse') {
+                if (dw > 0) rows.push({ name: b.name, rank: dw,
+                                        fig: figuresOf(b.wickets, b.runs), gold: true });
+            } else if (db >= 6 && dr >= 0) {
+                rows.push({ name: b.name, rank: db, fig: (dr / (db / 6)).toFixed(1) });
+            }
+        });
+        if (!rows.length) return [];
+        rows.sort(function (a, b) { return b.rank - a.rank; });
+        var out = [];
+        rows.slice(0, 2).forEach(function (r) {
+            out.push({ cls: 'bat', text: r.name });
+            // Gold is for totals: a collapse quotes match figures, a squeeze quotes
+            // what the window cost — and only the first of those is one.
+            out.push(r.gold ? { cls: 'score', text: r.fig } : det(r.fig));
+        });
+        if (face === 'squeeze') out.push(det('an over'));
+        return out;
+    }
+    /* THE TWO BOWLERS WHO DID THE SQUEEZING, and what they went for while doing it.
+     *
+     *   R Duff 1.2 and F Pardoe 2.4 an over
+     *
+     * Both figures are subtractions against the window's own anchor row, which is why
+     * they can be stated at all: a card carries a bowler's running total and never
+     * says when the runs were hit, so his match economy through a quiet passage is the
+     * wrong number — it is mostly made of the overs before it.
+     *
+     * AN OVER EACH AT LEAST. A man who bowled two balls of the window is not what
+     * happened in it, and his economy off two balls is noise. Ranked by how much of the
+     * window each one bowled, which for a normal spell is the two men who bowled all
+     * of it. Empty for the division's feed, which carries no bowling at all. */
+
+
+    /* THE FLOOR'S ONE LINE, both feeds. Lead, clause, tail — and the clause is chosen
+     * in the order a reader would miss it:
+     *
+     *   1. THE BOUNDARIES JUST HIT. The only candidate that is news rather than
+     *      standing context, and the reason the floor is worth a screen mid-passage.
+     *   2. THE STAND. What these two have put on, which is the shape of the passage
+     *      the two names in the lead are in.
+     *   3. THE PASSAGE. Runs and wickets over the last few overs — the clause that
+     *      works off a bare scoreline, and so the division's normal one.
+     *
+     * The chase left this line altogether. "Need 47 from 60" was rank two of the old
+     * order and it is now three tiles of the strip's own chase block, in figures a
+     * room can read; saying it again in prose beside them was the duplication this
+     * pass is about. Same for the side still to bat, which is the strip's TO BAT tile.
+     *
+     * WITH NOTHING TO SAY, SAY WHOSE GAME IT IS. A first sighting has no history to
+     * subtract and a division card has nobody to name, so the fallback is the fixture
+     * and its division — the one line that is worth more than a club on its own. */
+    /* THE BATTING SIDE LEADS AND THE PAIR CLOSES, which is the shape the whole
+     * family settled into on 2026-09-29.
+     *
+     *   Denham batting  ·  W Fairhead 4* and A Quill 0*
+     *   Denham batting partnership of 17  ·  W Fairhead 12* and A Quill 5*
+     *   High Wycombe batting v Maidenhead & Bray  ·  16–0 in the last 2 overs
+     *   W Fairhead moves to 9, a four for Denham
+     *
+     * The pair used to lead and the club trail as "Denham batting". Reading it aloud
+     * the sentence started in the middle: two names arrive with no idea whose they
+     * are, and the answer comes six words later. Whose innings this is, then what it
+     * is doing, then who is doing it, is the order a person says it in.
+     *
+     * A BURST OF BOUNDARIES IS ONE MAN'S LINE and takes the whole of it. When a single
+     * batter hit everything this poll brought, the news is him — "W Fairhead moves to
+     * 9, a four for Denham" — and the pair would only restate his figure a phrase
+     * later. Two batters sharing the burst still get the counted version, because
+     * naming one of them for his partner's boundary is the small lie the counted
+     * version was written to avoid.
+     *
+     * THE OPPONENT IS NAMED ONLY WHEN THE PAIR CANNOT BE. Two names identify our own
+     * match on a wall showing three; the division's card has nobody to name, so its
+     * line says "batting v" and carries the fixture instead. */
+    function scorePayload(m, ctx, sides, inn, ii, ob, delta, inns) {
+        var pr = creasePair(inn), club = sides.bat || '', d = delta || {};
+        if (club && d.who && d.movers === 1 && (d.fours > 0 || d.sixes > 0)) {
+            // The comma is its own part and glues to the figure before it, so the
+            // figure keeps the scoreline's gold and the punctuation does not.
+            return say([{ cls: 'bat', text: d.who }, det('moves to'),
+                        { cls: 'score', text: String(d.whoRuns || 0) },
+                        det(', ' + boundaryPhrase(d.fours, d.sixes))]
+                       // His club, or theirs if his is ours — see `clubTag`.
+                       .concat(clubTag(ctx, club, sides.other)),
+                       { who: d.who });
+        }
+        if (!club) return say(fixtureParts(m, ctx).concat([SEP, det(ctx.division, true)]));
+        var stand = pr.length ? partnershipRuns(inn) : null, clause = '', lead;
+        if (stand != null && stand >= STAND_MIN) {
+            /* THE PARTNERSHIP IS THE SUBJECT, so the club comes off the front of it:
+             * "Opening partnership of 17 for Denham" says whose it is in the phrase
+             * that can be dropped, where "Denham batting partnership of 17" spent the
+             * strong word on a club the pair behind it will identify anyway. */
+            lead = [det(capitalise(standName(inn))), det('partnership of'),
+                    { cls: 'score', text: String(stand) }]
+                   .concat(clubTag(ctx, club, sides.other));
+        } else {
+            /* NOTHING TO SAY ABOUT THE STAND: the verb the innings is in leads
+             * instead — "batting", or "chasing" in the second innings, which is the
+             * one word that says which half of the match this is.
+             *
+             * WHOSE INNINGS IT IS, UNLESS IT IS OURS. Every other line on this wall
+             * names the opposition and never us (see `clubTag`), and this one was the
+             * exception only because the club is its grammatical subject. Dropping the
+             * subject is what the rest of the rule implies: "Chasing Denham" says
+             * whose chase it is by saying whose it is not, and the pair behind it
+             * names the two men in.
+             * > James's direction, 2026-09-29. */
+            var verb = chasing(inns) ? 'chasing' : 'batting';
+            lead = isOurPlayer(ctx, club)
+                ? [det(capitalise(verb))]
+                : [team(club), det('are ' + verb)];
+            /* AND THE SIDE ON THE OTHER END OF IT. A chase names them either way —
+             * "chasing" is transitive and an object-less one is a sentence with a hole
+             * in it — except when they are us, where the hole is the lesser evil
+             * (> James's direction): "Chenies & Latimer are chasing" and nothing more.
+             *
+             * A first innings names them when there is no pair to identify the match
+             * (the division's line) or when the subject has just been dropped, so our
+             * own innings always says which game it is. Discretionary once the pair is
+             * there to say it anyway. */
+            var other = (sides.other && !isOurPlayer(ctx, sides.other))
+                ? dropCC(sides.other) : '';
+            if (other && (chasing(inns) || !pr.length || isOurPlayer(ctx, club))) {
+                var tag = chasing(inns) ? [team(other)] : [det('v'), team(other)];
+                if (pr.length) tag.forEach(function (x) { if (x) x.drop = true; });
+                lead = lead.concat(tag);
+            }
+            clause = (d.fours > 0 || d.sixes > 0)
+                ? capitalise(boundaryPhrase(d.fours, d.sixes))
+                : passageClause(m, ii, ob, inn);
+        }
+        return say(lead.concat([SEP, det(clause, true), SEP]).concat(pairParts(pr)),
+                   pr.length ? { who: pr[0].name } : null);
+    }
+    // Is this the second innings — the one being chased? Both feeds deliver innings in
+    // batting order, so the count is the answer.
+    function chasing(inns) { return (inns || []).length === 2; }
+    /* WHOSE PLAYER IS THIS? The match is ours; the person in the sentence may not be.
+     *
+     * Every individual event on our own feed can be about either side — their opener
+     * reaching fifty against us is the same diff as ours reaching one — and the strip's
+     * footer says "1st XI", so a bare name reads as one of ours whoever it belongs to.
+     * So the club is named in the tail, and the answer to this question also decides
+     * how much of the person's innings the band spells out: more for ours, less for
+     * theirs (see the payload builders below).
+     *
+     * Unresolvable is taken as NOT ours. The lean is a courtesy to our own players,
+     * and claiming one on a guess is the one way it could be wrong in public. */
+    function ourClub(ctx) { return ctx.ours ? (dropCC(ctx.our_club || '') || 'Wendover') : ''; }
+    function isOurPlayer(ctx, club) {
+        var our = ourClub(ctx);
+        return !!(our && club && dropCC(club).toLowerCase() === our.toLowerCase());
+    }
+    /* WHICH CLUB A LINE NAMES — AND IT IS NEVER OURS.
+     *
+     *   "F Pardoe into the attack for Wendover"   → v Denham
+     *   "S Moulton to the crease v Wendover"      → for Denham
+     *
+     * The strip's footer already says which of our XIs this is, so our own name in the
+     * sentence spends the one club slot on the thing the reader has and leaves the
+     * match unidentified — and on a wall carrying three of our sides at once, the
+     * OPPOSITION is the word that says which game you are looking at. So every phrase
+     * that names a club on one of our matches names theirs.
+     *
+     * THE PREPOSITION FOLLOWS FROM WHOSE PLAYER IT IS, which is what keeps the
+     * sentence true either way: his own club takes "for", the side he is up against
+     * takes "v". One rule, read off which of the two names we are allowed to print.
+     *
+     * Nothing to name at all yields nothing — an unresolved side is not worth a guess,
+     * and `say()` drops the empty group.
+     * > James's direction, 2026-09-29. */
+    function clubTag(ctx, his, foe, forWord, vWord) {
+        /* AND IT IS DISCRETIONARY. `drop` marks both parts as the first thing the band
+         * gives up when the line will not fit (see `fit` in live-ticker.html): the
+         * opposition is what identifies the match, which is worth saying and is never
+         * worth truncating the news to say. The phrase is written either way and the
+         * surface decides, because only the surface knows how wide the names are.
+         * > James's direction, 2026-09-29. */
+        var mark = function (parts) {
+            parts.forEach(function (x) { if (x) x.drop = true; });
+            return parts;
+        };
+        if (his && !isOurPlayer(ctx, his)) {
+            return mark([det(forWord || 'for'), team(dropCC(his))]);
+        }
+        if (foe && !isOurPlayer(ctx, foe)) {
+            return mark([det(vWord || 'v'), team(dropCC(foe))]);
+        }
+        return [];
+    }
+
+    /* THE TAIL ON AN INDIVIDUAL EVENT: the batting side and where it has left them.
+     *
+     * One rule for a batter and for a bowler, deliberately — the tail always names the
+     * side that is BATTING, so "J Harrington 54 · Wendover 104/2" is his own side and
+     * "W Vane 5-21 · Chenies & Latimer 74/5" is the side he is running through. A
+     * reader meets the rule twice and has it; two rules would need reading each time.
+     *
+     * It does two jobs for the length of one. It says whose player this is — the thing
+     * the strip's "1st XI" footer cannot, since both sides' players come off the same
+     * feed — and it says what state the innings is in, which is the "why now".
+     *
+     * NO OVERS AND NO GOLD. The overs are on the strip a few centimetres up and the
+     * line is already carrying a figure; the one gold number per line should be the
+     * news, which here is the person's. So the club takes the batting side's strong
+     * type and the figure recedes behind it, exactly as "Chenies & Latimer to bat"
+     * does on a score. */
+    function sideScoreTail(club, inn) {
+        if (!club || !inn) return null;
+        return [team(club), det((inn.runs || 0) + '/' + (inn.wickets || 0))];
+    }
+
+    /* A BATTER'S FIFTY OR HUNDRED — a person, not a row of a scorecard.
+     *
+     *   J Harrington 54  ·  from 44 balls, 7 fours and a six  ·  Wendover 104/2
+     *
+     * The old line was "J Harrington 54 (44) · Fifty for Wendover CC", which said
+     * FIFTY a second time under a gold tile already shouting it, wrote the club with
+     * its CC where the rest of the wall drops it, and spent its only clause on the
+     * one fact the reader had. The three phrases now each say something new: who and
+     * how many, how he got there, and what it has done for his side.
+     *
+     * THE MIDDLE CLAUSE IS WHERE THE LEAN LIVES. Ours gets the shape of the innings —
+     * the balls and the boundaries, which is the difference between an hour of
+     * blocking and a counter-attack; theirs gets the balls and stops. Both are true,
+     * and the choice of how much to say is the one place a club's own wall is allowed
+     * a preference. It is also the clause that ellipsises when the line is long, so
+     * the extra detail is spent in the phrase that can afford to lose it.
+     *
+     * The balls figure is omitted rather than faked when the card has none — a
+     * milestone "from 0 balls" is a gap in the feed dressed up as a scoring rate. */
+    function milestonePayload(b, mark, inn, sides, ctx, mine) {
+        /* THE SENTENCE SAYS THE MILESTONE, and the tile is no longer trusted to. The
+         * line was "A Quill 52 · from 50 balls · Denham 83/1" — a figure and two
+         * qualifications, which only becomes a fifty if you are reading the gold tile
+         * as the subject of the sentence. The tile goes back to the team and division
+         * before this ships, so every line has to stand up alone.
+         * > James's direction, 2026-09-29. */
+        var bits = [];
+        if (mine) {
+            if (b.balls) bits.push('from ' + b.balls + ' balls');
+            var shots = boundaryPhrase(b.fours || 0, b.sixes || 0);
+            if (shots) bits.push(shots);
+        }
+        // ONE PHRASE, not two: "reaches a fifty for Denham from 50 balls" is a
+        // sentence, where the dot made the balls a separate fact about a number the
+        // line had not yet given. The opposition tag is the first thing to go when
+        // that phrase will not fit — which on this line it often will not.
+        return say([{ cls: 'bat', text: b.name },
+                    det('reaches a ' + (MARK_WORDS[mark] || 'milestone'))]
+                   .concat(clubTag(ctx, sides.bat, sides.other))
+                   .concat([det(bits.join(', '), true),
+                            SEP]).concat(pairOf(inn)),
+                   { who: b.name });
+    }
+
+    /* A BOWLER'S FIFTH — the same three phrases, read from the other end.
+     *
+     *   W Vane 5-21  ·  9 overs, two maidens  ·  Chenies & Latimer 74/5
+     *
+     * The figures are the result panel's own `wickets-runs` with an en dash, as
+     * `dismissalText` already writes them, so a bowler's figures look the same in
+     * every phrase on this wall. What the figures do NOT carry is how long it took
+     * him and how much of it he gave nothing away in, which is what the middle clause
+     * is for — and, for one of ours, the maidens are the part of a five-for a club
+     * actually retells.
+     *
+     * Overs stay numeric and maidens are worded, which looks inconsistent and is not:
+     * "9 overs" is a scorecard figure a reader wants to read as a figure, while "two
+     * maidens" is prose. Same rule as the boundaries a line above. */
+    function fiveForPayload(bw, inn, sides, ctx, mine) {
+        /* HIS OWN CLUB, not the side he is running through. Every other line here
+         * names the batting side, and a five-for is the one place that reads wrong:
+         * the news is a bowler's afternoon, so the club in the sentence is his.
+         * "A fiver" is what the dressing room calls it.
+         * > James's direction, 2026-09-29. */
+        var bits = [];
+        if (bw.overs != null && bw.overs !== '') bits.push('off ' + bw.overs + ' overs');
+        if (mine && (bw.maidens || 0) > 0) {
+            bits.push(countWord(bw.maidens) + ' maiden' + (bw.maidens === 1 ? '' : 's'));
+        }
+        return say([{ cls: 'bat', text: bw.name }, det('takes a fiver')]
+                   .concat(clubTag(ctx, sides.other, sides.bat))
+                   .concat([SEP, { cls: 'score', text: figuresOf(bw.wickets, bw.runs) },
+                            det(bits.join(', '), true)]),
+                   { who: bw.name });
+    }
+    /* WHO IS AT THE OTHER END — the not-out batter who is not this one.
+     *
+     * `at_crease` where the card carries it, because that is the feed's own answer;
+     * otherwise the not-out batters who have faced a ball, which is the same set
+     * derived. A partner we cannot identify yields nothing and the clause is simply
+     * not written, rather than naming whoever happens to be first in the list. */
+    /* ---- SPELLS: the one thing a scorecard knows that it never says ------------
+     *
+     * A bowling card carries a running total per bowler and nothing else — no spells,
+     * no ends, no "1st change". But a spell is derivable from the one figure it does
+     * carry, because of how cricket is arranged: a bowler in a spell bowls every
+     * OTHER over. So his over count standing still while the innings advances by two
+     * overs means he has been taken off, and it means it at the exact moment the room
+     * notices — the over he would have bowled and did not.
+     *
+     * TWELVE BALLS IS THE RULE, and it is not a fudge factor. It is one over from each
+     * end: the over he did not bowl, plus the one from the other end that proves the
+     * game moved on rather than stopped. Eleven would fire mid-over on a guess; a
+     * whole eighteen would report the change an over after everybody in the ground had
+     * seen it.
+     *
+     * WHAT THIS CANNOT SEE, stated so nobody looks for it later:
+     *   - A CHANGE OF ENDS reads as one spell, because the card has no ends in it.
+     *   - THE LAST SPELL OF AN INNINGS never ends, because the innings stops advancing
+     *     and the clock this runs on is the innings' own over count. The innings
+     *     closing is the news at that point and it has its own type.
+     *   - A SPELL THAT SPANS A BREAK is one spell, which is right: tea does not take a
+     *     bowler off.
+     *
+     * The state rides on the CARD, the way `_received_at` does — the engine holds this
+     * poll's card as the next poll's `prev`, so a map stamped here is a map we have
+     * next time. It is one object per match, keyed by innings and bowler, and it
+     * carries where the spell began so that its own figures can be subtracted out of
+     * his running total at the end.
+     */
+    var SPELL_GAP_BALLS = 12;
+    function trackSpells(prevMap, m) {
+        var map = {}, moves = [], strikes = [];
+        (m.innings || []).forEach(function (inn, ii) {
+            var innBalls = balls(inn.overs);
+            var key = String(inn.innings_id != null ? inn.innings_id : ii);
+            /* AN INNINGS WE HAVE NEVER TRACKED SAYS NOTHING. Its bowlers are all
+             * "new" against an empty map, so a first poll — or a scorer publishing an
+             * innings late — would announce four bowling changes at once for overs
+             * nobody watched us miss. Seed the map and wait for the next poll, which
+             * is the same rule the wickets follow one block up, applied where it
+             * cannot be softened: a spell needs a history by definition. */
+            var known = false;
+            for (var k in (prevMap || {})) { if (k.indexOf(key + '|') === 0) { known = true; break; } }
+            (inn.bowling || []).forEach(function (bw) {
+                if (!bw || !bw.name) return;
+                var id = key + '|' + bw.name;
+                var now = { balls: balls(bw.overs), runs: bw.runs || 0,
+                            wickets: bw.wickets || 0, maidens: bw.maidens || 0 };
+                var was = (prevMap || {})[id];
+                if (!was) {
+                    // First sight of him in this innings. His spell began where his
+                    // figures were before the over he is in — nothing, for a bowler
+                    // opening his account.
+                    map[id] = { balls: now.balls, runs: now.runs, wickets: now.wickets,
+                                maidens: now.maidens, at: innBalls, done: false,
+                                start: { balls: 0, runs: 0, wickets: 0, maidens: 0, dm: 0 },
+                                dm: 0,
+                                /* NO DELIVERY HISTORY ON FIRST SIGHT, which is also
+                                 * the whole guard the hat-trick needs: a scorer who
+                                 * publishes an innings with three already to one
+                                 * bowler gives us an empty `hist`, so nothing is
+                                 * claimed about balls we never watched. */
+                                hist: [], on: null };
+                    /* AN OPENING BOWLER IS NOT A CHANGE. The pair who start an
+                     * innings take the new ball together, and only one of them is in
+                     * the card after the first over — so the other turns up as a
+                     * brand-new bowler on the second and would be announced as though
+                     * the captain had rung a change after six balls. Anyone whose
+                     * first over is one of the innings' first two opened the bowling,
+                     * which is news the innings starting has already carried. */
+                    if (known && innBalls - now.balls >= SPELL_GAP_BALLS) {
+                        moves.push({ kind: 'start', ii: ii, name: bw.name,
+                                     first: true, before: map[id].start, now: now });
+                    }
+                    return;
+                }
+                var rec = { balls: now.balls, runs: now.runs, wickets: now.wickets,
+                            maidens: now.maidens, at: was.at, done: was.done,
+                            start: was.start, hist: was.hist || [], on: was.on,
+                            dm: was.dm || 0 };
+                /* ---- HIS LAST FEW DELIVERIES, as a list of poll deltas.
+                 *
+                 * This is the whole hat-trick mechanism and it needs nothing the card
+                 * does not already carry. A hat-trick is three wickets in three
+                 * consecutive deliveries BY ONE BOWLER, and if a run of consecutive
+                 * polls sums to three balls and three wickets then every delivery in
+                 * that run took a wicket — so they were consecutive, necessarily. No
+                 * ball-by-ball feed required.
+                 *
+                 * A poll in which he did not bowl adds nothing and CLEARS nothing: a
+                 * bowler between overs keeps his two-in-two, which is exactly what the
+                 * Laws say (consecutive deliveries by him, not consecutive balls of
+                 * the match). Wides are invisible here because the over count counts
+                 * legal deliveries only — and that is right too, since a wide does not
+                 * break a hat-trick.
+                 *
+                 * A COUNTER GOING BACKWARDS IS A CORRECTION, not cricket, and the
+                 * history is thrown away rather than reasoned about. */
+                var db = now.balls - was.balls, dw = now.wickets - was.wickets;
+                var dr = now.runs - was.runs;
+                if (db < 0 || dw < 0 || dr < 0) rec.hist = [];
+                else if (db > 0) rec.hist = rec.hist.concat([{ b: db, w: dw, r: dr }]);
+                rec.hist = trimHist(rec.hist);
+                /* THREE IN THREE. Tested before the two-in-two below, which would
+                 * otherwise fire on the same poll off the last two balls of it. */
+                var three = suffixOf(rec.hist, 3);
+                var got = three.b === 3 && three.w === 3;
+                if (known && got) {
+                    strikes.push({ kind: 'hat', ii: ii, name: bw.name, now: now });
+                    rec.on = null;
+                }
+                /* HAS THE HAT-TRICK BALL BEEN BOWLED? `on` is his ball count when we
+                 * announced the two-in-two, so his bowling again resolves it — and if
+                 * the hat-trick did not fire on this poll, it resolved the other way
+                 * and the band is holding a sentence that has stopped being true.
+                 * That is a RETRACTION: see the `miss` strike, which un-says it
+                 * without saying anything. */
+                if (was.on != null && now.balls > was.on) {
+                    /* RETRACT ONLY WHAT WE CAN PROVE. A poll with no wicket in it at all
+                     * proves the hat-trick ball was survived, and the sentence goes.
+                     *
+                     * A poll that spans two balls and brought one wicket does not: it
+                     * may have been the hat-trick ball or the one after it, and the
+                     * suffix test — which needs three balls and three wickets exactly —
+                     * cannot separate them, so no hat-trick was claimed either. Both
+                     * halves stay honest by saying nothing, and the two-minute ttl is
+                     * what clears the pending line. Retracting here would be as much a
+                     * guess as claiming it.
+                     *
+                     * The wickets themselves are unaffected: each dismissal has already
+                     * had its own event, so the room is under-informed rather than
+                     * misinformed. */
+                    if (!got && known && dw === 0) {
+                        strikes.push({ kind: 'miss', ii: ii, name: bw.name });
+                    }
+                    rec.on = null;
+                }
+                /* ---- MAIDEN OVERS, and they need nothing but the two counters we
+                 * already trust.
+                 *
+                 * A maiden is six legal deliveries of his for no runs. `maidens` is a
+                 * real field on the raw RV bowling row, but whether it populates DURING
+                 * play is unverified — and it turns out not to matter, because his own
+                 * runs and balls answer the question outright. That is the better
+                 * source anyway: the same two numbers the band already quotes as his
+                 * figures, rather than a third that could disagree with them.
+                 *
+                 * HIS BALL COUNT IS ALWAYS A MULTIPLE OF SIX AT AN OVER BOUNDARY, since
+                 * a bowler bowls whole overs, so a suffix of exactly six of his
+                 * deliveries IS the over he has just finished — no alignment guesswork.
+                 * Wides are invisible to the ball count and counted in the runs, which
+                 * is exactly right: an over with a wide and nothing else is not a
+                 * maiden and this says so.
+                 *
+                 * AND IT WORKS AT EITHER CADENCE, unlike the hat-trick. At one poll an
+                 * over his delta is six balls outright; at fifteen seconds the deltas
+                 * are a ball each and sum to six at the boundary. A straddled poll
+                 * (balls five to eight) cannot land on six and says nothing.
+                 *
+                 * A RUN OF THEM is the same test at twelve, eighteen and twenty-four —
+                 * no counter to keep, and the same refusal to guess if the window
+                 * cannot be landed. Four overs is as far back as `hist` reaches. */
+                /* IT MUST BE THE POLL HE FINISHED THE OVER ON. `balls % 6 === 0` is a
+                 * standing state, not a transition: while the other end bowls, his
+                 * count sits on the boundary and the test answers yes on every poll of
+                 * the next four minutes. The store's id de-duplication hid this — the
+                 * event carries his ball count, so the repeats collapsed — but an
+                 * extractor emitting a maiden thirty times is wrong on its own terms.
+                 * `db > 0` is the transition. */
+                if (known && db > 0 && now.balls % 6 === 0 && now.balls >= 6) {
+                    var mrun = 0, over6 = null;
+                    for (var mk = 1; mk <= MAIDEN_RUN_MAX; mk++) {
+                        var mx = suffixOf(rec.hist, mk * 6);
+                        if (mx.b !== mk * 6 || mx.r !== 0) break;
+                        mrun = mk;
+                        if (mk === 1) over6 = mx;
+                    }
+                    if (over6) {
+                        /* AND COUNT IT. `spell_ended` used to read the feed's own
+                         * `maidens` column for its "two maidens" clause, which is the
+                         * one field in this whole file whose live population is
+                         * unverified — so a spell's maidens either worked or silently
+                         * never appeared, and we could not tell which from here. A
+                         * count of the maidens we have PROVED is a number we can stand
+                         * behind, and it degrades the way everything else here does:
+                         * overs bowled before we were watching are not in it. */
+                        rec.dm++;
+                        strikes.push({ kind: 'maiden', ii: ii, name: bw.name, now: now,
+                                       wkts: over6.w, run: mrun,
+                                       run_wkts: suffixOf(rec.hist, mrun * 6).w });
+                    }
+                }
+                if (known && !got) {
+                    var two = suffixOf(rec.hist, 2);
+                    if (two.b === 2 && two.w === 2 && was.on == null) {
+                        strikes.push({ kind: 'two', ii: ii, name: bw.name, now: now });
+                        rec.on = now.balls;
+                    }
+                }
+                // The moves below quote `now`, and the derived count has to travel with
+                // it: the record is what the next poll diffs, the move is what is said.
+                now.dm = rec.dm;
+                if (now.balls > was.balls) {
+                    /* He has bowled. A long enough gap BEHIND him makes this the
+                     * first over of a new spell, and the figures he carried into it
+                     * are the ones he had a moment ago.
+                     *
+                     * The gap is measured to where the innings stood when he STARTED
+                     * this over, not where it stands now — his own deliveries have
+                     * moved the innings' count along with his, so comparing the two
+                     * current figures counts his own over as part of the gap. Left
+                     * that way, an ordinary rotation at one poll an over reads as a
+                     * fresh spell every second over: six balls of his plus six from
+                     * the other end is exactly the twelve the rule is looking for. */
+                    var opened = innBalls - (now.balls - was.balls);
+                    if (opened - was.at >= SPELL_GAP_BALLS) {
+                        /* `dm` is taken from `was`, BEFORE the over just bowled was
+                         * counted above — so a maiden that is itself the first over of
+                         * a new spell belongs to the new spell, which is where it was
+                         * bowled. */
+                        rec.start = { balls: was.balls, runs: was.runs,
+                                      wickets: was.wickets, maidens: was.maidens,
+                                      dm: was.dm || 0 };
+                        rec.done = false;
+                        if (known) moves.push({ kind: 'start', ii: ii, name: bw.name,
+                                                first: false, before: rec.start, now: now });
+                    }
+                    rec.at = innBalls;
+                } else if (!was.done && innBalls - was.at >= SPELL_GAP_BALLS) {
+                    // He has been taken off: the over he would have bowled has gone by.
+                    rec.done = true;
+                    if (known) moves.push({ kind: 'end', ii: ii, name: bw.name,
+                                            before: was.start, now: now });
+                }
+                map[id] = rec;
+            });
+        });
+        return { map: map, moves: moves, strikes: strikes };
+    }
+    /* Keep only as much of a bowler's delivery history as any test can reach — six
+     * balls is twice the longest window and one over of his, which is plenty. */
+    // How long a run of maidens the band will count, which is also how far `hist`
+    // has to reach. Four is already a passage of play nobody in the ground will forget.
+    var MAIDEN_RUN_MAX = 4, MAIDEN_RUN_NEWS = 3;
+    var HIST_BALLS = MAIDEN_RUN_MAX * 6;
+    function trimHist(hist) {
+        var b = 0, cut = 0;
+        for (var i = hist.length - 1; i >= 0; i--) {
+            b += hist[i].b;
+            if (b >= HIST_BALLS) { cut = i; break; }
+        }
+        return cut ? hist.slice(cut) : hist;
+    }
+    /* THE LAST `want` DELIVERIES, accumulated backwards out of the poll deltas. It
+     * stops as soon as it has enough balls, so the caller can ask whether it landed on
+     * exactly the window it wanted: a suffix of 3 balls and 3 wickets is a hat-trick,
+     * where 6 balls and 3 wickets is three wickets in an over and says nothing about
+     * which three deliveries they came off. Refusing that case is the honesty in this
+     * whole mechanism. */
+    function suffixOf(hist, want) {
+        var b = 0, w = 0, r = 0;
+        for (var i = (hist || []).length - 1; i >= 0; i--) {
+            b += hist[i].b; w += hist[i].w; r += hist[i].r || 0;
+            if (b >= want) break;
+        }
+        return { b: b, w: w, r: r };
+    }
+
+    /* A bowler's figures the way the rest of the wall writes them — `wickets-runs`
+     * with an en dash, as `_bowl_highlight` does in build.py. */
+    function figuresOf(w, r) { return (w || 0) + '\u2013' + (r || 0); }
+    // "6 overs", "6.3 overs", "1 over" — a ball count written the way a scorecard
+    // writes one, with the plural it earns.
+    function oversWord(b) {
+        var t = b % 6 ? (Math.floor(b / 6) + '.' + (b % 6)) : String(b / 6);
+        return t + (b === 6 ? ' over' : ' overs');
+    }
+
+    /* A BOWLER COMING ON.
+     *
+     *   T Duff into the attack  ·  1-9 from four overs so far  ·  Wendover 78/5
+     *
+     * "Into the attack" is the phrase the game itself uses, and it is the whole news:
+     * the captain has changed something. The middle clause is what he brings with
+     * him and only exists for a bowler returning — a man opening his account has no
+     * figures, and inventing a clause to fill the slot would be filler.
+     *
+     * The tail is the batting side, as it is on every individual event: on a bowling
+     * change it says who he is being brought on AGAINST, and what they have made of
+     * the afternoon so far. */
+    function spellStartPayload(mv, inn, sides, ctx, mine) {
+        var sofar = mine && !mv.first && mv.before.balls
+            ? figuresOf(mv.before.wickets, mv.before.runs) + ' from ' +
+              oversWord(mv.before.balls) + ' so far' : '';
+        /* WHO HE IS BOWLING AT, and then the two men he will be bowling at. The tail
+         * was the batting side's score — "Denham 23/0" — which is the strip's gold
+         * figure repeated in small type; the pair is the half of that state the strip
+         * has no room for, and it is what a bowling change is actually about.
+         * > James's direction, 2026-09-29. */
+        return say([{ cls: 'bat', text: mv.name },
+                    det((mv.first ? 'into' : 'back into') + ' the attack')]
+                   .concat(clubTag(ctx, sides.other, sides.bat))
+                   .concat([SEP, det(sofar, true),
+                            SEP]).concat(pairOf(inn)),
+                   { who: mv.name });
+    }
+
+    /* A SPELL ENDING, which is the one individual event that arrives finished.
+     *
+     *   T Duff 3-19  ·  seven overs, two maidens  ·  Chenies & Latimer 74/5
+     *
+     * THE FIGURES ARE THE SPELL'S, not the match's, because the spell is what just
+     * ended — his running total is a different fact and will be on the scorecard all
+     * evening. Where the two differ the clause says so rather than leaving a reader
+     * to wonder which they are looking at; where they are the same, which is most
+     * spells, nothing is said and nothing needs to be.
+     *
+     * The overs are worded here where a five-for's are numeric, and the difference is
+     * real: "nine overs" in a five-for qualifies a figure the reader is already
+     * reading as a scorecard line, while a spell is being described rather than
+     * tabulated. Past three they go back to numerals, as everything else on the band
+     * does. */
+    function spellEndPayload(mv, inn, sides, ctx, mine) {
+        var sp = {
+            balls: mv.now.balls - mv.before.balls,
+            runs: mv.now.runs - mv.before.runs,
+            wickets: mv.now.wickets - mv.before.wickets,
+            /* THE MAIDENS WE WATCHED HIM BOWL, not the feed's column — see the maiden
+             * detection in `trackSpells` for why a derived count is the sounder of the
+             * two, and `dm` for what it is. */
+            maidens: (mv.now.dm || 0) - ((mv.before && mv.before.dm) || 0)
+        };
+        var bits = ['off ' + oversWord(sp.balls)];
+        if (mine && sp.maidens > 0) {
+            bits.push(countWord(sp.maidens) + ' maiden' + (sp.maidens === 1 ? '' : 's'));
+        }
+        /* GOLD IS FOR TOTALS, and a spell's figures are an increment — what he did in
+         * the last half hour, not what he has. So the spell reads in the plain type
+         * and the gold goes on his MATCH figures, which is also the honest ordering of
+         * the two: where he has bowled before, "0–16 off 3 overs" is the news and
+         * "0–26" is what it has left him on. Where this was his only spell the two are
+         * the same number, said once, and it is a total.
+         * > James's direction, 2026-09-29. */
+        var again = !!mv.before.balls;
+        var figs = again
+            ? [det(figuresOf(sp.wickets, sp.runs)), det(bits.join(', ') + ',', true),
+               { cls: 'score', text: figuresOf(mv.now.wickets, mv.now.runs) }, det('in all')]
+            : [{ cls: 'score', text: figuresOf(sp.wickets, sp.runs) },
+               det(bits.join(', '), true)];
+        return {
+            payload: say([{ cls: 'bat', text: mv.name }, det('finishes his spell')]
+                         .concat(clubTag(ctx, sides.other, sides.bat))
+                         .concat([SEP]).concat(figs),
+                         { who: mv.name }),
+            // How much of an afternoon this was. Wickets carry it — three in a spell
+            // is the best thing a bowler does in a league match — with a nod to the
+            // maidens, which is the other way a spell is remembered.
+            magnitude: Math.min(1, (sp.wickets / 3) + (sp.maidens > 0 ? 0.15 : 0)),
+            overs: sp.balls / 6
+        };
+    }
+
+    /* THE THREE MEN HE GOT, which is exactly derivable and better than any adjective.
+     *
+     * The last three dismissals of the innings ARE his three, and not by assumption: a
+     * run-out or a wicket at the other end in the middle of the sequence would have
+     * advanced his ball count without a wicket to his name, which breaks the suffix and
+     * means no hat-trick was claimed in the first place. So if we are here, the three
+     * most recent falls are his.
+     *
+     * Checked against his name all the same, and dropped rather than guessed if the
+     * check fails — a scorer's spelling can move between polls, and three names that
+     * are not the right three is a worse line than no names at all. */
+    function hatVictims(inn, pinn, name) {
+        var all = dismissalsOf(inn, pinn);
+        if (all.length < 3) return [];
+        var last = all.slice(-3);
+        for (var i = 0; i < last.length; i++) {
+            var b = bowlerOf(last[i].how);
+            if (!b || b !== name) return [];
+        }
+        return last.map(function (d) { return d.name; });
+    }
+    // "A, B and C" — a list as a sentence writes one.
+    function andList(names) {
+        if (!names || !names.length) return '';
+        if (names.length === 1) return names[0];
+        return names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+    }
+    /* A HAT-TRICK.
+     *
+     *   T Duff 3-19  ·  B Duff, C Godden and H Godden  ·  Chenies & Latimer 74/5
+     *
+     * WORDING PROVISIONAL — the whole stream's text is a later pass.
+     *
+     * The clause is the three batters rather than the words "three in three", because
+     * the tile already says HAT-TRICK and the L-frame's one rule is that the bar does
+     * not repeat it. It is also the better half of the story: which three, and in what
+     * state that left the innings.
+     *
+     * The figures are his MATCH figures, not the spell's. A hat-trick is not a spell
+     * ending and the three wickets are in the number either way, so the simpler fact is
+     * the honest one here. */
+    function hatTrickPayload(mv, inn, pinn, sides, ctx) {
+        // Not in the simulation, so it is written to the same intent as the rest: the
+        // sentence says what happened, the club is the discretionary tag, and the
+        // batting side's running total is the strip's business.
+        return say([{ cls: 'bat', text: mv.name }, det('takes a hat-trick')]
+                   .concat(clubTag(ctx, sides.other, sides.bat))
+                   .concat([SEP, { cls: 'score', text: figuresOf(mv.now.wickets, mv.now.runs) },
+                            det(andList(hatVictims(inn, pinn, mv.name)), true)]),
+                   { who: mv.name });
+    }
+    /* TWO IN TWO — the one line on the wall about a ball that has not been bowled.
+     *
+     *   T Duff 2-14  ·  on a hat-trick  ·  Chenies & Latimer 74/5
+     *
+     * The tile carries the fact and this carries what it means, which is the only way
+     * round that leaves both something to say. */
+    function onAHatTrickPayload(mv, inn, sides, ctx) {
+        return say([{ cls: 'bat', text: mv.name }, det('is on a hat-trick')]
+                   .concat(clubTag(ctx, sides.other, sides.bat))
+                   .concat([SEP, { cls: 'score', text: figuresOf(mv.now.wickets, mv.now.runs) }]),
+                   { who: mv.name });
+    }
+
+    /* ---- A TEAM TOTAL PASSING A MARK ------------------------------------------
+     *
+     *   Wendover 200 up  ·  J Harrington 78*, W Fairhead 45
+     *   High Wycombe 100 up
+     *
+     * WORDING PROVISIONAL, like the rest of the family.
+     *
+     * EVERY HUNDRED, AND NOTHING SMALLER. Fifty is an ordinary passage of a league
+     * innings and a hundred-and-fifty is a number nobody celebrates; the round hundreds
+     * are the ones a ground reacts to, and they are what James asked for.
+     *
+     * THE CLAUSE IS THE REASON THIS TYPE IS ALLOWED TO EXIST. The mark itself is on the
+     * strip in gold and larger, so what the band adds is who built the total — which no
+     * surface on the wall says. The lean is the usual one: ours get the top two, theirs
+     * the top one, and the division's card has no batters so its line goes without.
+     *
+     * THE STAR MATTERS HERE. A top score still growing and one that is finished are
+     * different facts about the innings, and it is one character. */
+    var TEAM_MARK = 100;
+    /* THE MEN WHO BUILT IT, in the type every other batter's figure is set in — the
+     * name in the batter's weight and the total in gold, because a batter's total is
+     * a total. They were one flat string, which put the only figures on the line in
+     * the muted type under a gold hundred.
+     * > James's direction, 2026-09-29. */
+    function topScorers(inn, n) {
+        var bats = ((inn && inn.batters) || []).filter(function (b) {
+            return b && b.name && (b.runs || 0) > 0;
+        });
+        bats.sort(function (a, b) { return (b.runs || 0) - (a.runs || 0); });
+        var out = [];
+        bats.slice(0, n).forEach(function (b) {
+            out.push({ cls: 'bat', text: b.name });
+            out.push({ cls: 'score', text: b.runs + (isOut(b) ? '' : '*') });
+        });
+        return out;
+    }
+    /* HOW MUCH ROAD IS LEFT, when the match will say. Only a chase can: the allotment
+     * is inferred from the first innings' close (WccChase.allotmentOvers), so during
+     * a first innings there is no honest figure to quote and the clause stays away.
+     * See the DLS overs note — a real per-competition allotment would give this to
+     * both innings.
+     * > James's direction, 2026-09-29. */
+    function oversLeft(inns) {
+        if (!chasing(inns) || !window.WccChase) return '';
+        var st = WccChase.chaseState(inns);
+        if (!st || st.balls == null || st.balls <= 0) return '';
+        return oversWord(st.balls) + ' left';
+    }
+    /* WHICH MARK, IF ANY, THIS POLL CROSSED — the highest of them, because a poll wide
+     * enough to cross two is wide enough that only the bigger is worth saying, and the
+     * smaller would be a wrong number the moment it went up.
+     *
+     * A CHASE STOPS SHORT OF THE TARGET. The mark that takes a chasing side past the
+     * first innings is not a milestone, it is the match, and `match_finished` has it.
+     * Announcing "200 up" in the same breath as a result would be the band talking over
+     * itself with the duller of the two. */
+    function teamMarkCrossed(pinn, inn, inns) {
+        var was = (pinn && pinn.runs) || 0, now = (inn && inn.runs) || 0;
+        var mark = Math.floor(now / TEAM_MARK) * TEAM_MARK;
+        if (!mark || was >= mark) return null;
+        if ((inns || []).length === 2) {
+            var target = ((inns[0] && inns[0].runs) || 0) + 1;
+            if (mark >= target) return null;
+        }
+        return mark;
+    }
+    /* A HUNDRED IS ROUTINE AND THREE HUNDRED IS A MONSTER, and one type covers both, so
+     * the mark itself is the magnitude. The numbers are chosen against what they have to
+     * land ON: `interestOf` turns a magnitude into a multiplier of 0.4 to 1.6 and then
+     * caps the whole thing at a quarter above base, so 0.25 puts a first hundred at 40
+     * (a shade under a match starting) and 0.55 puts two hundred at the cap, 62, just
+     * under an individual fifty. Three hundred cannot climb past that, which is the right
+     * shape: a total is the side's afternoon where a fifty is one man's.
+     *
+     * The first cut of this was `(mark/100 - 1) * 0.35`, which gave a first hundred a
+     * magnitude of ZERO — the bottom of the multiplier, 0.4, and an interest of 20,
+     * barely clear of the floor. A formula that starts at nothing prices the commonest
+     * case as the least interesting thing on the wall. */
+    function teamMarkMagnitude(mark) {
+        return Math.min(1, 0.25 + (mark / TEAM_MARK - 1) * 0.3);
+    }
+    /* "100 up for High Wycombe hosting Maidenhead & Bray."
+     *
+     * THE FIXTURE, NOT JUST THE CLUB. On a wall carrying eight of the division's games
+     * "High Wycombe 100 up" is a club and a number with no match attached — and this
+     * is the one type whose whole news is a number, so it can afford the other side.
+     * `home` picks the preposition, which is how the sentence says where it is being
+     * played without a second clause. */
+    function teamMarkPayload(mark, inn, sides, mine, home, inns, ctx) {
+        /* "100 UP" IS THE NEWS AND THE REST IS THE FIXTURE, so the fixture follows the
+         * wall's rule: name the opposition, never us. Ours drops the "for Wendover"
+         * and keeps the preposition, which still says where — "100 up chasing Denham",
+         * "100 up hosting Denham". Where WE are the other side, the preposition goes
+         * with us, since one without an object is not a phrase.
+         * > James's direction, 2026-09-29. */
+        var ours = ctx && isOurPlayer(ctx, sides.bat);
+        var lead = [{ cls: 'score', text: String(mark) }, det('up')];
+        if (!ours) lead = lead.concat([det('for'), team(sides.bat || '')]);
+        if (sides.other && !(ctx && isOurPlayer(ctx, sides.other))) {
+            // "Chasing" says which half of the match this is, and it replaces the
+            // preposition rather than joining it: a side chasing is not merely at a
+            // ground. > James's direction, 2026-09-28.
+            lead.push(det(chasing(inns) ? 'chasing' : (home ? 'hosting' : 'at')));
+            lead.push(team(sides.other));
+        } else if (sides.other && chasing(inns)) {
+            lead.push(det('chasing'));
+        }
+        var left = oversLeft(inns);
+        return say(lead.concat([SEP]).concat(topScorers(inn, mine ? 2 : 1))
+                       .concat(left ? [SEP, det(left)] : []));
+    }
+
+    /* THE LAST `n` MEN OUT, verified as his. The hat-trick's rule generalised: the
+     * dismissals at the end of the innings are the newest, and a wicket in the over we
+     * are describing is by construction one of them — but a run-out at the other end is
+     * a team wicket and not his, so every one is checked against the bowler's name and
+     * the whole clause is dropped rather than half-right. */
+    function victimsOf(inn, pinn, name, n) {
+        var all = dismissalsOf(inn, pinn);
+        if (all.length < n) return [];
+        var last = all.slice(-n);
+        for (var i = 0; i < last.length; i++) {
+            if (bowlerOf(last[i].how) !== name) return [];
+        }
+        return last.map(function (d) { return d.name; });
+    }
+    /* A WICKET MAIDEN.
+     *
+     *   T Duff 2-14  ·  D Cole  ·  Denham 20/4
+     *
+     * WORDING PROVISIONAL, like the rest of this family.
+     *
+     * The clause is who he got rather than the words "a wicket maiden", because the
+     * tile says that already — and naming him is what ties this over to the dismissal
+     * the room read a minute ago. With the name unverifiable it falls back to the one
+     * other thing the over can say about itself: which of his overs it was. */
+    function wicketMaidenPayload(mv, inn, pinn, sides, ctx) {
+        // The tile will not be saying it for much longer, so the line says it: six
+        // balls, nothing off them and a man out. Then whose over it was, his figures,
+        // and the batter he got. > James's direction, 2026-09-29.
+        var who = andList(victimsOf(inn, pinn, mv.name, mv.wkts));
+        return say([det('Wicket maiden')].concat(clubTag(ctx, sides.other, sides.bat))
+                   .concat([SEP, { cls: 'bat', text: mv.name },
+                            { cls: 'score', text: figuresOf(mv.now.wickets, mv.now.runs) },
+                            det(who ? ', ' + who : '', true)]),
+                   { who: mv.name });
+    }
+    /* MAIDENS ON THE TROT.
+     *
+     *   T Duff 2-14  ·  three in a row, and a wicket  ·  Denham 20/4
+     *
+     * The tile is the noun (MAIDEN OVERS) so the clause carries the count, which is the
+     * whole news — and the wicket, when there was one, because three maidens with a man
+     * out in them is a different over from three without. */
+    function maidenRunPayload(mv, inn, sides, ctx) {
+        var bits = countWord(mv.run) + ' maidens in a row';
+        if (mv.run_wkts === 1) bits += ', and a wicket';
+        else if (mv.run_wkts > 1) bits += ', and ' + countWord(mv.run_wkts) + ' wickets';
+        return say([{ cls: 'bat', text: mv.name }, det(bits)]
+                   .concat(clubTag(ctx, sides.other, sides.bat))
+                   .concat([SEP, { cls: 'score', text: figuresOf(mv.now.wickets, mv.now.runs) }]),
+                   { who: mv.name });
+    }
+
+    function creaseMate(inn, name) {
+        var pool = ((inn && inn.at_crease) || []).length ? inn.at_crease : (inn.batters || []);
+        var out = null;
+        pool.forEach(function (b) {
+            if (!b || !b.name || b.name === name) return;
+            if (isOut(b) || !(b.runs || b.balls)) return;
+            if (!out) out = b;
+        });
+        return out;
+    }
+
+    /* ---- THE LAST PAIR TOGETHER ------------------------------------------------
+     *
+     *   W Fairhead 45* and A Roan 3*  ·  47 still needed  ·  Wendover 224/9
+     *   W Fairhead 45* and A Roan 3*  ·  Wendover 224/9
+     *
+     * WORDING PROVISIONAL, like the rest of the family.
+     *
+     * The tile says LAST PAIR, so the sentence does not: it names them, and the tail's
+     * `/9` is the fact doing the work rather than decoration.
+     *
+     * THE CLAUSE IS THE CHASE, WHERE THERE IS ONE. Nine down needing 47 is the whole
+     * question the rest of the afternoon answers, and although the strip's chase block
+     * carries the same figure this is the one line on the band where it IS the news
+     * rather than the standing state. On a first innings there is nothing true to add —
+     * the stand is a ball old by construction — so the line is the pair and the score. */
+    function lastPairPayload(pair, inn, inns, sides, ctx) {
+        // "Last pair batting" — or chasing, which is when nine down is a story rather
+        // than a position. The runs still needed stay: it is the whole question the
+        // rest of the afternoon answers. > James's direction, 2026-09-29.
+        var need = '';
+        if (chasing(inns) && window.WccChase) {
+            var st = WccChase.chaseState(inns);
+            if (st && st.runs > 0) need = st.runs + ' still needed';
+        }
+        return say([det('Last pair ' + (chasing(inns) ? 'chasing' : 'batting'))]
+                   .concat(clubTag(ctx, sides.bat, sides.other))
+                   .concat([SEP]).concat(pairParts(pair))
+                   .concat(need ? [SEP, det(need, true)] : []),
+                   { who: pair[0].name });
+    }
+
+    /* ---- CLOSING IN ON A MILESTONE -------------------------------------------
+     *
+     *   J Harrington 44  ·  needs six for his fifty  ·  Wendover 104/2
+     *
+     * WORDING PROVISIONAL, like the rest of the family.
+     *
+     * The tile says CLOSING IN and the sentence says what he is closing in on and by how
+     * much, which is the same division of labour as TWO IN TWO over "on a hat-trick".
+     *
+     * FIRED ON ENTERING THE LAST TEN — crossing 40, or 90. A transition, so it goes out
+     * once and `repeat: null` keeps it that way; a batter who sits in the forties for
+     * twenty minutes is not news twenty times. James's own suggestion, and the right
+     * width: five is so close that a single blow skips the window altogether, and twenty
+     * is not approaching anything.
+     *
+     * THE GAP IS AS AT THE POLL, and it can be a run or two stale by the time the band
+     * shows it — the softest version of the risk `on_a_hat_trick` carries, because what
+     * ages is a number inside a sentence that stays true. The milestone firing retires
+     * it, which is what stops the gap ever being seen at zero or below. */
+    var APPROACH_WINDOW = 10, APPROACH_MARKS = [100, 50];
+    var MARK_WORDS = { 50: 'fifty', 100: 'hundred' };
+    function approachMagnitude(mark) {
+        return Math.min(1, 0.3 + (mark / 50 - 1) * 0.5);
+    }
+    function approachPayload(b, mark, inn, sides, ctx) {
+        var gap = mark - (b.runs || 0);
+        /* HIS OWN FIGURE HAS GONE FROM THE FRONT: the pair at the end carries it, with
+         * the star, and "A Quill 44 · needs six" was the same number twice under a
+         * subtraction. What is left is one sentence — who, how far, and for whom. */
+        return say([{ cls: 'bat', text: b.name },
+                    det('needs ' + countedWord(gap) + ' for a ' + MARK_WORDS[mark])]
+                   .concat(clubTag(ctx, sides.bat, sides.other))
+                   .concat([SEP]).concat(pairOf(inn)),
+                   { who: b.name });
+    }
+
+    /* A BATTER WALKING OUT.
+     *
+     *   T Denham to the crease  ·  with J Harrington on 54  ·  Wendover 74/5
+     *
+     * The news is not that a person exists, it is the SITUATION he has walked into,
+     * so the three phrases build it up: who, who he has joined, and what they are
+     * standing at. Read backwards off the tail it is the story — 74 for 5, an unbeaten
+     * 54 at one end and a new man at the other.
+     *
+     * The middle clause is the lean again: the partner is named for one of ours and
+     * left out for theirs. It is also the honest thing to drop first, since a partner
+     * at nought adds nothing that the tail's wicket count has not already said.
+     *
+     * THIS IS WHERE A PROFILE WOULD GO. "T Denham to the crease" is the moment the
+     * unbuilt player set exists for — his season, his best, what he did last week —
+     * and the type asks for the `profile` panel so that it lands the day that set is
+     * built. Until then it falls through to the match score, which is at least about
+     * the situation the sentence is describing. */
+    function arrivalPayload(b, inn, sides, ctx, mine) {
+        /* WHO HE IS WALKING OUT AGAINST, and who he has joined out there. The man at
+         * the other end is now written as the band writes every batter — name and
+         * starred figure — rather than as prose ("with A Godden on 8"), so the same
+         * fact is set the same way here as it is on the score line above. The new man
+         * himself is on nought by construction and is not worth a figure.
+         * > James's direction, 2026-09-29. */
+        var mate = mine ? creaseMate(inn, b.name) : null;
+        return say([{ cls: 'bat', text: b.name }, det('to the crease')]
+                   .concat(clubTag(ctx, sides.bat, sides.other))
+                   .concat([SEP]).concat(mate ? batFig(mate) : []),
+                   { who: b.name });
+    }
+
     function creaseText(inn) {
         var at = (inn && inn.at_crease) || [];
         if (!at.length) return '';
@@ -1841,22 +4339,37 @@
      * same reason: pairing this ball's over with the current total would state a
      * position the match was never in. The row's over and ball are kept on the event
      * instead, where they date it without asserting a scoreline. */
+    /* THE SAME SHAPE AS EVERY OTHER WICKET, which is the whole of this rewrite.
+     *
+     * It led with the innings' current scoreline — "Wendover 15/1 (4 ov) · R Duff out
+     * (4.1)" — which is the v1 grammar the wicket line left behind, and it turns up a
+     * minute after a properly written wicket saying the same thing in an older hand.
+     * (It turns up at all because footage of a wicket the band has ALREADY shown earns
+     * its own screen rather than being folded in silently; see `attachClip`.)
+     *
+     * What it can say is thinner than a scorecard wicket — a row carries the batter,
+     * sometimes the bowler, and the ball it happened on, and never how he went or for
+     * how many — so it says those and stops. The over and ball stay because they are
+     * the one thing this path knows that the scorecard does not. */
     function ballPayload(m, ctx, c, type) {
         var inn = inningsOfClip(m, c);
         var who = c.dismissed || c.batter || '';
-        var at = c.over != null ? ' (' + c.over + '.' + (c.ball || 0) + ')' : '';
+        var at = c.over != null ? '(' + c.over + '.' + (c.ball || 0) + ')' : '';
         if (!inn) {
-            return { headline: c.title || clipText(c), who: who,
-                     detail: matchTitle(m) + at };
+            return say([det(c.title || clipText(c)), SEP]
+                       .concat(fixtureParts(m, ctx, at)), { who: who });
         }
         var sides = sidesOf(m, ctx, inn);
-        var sc = scoreParts(sides.bat || dropCC(inn.club || inn.side || ''), inn);
-        var clause = who
-            ? (type === 'wicket'
-                ? who + ' out' + (c.bowler ? ' \u2014 bowler ' + c.bowler : '')
-                : who + (c.bowler ? ' \u2014 ' + c.bowler : ''))
-            : (c.title || clipText(c));
-        return { headline: sc.headline, parts: sc.parts, who: who, detail: clause + at };
+        if (!who) {
+            return say([det(c.title || clipText(c)), det(at)]
+                       .concat(clubTag(ctx, sides.bat, sides.other)), { who: who });
+        }
+        var lead = [{ cls: 'bat', text: who },
+                    det(type === 'wicket' ? 'out' : ''), det(at)];
+        var credit = c.bowler
+            ? [{ cls: 'bat', text: c.bowler }].concat(clubTag(ctx, sides.other, sides.bat))
+            : clubTag(ctx, sides.bat, sides.other);
+        return say(lead.concat([SEP]).concat(credit), { who: who });
     }
     // Which innings a row belongs to — by id, then by the batting side's name.
     function inningsOfClip(m, c) {

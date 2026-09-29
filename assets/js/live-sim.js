@@ -105,7 +105,12 @@
     }
     function hhmm(ms) {
         var m = DAY_START_MIN + Math.floor(ms / 60000);
-        return Math.floor(m / 60) + ':' + String(((m % 60) + 60) % 60).padStart(2, '0');
+        // Both halves padded. The HUD only ever shows afternoon times so the hour
+        // happened to be two digits already, but this now feeds a start time on the
+        // band, where a 9:30 start beside the build's own "09:30" would be the same
+        // fact written two ways.
+        return String(Math.floor(m / 60)).padStart(2, '0') + ':' +
+               String(((m % 60) + 60) % 60).padStart(2, '0');
     }
 
     // ---- the day ------------------------------------------------------------
@@ -603,7 +608,14 @@
                     toss: { winner: sides[0].team, winner_club: oppClub, decision: 'bat',
                             is_wendover: false,
                             text: oppClub + ' won the toss and elected to bat' },
-                    streamed: !!cfg.streamed, video_id: cfg.streamed ? 'sim-' + cfg.pc_id : null,
+                    /* THE STREAM COMES ONLINE AFTER THE GAME DOES, which is the whole
+                     * point of having it here: a card carrying its stream from
+                     * breakfast has no transition in it, and `stream_started` is
+                     * detected as one. Frogbox is switched on around the start rather
+                     * than hours before, so the marker appears a few minutes in. */
+                    streamed: !!cfg.streamed && elapsed >= STREAM_ON_MS,
+                    video_id: (cfg.streamed && elapsed >= STREAM_ON_MS)
+                        ? 'sim-' + cfg.pc_id : null,
                     innings: inns,
                     clips: cfg.streamed ? clipsUpTo(inns, t, cfg.allot) : [],
                     /* The scorer's own cursor, which is what brackets an event's
@@ -665,6 +677,9 @@
      * These are MP4, not HLS. `live-flash.html` plays a plain media file directly and
      * `hls-cache.js` skips pre-staging it; production clips are always Frogbox
      * `.m3u8`, so neither path changes on the wall. */
+    var BAKED_YT = null;
+    // How long after the first ball the simulated Frogbox stream comes online.
+    var STREAM_ON_MS = 4 * 60000;
     var CLIP_FALLBACK = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
     var clipPool = [];
 
@@ -943,8 +958,20 @@
         ours = DAY.ours.map(ourMatch);
         others = DAY.league.map(leagueMatch);
         cfgById = {};
-        DAY.ours.forEach(function (m) { cfgById[String(m.pc_id)] = m; });
-        DAY.league.forEach(function (m) { cfgById[String(m.match_id)] = m; });
+        /* THE SCHEDULED START, which live-config carries and the simulator was
+           dropping. `ctx.start_time` is what a toss reads to say "…will take the field
+           from 13:00", and it comes off this map — so with nothing here the one clause
+           on the wall that quotes a clock simply vanished, on the simulator only.
+           Derived from the fixture's own `start` rather than copied from the baked
+           row: the simulated day keeps the template's staggering (the beats are placed
+           against it), so the baked 13:00 and the hour this match actually begins are
+           two different times, and the sentence should quote the one being simulated. */
+        DAY.ours.forEach(function (m) {
+            cfgById[String(m.pc_id)] = Object.assign({}, m, { time: hhmm(m.start) });
+        });
+        DAY.league.forEach(function (m) {
+            cfgById[String(m.match_id)] = Object.assign({}, m, { time: hhmm(m.start) });
+        });
         timeline = [];
         ours.concat(others).forEach(function (f) {
             (f.marks || []).forEach(function (mk) { timeline.push(mk); });
@@ -1371,6 +1398,10 @@
         return fetch('/live-config.json', { cache: 'no-store' })
             .then(function (r) { return r.ok ? r.json() : null; })
             .then(function (cfg) {
+                // The club's channel, for the stream-starting event's "watch it
+                // here" clause. Carried through with the fixtures because supplying
+                // our own ids skips the engine's config fetch entirely.
+                if (cfg && cfg.youtube) BAKED_YT = cfg.youtube;
                 var ms = ((cfg && cfg.matches) || []).filter(function (m) { return m.pc_id != null; });
                 if (!ms.length) return;
                 // Keep the simulation's own shape (the beats, the stagger, the
@@ -1433,7 +1464,10 @@
                         match_id: m.match_id,
                         home: m.home_club_name || base.home,
                         away: m.away_club_name || base.away,
-                        competition: m.competition_name || base.competition,
+                        // The chrome's own short form when the build baked one, so
+                        // the simulated division is labelled the way a real one is.
+                        competition: m.competition_short || m.competition_name ||
+                                     base.competition,
                         home_team_id: m.home_team_id || null,
                         away_team_id: m.away_team_id || null,
                         // The fixture's real start time when it has one, so the board's
@@ -1483,6 +1517,7 @@
                can only say "Match under way". Empty when the build baked no league
                fixtures, which is the invented-division case. */
             leagueRows: BAKED_LEAGUE,
+            youtube: BAKED_YT,
             // Read LAZILY: the player assigns window.onLiveState inside its own
             // start(), which may not have run when the simulator arms itself.
             onState: function (feed, status) {

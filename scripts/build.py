@@ -3273,6 +3273,20 @@ def _competition_short(ev):
     return div if (lg and div and len(both) > _COMP_MAX) else both
 
 
+def _youtube_channel():
+    """The club's YouTube channel as the live band names it: {handle, url}.
+
+    Read from the authored `homepage_cards` entry of type "youtube", which is where
+    the channel already lives for the home page and the stream fetcher. `handle` is
+    written with its display capitalisation there — YouTube handles are
+    case-insensitive for lookup and case-preserving for display, so the one field
+    serves both."""
+    for card in load_config().get("homepage_cards", []) or []:
+        if card.get("type") == "youtube" and (card.get("handle") or card.get("url")):
+            return {"handle": card.get("handle") or "", "url": card.get("url") or ""}
+    return {}
+
+
 def build_live_config():
     """Write site/live-config.json — today's pollable matches (the day's events
     that have a pc_id) = the live-proxy Worker's poll list (LIVE_CONFIG_URL), plus
@@ -3285,7 +3299,13 @@ def build_live_config():
     poll_from, poll_until = live_poll_window(matches)
     out = {"generated_at": int(datetime.now().timestamp()),
            "date": _today().isoformat(),
-           "poll_from": poll_from, "poll_until": poll_until, "matches": matches}
+           "poll_from": poll_from, "poll_until": poll_until, "matches": matches,
+           # THE CLUB'S CHANNEL, once, at the top rather than on every match row.
+           # A stream starting is the one event whose whole point is where to go and
+           # watch it, and the handle is a club-wide constant, not a property of a
+           # fixture. Authored in content/config.json's youtube homepage card, which is
+           # where the channel is already described.
+           "youtube": _youtube_channel()}
     (SITE / "live-config.json").write_text(json.dumps(out, indent=2) + "\n")
     window = f"{poll_from} → {poll_until}" if poll_from else "closed (nothing on)"
     replay = " [replay build: window is the REAL day]" if _today() != date.today() else ""
@@ -3806,6 +3826,22 @@ def build_league_config():
     (scripts/fetch_league_fixtures.py). Empty/absent → an empty list, so the Worker
     just has nothing to poll."""
     matches = [m for ms in _load_league_today().values() for m in ms]
+    # THE COMPETITION AS THE CHROME SAYS IT — "TVCL Div 6C" — stamped on every row.
+    # The league row carries `competition_name` ("Division 6C") and no league at all,
+    # so the band had nothing but the raw division to name somebody else's match with
+    # while our own matches carried the short form from live-config. Same division,
+    # two different labels, depending on whose game was up.
+    # The league name is joined off OUR OWN matches by `competition_id`: these
+    # divisions are by construction the ones our teams play in, so the id is a
+    # complete bridge. No match on it degrades to the division alone, which is what
+    # `_competition_short` does with an unmapped league anyway.
+    ours, _ = _todays_events()
+    league_of = {str(e.get("competition_id")): (e.get("league_name") or "")
+                 for e in ours if e.get("competition_id")}
+    matches = [dict(m, competition_short=_competition_short({
+                   "competition": m.get("competition_name"),
+                   "league_name": league_of.get(str(m.get("competition_id")), "")}))
+               for m in matches]
     out = {"generated_at": int(datetime.now().timestamp()),
            "date": _today().isoformat(), "matches": matches}
     (SITE / "live-league.json").write_text(json.dumps(out, indent=2) + "\n")
@@ -3858,17 +3894,87 @@ def _club_crest(club_name):
     return None
 
 
-def _team_tla(club_name):
-    """Short 2–4 char tag for a club (Frogbox-style), the ladder's crest fallback.
-    Initials of the significant words; a single-word club takes its first 3 letters.
-    A manual override map can refine collisions later."""
+# Words that are not part of a club's identity, so they never earn a letter.
+_TLA_STOPWORDS = ("cc", "cricket", "club", "the", "and", "xi")
+# `y` counts as a vowel here, which is what makes "Wycombe" give C rather than Y.
+# It is only ever a consonant at the head of a word, and a word's head is taken as
+# an initial before this rule is consulted at all.
+_TLA_VOWELS = "aeiouy"
+
+
+def _team_tla(club_name, desig=""):
+    """A club's three-letter tag — the ladder's label, and the whole of it.
+
+    THREE CHARACTERS FOR EVERY CLUB, because the ladder is a column of them and two
+    lengths in one column reads as two kinds of thing. The old rule gave two letters
+    to a two-word club and three to a one-word club, so "HW" sat above "HUR" and
+    neither looked like a member of the same set.
+
+    Built in one order, each step only reached when the one before ran short:
+
+      1. AN AUTHORED OVERRIDE wins outright (`team_tla` in content/config.json), keyed
+         by the full team name first and the club second — some clubs have a tag
+         everyone already says, and no rule will find it.
+      2. THE FIRST LETTER OF EVERY WORD, which is the part a reader actually uses to
+         find a club in a list. Four-word clubs take the first three.
+      3. CONSONANTS FROM THE LAST WORD, then the word before it, and so on. Vowels are
+         skipped because a consonant skeleton is what makes an abbreviation
+         recognisable — "Maidenhead & Bray" and "Maidenhead Royals" are MBR and MRL,
+         which differ in two places, where initials alone gave MB and MR.
+         The LAST word is extended first: "High Wycombe" wants HWC, not HWG.
+      4. FAILING ALL THAT, the first three letters of the name. "Kew" and "The Lee"
+         have no consonant skeleton to speak of, and KEW and LEE are what a reader
+         expects to see anyway.
+
+    `desig` is accepted but not used here — two teams of one club produce the same
+    tag by construction, and that is resolved against the rest of the table by
+    `_dedupe_tlas`, which is the only place that knows there is a clash."""
+    authored = load_config().get("team_tla", {})
+    for key in ((club_name or "").strip() + (" - " + desig if desig else ""),
+                (club_name or "").strip()):
+        if key and authored.get(key):
+            return str(authored[key]).upper()
     words = [w for w in re.split(r"[^A-Za-z0-9]+", club_name or "")
-             if w and w.lower() not in ("cc", "cricket", "club", "the", "and", "xi")]
+             if w and w.lower() not in _TLA_STOPWORDS]
     if not words:
         return (club_name or "?")[:3].upper()
-    if len(words) == 1:
-        return words[0][:3].upper()
-    return "".join(w[0] for w in words).upper()[:4]
+    out = [w[0] for w in words][:3]
+    # Consonants, last word first — the tail is where a club's distinguishing
+    # letters live, and extending the first word buries them.
+    for w in reversed(words):
+        for ch in w[1:]:
+            if len(out) >= 3:
+                break
+            if ch.lower() not in _TLA_VOWELS:
+                out.append(ch)
+        if len(out) >= 3:
+            break
+    if len(out) < 3:
+        out = list("".join(words)[:3])
+    return "".join(out).upper()[:3]
+
+
+def _dedupe_tlas(teams):
+    """Make every tag in one table unique, in place.
+
+    Two teams of the same club in one division is not a corner case — the women's
+    indoor table has Wendover twice — and it produced two tiles reading WEN with the
+    same crest and, in that table, no designation either. Two rows a viewer cannot
+    tell apart is worse than an ugly tag.
+
+    A clash keeps the first two letters and spends the third on the side: the XI's own
+    number where the table names one ("2nd XI" -> WN2), and the position in the table
+    otherwise, so the tags at least run in the order the rows do. Only the clashing
+    tags are touched; everybody else keeps the tag the rule gave them."""
+    seen = {}
+    for t in teams:
+        seen.setdefault(t.get("tla"), []).append(t)
+    for tag, group in seen.items():
+        if len(group) < 2:
+            continue
+        for i, t in enumerate(group, 1):
+            m = re.search(r"(\d+)", t.get("desig") or "")
+            t["tla"] = (tag[:2] + (m.group(1)[0] if m else str(i)))[:3].upper()
 
 
 def _club_of(team_name):
@@ -3961,7 +4067,7 @@ def _strip_league_view(ev, our_team_id, by_comp):
             "crest": _club_crest(club),
             # The scoreboard labels its two sides under their crests with the XI.
             "desig": desig,
-            "tla": _team_tla(club),
+            "tla": _team_tla(club, desig),
             # The club name is what the live feeds name a batting side by, so it's
             # the join key for "is this tile's team batting?" (team ids don't appear
             # in a scorecard). Kept alongside the id, which joins tile → fixture.
@@ -3972,6 +4078,8 @@ def _strip_league_view(ev, our_team_id, by_comp):
         })
     if not teams:
         return None
+    # Two teams of one club in one division read as the same tile otherwise.
+    _dedupe_tlas(teams)
     # Today's matches in this division. Ours is polled through the rich WCC feed
     # (`wcc-live`, keyed by pc_id); everyone else's through the slow league feed
     # (`wcc-league`, keyed by match_id) — hence the `ours` flag per fixture.
@@ -4020,7 +4128,7 @@ def _strip_friendly_view(ev, our_team_id):
     says who did — and the chase panel fills the space below."""
     opp_id = str(ev.get("opposition_team_id") or "")
     our_club = ev.get("our_club") or "Wendover CC"
-    ours = {"crest": _club_crest(our_club), "tla": _team_tla(our_club),
+    ours = {"crest": _club_crest(our_club), "tla": _team_tla(our_club, ev.get("team_name") or ""),
             "club": our_club,
             # Our own XI is named by the fixture rather than by a table row.
             "desig": ev.get("team_name") or "",
@@ -4029,7 +4137,7 @@ def _strip_friendly_view(ev, our_team_id):
     # The crest is keyed on the CLUB, and a fixture's opposition can arrive as a
     # team ("Denham CC - 2nd XI"), which would slug to nothing on disk. `club` itself
     # stays as the feed wrote it — it is a join key for the scorecard's batting side.
-    opp = {"crest": _club_crest(_club_of(opp_club)), "tla": _team_tla(opp_club),
+    opp = {"crest": _club_crest(_club_of(opp_club)), "tla": _team_tla(opp_club, _desig_of(opp_club)),
            "club": opp_club, "desig": _desig_of(opp_club),
            "team_id": opp_id, "ours": False}
     return {

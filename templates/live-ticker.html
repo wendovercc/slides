@@ -108,19 +108,25 @@
         .tick-seg .team { font-weight: 900; color: var(--text); }
         .tick-seg .score { font-weight: 900; font-variant-numeric: tabular-nums; color: var(--accent); }
         .tick-seg .ov { font-weight: 400; font-size: var(--t-sm); color: var(--light-blue); }
-        /* The parts above sit inside ONE span rather than being flex children of the
-           segment, so they are separated by an ordinary word space instead of the
+        /* The parts of a group sit inside ONE span rather than being flex children of
+           the segment, so they are separated by an ordinary word space instead of the
            segment's 0.8vw gap — "9/0 (1 ov)" is a phrase, not three columns. */
-        .tick-seg .line { font-weight: 400; color: var(--text); }
-        /* WHICH PHRASE GIVES WAY WHEN THE LINE IS TOO LONG, and it must not be the
-           ends. The scoreline is what the glance is for and the third phrase is the
-           club that would otherwise go unnamed all afternoon; the middle clause —
-           a dismissal's particulars, a burst of boundaries — is the expendable one,
-           so it is the only shrinkable item and it ellipsises inside itself.
-           Without this the segment simply clipped its own right-hand end, which is
-           exactly where the newest information sits. */
-        .tick-seg > .line, .tick-seg > .tail, .tick-seg > .sep { flex: 0 0 auto; }
-        .tick-seg > .det { flex: 0 1 auto; min-width: 0;
+        .tick-seg .grp { font-weight: 400; color: var(--text); }
+        /* WHICH PHRASE GIVES WAY WHEN THE LINE IS TOO LONG. Without a rule the
+           segment clips its own right-hand end, which is exactly where the newest
+           information sits — so one group is marked shrinkable by the payload
+           (`shrink: true`, see live-events.js) and everything else is pinned.
+           The shrinkable one is always the particulars: a dismissal's how-and-for-
+           how-many, a burst of boundaries, a spell's overs. The figure at the head of
+           the line is what the glance is for and the club at the end is the one that
+           would otherwise go unnamed all afternoon; the clause between them is what a
+           reader can most afford to lose, and it ellipsises inside itself rather than
+           taking the rest of the line with it.
+           GROUPS COME FROM THE SEPARATORS. Every part between two `{sep:true}` markers
+           is one `.grp`, so a payload never states the grouping — it writes a line and
+           the dots divide it. */
+        .tick-seg > .grp, .tick-seg > .sep { flex: 0 0 auto; }
+        .tick-seg > .grp.shrink { flex: 0 1 auto; min-width: 0;
             overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .tick-seg .bat { font-weight: 700; color: var(--text); }
         /* Shared by at-crease batters and the last-wicket line so player names read
@@ -232,6 +238,10 @@
            the whole paragraph one unbreakable token — which is exactly the shape
            these segments are expected to take as they stop being scorelines. */
         html.portrait .tick-seg > span { white-space: normal; }
+        /* The shrinkable group is a wall rule: out here the band grows to its text,
+           so an ellipsis is the one thing it must not do. */
+        html.portrait .tick-seg > .grp.shrink { overflow: visible; text-overflow: clip;
+            white-space: normal; }
         html.portrait .tick-seg .team,
         html.portrait .tick-seg .score,
         html.portrait .tick-seg .ov,
@@ -239,6 +249,7 @@
         html.portrait .tick-seg .num,
         html.portrait .tick-seg .lbl { white-space: nowrap; }
         html.portrait .tick-seg .prose,
+        html.portrait .tick-seg .grp,
         html.portrait .tick-seg .det { white-space: normal; }
         /* Body copy, not display type: same family, weight and size as `.pf-body`.
            The wall's emphasis spans (team/score at 900, batter at 700) come back to
@@ -356,25 +367,105 @@
         return String(label || '').length > 9 || longest > 6;
     }
 
-    /* THE HEADLINE, MARKED UP — when the payload says how.
-       Most events hand the band a sentence, which is one span of prose and needs no
-       more. A SCORELINE is not a sentence: "High Wycombe 9/0 (1 ov)" is a club, a
-       figure and the overs that qualify it, and those three are typed differently
-       here exactly as they are on the match-day board. So a payload may carry
-       `parts` — [{ cls, text }] — and this turns them into spans; `headline` stays
-       on the payload as the flat form every other surface (the flash, the inspector)
-       reads, and as the fallback here.
+    /* THE LINE, MARKED UP. A payload is ONE list of parts — `{ cls, text }` for a
+       span, `{ sep: true }` for the dot between groups, `shrink: true` on a part to
+       mark its group as the one that may give way. This walks it once, cutting a
+       `.grp` at every separator.
 
-       The class is WHITELISTED rather than written through. The payload is built
-       from feed data, and a stylesheet class is the one place a renderer can be
-       talked into something by a string it did not write. */
-    var PART_CLS = { team: 1, score: 1, ov: 1, det: 1, num: 1, star: 1, lbl: 1, prov: 1 };
-    function partsHtml(parts, fallback, cls) {
-        if (!parts || !parts.length) return '<span class="prose">' + esc(fallback) + '</span>';
-        return '<span class="' + (cls || 'line') + '">' + parts.map(function (p) {
-            var cls = PART_CLS[p && p.cls] ? p.cls : '';
-            return '<span class="' + cls + '">' + esc(p && p.text) + '</span>';
-        }).join(' ') + '</span>';
+       WHY ONE LIST. It used to be three fields — headline, detail, tail, each with an
+       optional `_parts` twin — drawn in that order with dots supplied here. Three
+       boxes bought two things, and only two: which phrase ellipsises, and separators
+       no payload has to punctuate for itself. Both survive as `shrink` and `{sep}`.
+       What they did not buy was any difference of MEANING, and once the middle clause
+       needed marked-up parts as well (a club anywhere on this wall is set in the heavy
+       type) the three were the same thing under different names. A line that wants to
+       be a sentence rather than three columns can now simply be one.
+
+       The class is WHITELISTED rather than written through. The payload is built from
+       feed data, and a stylesheet class is the one place a renderer can be talked into
+       something by a string it did not write. */
+    var PART_CLS = { team: 1, score: 1, ov: 1, det: 1, num: 1, star: 1, lbl: 1, prov: 1, bat: 1 };
+    // A part that BEGINS with punctuation is a continuation of the one before it, not
+    // a word of its own, so no space goes in front of it. That is what lets a payload
+    // write ", a four" as its own part and still keep the figure before it in the
+    // gold type — the alternative was gluing the comma onto the number, which put a
+    // comma in the scoreline's colour (and is why this rule exists).
+    function glue(t) { return /^[,;:.!?)\u2019']/.test(String(t || '')); }
+    function partsHtml(parts, fallback) {
+        if (!parts || !parts.length) {
+            return '<span class="grp"><span class="prose">' + esc(fallback) + '</span></span>';
+        }
+        var html = '', group = '', empty = true, shrink = false;
+        function flush() {
+            if (empty) return;
+            html += '<span class="grp' + (shrink ? ' shrink' : '') + '">' + group + '</span>';
+            group = ''; empty = true; shrink = false;
+        }
+        parts.forEach(function (p) {
+            if (!p) return;
+            if (p.sep) {
+                // A separator with nothing before it draws nothing: `say()` normalises
+                // the list, but a hand-built payload or an older one must not be able
+                // to put a stray dot at the head of the band.
+                if (empty) return;
+                flush();
+                html += '<span class="sep">\u00b7</span>';
+                return;
+            }
+            if (p.shrink) shrink = true;
+            if (!empty && !glue(p.text)) group += ' ';
+            /* `drop` MARKS A PHRASE AS DISCRETIONARY — see `fit`. It is its own span so
+               it can be taken out again without disturbing the words around it. */
+            group += '<span class="' + (PART_CLS[p.cls] ? p.cls : '') +
+                     (p.drop ? ' opt' : '') + '">' + esc(p.text) + '</span>';
+            empty = false;
+        });
+        flush();
+        return html;
+    }
+    /* SAY IT IF THERE IS ROOM — the discretionary phrase, settled after layout.
+     *
+     * Several lines carry a phrase the payload would LIKE to say and can do without:
+     * "v Denham" on a bowling change, "for Chenies & Latimer" on a fifty. Whether
+     * there is room for it is not something a payload can know — it depends on the
+     * band's width, the type size and how long the names happen to be — so the text is
+     * written with the phrase in and it comes off here if it does not fit.
+     *
+     * TRUNCATION IS THE TEST, not a character count. The band overflows in two ways:
+     * the segment itself runs past its box, or the group marked `shrink` ellipsises
+     * inside itself (which is the commoner one, since that group is there to absorb
+     * exactly this). Either counts, and optional phrases come off the END first,
+     * because the earliest ones are the closest to the news.
+     *
+     * NOT ON THE PHONE. The portrait band wraps to as many lines as it needs and
+     * nothing is ever truncated there, so nothing is ever dropped.
+     * > James's direction, 2026-09-29. */
+    function truncating(seg) {
+        if (seg.scrollWidth > seg.clientWidth + 1) return true;
+        var g = seg.querySelectorAll('.grp.shrink');
+        for (var i = 0; i < g.length; i++) {
+            if (g[i].scrollWidth > g[i].clientWidth + 1) return true;
+        }
+        return false;
+    }
+    function fit(seg) {
+        if (document.documentElement.classList.contains('portrait')) return;
+        var opt = Array.prototype.slice.call(seg.querySelectorAll('.opt'));
+        while (opt.length && truncating(seg)) {
+            var el = opt.pop(), grp = el.parentNode;
+            grp.removeChild(el);
+            // A group that was ONLY the optional phrase takes its separator with it,
+            // or the band is left with a dot leading nowhere.
+            if (!grp.querySelector('span')) {
+                var sep = grp.nextElementSibling && grp.nextElementSibling.classList.contains('sep')
+                    ? grp.nextElementSibling
+                    : (grp.previousElementSibling &&
+                       grp.previousElementSibling.classList.contains('sep')
+                        ? grp.previousElementSibling : null);
+                if (sep) sep.parentNode.removeChild(sep);
+                grp.parentNode.removeChild(grp);
+            }
+        }
     }
 
     /* THE SCHEDULER'S PICK, DRAWN. `showing` is the whole event record — see
@@ -382,20 +473,12 @@
        gold tile, and the payload's text, for the bar. */
     function show(ev) {
         var p = DEMO ? {} : (ev.payload || {});
-        var text = DEMO ? DEMO_TEXT : (p.headline || '');
-        var detail = DEMO ? '' : (p.detail || '');
-        var parts = DEMO ? null : p.parts;
-        /* THE THIRD PHRASE — whose bowlers these are. Its club is drawn in the SAME
-           strong type as the batting side in the headline, because they are the same
-           kind of thing (a club, named) and the eye should pair them across the line;
-           the state behind it stays muted like any other supporting clause. Carried
-           as parts rather than text for exactly that reason. */
-        var tail = DEMO ? null : (p.tail_parts || (p.tail
-            ? [{ cls: 'det', text: p.tail }] : null));
         var next = 1 - face;
-        segs[next].innerHTML = partsHtml(parts, text) +
-            (detail ? '<span class="sep">·</span><span class="det">' + esc(detail) + '</span>' : '') +
-            (tail ? '<span class="sep">·</span>' + partsHtml(tail, '', 'tail') : '');
+        segs[next].innerHTML = DEMO ? partsHtml(null, DEMO_TEXT)
+                                    : partsHtml(p.parts, p.headline || '');
+        // Measured before the crossfade: the segment is in the layout at every
+        // opacity, so the line is already the width it will be shown at.
+        fit(segs[next]);
         segs[next].classList.add('on');
         segs[face].classList.remove('on');
         face = next;

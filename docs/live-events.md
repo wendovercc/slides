@@ -6,9 +6,11 @@
 > all render the scheduler's pick, and the player's chrome latch follows it. The
 > inspector slide (`templates/slides/live-events.html`) renders the working.
 >
-> **What is not finished is the writing.** Only `toss` and `match_started` have had
-> their text and their panel written *for* the L-frame; every other type renders on the
-> generic default and is waiting its turn — see [Open questions](#open-questions).
+> **What is not finished is the writing.** `toss`, `match_started`, `score_update`,
+> `wicket` and the individual family (`fifty`, `hundred`, `five_for`, `new_batsman`,
+> `spell_started`, `spell_ended`) have had their text and their panel written *for* the
+> L-frame; the match-state types and the two swings still render on the generic
+> default and are waiting their turn — see [Open questions](#open-questions).
 >
 > Companion to `docs/live-presentation.md` (the v1 surfaces this replaced the innards
 > of) and `docs/match-highlights.md` (the clips it absorbs).
@@ -54,7 +56,7 @@ happened_at   [from, to] — when it happened out on the field
 received_at   when THIS client learned of it
 shown_at      when the chrome last showed it; null = never   (+ shown_count)
 interest      0..n, fixed at extraction: how much this deserves a screen
-payload       { headline, detail, … } — what it takes to render
+payload       { parts, headline, who, … } — ONE list of parts, plus its flat form
 clip          { id, url, event, duration } or null
 dwell         ms — the MINIMUM it will be up for, not how long it lasts
 ```
@@ -106,18 +108,33 @@ while it is up.
 
 | type | base | ttl | repeat | panel | source |
 |---|---|---|---|---|---|
+| `hat_trick` | 94 | 15m | 7m | profile | 3 balls and 3 wickets in one bowler's suffix |
 | `hundred` | 92 | 15m | 7m | profile | batter's runs crossing 100 |
 | `five_for` | 90 | 15m | 7m | profile | bowler's wickets crossing 5 |
 | `match_finished` | 88 | 45m | 5m | ladder | `complete` false→true, and `final` false→true |
 | `abandoned` | 84 | 45m | 10m | ladder | result text matching abandon/no result/wash |
 | `innings_closed` | 74 | 15m | 5m | score | a new innings appears — **this is when a target exists** |
+| `on_a_hat_trick` | 76 | 2m | never | profile | 2 balls and 2 wickets — **retracted, not merely aged** |
+| `approaching` | 46 | 5m | never | profile | a batter entering the last 10 before 50 or 100 |
+| `collapse` | 72 | 12m | 5m | score | 3 wickets inside 6 overs |
 | `wicket` | 70 | 5m | 3m | score | **one per dismissal** — the batter rows, not `last_wicket` |
 | `fifty` | 64 | 8m | 5m | profile | batter's runs crossing 50 |
+| `stand` | 64 | 10m | 5m | score | the stand (total less last `fow`) passing 50, 100, 150… (`magnitude` by mark) |
+| `last_pair` | 54 | 8m | never | score | nine down with two men at the crease |
 | `ladder_shift` | 60 | 15m | 7m | ladder | **announced by the strip** (see below) |
 | `rain_break` | 56 | 30m | 10m | score | `break_desc` matching rain/weather/wet/shower |
+| `wicket_maiden` | 56 | 7m | 4m | profile | 6 of his balls for 0 runs with a wicket in them |
+| `charge` | 52 | 6m | 4m | score | 3 overs well above the innings' own rate |
+| `squeeze` | 50 | 8m | 5m | score | 5 overs well below it |
+| `maiden_run` | 50 | 8m | 5m | profile | 3 or 4 consecutive maidens by one bowler |
+| `team_total` | 50 | 8m | 5m | score | the total passing 100, 200, 300… (`magnitude` by mark) |
 | `probability_shift` | 48 | 7m | 5m | score | chase model's `p` moving ≥ 0.15 between polls |
+| `stream_started` | 46 | 20m | 5m *(fade 0.7)* | score | a stream marker appearing on the card |
 | `match_started` | 44 | 15m | 90s *(fade 0.7)* | ladder | a division match's `phase` → `live` |
+| `spell_ended` | 40 | 8m | never | profile | a bowler's over count standing still for two overs |
 | `toss` | 40 | 30m | 90s *(fade 0.7)* | form | `toss` appearing |
+| `new_batsman` | 36 | 5m | never | profile | a batter's first ball faced, once a wicket has fallen |
+| `spell_started` | 30 | 5m | never | profile | a bowler bowling after a gap of two overs, or his first |
 | `match_break` | 26 | 10m | never | score | `break_desc` appearing that is *not* the weather |
 | `ball_clip` | 20 | 3m | never | score | a clip nothing else claims |
 | `score_update` | 12 | 9m | never | score | every whole over (ours), every changed scoreline (division) |
@@ -199,6 +216,828 @@ they fell. Measured: three wickets get about ten seconds each — `MIN_SHOW_MS`,
 equal scores mean the incumbent yields as soon as it is allowed to — and the last one
 then keeps the band.
 
+### The people in the match
+
+Three of the types are about a **person** rather than a score, and until this pass
+none of them had been written: a milestone rendered as a row of a scorecard, and the
+two things that happen to a bowling attack had no type at all.
+
+**The shape is the shape a score already has**, which is the point. A score reads
+club → figure → what qualifies it; an individual event reads person → figure → what
+qualifies it, with the batting side and its total at the end:
+
+```
+FIFTY      J Harrington 54      · from 44 balls, 7 fours and a six · Wendover 104/2
+HUNDRED    J Harrington 102     · from 85 balls, 13 fours and two sixes · Wendover 186/3
+FIVE WKTS  W Vane 5–21          · 9 overs, two maidens             · Chenies & Latimer 74/5
+BATTER IN  T Denham to the crease · with J Harrington on 54        · Wendover 78/5
+CHANGE     T Duff into the attack ·                                · Chenies & Latimer 29/2
+SPELL      T Duff 2–9           · three overs, a maiden            · Chenies & Latimer 29/2
+```
+
+The old milestone line was `J Harrington 54 (44) · Fifty for Wendover CC`, which said
+FIFTY a second time under a tile already shouting it, wrote the club with a `CC` the
+rest of the wall drops, and spent its one clause on the fact the reader already had.
+
+**The tail always names the side that is BATTING**, whether the person is batting or
+bowling — so `W Vane 5–21 · Chenies & Latimer 74/5` is the side he is running through
+and `J Harrington 54 · Wendover 104/2` is his own. One rule, met twice, rather than
+two rules to work out each time. It earns its length twice over: it says **whose
+player this is**, which the strip's `1st XI` footer cannot (both sides' players come
+off the same feed, so a bare name reads as one of ours), and it says what state the
+innings is in, which is the *why now*. No overs and no gold in it — the strip carries
+the overs a few centimetres up, and the one gold figure on a line should be the news.
+
+**Whose player it is also decides how much is said, and what it is worth.** The middle
+clause is the lean: ours gets the shape of the innings (the balls *and* the
+boundaries, the overs *and* the maidens), theirs gets the bare figure. It is also the
+clause that ellipsises first when a line is long, so the extra detail is spent where
+it can afford to be lost. And the club test goes through to `interest`, where a
+player who is not ours takes the ordinary `OTHER_CLUB_FACTOR` — their hundred still
+outranks our fifty, our fifty outranks theirs. `extra.ours` on the event record is
+what carries this: almost every event takes its side from the match, but an event
+about a **person** belongs to that person's club, and on our own feed both sides
+arrive through the same diff. Unresolvable is taken as *not ours*: the lean is a
+courtesy, and claiming a player on a guess is the one way it could be wrong in public.
+
+**A `profile` panel is what all three ask for**, and all three fall through to the
+match score today — the player set is unbuilt (see `project_player_profiles`).
+`T Denham to the crease` is precisely the moment that set exists for, so the
+preference is recorded now and lands the day it is built.
+
+### A team total passing a hundred — the one type whose figure is already on the strip
+
+```
+Wendover 200 up  ·  W Fairhead 94*, T Denham 32
+High Wycombe 100 up
+```
+
+This is the weakest case on the wall and it is built knowing that. The strip shows
+`203/4` in gold, larger and better set, so the headline figure is a duplication of the
+surface next to it. What justifies the type at all is that **the crossing is a moment and
+a scoreboard only ever shows a state**: the strip can never say they have *just* gone
+past two hundred.
+
+**The clause is the reason it is allowed to exist.** It names the men who built the
+total, which nothing on the wall does. The lean is the usual one — ours get the top two
+scores, theirs the top one — and **the star is doing real work**: a top score still
+growing and one that is finished are different facts about the innings, for one
+character.
+
+**On the division's feed there is no clause**, because that card carries no batters. That
+line says nothing the strip is not already showing, and it goes out anyway on the
+strength of the crossing alone. It is the thinnest thing the band says, and the magnitude
+below is what keeps it near the floor.
+
+**Every hundred and nothing smaller.** Fifty is an ordinary passage of a league innings
+and 150 is a number nobody celebrates; the round hundreds are the ones a ground reacts
+to.
+
+#### The mark is the magnitude
+
+One type covers every mark, with `magnitude` doing the ordering — the `wicket_maiden`
+pattern. The numbers are chosen against what they have to land on:
+
+| mark | magnitude | interest (ours) | lands |
+|---|---|---|---|
+| 100 | 0.25 | 40 | a shade under `match_started` (44) |
+| 200 | 0.55 | 63 | at the tier cap, just under `fifty` (64) |
+| 300+ | 0.85–1.0 | 63 | capped — a total cannot climb past a fifty |
+
+The cap is the right shape rather than a limitation: **a total is the side's afternoon
+where a fifty is one man's.**
+
+The first cut was `(mark/100 - 1) * 0.35`, which gave a first hundred a magnitude of
+**zero** — the bottom of the multiplier and an interest of 20, barely clear of the floor.
+A formula that starts at nothing prices the commonest case as the least interesting thing
+on the wall.
+
+#### Three guards, and each is a case that would have lied
+
+- **`watched` / `plast`.** A crossing is a transition, so an innings we are seeing for
+  the first time crossed all of its marks before we were looking. On our feed the flag is
+  captured *before* the empty-innings synthesis replaces the answer; on the division's it
+  is the previous card having the innings at all.
+- **The innings count must match.** `plast` is the previous card's *last* innings, which
+  is a different innings once the second has begun — a chase at 105 compared against a
+  first innings of 80 would announce a hundred nobody watched arrive.
+- **A chase stops short of the target.** The mark that takes a chasing side past the
+  first innings is not a milestone, it is the match, and `match_finished` has it.
+  Announcing "200 up" in the same breath as a result would be the band talking over
+  itself with the duller of the two.
+
+**Not gated on a whole over,** unlike the floor and the passage family. It is the
+crossing that is the news and the ball it happened on is the one the ground cheered, so a
+poll mid-over says it then rather than waiting for the over to end.
+
+**A bigger mark retires a smaller one** — "200 up" is a wrong number once they are past
+three hundred. Scoped per match as always, which here is exactly right: both sides'
+totals in one match are the same running story and the older one is the stale half.
+
+### Maidens, and why the probe turned out not to be needed
+
+```
+T Duff 2-14  ·  D Cole                        ·  Denham 20/4
+T Duff 3-15  ·  three in a row, and a wicket  ·  Denham 45/6
+```
+
+This was on the list as "probe `bowling[].maidens` on a live Saturday first" — the field
+is real in the raw RV card, but whether it populates *during* play is unverified, and
+building on a field that might be empty all afternoon is how you ship something that
+silently never fires.
+
+**It is not needed.** A maiden is six legal deliveries of his for no runs, and his runs
+and balls are the two counters the band already quotes as his figures. Deriving it from
+those is the better answer even if the column does work: one fewer number that could
+disagree with the ones on screen.
+
+**His ball count is always a multiple of six at an over boundary**, because a bowler
+bowls whole overs — so a suffix of exactly six of his deliveries *is* the over he has
+just finished, with no alignment guesswork. Wides are invisible to the ball count and
+counted in the runs, which is exactly right: an over with a wide and nothing else is not
+a maiden, and this says so.
+
+**A run of them is the same test at 12, 18 and 24 balls.** No counter to keep, and the
+same refusal to guess when the window cannot be landed. Four overs is as far back as
+`hist` reaches, and four consecutive maidens is already a passage nobody in the ground
+will forget.
+
+**And unlike the hat-trick, it works at either cadence.** At one poll an over his delta
+is six balls outright; at fifteen seconds the deltas are a ball each and sum to six at
+the boundary. Only a straddled poll — balls five to eight — cannot land, and it says
+nothing. So this family *can* be walked in the simulator, and was verified at both
+cadences on the bench.
+
+**It must be the poll he finished the over on.** `balls % 6 === 0` is a standing state,
+not a transition: while the other end bowls, his count sits on the boundary and the test
+answers yes on every poll of the next four minutes. The store's id de-duplication hid
+this — the event carries his ball count, so thirty repeats collapsed into one — but an
+extractor emitting a maiden thirty times is wrong on its own terms. `db > 0` is the
+transition.
+
+#### Two events, ranked, and no event for an ordinary maiden
+
+- **`wicket_maiden` (56)** — six for nothing with a man out, the best over a bowler
+  bowls short of a hat-trick. Below the `wicket` itself on purpose: the dismissal has
+  already had its line at 70, and what this adds is that the over around it was
+  flawless. **`magnitude` carries one wicket against two**, which is why it is one type
+  and not two — a double-wicket maiden lands in the wicket's own tier.
+- **`maiden_run` (50)** — the squeeze told through one bowler, and priced level with it
+  for that reason. **Three is the threshold**: one maiden is an ordinary over in league
+  cricket and two is a spell going well, but three consecutive overs for nothing is the
+  fielding side taking the game over.
+- **A lone wicketless maiden is not an event**, which is the right answer in a league
+  where most bowlers manage one.
+
+**Ranked, not both.** A wicket maiden that completes three in a row is one over and gets
+one line — the run is the bigger half of it, so its clause carries the wicket too.
+
+**A longer run retires a shorter one**: "three in a row" is a wrong number once it is
+four, the same reasoning a century stand retires its fifty. **Known scope limitation:**
+`RETIRES` is per *match*, so a second bowler's run of maidens would retire the first
+bowler's, which is not false, only earlier. It needs two bowlers with three consecutive
+maidens each inside one ttl to happen at all, and the alternative is a per-person
+retirement scope that nothing else wants.
+
+#### What this did to `spell_ended`
+
+Its "two maidens" clause read the feed's `maidens` column — the one field here whose live
+population is unverified — so the clause either worked or silently never appeared, and
+from this repo we could not tell which. It now counts the maidens we have **proved** him
+to bowl in that spell (`dm` on the spell record, incremented where each maiden is
+detected). The count is taken onto a new spell's `start` *before* the over just bowled is
+added, so a maiden that is itself the first over of a spell belongs to the spell it was
+bowled in. It degrades the way everything else here does: overs bowled before we were
+watching are not in it.
+
+**That leaves nothing in this file depending on `maidens`**, and the probe item with it.
+
+### A hat-trick, which the feed does not carry and we can still prove
+
+```
+W Vane 3-11  ·  D Cole, E Shaw and F Nash  ·  Denham 26/5
+W Vane 2-11  ·  on a hat-trick             ·  Denham 20/4
+```
+
+There is no ball-by-ball data on either feed, so this looked impossible and is not. A
+hat-trick is **three wickets in three consecutive deliveries by one bowler**, and the
+card carries that bowler's running balls and wickets. So keep his poll deltas as a short
+list (`hist` on the spell map) and accumulate backwards:
+
+> **If a run of consecutive polls sums to three balls and three wickets, every delivery
+> in that run took a wicket — so they were consecutive, necessarily.**
+
+`suffixOf` stops as soon as it has enough balls, which is what lets the caller insist on
+landing *exactly* on the window it asked for. Three balls and three wickets is a
+hat-trick. **Six balls and three wickets is three wickets in an over and says nothing
+about which three deliveries they came off, so it is refused** — that refusal is the
+honesty in the whole mechanism, and it is the difference between this and a guess.
+
+**It is correct at any poll cadence, and it fails silent.** The claim rests on a delta
+being exactly three of *his* deliveries, and a bowler's own three deliveries are
+consecutive by definition however often we looked. What granularity changes is only
+whether the window lands cleanly: production polls every fifteen seconds against a ball
+every thirty-five, so most deltas are a ball or none. A scorer syncing in lumps of overs
+produces `{6 balls, 3 wickets}` and we say nothing. Missing one beats inventing one.
+
+**A poll in which he did not bowl clears nothing.** A bowler between overs keeps his
+two-in-two, which is what the Laws say — consecutive deliveries *by him*, not
+consecutive balls of the match — and it is why the across-the-over-boundary case (fifth
+and sixth balls of one over, first of his next) works, which is the case a naive
+implementation loses. Wides are invisible to the over count, and that is right too,
+since a wide does not break a hat-trick. **A counter going backwards is a correction,
+not cricket**, and the history is thrown away rather than reasoned about.
+
+**The three victims are named, and they are exactly derivable.** The last three
+dismissals of the innings *are* his three — not by assumption, but because a run-out or
+a wicket at the other end in the middle of the sequence would have advanced his ball
+count without a wicket to his name, which breaks the suffix and means no hat-trick was
+claimed. `hatVictims` checks each against his name anyway and drops the clause rather
+than guess, because a scorer's spelling can move between polls and three names that are
+not the right three is worse than no names. The clause is the three men rather than the
+words "three in three", since the tile already says HAT-TRICK.
+
+#### `on_a_hat_trick` — the one event that looks forward, and the retraction
+
+Two balls, two wickets: the same suffix test one ball shorter. It is the only thing the
+band ever says about a ball that has not been bowled, which is why it outranks a wicket
+— and the only type whose truth can **expire on a ball we never see**.
+
+**The tile states the fact and the bar states what it means** — TWO IN TWO over "W Vane
+2-11 · on a hat-trick" — because a tile reading ON A HAT-TRICK would leave the sentence
+nothing to add.
+
+It is built to die young: `ttl` two minutes, `repeat` null, and a real **retraction**
+rather than mere ageing. This is new machinery and it is small: an event may carry
+`retires` of its own and `retire_only`, in which case the store applies the retirement
+and **throws the event away** — it is never shown, never remembered in `byId`, and
+`live-engine.js` filters it out of what a poll hands back, so a simulator or an
+inspector listing "what this poll produced" cannot print a sentence that was
+deliberately never written. "W Vane did not take a hat-trick after all" is not news.
+
+**And the retraction only retracts what it can prove.** A poll with no wicket in it at
+all proves the hat-trick ball was survived, and the line goes. A poll that spans two
+balls and brought one wicket does not: it may have been the hat-trick ball or the one
+after, and the suffix test cannot separate them either — so no hat-trick was claimed and
+nothing is retracted. Both halves stay honest by saying nothing, and the two-minute ttl
+clears the pending line. Retracting there would be as much a guess as claiming it. The
+dismissals themselves are unaffected, having each had their own event, so the room is
+under-informed rather than misinformed.
+
+**A hat-trick retires the two-in-two** for the other answer: the question has been
+settled by the best possible result.
+
+#### It cannot be seen in the simulator
+
+`playInnings` snapshots **once per completed over** and the whole simulated day is
+indexed on that axis, so every card the simulator hands the extractor advances six balls
+at a time. A hat-trick therefore arrives as `{6 balls, 3 wickets}` and is refused, and
+two-in-two never fires at all. That is the detector being right, not the simulator being
+broken — but it does mean this family has to be verified on a **ball-by-ball bench**
+rather than by walking the sim, which is how it was done (including the
+across-the-over-boundary case and the retraction).
+
+Putting it in the simulator means per-ball snapshots kept under the existing over axis,
+picked by the fraction of the over elapsed — self-contained, but a simulator job rather
+than a wording one.
+
+### The passage of play, as an event
+
+```
+Wendover have added 32 in 3 overs        ·  W Fairhead 31* and T Denham 13*
+Wendover have added 4 in 5 overs         ·  W Fairhead 45* and T Denham 29*
+Wendover have lost three for 13 in 6 overs  ·  W Fairhead 50* and H Godden 0*
+High Wycombe have added 24 in 3 overs
+```
+
+> The **wording** of this family is provisional — James is reviewing the text of the
+> whole stream in a later pass. What follows is the emission logic, which is the part
+> that is settled.
+
+Three faces of one idea, and the idea is the thing a scoreboard structurally cannot
+show: it displays a number going up, and it can never say that the number has started
+going up *faster*, or has stopped, or that the innings is falling over.
+
+| face | base | window | test |
+|---|---|---|---|
+| `collapse` | 72 | 3 wickets within 6 overs | wickets alone — it is not defined by time |
+| `charge` | 52 | 3 overs (+3 slack) | ≥ 1.75× the baseline rate, ≥ 24 runs, ≤ 1 wicket |
+| `squeeze` | 50 | 5 overs (+3 slack) | ≤ 0.45× the baseline, ≤ 12 runs, baseline ≥ 4 an over |
+
+All three are subtractions of two published totals — the same arithmetic the floor's
+passage clause already does, promoted to news when it crosses a threshold worth a
+screen.
+
+**The baseline is the innings itself**, not a par rate for the league. "They have gone
+from four an over to nine" is the news; "they are scoring at nine" is a fact about the
+pitch. And it is measured **up to the window's start, never including the window**, or a
+burst pollutes the baseline it is being judged against and every burst comes out smaller
+than it was.
+
+**A ratio is not enough on its own.** Two runs an over against one is a doubling and it
+is nothing, so each face carries an absolute floor as well. The squeeze also requires a
+baseline *worth* squeezing: a side already scoring at two an over cannot be strangled,
+and saying so would be reporting an ordinary league afternoon as a triumph.
+
+**Each face has its own window,** because the three are not the same length of event. A
+burst is three overs; a drying-up needs five or six before it is real rather than one
+quiet over; a collapse is defined by its wickets and not by time at all — which is why
+it reads the log from the other end (`anchorWithin`, the oldest row within six overs,
+against `anchorBack`'s newest row at least *n* overs back).
+
+**The window must be roughly the one we asked for.** The division's log is sampled per
+observation, so the nearest anchor to "three overs ago" can be twelve overs back — at
+which point the test means something else entirely and the sentence is about a different
+passage of play. `slack` bounds it, and no anchor in range yields no event.
+
+**They are ranked, because one window can answer to two of them.** Three wickets for
+eleven is both a collapse and a squeeze, and the collapse is the bigger thing to have
+happened. The charge cannot collide with either, since it caps the wickets in its window
+— a burst with three men out is not a burst.
+
+#### One event per passage, not one per over
+
+A burst that runs for six overs answers the charge test on every one of them, and a band
+that said so would be reporting the same four overs four times. The rule is **disjoint
+windows**: the next event of a face may not fire until its own window has cleared the
+last one (`surgeFresh`, riding on `m._surges` with the rest of the derived memory). So
+two charges always describe two different passages, and the constant that decides it is
+the window itself rather than a cooldown invented beside it.
+
+**The same rule applies between the surfaces, one level up.** Two places can tell the
+same passage of play, and both now stand down:
+
+- **A surge stands the floor down** for that poll (`saidScore`), exactly as a wicket
+  does. The score line's clause *is* the passage clause — the same subtraction over the
+  same overs — so an over that produced a charge would otherwise say "44 in the last 4
+  overs" twice from one poll, the second time with the duller half of it. On the
+  division's feed the surge replaces the score line outright.
+- **The floor never measures back past the last thing we said.** A charge has just
+  announced four overs in its own tile; a floor line measuring six overs through the
+  same passage restates it a minute later. So `passageClause` clamps its anchor to the
+  last surge in that innings and describes what has happened *since*. Where that leaves
+  nothing measurable the fixture takes the slot, but it will take the oldest row after
+  the announcement rather than sit silent for five overs — the passage since is short,
+  and it is what has happened.
+
+**A passage is an incident**, so none of the three is ever retired: "they added 44 in
+four overs" stays true afterwards, and a later squeeze does not unmake an earlier
+charge. All three retire the routine snapshot, for the usual reason — once the band has
+said what the last four overs were worth, where they are is the duller half of it.
+
+**And this is the one family the division's feed can hold its own in.** A charge, a
+squeeze and a collapse are made of nothing but totals and overs, which is all its card
+carries. Everything else the band says about a match — the people, the dismissals, the
+spells — is ours alone, so these three are what let another club's afternoon be
+*described* rather than merely scored.
+
+### The last pair together — a state, not a transition
+
+```
+I Nine 24* and K Eleven 1*   ·  41 still needed  ·  Wendover 146/9
+W Fairhead 45* and A Roan 3*                     ·  Wendover 224/9
+```
+
+Nine down, and everything that happens now is the end of the innings one way or the other.
+A consequence of a wicket like `new_batsman`, but a much larger one: an arrival changes who
+is batting, where this changes what the rest of the innings can be. It sits below the
+`wicket` that made it (70) and is handed **`tension`** — nine down needing 41 is a
+completely different line from nine down at 300, and the chase model already knows which.
+
+**It is tested as a state, and that is the interesting part.** The obvious implementation
+is "the ninth wicket falling", and it does not work: on that poll the man coming in has
+faced nothing, so there is no pair to name. `creasePair` requires both men to have faced
+something — the same rule `new_batsman` uses, and the right one here too, since a pair is
+*together* once both are batting. So the condition is tested on every poll and the answer
+is latched:
+
+```js
+function onceOnly(m, ii, tag)   // one sentence per innings, in the derived memory
+```
+
+The store's id de-duplication would have hidden a missing latch, exactly as it hid the
+[repeating maiden](#maidens-and-why-the-probe-turned-out-not-to-be-needed) — so the latch
+lives in the extractor, where the decision belongs.
+
+**Nine wickets is the last pair only if there is a pair.** A side batting a man short is
+all out at nine, and requiring two men at the crease is what tells the difference without
+having to know the squad size — which no card reliably states.
+
+**The clause is the chase, where there is one.** Nine down needing 41 is the whole question
+the rest of the afternoon answers, and although the strip's chase block carries the same
+figure, this is the one line on the band where it *is* the news rather than the standing
+state. On a first innings there is nothing true to add — the stand is a ball old by
+construction — so the line is the pair and the score, with the tail's `/9` doing the work.
+
+**And the arrival stands down for these two.** The last-pair line names the incoming man
+and what he has, so "K Eleven to the crease" a line later is the same moment said twice,
+and the smaller half of it. Suppressed at emission rather than by retirement, because the
+arrival is pushed *after* this and a retirement only reaches events already in the store.
+
+**The tenth wicket unmakes it** — they are not together any more, they are all out — so
+`wicket` retires it, as do `innings_closed`, `match_finished` and `abandoned`. The wicket
+that *creates* the last pair does not, and for a reason worth keeping in mind when reading
+that table: the wickets block runs first in the extractor, so its retirement reaches only
+events already in the store.
+
+### Closing in on a milestone — forward-looking, and safe about it
+
+```
+J Harrington 44  ·  needs six for his fifty     ·  Wendover 104/2
+W Fairhead 94    ·  needs six for his hundred   ·  Wendover 202/5
+```
+
+The second type that looks forward, and a far safer one than `on_a_hat_trick`: "he needs
+six for his fifty" stays true for a dozen balls where a hat-trick ball is answered by the
+next delivery. So it needs none of the retraction machinery — the milestone retires it, a
+wicket retires it, and the ttl outlives neither.
+
+**The tile says CLOSING IN and the sentence says what he is closing in on and by how
+much** — the same division of labour as TWO IN TWO over "on a hat-trick".
+
+**Fired on entering the last ten**: crossing 40, or 90. A transition, so it goes out once
+and `repeat: null` keeps it that way — a batter who sits in the forties for twenty minutes
+is not news twenty times. Ten is the right width: five is so close that a single blow
+skips the window altogether, and twenty is not approaching anything.
+
+**The higher mark is tested first**, so a batter arriving in the nineties is closing in on
+a hundred and not on a fifty he passed an hour ago. And `< mark` keeps it out of the
+milestone's way: a blow from 44 to 52 crossed the window and the mark in one poll, and the
+`fifty` has already said the only thing worth saying.
+
+**The gap is as at the poll**, and it can be a run or two stale by the time the band shows
+it. That is the softest version of the risk `on_a_hat_trick` carries, because what ages is
+a number inside a sentence that stays true — and the milestone firing is what stops the
+gap ever being seen at zero or below.
+
+| mark | magnitude | interest (ours) | lands |
+|---|---|---|---|
+| 50 | 0.3 | 40 | beside `match_started` (44) |
+| 100 | 0.8 | 58 | just under the `fifty` it is not yet (64) |
+
+**A man out in the forties makes the line false, not old**, so `wicket` takes the approach
+with it. **Known over-reach:** `RETIRES` is per match, so that also retires the *other*
+batter's approach, which is still perfectly true. It costs that event the rest of its time
+on the band and never puts a wrong sentence on screen, where not retiring would leave the
+band telling a room that a man walking off needs six more. Two batters approaching marks
+at once is rare; being wrong in public about one of them is not worth the trade.
+
+**There is no approach to 150**, because there is no `hundred`-style milestone above a
+hundred either. If one is ever added the window comes with it.
+
+### A partnership, which is the first event about two people
+
+```
+J Harrington and W Fairhead  ·  53 together in 8.2 overs  ·  Wendover 104/2
+```
+
+One type, `stand`, every fifty. The shape is the individual family's with
+the pair where the person goes — who, the figure, what qualifies it, the side and its
+total — and the new thing is the qualifier: **a stand's length**, which no surface on
+the wall carries and which is the difference between a counter-attack and an hour of
+survival.
+
+**The runs are `fow` arithmetic and need no memory.** A stand is the total now less the
+total when the last man went, and both figures are published by the scorer. Extras
+added while the two have been in belong to the stand, which is what a partnership
+means.
+
+**The overs are memory, and they are guarded.** The feed carries no over on a fall — so
+the only honest source for when a wicket fell is the over count on the card we were
+holding when it appeared (`logFall`, riding on `m._falls`). At fifteen seconds a poll
+that is within a ball or two. Under a lumpy sync it is overs out, so the log records how
+much cricket the poll itself spanned and **more than two overs marks the reading
+`wide`**, after which the stand is stated in runs alone. A missing clause beats an
+invented number. An opening stand needs no log at all: nobody is out, so the innings'
+own over count is its length.
+
+**The figure is the stand as it stands, not the mark.** By the time a poll catches it
+they are usually a few runs past: 53 is the true number, and the one the strip's own
+figures can be reconciled with.
+
+**Every fifty, and one type for all of them.** It began as `stand_fifty` and
+`stand_hundred`, which stopped dead at a hundred — a stand of 150 or 200 raised nothing at
+all. A type per fifty is the wrong shape, and a 150 stand under a tile reading CENTURY
+STAND is worse, so the tile says the noun (PARTNERSHIP), the sentence says the figure — it
+always did — and `magnitude` carries the difference. The `team_total` pattern, for the
+same reason.
+
+| mark | magnitude | interest (ours) | lands |
+|---|---|---|---|
+| 50 | 0.32 | 58 | just under an individual `fifty` (64) |
+| 100 | 0.52 | 79 | above a `wicket` (70), below a personal `hundred` (92) |
+| 150+ | 0.72–1.0 | 80 | the tier cap |
+
+The cap flattens 150 and 200 together, which is the right shape rather than a limitation:
+by then the stand is the biggest thing in the match bar somebody's hundred, and a league
+afternoon rarely produces one. **The floor is 0.32 and not zero** — a magnitude of nothing
+puts the commonest case at the bottom of the multiplier, which is the mistake `team_total`
+made first time and which priced a first hundred at 20.
+
+**The highest mark crossed, and only that one.** A poll wide enough to take a stand from
+40 to 105 is wide enough that "fifty together" would be a wrong number the moment it went
+up.
+
+**No split of the contributions**, though the card carries both. "34 and 19" beside "53
+together" invites a reader to add them up and get a different number, because the
+extras belong to the stand and to neither batter. The one place the arithmetic would be
+visibly wrong is the place it would be checked.
+
+**A stand is not an incident, and it is the one thing on the wall that can be made
+false by a later event.** Two men on 53 together stop being on 53 together the moment
+one of them is out, so `wicket` **retires** the stand in that match, and a stand retires
+its own kind — the same pair on 153 make "104 together" a wrong number rather than an old
+one, whatever marks the two lines happened to be about. That is the retirement test
+exactly, and it is why a stand does not get the wicket's exemption.
+
+**Not in the same poll as a wicket.** The stand is measured from the last fall, so a
+poll that brought one is comparing two different pairs and the crossing would be an
+artefact of the arithmetic. Wickets unchanged is the whole test. Nor off a synthesised
+previous card — the same guard the arrival and the boundary rules use, or a
+late-publishing scorer announces a partnership built before we were watching.
+
+**Not in the same breath as a personal milestone — but only when it really is the same
+fact.** A stand of 54 with fifty of them to one man *is* his fifty, and his is the
+bigger claim, being the one a scorecard keeps. But a man who reaches fifty across three
+partnerships on the same poll as this pair reach theirs is a coincidence of arithmetic,
+and a first cut of this rule suppressed exactly that — on both test innings. So the test
+is his **share of this stand** (`standShare`: his total now, less what the fall log says
+he had when the last man went), and it is applied only when the log can prove it. An
+unproven share suppresses nothing.
+
+The test generalises to every mark without changing: a share of 150 in a 150 stand means
+he made all of it, where a hundred of it means the stand and his hundred are two facts and
+both are said.
+
+#### And what the wicket says about it
+
+```
+Wendover 139/3 (25 ov)  ·  B Duff ct Vane b Duff 46 — W Vane 2-19, ending a stand of 85  ·  Denham to bat
+```
+
+The stand a wicket broke is what the wicket *did* to the match, and it is the half a
+scoreboard can never show: the strip's figures are a state, and a partnership only
+exists as the difference between two of them. Two fall figures subtracted, so it is
+exact for a backfilled wicket as much as for the newest one — `newDismissals` now
+carries `prev_fow` for the purpose, with 0 for the first wicket, whose stand is the
+opening one.
+
+It goes **inside** the dismissal clause rather than beside it, because that clause is
+the group marked `shrink`: on a long line the stand is the first thing a reader can
+afford to lose, where the scoreline at the head and the club at the tail are not.
+Thirty runs is where it becomes worth saying; below that the stand is not what the
+wicket did, and a clause reporting every eight-run partnership would be reporting the
+over rate again.
+
+### A batter arriving, and why it is detected on his first ball
+
+`new_batsman` fires on a **runs/balls counter moving off zero**, not on his appearing
+in the card. RV lists the whole squad with a `number` of 99 until they bat, and the
+worker's normalisation of that is not something the band should read tea leaves from;
+a counter moving is unambiguous on any shape of card, and it is the same kind of claim
+the boundaries make — a difference between two stated numbers.
+
+It also puts the sentence in a better place. The arrival lands a poll or two *after*
+the dismissal that caused it rather than in the same breath, so the band says the
+wicket and then says who walked out to face the next one, which is the order the
+ground saw it in.
+
+**The openers are not an arrival.** At 0/0 nobody has come in — they have started, and
+the toss and the first score line have that covered. So it takes a wicket to have
+fallen, which is also what makes the line worth reading: a batter is only news when
+the situation he walks into is. And not off a synthesised innings either — the empty
+previous card that the `!pinn` branch builds makes every batter look brand new, so a
+late-publishing scorer would announce both not-out batters at once.
+
+**A wicket retires the last arrival**, and this is a state, not an incident: "T Denham
+is in" describes the pair at the crease, and a wicket has just broken that pair. Same-poll
+ordering makes it safe rather than lucky — the wickets are pushed before the batters
+loop runs, so a wicket landing beside the arrival that *followed* it retires the
+previous one and leaves the new one standing.
+
+### Spells — the one thing a scorecard knows and never says
+
+A bowling card carries a running total per bowler and nothing else: no spells, no
+ends, no first change. But a spell is **derivable from that one figure**, because of
+how cricket is arranged — a bowler in a spell bowls every *other* over. So his count
+standing still while the innings advances by two overs means he has been taken off,
+and it means it at the moment the room notices: the over he would have bowled and did
+not.
+
+**Twelve balls is the rule and it is not a fudge factor.** It is one over from each
+end — the over he did not bowl, plus the one from the other end that proves the game
+moved on rather than stopped.
+
+**The gap is measured to where the innings stood when he STARTED the over**, not where
+it stands now. His own deliveries move the innings' count along with his, so comparing
+the two current figures counts his own over as part of the gap — and left that way an
+ordinary rotation reads as a fresh spell **every second over**: six of his plus six
+from the other end is exactly the twelve the rule is looking for. Measured both ways
+against a fourteen-over innings, at one poll an over and again at one poll a ball: the
+corrected rule puts the same two spells in the same two places at both cadences, which
+is the test that matters, since production polls at fifteen seconds and a lumpy scorer
+polls at whatever he feels like.
+
+**An opening bowler is not a change.** The pair who start an innings take the new ball
+together and only one of them is in the card after the first over, so the other turns
+up as a brand-new bowler on the second and was announced as though the captain had
+rung a change after six balls. Anyone whose first over is one of the innings' first
+two opened the bowling.
+
+**Three overs or it is not a spell.** Two is a look, and a band announcing every bowler
+who had a look would be reporting the over rate. The floor is on the *spell's* own
+overs, so a bowler returning for one more over and being taken off again does not get
+a line off the back of the six he bowled an hour ago.
+
+**The figures are the spell's, not the match's** — the spell is what just ended, and
+his running total is a different fact that will be on the scorecard all evening. Where
+the two differ the clause says so (`3–24 in all`) rather than leaving a reader to
+wonder which they are looking at; where they are the same, which is most spells,
+nothing is said.
+
+**`magnitude` is what decides whether one reaches the wall**, and it is why this is one
+type rather than two. It is set from the wickets in the spell with a nod to the
+maidens, so a wicketless five overs scores 26 and a three-for scores 50 — the spread
+the type wants, off the dial that already means "how big".
+
+**What this cannot see**, stated so nobody looks for it later:
+
+- **A change of ends reads as one spell**, because the card has no ends in it.
+- **The last spell of an innings never ends**, because the innings stops advancing and
+  the clock this runs on is the innings' own over count. The innings closing is the
+  news at that point and has its own type.
+- **A spell spanning a break is one spell**, which is right: tea does not take a bowler
+  off.
+
+**The state rides on the card**, the way `_received_at` does — the engine holds this
+poll's card as the next poll's `prev`, so a map stamped on it (`m._spells`, keyed by
+innings and bowler) is a map we have next time, and it carries where each spell began
+so its own figures can be subtracted out of the running total at the end. It is
+stamped on **every** poll including the first, where the moves are thrown away: a poll
+that skipped it would lose a bowler's place in his spell. **An innings we have never
+tracked says nothing** — its bowlers are all "new" against an empty map, so a first
+sighting or a late-published innings would announce four changes at once for overs
+nobody watched us miss. Seed the map, wait for the next poll. It is the rule the
+wickets follow one block up, applied where it cannot be softened, since a spell needs
+a history by definition.
+
+### A stream coming online
+
+```
+STREAM   Wendover v Denham in TVCL Div 6C is being live streamed · @WendoverCricketClub
+```
+
+The one event on the wall that is **not news about the cricket**. It is an invitation
+— this game can be watched, and here is where — which is why it outranks a match
+merely starting, why its ttl is twenty minutes rather than five (a viewer has to fetch
+a phone, find the channel and settle), and why it fades slowly and comes back. An
+invitation nobody was in the room for is an invitation nobody got, where a wicket
+announced to an empty room has at least happened.
+
+**It says the fixture, not the score.** When a stream comes online the match may be
+four minutes old, and a viewer deciding whether to go and watch wants to know *which
+game*, not what the score is. The division rides in the same clause for the reason it
+does on a match starting: on a wall showing three of our sides there is otherwise
+nothing to say which one this is.
+
+**The handle is its own group**, and is the only part of any line on this band that is
+an instruction rather than a statement. It takes the club type a club name takes,
+because that is what it is — the club's name, in the form a reader has to type. It
+comes from `live-config.json` once (`_youtube_channel`, read from the authored
+`homepage_cards` YouTube entry) rather than from each fixture, and the line is complete
+without it.
+
+**Three signals, ranked by how much they prove.** It is detected as a *transition*, the
+way the toss is:
+
+| signal | what it proves |
+|---|---|
+| `recording_started_utc` appearing | the stream came online, outright |
+| a `video_id` appearing | probably — an id may be minted with a scheduled broadcast, but on a card that had none it is new |
+| the first clip arriving | a camera exists; footage cannot be produced without one |
+
+The first is the real answer, and `scripts/probe_live.py`'s anchor loop is the evidence
+for it: it retries `recording_started_utc` precisely because a match probed *before* its
+Frogbox stream comes online has none, and gains one when it does. The other two are
+there because **the Worker's normalisation decides which of the three actually reaches
+us, and that is not visible from this repo** — worth confirming with
+`scripts/probe_live.py <pc_id> --raw` the next time a streamed fixture comes round.
+
+**A card that carries its stream all day yields nothing**, and that is the honest
+failure rather than a bug: there is no transition to find, so nothing is announced —
+which beats announcing a stream at whatever time we happened to start polling. Same
+rule `match_started` follows.
+
+### The score line is written against the scoreboard beside it
+
+`score_update` is the **floor**: it goes out every over on every match we can see, and
+it is the one type that is not news. Under v1 the band *was* the scoreboard, so the
+line was the score — club, figure, overs — with a clause behind it. The strip is now
+the scoreboard stood on its end, and by the time that landed every group of the old
+line was already on it, larger and better set:
+
+| the old line said | the strip says it |
+|---|---|
+| `Wendover 60/1 (6 ov)` | the `Runs`, `Wickets` and `Overs` apertures, in gold |
+| `· Denham to bat` | the `TO BAT` tile under the side still to come |
+| `· Need 47 from 60 balls, 5 wickets left` | the chase block — `To win`, `Balls left`, `Req rate` |
+| `· Wendover v Denham · TVCL Div 6C` | two crest tiles over the division in the footer |
+
+So the floor stopped repeating the numbers and took the half of a quiet over the
+scoreboard cannot hold. **The split is the one the two surfaces are for:**
+
+- **the strip is STATE** — where they are, this second;
+- **the ticker is CHANGE** — who is doing it, and how the last few overs have gone.
+
+A scoreboard has never named a person and cannot say what happened five overs ago, and
+those are exactly what makes a routine over worth a line. They are also what a
+commentator reaches for when nothing has happened: *"Harrington settled on 38,
+Fairhead 15, forty-four together."*
+
+```
+J Harrington 38* and W Fairhead 15*  ·  44 together          ·  Wendover batting
+J Harrington 38* and W Fairhead 15*  ·  J Harrington 38, two fours  ·  Wendover batting
+W Fairhead 0* and B Duff 9*          ·  25 for one in the last 5 overs  ·  Wendover batting
+High Wycombe                         ·  18 for two in the last 5 overs
+```
+
+**The lead is the most specific actor the feed can name.** Our own card knows who is
+in, so the pair leads and the club drops to the tail; the division's card has no
+batters at all, so the club *is* the most specific thing it holds and it leads. One
+shape filled as far as each feed allows, rather than two different sentences — the
+same rule that made the old line the league line, pointed the other way now that there
+is something better than a scoreline to lead with.
+
+**The star is doing work.** `38*` is how a scorecard says an innings is still going,
+and it is the reason a figure is worth reading on this line at all: these two are the
+men in, and neither number is final.
+
+**The tail names the batting side in one word.** It is the same job it does on every
+individual event — two names off our own feed could belong to either side, and the
+strip's footer says which of *our* XIs this is, never which club is batting. The score
+is not repeated with it.
+
+#### The clause, in the order a reader would miss it
+
+1. **The boundaries just hit** (`boundaryClause`) — the only candidate that is news
+   rather than standing context, and the reason the floor is worth a screen at all
+   during a passage of play.
+2. **The stand** — `44 together`, runs added since the last wicket fell. A subtraction
+   of two figures the feed states: the total now, and the total when the last man went
+   (`fow`). Extras added while the two have been together belong in it, which is what a
+   partnership *means*, so the team total is the right minuend. No wicket yet means the
+   whole total is the stand, and an opening partnership is the commonest thing this
+   clause says. **It refuses to guess**: if the fall figures cannot account for every
+   wicket — one of them null, a name that changed spelling between polls — the highest
+   `fow` we can see belongs to an *earlier* wicket and the stand would come out too
+   big, so it stands down and the passage takes the slot. Under ten runs it stands down
+   as well; "3 together" is arithmetic, not a story.
+3. **The passage** — `25 for one in the last 5 overs`, which is the clause that works
+   off a bare scoreline and so the division's normal one.
+
+**The chase left this line altogether**, and so did the side still to bat. Both were
+ranked ahead of naming anybody in the old order, and both are now tiles of the strip's
+own panel in figures a room can read; saying them again in prose a few centimetres
+away was the duplication this pass is about. `toBatTail` survives on the **wicket**,
+whose scoreline is stamped to the ball it fell on and which has no panel duplicating it.
+
+**With nothing to say, say whose game it is.** A first sighting has no history to
+subtract and a division card has nobody to name, so the fallback is the fixture and its
+division — the one line worth more than a club standing on its own.
+
+#### The passage is two stated totals, subtracted
+
+An over log rides on the card as `m._passage` (the `_spells` and `_received_at`
+precedent), carried forward poll to poll by `carryDerived` (which brings the fall log with
+it) and appended to by `logOver`. Each row is `{balls, runs, wickets}` at a whole over.
+
+That is all the clause is, and it is why it may make a claim about **time** where a
+boundary counter may not: both ends of it are scores the scorer published, and the
+overs between them are the difference of two over counts. Nothing is inferred about
+any individual ball.
+
+- **The anchor is the newest row at least five overs old** — about half an hour of a
+  league afternoon, long enough for a rate to mean something. Early in an innings there
+  is no row that old, so the oldest is used instead, provided it is two overs back. One
+  over back is the over that has just finished, and "6 in the last over" is the
+  ball-by-ball claim this clause exists to avoid making.
+- **The log is kept whether or not a line goes out.** It records where the innings
+  stood, not what we said, so an over that produced a wicket — and therefore no floor
+  line — still leaves an anchor behind it. Logging inside that gate would measure the
+  next five overs from the wrong ball.
+- **The division logs per observation, not per over.** That feed has no over-by-over
+  truth to offer and its over count arrives coarse and patchy, so the anchor is
+  wherever the last changed scoreline was seen and the clause states the gap it
+  actually measured. `34 in the last 6 overs` off two observations six overs apart is
+  the same subtraction as six consecutive ones.
+- **The overs are written as a scorecard writes them** (`oversWord`), so a gap of
+  twenty-one balls is `3.3 overs` and never `3.5` — a part-over gap is the normal case
+  on the division's feed, and a decimal there would be a different number from the one
+  it means.
+- **A wicket count is counted, not introduced.** `countWord` gives "a four" because one
+  four is a thing that happened; a wicket column has always been read as a number, so
+  `wicketWord` gives "for one", "for two".
+
 ### There is no `four` or `six` event
 
 Both were removed, and the reasoning generalises. A boundary is a **counter** on the
@@ -214,9 +1053,9 @@ is lost and the dishonesty goes: the score is current by construction, and the
 boundaries qualify it rather than claiming a moment of their own.
 
 ```
-Wendover 60/1 (6 ov)  ·  J Harrington 38, two fours and a six  ·  Denham to bat
-Wendover 56/1 (6 ov)  ·  Two fours  ·  Denham to bat
-Wendover 75/1 (10 ov) ·  J Harrington 45, three fours  ·  Denham to bat
+J Harrington 38* and W Fairhead 15*  ·  J Harrington 38, two fours and a six  ·  Wendover batting
+J Harrington 38* and W Fairhead 15*  ·  Two fours  ·  Wendover batting
+High Wycombe  ·  Three fours
 ```
 
 Three rules inside it:
@@ -238,9 +1077,11 @@ either. Footage of a boundary is a REPLAY, which is its own surface; letting an
 unclaimed row raise a `four` would bring the type back through the side door on the
 streamed match only — the one place the inconsistency would be hardest to spot.
 
-**A third phrase names the bowling side**, on `score_update` and `wicket`, first
-innings only: `· Chenies & Latimer to bat`, with the club in the **batting team's own
-strong type** and the state muted behind it. It was the one thing the band never said
+**A final group names the bowling side**, on the `wicket`, first innings only:
+`· Chenies & Latimer to bat`, with the club in the **batting team's own strong type**
+and the state muted behind it. It was on the `score_update` too until the strip became
+the scoreboard, which states the same fact as a `TO BAT` tile — see the score line
+above. It was the one thing the band never said
 — a wicket named who got him, a score said where they were, and on a wall showing
 three of our XIs at once neither said which club was bowling. It replaced a
 possessive club inside the dismissal clause, which paid for the name twice over in the
@@ -253,18 +1094,15 @@ side has already batted and the same words would be a plain falsehood.
 batters, no bowlers, no dismissals — but it names both clubs and says which is
 batting, which is all this phrase needs. One wall, one way of writing a score.
 
-**The middle clause is the one that gives way.** With three phrases a long line
-overflows, and the segment used to clip its own right-hand end — losing the newest
-information and the club. The scoreline and the tail are now fixed flex items and only
-the middle clause shrinks, ellipsising inside itself: a dismissal's particulars are
-what a reader can most afford to lose.
+**The particulars are what gives way.** A long line overflows, and the segment used to
+clip its own right-hand end — losing the newest information and the club. The group
+carrying the particulars is marked `shrink` and every other group is pinned, so the
+clause ellipsises inside itself: a dismissal's how-and-for-how-many is what a reader
+can most afford to lose, where the figure at the head and the club at the tail are not.
 
-**The score's clause is chosen in one order**, ranked by how much a reader would miss
-it: (1) the boundaries just hit — the only candidate that is *news* rather than
-standing context, and the reason the floor event is worth a screen during a passage of
-play; (2) the chase, once two innings exist, because "need 47 from 60" is the state of
-the match; (3) the fixture and division — but only when there is no third phrase, since on a
-first innings that phrase is already naming the other side.
+**The score's clause is chosen in one order** — the burst, then the stand, then the
+passage, then the fixture. See the score line above for what each one is and why it
+sits where it does.
 
 **The floor stands down when the poll already said the score.** A wicket, a four and a
 six all lead with the scoreline now, so one landing on an over boundary used to produce
@@ -707,23 +1545,63 @@ ball and its row appearing. It is cheap to log on a live Saturday — `dt_utc` a
 the poll that first carries the row — and it is the number that says whether a
 one-poll grace on a boundary burst would buy anything.
 
-### A payload may say how it is typed
+### One line, one list
 
-Most events hand the band a sentence, which is one span of prose. A **scoreline** is
-not a sentence: "High Wycombe 9/0 (1 ov)" is a club, a figure and the overs that
-qualify it, and those three are typed differently — the club in white at 900, the
-figure in **gold** because gold is the scoreline everywhere on this wall, the overs a
-rung smaller and blue because they qualify the score rather than being part of it.
-That is `.sq-runs` and `.sq-ov` on the match-day board, mirrored: a score on the band
-and a score on the tile a few centimetres above it are the same fact and are typed the
-same way.
+Most events hand the band a sentence. A **scoreline** is not a sentence: "High Wycombe
+9/0 (1 ov)" is a club, a figure and the overs that qualify it, and those three are
+typed differently — the club in white at 900, the figure in **gold** because gold is
+the scoreline everywhere on this wall, the overs a rung smaller and blue because they
+qualify the score rather than being part of it. That is `.sq-runs` and `.sq-ov` on the
+match-day board, mirrored: a score on the band and a score on the tile a few
+centimetres above it are the same fact and are typed the same way.
 
-So a payload may carry `parts` — `[{cls, text}]` — which the ticker renders as spans,
-with `headline` alongside as the flat form every other reader wants (the flash, the
-inspector, a log line) and as the fallback. The third phrase carries `tail_parts` the
-same way. Classes are **whitelisted** in the renderer: a payload is built from feed
-data, and a stylesheet class is the one place a renderer can be talked into something
-by a string it did not write.
+So a payload carries **one `parts` list**:
+
+```js
+parts: [
+  { cls: 'bat', text: 'J Harrington' }, { cls: 'score', text: '54' },
+  { sep: true },
+  { cls: 'det', text: 'from 44 balls, 7 fours and a six', shrink: true },
+  { sep: true },
+  { cls: 'team', text: 'Wendover' }, { cls: 'det', text: '104/2' }
+]
+```
+
+`{ sep: true }` ends a group and draws the dot; `shrink: true` marks the group that may
+ellipsise. `headline` is the same line flat — what the inspector's row, the simulator's
+HUD and any log line read — and it is **derived** by `say()` from the parts rather than
+typed out beside them, so the two cannot drift.
+
+**It used to be three fields.** `headline`, `detail` and `tail`, each with an optional
+`_parts` twin, drawn in that order with the dots supplied by the renderer. Three boxes
+bought exactly two things — which phrase gives way, and separators no payload has to
+punctuate for itself — and both survive here as `shrink` and `{sep}`. What they did not
+buy was any distinction of **meaning**; and the moment the middle clause needed
+marked-up parts too (a club anywhere on this wall is set in the heavy type, so a club
+landing in `detail` could not be) all three were the same thing under different names.
+The nesting that would have required brought a CSS specificity fight with it —
+`.det .team` against `.det` — which simply does not arise when the parts are siblings.
+
+The practical gain is that **a line that wants to be a sentence can be one**. Narrative
+is the direction the band is going, and three fixed boxes is a data grammar.
+
+**The list is normalised on the way in** — empty parts dropped, then leading, trailing
+and doubled separators collapsed. That is what lets a builder write
+`[score, SEP, maybeClause, SEP, maybeTail]` without first checking whether the middle
+one came out empty, which is what the old builders spent most of their length on.
+
+Classes are **whitelisted** in the renderer: a payload is built from feed data, and a
+stylesheet class is the one place a renderer can be talked into something by a string
+it did not write.
+
+**A club name is always `team`.** The rule for this wall is that a club is set in the
+heavy weight — `.sb-team` on the match-day tile, `.bclub` on the strip's scoreboard,
+`.team` on the band — so every phrase that names one does it as a part, never inside a
+prose string. `fixtureParts()` writes a fixture that way (CCs dropped, both clubs their
+own part) and `resultParts()` lifts the club out of the front of the feed's own result
+sentence by matching it against the two clubs we already know are playing, longest
+first. No match means no split and the sentence goes out as prose: guessing where a
+club name ends inside somebody else's sentence is how you end up with "Wend" in bold.
 
 Events also carry **`who`** — the player the event is about. It exists because the clip
 join used to match a name against the *headline*, which was right while a wicket's
@@ -1692,14 +2570,69 @@ Nothing is baked into it, so it is honestly empty on a day with no cricket.
 
 ## Open questions
 
-**1. The remaining event types have not been written for the L-frame.** Only `toss`
-and `match_started` have had their text and their panel thought about; `wicket`,
-`innings_closed`, `match_finished`, `abandoned`, `rain_break`, `probability_shift`,
-`hundred`/`fifty`/`five_for`, `ladder_shift` and `match_break` all render on the
-generic default. `score_update` and `wicket` have now been written — club, gold
-figure, blue overs, then a clause: the boundaries just hit, the chase's terms, who is
-still to bat, or the dismissal in scorecard notation. Walking them **one at a time** against the
-simulator is the way this has gone and the way it should continue.
+> **THE WORDING REVIEW OF 2026-09-29 IS AHEAD OF THIS DOCUMENT.** James read a whole
+> simulated afternoon line by line and rewrote most of the band; the code is the
+> authority for the exact text until this page is re-levelled. The rules that came out
+> of it, which any new type must follow:
+>
+> - **The sentence stands on its own.** The gold tile goes back to the team and
+>   division before this ships, so no line may lean on it to name the event: a fifty
+>   says "reaches a fifty", a wicket maiden says "wicket maiden".
+> - **The club named is never ours** (`clubTag`). His own club takes "for", the side he
+>   is up against takes "v", and the opposition is what identifies the match on a wall
+>   showing three of our sides.
+> - **That phrase is discretionary**: `drop: true` on a part, and the ticker takes it
+>   off again when the line would otherwise truncate (`fit` in live-ticker.html). Say
+>   it when there is room; never truncate the news to say it.
+> - **Gold is for totals.** A score, a batter's running total, a bowler's match
+>   figures. Never an increment: a spell's figures, a passage's runs, an economy
+>   through a window and a stand's rate are all in the plain type.
+> - **The strip holds the state**, so no line repeats the innings total.
+> - **In the second innings the verb is "chasing"**, not batting, added or scored.
+> - **Punctuation glues**: a part beginning with a comma takes no space in front of it
+>   (`glue` in the ticker, `textOf` here), which is how a figure keeps its colour
+>   without the comma taking it too.
+>
+> **Still to do, in James's order (2026-09-29):**
+>
+> 1. **`innings_closed`** wants writing across its four axes — ours or not, first or
+>    second innings, us batting or bowling, bowled out or out of overs. (The related
+>    bug is FIXED: a `score_update` or `wicket` now retires it, so a closed innings no
+>    longer sits on the band through the chase that followed it.)
+> 2. **`match_break` / the innings break** alongside it, for the same reason.
+> 3. **`match_finished`**, **`probability_shift`** and **`ladder_shift`** are
+>    unreviewed and still on their old text.
+> 4. **The ladder's red/green fill** is unreviewed.
+> 5. **`team_total` would like the overs remaining in a first innings too.** It has
+>    them in a chase only, because the allotment is inferred from the first innings'
+>    close — the DLS overs note again, and the per-competition table would answer both.
+> 6. **How long they were off for** is stated when play resumes, not while they are
+>    off: we know when a break began and never when it will end, and a duration that
+>    grows on screen is a clock rather than a line.
+> 7. ~~**The strip's chase apertures**, flat and dimmed at SIM 19:25~~ — ANSWERED, and
+>    it was not the strip. The panel was right: that match had finished, and a finished
+>    match's figures are settled by design. What was wrong was the LINE beside it —
+>    "Tring Park are chasing The Lee", half an hour after Tring Park had lost. A card
+>    does not stop moving when the game does (a late sync, a correction, the same
+>    innings re-stated), and the completion branch returns on the transition poll only,
+>    so every later change was still being read as a live scoreline. Both feeds' score
+>    lines and the passage family are now guarded on `!m.complete`: **a match that is
+>    over has no score to report, only a result.**
+
+
+**1. The remaining event types have not been written for the L-frame.** Written so
+far: `toss`, `match_started`, `score_update` (rewritten against the scoreboard beside
+it: the pair at the crease, the stand or the passage, the batting side — no scoreline),
+`wicket` (club, gold figure, blue overs, then the dismissal in scorecard notation and
+who is still to bat), and the individual family above —
+`hundred`/`fifty`/`five_for` rewritten, `new_batsman`, `spell_started` and
+`spell_ended` added, `stand` — the first event about two players rather than one — the passage family (`charge`, `squeeze`, `collapse`),
+`hat_trick`/`on_a_hat_trick`, the maidens (`wicket_maiden`, `maiden_run`) and
+`team_total`, whose **wording is still provisional**. **Still on the generic default:** `innings_closed`,
+`match_finished`, `abandoned`, `rain_break`, `match_break`, and
+`probability_shift`/`ladder_shift`, which are deliberately held back with the swing
+and highlight work. Walking them **one at a time** is the way this has gone and the
+way it should continue.
 
 **2. Some type labels are written for a table, not for an 8vw block.** The tile
 renders `TYPES[].label`, so `match_finished` puts "MATCH FINISHED" in the corner where

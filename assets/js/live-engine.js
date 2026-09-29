@@ -68,6 +68,10 @@
     var flashEvents = opts.flashEvents || 'all';
     var seenClips = null;             // null until baselined; then a {id:1} set
     var cfgById = {};                 // pc_id -> config match (crest/team attribution)
+    // The club's YouTube channel, from live-config. Club-wide rather than per match,
+    // so it rides beside the id map rather than on every row of it. Only one event
+    // wants it — a stream starting, whose whole point is where to go and watch.
+    var ytChannel = null;
 
     /* The EVENT STREAM (see live-events.js). The engine holds the previous poll of
      * each feed and differentiates against it, so every surface downstream is fed
@@ -174,6 +178,8 @@
           // The baked division fixtures, so an event about somebody else's match can
           // name the clubs and the ground the lean card never carries.
           leagueById: leagueCfgById,
+          // Where a stream can be watched. See `stream_started` in live-events.js.
+          youtube: ytChannel,
           /* Lets the extractor's clip join reach back past this poll — footage lags
            * the scorecard, so the wicket it belongs to was extracted a poll or two
            * ago and lives in the store, not in this batch. Newest first, this match
@@ -191,7 +197,12 @@
         found.forEach(function (ev) { events.add(ev); });
         if (kind === 'league') prevLeague = feed; else prevFeed = feed;
         eventBroadcast();
-        return found;
+        /* RETRACTIONS ARE NOT EVENTS, and callers of this get the honest list. One of
+         * them exists to un-say something the band is holding (see `retire_only` in
+         * live-events.js); the store has already applied it, and a simulator or an
+         * inspector listing "what this poll produced" must not print a sentence that
+         * was deliberately never written. */
+        return found.filter(function (ev) { return !ev.retire_only; });
     }
     /* What `start` hands back: the clock and the stream, for a caller that wants to
      * drive them. The simulator steps `poll`/`pollLeague` from a key press; the
@@ -520,6 +531,9 @@
      * until something asks for the next. */
     if (transport) {
       if (opts.cfgById) cfgById = opts.cfgById;
+      // The simulator supplies ids of its own, which skips the config fetch above —
+      // so it has to hand the channel over with them.
+      if (opts.youtube) ytChannel = opts.youtube;
       cfgReady = Promise.resolve();
       pcs = opts.matches || [];
       leagueIds = opts.leagueMatches || [];
@@ -565,6 +579,7 @@
           var ms = cfg.matches || [];
           pcs = ms.map(function (m) { return m.pc_id; }).filter(function (id) { return id != null; });
           ms.forEach(function (m) { if (m.pc_id != null) cfgById[String(m.pc_id)] = m; });
+          if (cfg.youtube) ytChannel = cfg.youtube;
           if (window.WccLiveWindow) pollWindow = window.WccLiveWindow.parse(cfg);
         })
         .catch(function () { /* keep pcs null + window null → bare fallback */ })

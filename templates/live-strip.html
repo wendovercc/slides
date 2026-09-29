@@ -78,7 +78,49 @@
         }
         .strip.show { opacity: 1; }
 
-        /* One equal-height tile per team, ordered by league position. Channels:
+        /* ── THE LADDER'S HEAD ───────────────────────────────────────────────
+           WHAT THIS COLUMN IS, said once, at the top.
+
+           The ladder used to have no title of any kind. It asked a reader to infer
+           that the tiles were a league table, that they were in position order, and
+           that it was the table our XI plays in — three inferences, none of them
+           written anywhere, under ten unlabelled encodings.
+
+           THE DIVISION COMES UP HERE TO JOIN IT. It was in the footer, which put the
+           two halves of one label at opposite ends of a 100vh column: "LEAGUE TABLE"
+           at the top and "TVCL DIV 6C" ninety-five hundredths of a screen below it.
+           Together they are one caption — this division's table — and a caption is
+           read as a unit or not at all.
+           > James's question, 2026-09-28.
+
+           AND THE LADDER HAS NO FOOTER AT ALL NOW. It briefly kept one naming our XI
+           — the third inference, and the one the column could never make — until our
+           own row started carrying the crest and the XI itself. A band at the foot of
+           the column repeating what a tile in the middle of it already says is the
+           same fact twice in a column with no room for one. The tiles run to the
+           bottom edge instead, onto the ticker's gold rule, which is where the L
+           joins anyway.
+           > James's direction, 2026-09-28.
+           The SCOREBOARD keeps its footer: its two tiles name the clubs and the XIs
+           but nothing there says which division they are playing in. */
+        .head {
+            flex-shrink: 0; padding: 0.7vh 0.4vh 0.55vh;
+            border-bottom: 0.15vh solid rgba(255,255,255,0.18);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 0.1vh; text-align: center; overflow: hidden;
+        }
+        .head-div {
+            font-size: 1.7vh; font-weight: 900; letter-spacing: 0.04em;
+            text-transform: uppercase; line-height: 1.05; color: var(--gold);
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .head-what {
+            font-size: 1.2vh; font-weight: 700; letter-spacing: 0.1em;
+            text-transform: uppercase; color: var(--muted); opacity: 0.7; line-height: 1.1;
+        }
+
+        /* One tile per team, ordered by league position. Channels:
            - FILL colour   = result lean (green win / red loss), always the full points colour
            - FILL height   = certainty (a band rising from the bottom; full tile = settled)
            - bat/bowl ICON = live role (top-left)
@@ -90,6 +132,60 @@
             display: flex; align-items: center; justify-content: center;
             background: rgba(255,255,255,0.06);
         }
+        /* ── THE LADDER AS A LIST ─────────────────────────────────────────────
+           A ROW, NOT A POSTER. Every tile used to be an equal share of the column —
+           about 100px tall — holding one centred three-letter word at 3.2vh. Ten of
+           those spend half the column on air around short words, and the shape says
+           "ten things" rather than "a ranked list of ten".
+
+           Set as a row it reads as a table line: the position at the left margin, the
+           club's tag, the points at the right. The tag is SMALLER than it was and the
+           column is more legible for it, because what a reader is doing here is
+           finding one row, not reading thirty letters.
+
+           And the room that frees is what pays for the expanded tiles below. */
+        .tile.row { flex: 1; }
+        .tile.row .tla { font-size: 2.4vh; }
+        /* THE POSITION, TOP LEFT, IN ONE TYPE — on every row of the column, expanded
+           or not. It is the table's own first column and the reader's way into the
+           list, so it has to be in the same place and at the same size whatever the
+           row beneath it is doing; a number that moved and resized between rows would
+           stop reading as a column of numbers at all.
+           > James's direction, 2026-09-28.
+           Absolutely positioned rather than a flex child, so it costs the row's
+           content nothing and the tag can stay centred in the tile where it always
+           was. Tabular figures so 1 and 10 occupy the same width. */
+        .pos { position: absolute; top: 0.45vh; left: 0.6vh; z-index: 1;
+            font-size: 1.5vh; font-weight: 700; font-variant-numeric: tabular-nums;
+            color: var(--muted); opacity: 0.8; line-height: 1; }
+
+        /* ── THE ROWS THE EVENT IS ABOUT ──────────────────────────────────────
+           THE TICKER HAS JUST NAMED TWO CLUBS; these are those two clubs. That join is
+           the whole reason the ladder is beside the bar rather than under it, and
+           until now a reader had to make it out of a three-letter tag.
+
+           So the event's sides get the match-day tile's head — crest, club, XI — at a
+           size that can be read across a room, and everybody else gives up the height
+           for it. Three expanded rows at 2.6 shares and seven compressed at 0.55 comes
+           to very nearly the ten the column used to divide equally, so the panel is the
+           same height it always was; it is only spent differently.
+           > James's direction, 2026-09-28. */
+        /* TWICE A TABLE LINE, not four times it. These were half air — the content
+           came to about 120px in a 250px box — so the padding came off and the height
+           with it. What that buys is a THIRD expanded row: the event's two sides plus
+           our own, which is the row a viewer is looking for whoever is playing.
+           > James's direction, 2026-09-28. */
+        .tile.focus { flex: 2; flex-direction: column; gap: 0.15vh;
+            padding: 0.3vh 0.3vh 0.25vh; justify-content: center; }
+        /* Sized so crest, club and XI fit the halved tile with nothing clipped: at
+           three expanded rows the tile is about 140px and this content comes to 122. */
+        .tile.focus img { position: relative; z-index: 1; flex-shrink: 0;
+            width: 5.8vh; height: 5.8vh; border-radius: 50%; object-fit: contain;
+            background: #fff; padding: 0.35vh; box-sizing: border-box; }
+        /* The club and the XI, as `.bclub` and `.bname` set them on the scoreboard —
+           one identity, written the same way wherever it appears on this wall. */
+        .tile.focus .bclub { font-size: 1.8vh; }
+        .tile.focus .bname { font-size: 1.3vh; }
         /* Certainty fill: full points colour, rising from the bottom to `height`. */
         .fill { position: absolute; left: 0; right: 0; bottom: 0; z-index: 0;
             transition: height 0.6s ease; }
@@ -395,19 +491,91 @@
            live figures, flush-and-dimmed means figures that cannot change. */
         .sbox .stat-tile.batting { background: var(--aperture); border-radius: var(--radius); }
 
-        /* Our team: a thick gold bar down the tile's left edge. A real border, not
-           an inset shadow: the tile now reaches the frame, so there is no gutter
-           left to hang an outside bar in — and an INSET shadow would be painted
-           under the .fill child and disappear as certainty rose. The border also
-           holds the fill off it, since an absolutely positioned child resolves
-           against the padding box.
+        /* THERE IS NO GOLD BAR ON OUR ROW ANY MORE, and the reason is that the thing
+           it was for has been done better. It was a thick gold border down the left
+           edge answering "which of these ten is us" — necessary while every row was
+           three anonymous letters, and redundant the moment our row started carrying
+           the club's own crest and name at twice the height of its neighbours.
 
-           LADDER ONLY. In the ladder it answers "which of these ten is us", which is
-           the first thing a viewer wants from a division column. A scoreboard has
-           two sides and the footer has just named the XI, so there is nothing left to
-           pick out — and the bar was competing with the gold score figures for the
-           one accent the column is allowed. */
-        .tile.ours { border-left: 0.6vh solid var(--gold); }
+           Losing it also squares the column up. A border is part of the box, so the
+           one row that had it was inset by 0.6vh and its position numeral sat a bar's
+           width right of every other — the numbers ran down the column in two
+           alignments, which is exactly what a table must not do.
+           > James's direction, 2026-09-28. */
+
+        /* ── THE DIMENSION LINES ──────────────────────────────────────────────
+           HOW FAR APART THE EXPANDED SIDES ARE, IN POINTS — drawn between them rather
+           than printed on them, because a bare "+34" inside a tile has no referent.
+           The rule IS the referent: it says which two rows the number is about.
+
+           A DRAFTSMAN'S DIMENSION LINE, not a double-headed arrow: a plain rule with a
+           tick at each end and the figure at the top. Arrowheads in a nineteen-pixel
+           corridor are mush at ten feet, and the tick-and-rule is the convention every
+           reader has already met on a drawing.
+
+           IT RUNS DOWN A CORRIDOR THAT IS EMPTY THE WHOLE HEIGHT OF THE COLUMN.
+           Measured at 1920x1080, where the strip is 14.2vh wide: the position numeral
+           occupies 0.6-2.4vh, the expanded crest 4.2-10.0vh and a compressed tag
+           4.5-9.7vh, which leaves 2.4-4.2vh clear from top to bottom. The rule sits on
+           its midline.
+           > James's observation, 2026-09-28.
+
+           THE FIGURE IS ALWAYS AT THE TOP, and the alternative is worth recording
+           because it was the obvious one: hunt for the nearest inter-tile spacer and
+           put the number there, clear of everything. Two things killed it. The spacer
+           is 0.4vh — four pixels — so a 13px numeral overlaps the tiles wherever it
+           goes and "on the spacer" buys nothing; and the corridor is clear INSIDE the
+           tiles as well, so there is nothing to hunt for. What is left is a choice
+           between consistent and arbitrary, and a number that is always in the same
+           place relative to its rule can be read without being looked for. At the top
+           it also reads in the right direction: this side is N points ahead of the one
+           below.
+           > James's direction, 2026-09-28.
+
+           IT STOPS SHORT OF BOTH TILE CENTRES. The crest never crosses the corridor,
+           but the club name does — a centred line of type is wide enough to reach past
+           4.2vh on most clubs — so the rule enters each tile only as far as the air
+           above the crest and below the XI, which is what `--link-inset` is. */
+        .links { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+        .link { position: absolute; left: 3.3vh; width: 0.26vh;
+            background: rgba(255,255,255,0.45); }
+        /* THE END TICKS, AND THE T JUNCTION. Drawn at the same weight as the rule the
+           two met as a flat cross: nothing marked the point they actually intersect,
+           and a 1.1vh tick beside a 0.2vh rule read as the heavier of the two even
+           though the rule is the subject.
+           Two changes, both small. The rule is now a shade THICKER than the tick, so
+           the vertical is plainly the line and the ticks are its terminals. And the
+           tick is brightest AT ITS MIDDLE, fading towards both tips — so weight
+           gathers exactly where the two cross, which is the junction drawing itself.
+           The two are semi-transparent and overlap there, so the crossing composites
+           brighter again without a third element to position.
+           > James's direction, 2026-09-28. */
+        .link::before, .link::after { content: ''; position: absolute;
+            left: -0.37vh; width: 1vh; height: 0.18vh;
+            background: linear-gradient(to right,
+                rgba(255,255,255,0.18), rgba(255,255,255,0.85) 50%, rgba(255,255,255,0.18)); }
+        .link::before { top: 0; }
+        .link::after { bottom: 0; }
+        /* The figure, breaking the rule at its head. Gold because it is the one number
+           on this panel and gold is what a figure is on this wall; matte behind it so
+           the rule reads as broken rather than as struck through. */
+        /* "+17", NOT "17". The plus is the one character that says the figure is a
+           DIFFERENCE rather than a value — the convention a reader has already met in
+           a goal-difference or a +/- column — and without it a bare number beside a
+           rule could as easily be places, or a score, or the row's own points. "17 PTS"
+           would say it outright and does not fit: the corridor is 1.8vh and that is
+           more than twice as wide.
+           Read with the figure anchored at the head of the rule it also has the right
+           sense: this side is +17 on the one below.
+           > James's direction, 2026-09-28.
+           The chip is a shade wider than the corridor now and spills a little either
+           side. That is on to a position numeral's right-hand air and the empty corner
+           of a crest's bounding box, so nothing collides; the size is tuned down a
+           notch to keep the spill small. */
+        .link-n { position: absolute; top: 0.5vh; left: 50%; transform: translateX(-50%);
+            padding: 0.1vh 0.25vh; background: var(--matte);
+            font-size: 1.15vh; font-weight: 900; line-height: 1;
+            font-variant-numeric: tabular-nums; color: var(--gold); }
 
         /* Idle 'none' (no match): flatter base and a dimmed TLA so it recedes. */
         .tile.idle-none { background: rgba(255,255,255,0.03); }
@@ -417,12 +585,29 @@
         /* Silent-feed marker: a quiet, static muted dot — deliberately less present
            than the bat/bowl icons, since 'match on but no data' says less than a
            known innings role. Bottom-left, the role slot (the two never co-occur). */
-        .dot { position: absolute; bottom: 1.5vh; left: 1.5vh; z-index: 1;
+        /* TOP RIGHT, opposite the position — the two corners of a row that are not
+           the name. `.dot` alone is the silent-feed mark (dim, still); `.dot.live` is
+           a match whose scores are actually reaching us, in the ticker's own live red
+           and with the ticker's own pulse, so one mark means one thing across the
+           whole L.
+           IT REPLACED THE BAT AND BALL GLYPHS. Those said which of the two sides was
+           in, which is a fact about a match the ladder is not otherwise describing —
+           on a ten-row table what a reader wants from a tile is whether that game is
+           live at all.
+           > James's direction, 2026-09-28. */
+        .dot { position: absolute; top: 0.75vh; right: 0.7vh; z-index: 1;
             width: 1.1vh; height: 1.1vh;
             border-radius: 50%; background: rgba(255,255,255,0.55); }
+        .dot.live { background: #b3261e; animation: strip-pulse 1.8s infinite; }
+        @keyframes strip-pulse {
+            0%   { box-shadow: 0 0 0 0 rgba(179,38,30,0.6); }
+            70%  { box-shadow: 0 0 0 0.9vh rgba(179,38,30,0); }
+            100% { box-shadow: 0 0 0 0 rgba(179,38,30,0); }
+        }
 
-        /* Bat/bowl icon, tucked into the bottom-left corner clear of the centred TLA.
-           PLACEHOLDER — swap for the club's own set. */
+        /* The provisional-result clock — decided, not yet published. Kept when the
+           bat/ball pair went: it is not a role, it is a state of the RESULT, and
+           nothing else on the surface reports it. */
         .role { position: absolute; bottom: 0.6vh; left: 0.6vh; z-index: 1;
             width: 3vh; height: 3vh; color: #fff; }
         .role svg { width: 100%; height: 100%; display: block; }
@@ -536,10 +721,11 @@
         var badge = !!opt.badge;
         var cls = ['tile'];
         if (badge) cls.push('badge');
+        // The ladder's own two shapes — see the CSS. Never on the scoreboard, whose
+        // tiles are already the expanded form and have no table around them.
+        else cls.push(t.focus ? 'focus' : 'row');
         // The panel decides this, not the tile — see badgeIsLong.
         if (badge && opt.long) cls.push('is-long');
-        // The gold bar is a ladder channel; the scoreboard has no use for it.
-        if (t.ours && !opt.badge) cls.push('ours');
         if (t.idle === 'none') cls.push('idle-none');
         if (t.idle === 'nodata') cls.push('idle-nodata');
 
@@ -551,7 +737,9 @@
         if (t.lean && !opt.badge) inner += fill(t.lean, t.certainty);
         // Bottom-left slot: bat/bowl while in play, else a clock while the result is
         // provisional (done, not yet published). The scoreboard keeps only the clock.
-        if (t.role && GLYPH[t.role] && !opt.badge) inner += '<span class="role">' + GLYPH[t.role] + '</span>';
+        // A game we are getting scores from, or a result waiting to be made official.
+        // The bat/ball pair that used to live here has gone — see `.dot`.
+        if (t.live && !opt.badge) inner += '<span class="dot live"></span>';
         else if (t.provisional) inner += '<span class="role">' + GLYPH.prov + '</span>';
         /* THE SCOREBOARD: crest, club, XI — the match-day tile's head, stacked. The
            badge is skipped when the club has none cached; the names stand on their own.
@@ -562,7 +750,29 @@
             inner += '<span class="bclub">' + esc(clubLabel(t)) + '</span>';
             var xi = desigLabel(t);
             if (xi) inner += '<span class="bname">' + esc(xi) + '</span>';
-        } else inner += '<span class="tla">' + esc(t.tla) + '</span>';
+        } else {
+            /* THE LADDER, IN TWO DIALECTS. A row the current event is about is spelled
+               out — crest, club, XI — because the ticker has just named it and the
+               join between the two surfaces is the point of the pair. Every other row
+               is a table line: position, tag, points.
+               Both carry the position and the points, which is what makes them rows of
+               one table rather than two kinds of tile. */
+            if (t.pos) inner += '<span class="pos">' + esc(t.pos) + '</span>';
+            if (t.focus) {
+                if (t.crest) inner += '<img src="' + esc(t.crest) + '" alt="' + esc(t.tla) + '">';
+                inner += '<span class="bclub">' + esc(clubLabel(t)) + '</span>';
+                var fxi = desigLabel(t);
+                if (fxi) inner += '<span class="bname">' + esc(fxi) + '</span>';
+            } else {
+                inner += '<span class="tla">' + esc(t.tla) + '</span>';
+            }
+            /* NO POINTS COLUMN, for now. It is a real fact — eight points between two
+               sides is one afternoon and sixty is a season — but a third figure on
+               every row made the column busy, and busy is what this redesign is for.
+               The data is still on the row (`ladder()` orders by it), so bringing it
+               back is a span.
+               > James's direction, 2026-09-28. */
+        }
         // The arrow carries direction, the numeral how far — a one-place nudge and a
         // four-place surge are very different things, and the arrow alone hid that.
         // Bare arrow for a single place, so the common case stays quiet.
@@ -570,7 +780,14 @@
             (t.ghostN > 1 ? '<i>' + t.ghostN + '</i>' : '') + '</span>';
         if (t.idle === 'nodata') inner += '<span class="dot"></span>';
 
+        /* `data-p` is what the dimension lines subtract, and it is `ptsNow` — the
+           figure `ladder()` put the rows in order by (the table's points plus anything
+           today has already settled), never the baked column. Quoting the baked one
+           beside a column that has reordered on the live one would print a gap that
+           contradicts the layout: a side shown below us, described as ahead. */
+        var pts = t.ptsNow != null ? t.ptsNow : t.points;
         return '<div class="' + cls.join(' ') + '"' + (t.key ? ' data-k="' + esc(t.key) + '"' : '') +
+               (t.focus && pts != null ? ' data-p="' + esc(pts) + '"' : '') +
                '>' + inner + '</div>';
     }
 
@@ -652,6 +869,14 @@
        > James's observation, 2026-09-28. */
     function divisionOf(view, ev) {
         return view.name_short || view.name || (ev && ev.match && ev.match.division) || '';
+    }
+    /* WHAT THIS COLUMN IS. Two lines: the division, and the fact that these are its
+       standings. See `.head` for why the division moved up here from the footer. */
+    function ladderHead(view) {
+        var div = divisionOf(view, showing);
+        return '<div class="head">' +
+               (div ? '<span class="head-div">' + esc(div) + '</span>' : '') +
+               '<span class="head-what">League table</span></div>';
     }
     function footer(view, ev, opt) {
         /* WHOSE MATCH, from the event when there is one. Ours names the XI over the
@@ -917,7 +1142,11 @@
         if (stale) return { idle: 'nodata' };
         var cur = inns[inns.length - 1];
         var batting = inningsSide(card, cur) === side;
-        var out = { role: batting ? 'bat' : 'bowl' };
+        /* `live` is what the dot reports: this match has a card, it has an innings in
+           it, it is not complete and the score is not stale — which is precisely "we
+           are receiving scores for this game". It is not the same as `role`, which
+           said WHICH SIDE was in; that pair has gone (see `.dot`). */
+        var out = { role: batting ? 'bat' : 'bowl', live: true };
         var chase = chaseState(inns);
         if (chase) {
             // p is the chasing side's; mirror it for the side defending.
@@ -1089,12 +1318,21 @@
                so the tile's own `ours` flag answers it without a lookup. */
             var ourSide = (fx && fx.ours && side) ? (team.ours ? side : other(side)) : null;
             var state = fx ? assess(card, side, ourSide, staleCard(fx, card)) : { idle: 'none' };
+            /* The identity comes along now, not just the tag: an expanded row draws
+               the crest, the club and the XI, and it is the same team object the
+               scoreboard reads those off. */
             var t = { key: team.team_id, tla: team.tla, ours: team.ours, points: team.points,
+                      crest: team.crest, club: team.club, desig: team.desig,
                       settledPts: fx ? settledPoints(view, card, side) : null };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
             return t;
         });
-        return ladder(view, rows);
+        rows = ladder(view, rows);
+        /* THE POSITION IS STAMPED AFTER THE ORDERING, never before: `ladder()` may
+           reorder for a settled result, and a number carried through from the baked
+           table would then be a rank the column is no longer in. */
+        rows.forEach(function (r, i) { r.pos = i + 1; });
+        return rows;
     }
 
     /* THE TWO SIDES OF ONE MATCH, batting side on top — the `score` panel. Works for
@@ -1215,6 +1453,57 @@
         });
         return out;
     }
+    /* HOW FAR THE RULE REACHES INTO A TILE, as a fraction of that tile's height.
+       Not a fixed vh: an expanded tile is twice a table line and the air it has above
+       its crest and below its XI scales with it, so a constant would sit in the air on
+       one layout and through the type on another.
+
+       A FOURTEENTH, and the arithmetic is worth keeping because the first try was a
+       sixth and that was too deep. An expanded tile is about 140px with three of them
+       up; its content — crest 63, club 20 or 41 depending on whether the name wraps,
+       XI 15, gaps 3 — comes to 101 to 122, so the air at each end is 9px on a club
+       whose name takes two lines and 19px on one whose name does not. A sixth is 23px,
+       which clears the air on the short names and runs through the XI on the long ones.
+       A fourteenth is 10px: inside the air on every name, and still a visible reach
+       into the tile once the inter-tile gap is added to it.
+       > James's direction, 2026-09-28. */
+    var LINK_INSET = 1 / 14;
+    /* THE DIMENSION LINES, drawn after layout because they span tiles.
+       Every other channel on this column is a property of one tile and can be written
+       into its markup; this one is a relationship between two, so it needs both their
+       positions and there is only one way to have those — measure. The strip already
+       measures tile tops for the FLIP, so this is a second use of the same idea rather
+       than a new dependency.
+       CHAINED IN RENDERED ORDER: expanded row 1 to 2, 2 to 3. Rules radiating from our
+       own row would cross each other, and consecutive rules never can. */
+    function drawLinks() {
+        if (!root.querySelectorAll) return;
+        var old = root.querySelector('.links');
+        if (old && old.parentNode) old.parentNode.removeChild(old);
+        var tiles = Array.prototype.slice.call(root.querySelectorAll('.tile.focus'));
+        if (tiles.length < 2) return;
+        var html = '';
+        for (var i = 0; i + 1 < tiles.length; i++) {
+            var a = tiles[i], b = tiles[i + 1];
+            var top = a.offsetTop + a.offsetHeight - a.offsetHeight * LINK_INSET;
+            var bot = b.offsetTop + b.offsetHeight * LINK_INSET;
+            if (!(bot > top)) continue;
+            var pa = parseFloat(a.getAttribute('data-p'));
+            var pb = parseFloat(b.getAttribute('data-p'));
+            // No points system, or a table we cannot price today — the rule still
+            // draws, because "these two rows" is worth saying without a figure.
+            var gap = (isNaN(pa) || isNaN(pb)) ? null : Math.abs(Math.round(pa - pb));
+            html += '<div class="link" style="top:' + top + 'px;height:' + (bot - top) + 'px">' +
+                    (gap == null ? '' : '<span class="link-n">+' + esc(gap) + '</span>') +
+                    '</div>';
+        }
+        if (!html) return;
+        var box = document.createElement('div');
+        box.className = 'links';
+        box.innerHTML = html;
+        root.appendChild(box);
+    }
+
     function playMoves(before) {
         if (!root.querySelectorAll) return;
         Array.prototype.forEach.call(root.querySelectorAll('[data-k]'), function (el) {
@@ -1462,9 +1751,29 @@
         var body = '';
         if (panel === 'ladder') {
             var rows = leagueTiles(view);
+            /* WHICH ROWS THE EVENT IS ABOUT — the two sides of its fixture, which the
+               baked view already binds by team id (never by name: see the
+               side-resolution note above). No fixture means no expansion, and the
+               ladder falls back to ten table lines, which is a complete surface in
+               itself rather than a degraded one. */
+            var focus = {};
+            ((fx && fx.team_ids) || []).forEach(function (id) {
+                if (id) focus[String(id)] = 1;
+            });
+            /* AND OURS, always. The halved expanded tile paid for a third one, and
+               this is what it bought: on somebody else's match the column otherwise
+               spelled out two clubs a viewer has no stake in and left the one they
+               came for as three letters in the middle of the table. Free when the
+               event IS our match, since we are already one of its two sides.
+               > James's direction, 2026-09-28. */
+            rows.forEach(function (r) {
+                r.focus = !!focus[String(r.key)] || !!r.ours;
+            });
             // Wrapped, not passed bare: `map` would hand the INDEX to tile()'s
             // second argument, which is now the dialect.
-            body = rows.length ? rows.map(function (r) { return tile(r); }).join('') : '';
+            body = rows.length
+                ? ladderHead(view) + rows.map(function (r) { return tile(r); }).join('')
+                : '';
         } else if (panel === 'score') {
             body = scorePanel(view, fx);
         }
@@ -1478,14 +1787,29 @@
         // bottom. That way the edge that MOVES as the panel's content changes is its
         // top — furthest from the corner the eye is reading. The scoreboard's footer
         // is the division alone; the ladder's is the XI over it.
-        var html = body + footer(view, ev, { divOnly: panel === 'score' });
+        /* THE LADDER HAS NO FOOTER. Its head carries the division and our own row
+           carries the club and the XI, so there is nothing left for a band at the
+           bottom to say — see `.head`. The scoreboard still needs one: its tiles name
+           two clubs and neither says which division they are in. */
+        var html = body + (panel === 'ladder' ? ''
+                           : footer(view, ev, { divOnly: panel === 'score' }));
         if (html === lastKey) return;   // nothing changed — leave the DOM (and its transitions) alone
         lastKey = html;
         var before = tilePositions();
         root.innerHTML = html;
         playMoves(before);
+        /* After the tiles are in the DOM, and after `playMoves` has put them back
+           where they were to animate from: the lines are drawn at the FINAL positions,
+           which is where the tiles are heading and where they will be for all but the
+           half-second the move takes. */
+        drawLinks();
         root.classList.add('show');
     }
+
+    /* The lines are the one thing on this surface measured in pixels rather than
+       stated in vh, so they are the one thing a resize invalidates. Everything else
+       re-lays itself out. */
+    window.addEventListener('resize', function () { drawLinks(); });
 
     // ---- feeds in ------------------------------------------------------------
     window.addEventListener('message', function (e) {

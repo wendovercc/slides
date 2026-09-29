@@ -89,6 +89,23 @@
        `transport` is the engine's own poll health ('ok' | 'offline' | 'error' |
        'forbidden'), which no card can report on because a card that never arrived
        says nothing at all. */
+    // The two-word name for a stoppage, from the scorer's own description.
+    var BREAK_WORDS = [
+        [/rain|shower|wet|weather|covers/i, 'Rain break'],
+        [/bad light|light/i,                'Bad light'],
+        [/innings/i,                        'Innings break'],
+        [/tea/i,                            'Tea'],
+        [/lunch/i,                          'Lunch'],
+        [/drinks/i,                         'Drinks'],
+        [/injur|medical|blood/i,            'Injury']
+    ];
+    function breakWord(desc) {
+        var t = String(desc || '');
+        for (var i = 0; i < BREAK_WORDS.length; i++) {
+            if (BREAK_WORDS[i][0].test(t)) return BREAK_WORDS[i][1];
+        }
+        return 'Break';
+    }
     function ours(card, transport, feed) {
         var age = secsSince(scoresUpdated(card), feed);
         if (transport && transport !== 'ok') return { cls: 'off', text: 'No feed', age: age };
@@ -98,8 +115,17 @@
         /* A break is a break whichever way the feed says so: rv.mjs derives
            phase 'break' from `match_break_desc`, but a card carrying the
            description without the phase is the same afternoon. */
-        if (card.phase === 'break' || card.break_desc)
-            return { cls: 'brk', text: 'Break', detail: card.break_desc || null, age: age };
+        /* AND IT SAYS WHICH BREAK when the feed has told us. "Break" is the state;
+           "Rain break" is the afternoon — one of them says whether the game is in
+           trouble. Two words at most, so the column stays a column: the scorer's
+           reason is a free-text field with an "Other" on the end of the list, and
+           anything we do not recognise stays the plain word with the description
+           behind it in `detail`.
+           > James's direction, 2026-09-29. */
+        if (card.phase === 'break' || card.break_desc) {
+            return { cls: 'brk', text: breakWord(card.break_desc),
+                     detail: card.break_desc || null, age: age };
+        }
         if (card.phase === 'live') {
             // Scored and current, or scored and gone quiet — in which case the age
             // REPLACES the word, so the column stays one token wide and a stall is
