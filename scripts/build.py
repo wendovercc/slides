@@ -3745,16 +3745,109 @@ def _match_pre(ev, stats, all_fixtures):
         return "" if not team or team == (club or "").strip() else team
 
     opp_club = drop_cc(ev.get("opposition") or "")
-    ours = {"club": drop_cc(ev.get("our_club") or "") or OUR_CLUB,
-            "team": desig(ev.get("team_name"), ev.get("our_club")),
+    our_club = drop_cc(ev.get("our_club") or "") or OUR_CLUB
+    our_team = desig(ev.get("team_name"), ev.get("our_club"))
+    opp_team = desig(ev.get("opposition_team"), opp_club)
+    # AN INTRA-CLUB FRIENDLY HEADLINES WHAT TELLS THE SIDES APART — "Hurricanes" v
+    # "Spitfires", not "Wendover" twice with the difference in the small line. The
+    # band above already says "Wendover Friendly" (or the occasion). A league game
+    # between two of ours keeps the usual club-and-team form.
+    # > James's direction, 2026-10-01.
+    if _intra_club(ev) and not ev.get("competition_id"):
+        a, b = _distinguishing(*_our_two_sides(ev))
+        our_club, our_team, opp_club, opp_team = a, "", b, ""
+    elif _intra_club(ev) and ev.get("_twin"):
+        # The other side's own name as our team list spells it, not PC's.
+        opp_team = ev["_twin"].get("team_name") or opp_team
+    ours = {"club": our_club,
+            "team": our_team,
             "crest": ev.get("our_crest") or "/assets/images/wcc-logo.png",
             "form": ((stats or {}).get("form", {}).get(ev.get("team"), {}).get("all", []))[-5:]}
     theirs = {"club": opp_club,
-              "team": desig(ev.get("opposition_team"), opp_club),
+              "team": opp_team,
               "crest": ev.get("opp_crest"),
               "form": fixture.get("opposition_form") or []}
     return {"home": ours if ev.get("is_home") else theirs,
             "away": theirs if ev.get("is_home") else ours}
+
+
+def _side_key(name):
+    """A team name reduced to compare across spellings — PC's "Women Softball Kites"
+    against our "Women's Softball Kites", "Under 12 - Spitfires" against "U12
+    Hurricanes": case, punctuation, "Under N" and a trailing "s" on each word are
+    all noise here. One entry per word of the name as written."""
+    s = re.sub(r"\bunder\s*(\d+)", r"u\1", (name or "").lower())
+    return tuple(w.rstrip("s") for w in re.sub(r"[^a-z0-9 ]", "", s).split())
+
+
+def _intra_club(ev):
+    """Both sides of this fixture are ours — President's Day, Hawks v Kites."""
+    return drop_cc(ev.get("opposition") or "") == OUR_CLUB
+
+
+def _distinguishing(a, b):
+    """What tells two of our own sides apart: each name with the words it shares
+    with the other at either end taken off — "Women's Softball Hawks" and "Women
+    Softball Kites" → "Hawks", "Kites". A name that would come out empty keeps
+    every word, so two identical names still say something."""
+    def words(n):
+        out = []
+        for w in re.sub(r"\s+-\s+", " ", re.sub(r"\bUnder\s+(\d+)", r"U\1", n or "", flags=re.I)).split():
+            out.append((w, _side_key(w)))
+        return out
+    wa, wb = words(a), words(b)
+    lo = 0
+    while lo < min(len(wa), len(wb)) and wa[lo][1] == wb[lo][1]:
+        lo += 1
+    hi = 0
+    while hi < min(len(wa), len(wb)) - lo and wa[-1 - hi][1] == wb[-1 - hi][1]:
+        hi += 1
+    def cut(ws):
+        mid = ws[lo:len(ws) - hi]
+        return " ".join(w for w, _ in (mid or ws))
+    return cut(wa), cut(wb)
+
+
+def _our_two_sides(ev):
+    """(ours, theirs) for an intra-club fixture, each as its full team name. Our
+    side is the twin's fixture's team when both sides are teams of ours, else the
+    team the fixture is filed under (a seeded `team_name` overrides that, which is
+    how a one-day side like President's Day's Hurricanes gets named)."""
+    twin = ev.get("_twin")
+    theirs = (twin.get("team_name") if twin else None) or ev.get("opposition_team") or ""
+    return ev.get("team_name") or "", theirs
+
+
+def _match_day_heading(take):
+    """A match-day band's title as (sides, whole_line).
+
+    `sides` is our side(s) as the gold corner tile names them, one per fixture —
+    "1st XI", or "1st XI & 2nd XI" with two of ours in one division — and goes in
+    front of the division. `whole_line`, when set, IS the title and nothing goes
+    with it:
+
+      - an authored OCCASION on the fixture ("President's Day", via live-seed);
+      - an intra-club FRIENDLY → "Wendover Friendly": both sides are ours, so
+        naming either one as "our side" would be choosing between them.
+
+    AN INTRA-CLUB LEAGUE GAME NAMES NO SIDE AT ALL — the band is the division alone,
+    for the same reason. Its tile names both sides.
+
+    And a friendly says "Friendly" after our side, unless that side's own name
+    already does (the Friendly XI), in which case the side is the whole line.
+    > James's direction, 2026-10-01."""
+    sides = []
+    for e in take:
+        if e.get("occasion"):
+            return [], e["occasion"]
+        if _intra_club(e):
+            if not e.get("competition_id"):
+                return [], "Wendover Friendly"
+            continue
+        mine = e.get("team_short") or e.get("team_name") or ""
+        if mine:
+            sides.append(mine)
+    return sides, ""
 
 
 def match_day_layout(events, stats=None, all_fixtures=None):
@@ -3786,13 +3879,29 @@ def match_day_layout(events, stats=None, all_fixtures=None):
     handed."""
     matches = [e for e in events if e.get("type") == "match"]
     matches.sort(key=lambda e: (e.get("time") or "99:99"))
+    # ONE TILE PER GAME. A game between two teams of ours is a fixture in each
+    # team's list under one match id, and both would bind the same live card — the
+    # same match drawn twice, side by side. The first is kept and carries the other
+    # as `_twin`, which is where its tile and heading find the second side's name.
+    by_pc, single = {}, []
+    for e in matches:
+        pid = str(e.get("pc_id") or "")
+        if pid and pid in by_pc:
+            by_pc[pid]["_twin"] = e
+            continue
+        if pid:
+            e = by_pc[pid] = dict(e)
+        single.append(e)
+    matches = single
 
     groups, by_comp = [], {}
     for ev in matches:
         comp = str(ev.get("competition_id") or "")
         # A friendly has no division, so it can't share one — each gets its own
-        # group, and so its own band.
-        key = comp or "solo:%d" % len(groups)
+        # group, and so its own band. Except the two halves of ONE friendly between
+        # two of our own teams, which share a match id and so a band.
+        pid = str(ev.get("pc_id") or "")
+        key = comp or ("pc:" + pid if pid else "solo:%d" % len(groups))
         g = by_comp.get(key)
         if g is None:
             g = by_comp[key] = {"comp": comp, "events": []}
@@ -3813,6 +3922,7 @@ def match_day_layout(events, stats=None, all_fixtures=None):
         take = g["take"]
         span = tile_span * len(take)
         lg = take[0].get("league") or {}
+        sides, whole = _match_day_heading(take)
         all_others = lg.get("others") or []
         # As many as fill the band's rows; the rest are counted, not drawn.
         shown = all_others[:span * MATCH_DAY_OTHER_ROWS]
@@ -3823,6 +3933,13 @@ def match_day_layout(events, stats=None, all_fixtures=None):
             # Whether the division's results can be priced — see _is_tvcl. The
             # other-game tiles badge points only where it's true.
             "tvcl": _is_tvcl(lg.get("name") or take[0].get("league_name")),
+            # The heading's two halves as the live chrome writes them: our XI as the
+            # gold corner tile says it ("1st XI"), and the division as the ladder's
+            # head says it ("Div 6C TVCL"). See _match_day_heading for the sides.
+            "ours_short": [whole] if whole else sides,
+            # A friendly says so, unless our side's own name already has ("Friendly XI").
+            "short": "" if whole else (_competition_short(take[0]) or (
+                "" if any("friendly" in x.lower() for x in sides) else "Friendly")),
             "start": col, "span": span,
             "matches": [{"ev": e, "col": col + i * tile_span, "span": tile_span,
                          "pre": _match_pre(e, stats, all_fixtures or {})}

@@ -107,20 +107,25 @@
        which columns belong to it. A container tint under a group of tiles that
        already have their own backgrounds was a third shade doing what the
        centring does for nothing. */
+    /* OUR XI · THE DIVISION, IN GOLD — "1ST XI · DIV 6C TVCL". The two halves are
+       the live chrome's own words for them: the XI as the gold corner tile writes
+       it, the division as the ladder's head does. One label for one band wherever
+       on the wall it is read, and the short forms are what let a 2-column band
+       carry both. Gold because this is the band's title, and the one place on the
+       board that names whose day it is.
+       > James's direction, 2026-10-01 — trial. */
     .md-div-head { grid-row: 1; min-width: 0;
         display: flex; align-items: baseline; justify-content: center; gap: 0.6vw;
-        font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.08em;
-        color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; }
-    /* THE LEAGUE GIVES WAY FIRST. Both halves can ellipsise, but the league's
-       shrink weight is so much larger that it takes practically all the squeeze
-       and the division only starts to give once the league has gone — the division
-       is the half a reader is looking for, and the league is the guessable one.
-       > James's direction, 2026-10-01. */
-    .md-div-name { font-weight: 700; color: var(--text); min-width: 0; flex-shrink: 1;
-        overflow: hidden; text-overflow: ellipsis; }
-    .md-div-league { min-width: 0; flex-shrink: 1000;
-        overflow: hidden; text-overflow: ellipsis; }
-    .md-div-more { flex-shrink: 0; opacity: 0.7; }
+        font-size: var(--t-xs); font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.08em; color: var(--accent); white-space: nowrap; overflow: hidden; }
+    /* THE DIVISION GIVES WAY FIRST. The sides are the half that says which of our
+       matches this is, so the division takes practically all the squeeze; the
+       sides only ellipsise once it has gone (an intra-club "A v B" can be long). */
+    .md-div-sep { flex-shrink: 0; }
+    .md-div-ours, .md-div-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .md-div-ours { flex-shrink: 1; }
+    .md-div-name { flex-shrink: 1000; }
+    .md-div-more { flex-shrink: 0; font-weight: 400; color: rgba(255,255,255,0.55); }
 
     /* ── A Wendover match tile ───────────────────────────────────────────── */
     .md-col { grid-row: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column;
@@ -732,8 +737,11 @@
     {% set cols = 'grid-column: %d / span %d' % (band.start, band.span) %}
 
     <div class="md-div-head" style="{{ cols }}">
-        <span class="md-div-name">{{ band.division or band.name or 'Friendly' }}</span>
-        {% if band.division and band.name %}<span class="md-div-league">{{ band.name }}</span>{% endif %}
+        {%- set ours = band.ours_short | select | join(' & ') %}
+        {%- set comp = band.short or band.division or band.name %}
+        {% if ours %}<span class="md-div-ours">{{ ours }}</span>{% endif %}
+        {% if ours and comp %}<span class="md-div-sep" aria-hidden="true">&middot;</span>{% endif %}
+        {% if comp %}<span class="md-div-name">{{ comp }}</span>{% endif %}
         {% if band.others_hidden %}<span class="md-div-more">+{{ band.others_hidden }} more</span>{% endif %}
     </div>
 
