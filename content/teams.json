@@ -38,6 +38,7 @@
     {
       "id": "womens-softball-kites",
       "name": "Women's Softball Kites",
+      "short_name": "Women's Kites",
       "play_cricket_league_id": 142917,
       "play_cricket_team_id": 424723,
       "league_table_name": "Wendover CC",
@@ -49,6 +50,7 @@
     {
       "id": "womens-softball-hawks",
       "name": "Women's Softball Hawks",
+      "short_name": "Women's Hawks",
       "play_cricket_league_id": 142917,
       "play_cricket_team_id": 424724,
       "league_table_name": "Wendover CC",

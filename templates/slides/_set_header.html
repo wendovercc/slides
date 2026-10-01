@@ -28,7 +28,7 @@
                 designation), the opposition detail having moved off the right meta. -#}
             <div class="subtitle">
                 <span class="sub-team">{{ slide._set_subtitle }}</span>
-                {% if slide._set_opp_club %}<span class="sub-vs">vs</span> <span class="sub-opp">{{ slide._set_opp_club }}{% if slide._set_opp_team %}<span class="sub-opp-sub">{{ slide._set_opp_team }}</span>{% endif %}</span>{% endif %}
+                {% if slide._set_opp_club %}<span class="sub-vs">vs</span> <span class="sub-opp">{{ slide._set_opp_club | drop_cc }}{% if slide._set_opp_team %}<span class="sub-opp-sub">{{ slide._set_opp_team }}</span>{% endif %}</span>{% endif %}
             </div>
         </div>
         {{ set_meta(slide) }}

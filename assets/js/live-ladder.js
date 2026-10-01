@@ -282,13 +282,31 @@
         // already moved.
         var byBase = rows.slice().sort(function (x, y) { return y.base - x.base || rows.indexOf(x) - rows.indexOf(y); });
         var byProj = rows.slice().sort(function (x, y) { return y.proj - x.proj || rows.indexOf(x) - rows.indexOf(y); });
+        /* LIKE FOR LIKE, OR NO ARROW. A side is only PRICED when its projection is a
+           reading of its game: a chase on (`p`), or a result (`final` — settled, or
+           not playing, whose points cannot move). Anything else — no score, a first
+           innings, a stale one withdrawn — sits at the neutral value, a placeholder.
+           A chase going well passes a placeholder on paper whatever is happening in
+           that other game, so an arrow is drawn only when the side AND every side it
+           crosses are priced. The band's "on course" event fires off this arrow, so
+           the two cannot disagree.
+           > James's direction, 2026-10-01 (SIM 15:57: Gerrards Cross "above
+           Chesham", with no score in Chesham's game at all). */
+        var priced = function (r) { return r.p != null || r.final; };
+        rows.forEach(function (r) {
+            r.baseRank = byBase.indexOf(r) + 1;
+            r.projRank = byProj.indexOf(r) + 1;
+        });
         rows.forEach(function (r) {
             /* THE TWO RANKS THE ARROW IS THE DIFFERENCE OF, kept for the band: the
                expected-position event says where a side is heading ("up to 3rd") and
                whom it would pass, and both are read off these rather than re-derived. */
-            r.baseRank = byBase.indexOf(r) + 1;
-            r.projRank = byProj.indexOf(r) + 1;
-            if (r.final || r.idle) return;
+            if (r.final || r.idle || !priced(r)) return;
+            var crossesUnpriced = rows.some(function (q) {
+                return q !== r && !priced(q) &&
+                       (q.baseRank < r.baseRank) !== (q.projRank < r.projRank);
+            });
+            if (crossesUnpriced) return;
             var move = byBase.indexOf(r) - byProj.indexOf(r);
             if (move > 0) { r.ghost = 'up'; r.ghostN = move; }
             else if (move < 0) { r.ghost = 'down'; r.ghostN = -move; }
@@ -314,7 +332,8 @@
             /* The identity comes along now, not just the tag: an expanded row draws
                the crest, the club and the XI, and it is the same team object the
                scoreboard reads those off. */
-            var t = { key: team.team_id, tla: team.tla, ours: team.ours, points: team.points,
+            var t = { key: team.team_id, tla: team.tla, ours: team.ours, wendover: team.wendover,
+                      points: team.points,
                       crest: team.crest, club: team.club, desig: team.desig,
                       settledPts: fx ? settledPoints(view, card, side) : null };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];

@@ -29,31 +29,25 @@
         }
         .ticker-bar.show { opacity: 1; }
 
-        /* The gold tile, bottom-left: THE EVENT TYPE. Its width is pinned to the live
+        /* The gold tile, bottom-left: WHOSE MATCH. Its width is pinned to the live
            band (the strip's width: this iframe spans the stage, so `--live-band` vw
            lands exactly under the strip), so the strip's gold spine runs down into
            this tile's right edge and the ticker's gold top border runs off its left —
            one continuous L. Keep --live-band in step with the players'.
 
-           IT USED TO NAME THE MATCH — the featured XI over its division — and stood in
-           as the header for the whole chrome, the strip above it having none of its
-           own. That was the wrong occupant for the slot twice over. The content did not
-           fit: `is-long` exists only because "U11 Incredibles" over "TVCL Div 6C" has to
-           shrink to survive 8vw, so the brightest block on the screen was shrinking its
-           type to say the least urgent of the three things. And it answered the wrong
-           question: at ten feet the gold is read first, so it should say WHAT JUST
-           HAPPENED, not whose. The type is also a short closed vocabulary — TOSS,
-           WICKET, SIX, RESULT, RAIN — which fits on one line at full size.
+           OURS NAMES THE XI ("1st XI", "U11 Incredibles"); SOMEBODY ELSE'S NAMES THE
+           DIVISION ("Div 6C TVCL"), since which two clubs is the bar's own business
+           and two club names have never fitted 8vw. The division itself sits at the
+           top of the strip, over the ladder or the scoreboard alike, so the strip no
+           longer needs a footer to say whose match it is.
+           > James's direction, 2026-10-01.
 
-           It makes the corner the hinge of both readings of the L: along the bottom,
-           WICKET → the description; up the side, WICKET → what it did to the match. And
-           with v1's nine-second cycle gone, the tile flipping is the cheapest signal
-           that the screen CHANGED rather than drifted.
-
-           Whose match it is moves to the strip's own bottom band, directly above this
-           tile — see live-strip.html. Bottom rather than top so that the attribution
-           lands on both paths out of the corner instead of stranded 90vh away at the
-           far end of one. */
+           It carried the EVENT TYPE for a spell (TOSS, WICKET, RESULT), on the
+           argument that the gold is read first and should say what just happened.
+           The bar's own wording says that already, so the type was the same news
+           twice, and the attribution it had displaced was left in a footer at the
+           bottom of the strip that nothing else needed. `is-long` comes back into its
+           own: the names are what it was written for. */
         .tick-live {
             --live-band: 8vw;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -64,21 +58,28 @@
                whatever the label turns out to be. */
             overflow: hidden;
         }
-        /* The type label, with the live dot riding INLINE at the head of the text —
-           not as a flex sibling — so a two-word type ("MATCH" / "FINISHED") keeps the
-           dot on its first line instead of leaving it stranded beside a block.
-           Clamped to two lines. */
+        /* The label: the live dot, then the name. TWO FLEX ITEMS, not a dot riding
+           inline at the head of the text. Inline, a name that wrapped ("WOMEN'S" /
+           "INDOOR") left the dot on the first line only and the second line centred on
+           its own, so neither the dot nor the two lines sat together. As a row, the
+           dot centres on the whole text block, and the lines are set left so they
+           start at the same edge. Clamped to two lines.
+           > James's direction, 2026-10-01.
+           A wrapped block is as wide as the room it is given, not as its longest
+           line, which would push the group to the tile's left edge; `shrinkWrap()`
+           below sets the name to its widest line so the row centres as one unit. */
         .tick-live-label { font-size: var(--t-sm); letter-spacing: 0.1em;
+            display: flex; align-items: center; min-width: 0; max-width: 100%; }
+        .tick-live-name { min-width: 0; text-align: left;
             display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
             overflow: hidden; }
-        /* Long labels — "MATCH FINISHED", "FIVE WICKETS" — step down a size and shed
+        /* Long labels — "U11 INCREDIBLES", "DIV 6C TVCL" — step down a size and shed
            most of the tracking. The binding constraint is the longest WORD, which
            can't be broken: at this size an 11-character one still fits the band's
            ~7.2vw of content width. Applied by isLongLabel() below, on the label's
-           actual shape rather than a fixed list. The type vocabulary is short enough
-           that this should now be rare, but "Match finished" still trips it. */
+           actual shape rather than a fixed list. */
         .tick-live.is-long .tick-live-label { font-size: 0.85vw; letter-spacing: 0.03em; }
-        .tick-live i { display: inline-block; vertical-align: 0.04em;
+        .tick-live i { flex-shrink: 0;
             width: 0.8vw; height: 0.8vw; margin-right: 0.4vw;
             border-radius: 50%; background: #b3261e; }
         .tick-live.is-live i { background: #b3261e; animation: tick-pulse 1.8s infinite; }
@@ -210,8 +211,8 @@
             content: '\2192'; font-size: var(--t-xs); font-weight: 400; opacity: 0.85; }
         html.portrait .tick-live-label,
         html.portrait .tick-live.is-long .tick-live-label {
-            -webkit-line-clamp: 1; white-space: nowrap; letter-spacing: 0.08em;
-            font-size: var(--t-xs); }
+            letter-spacing: 0.08em; font-size: var(--t-xs); }
+        html.portrait .tick-live-name { -webkit-line-clamp: 1; white-space: nowrap; }
         html.portrait .tick-live i {
             width: 0.62em; height: 0.62em; margin-right: 0.55em; }
         /* GROWS TO ITS CONTENTS. On the wall the ticker is one line in a fixed band
@@ -280,7 +281,7 @@
 <body>
     <div id="ticker" class="ticker-bar">
         <div id="tick-live" class="tick-live is-live">
-            <span class="tick-live-label"><i></i><span id="tick-live-text">Live</span></span>
+            <span class="tick-live-label"><i></i><span id="tick-live-text" class="tick-live-name">Live</span></span>
         </div>
         <div class="tick-body">
             <div id="seg-a" class="tick-seg on"></div>
@@ -302,9 +303,9 @@
  *
  * The split across the L (docs/live-events.md) gives this surface the TEXT and the
  * TYPE and nothing else:
- *     gold tile  the event type          TOSS
+ *     gold tile  whose match             1st XI   (or Div 6C TVCL)
  *     bar        the event description   Chalfont St Peter elected to bat
- *     strip      the match it happened in, and whose it is
+ *     strip      the match it happened in, headed by its division
  *
  * So the bar no longer says which match it is and no longer loads live-config.json to
  * find out — `showing.match` carries the team and division already, and the strip is
@@ -357,9 +358,7 @@
 
     // Does this label need the smaller tile type? Two ways to be too big for the
     // band: too many characters overall, or a single word too long to break.
-    // Deliberately a shape test, not a length-only one. The type vocabulary is much
-    // kinder to the band than the team names it replaced — "Match finished" is the
-    // only one that still trips it.
+    // Deliberately a shape test, not a length-only one.
     function isLongLabel(label) {
         var words = String(label || '').split(/\s+/);
         var longest = 0;
@@ -450,10 +449,20 @@
     }
     function fit(seg) {
         if (document.documentElement.classList.contains('portrait')) return;
-        var opt = Array.prototype.slice.call(seg.querySelectorAll('.opt'));
-        while (opt.length && truncating(seg)) {
-            var el = opt.pop(), grp = el.parentNode;
-            grp.removeChild(el);
+        /* A PHRASE COMES OFF WHOLE. "v Denham" is two optional parts — the word and
+           the club — and taking them one at a time took the club, found the line now
+           fitted, and left a "v" standing on its own. Adjacent optional spans are one
+           phrase, so they are gathered into one unit and removed together.
+           > James's observation, 2026-10-01 (SIM 16:33). */
+        var units = [];
+        Array.prototype.slice.call(seg.querySelectorAll('.opt')).forEach(function (el) {
+            var prev = el.previousElementSibling, last = units[units.length - 1];
+            if (last && prev && last.indexOf(prev) !== -1) last.push(el);
+            else units.push([el]);
+        });
+        while (units.length && truncating(seg)) {
+            var unit = units.pop(), grp = unit[0].parentNode;
+            unit.forEach(function (el) { grp.removeChild(el); });
             // A group that was ONLY the optional phrase takes its separator with it,
             // or the band is left with a dot leading nowhere.
             if (!grp.querySelector('span')) {
@@ -468,9 +477,44 @@
         }
     }
 
+    /* THE NAME, AS WIDE AS ITS WIDEST LINE. CSS has no way to shrink a wrapped
+       block to its text: "WOMEN'S / INDOOR" keeps the full width it was offered,
+       the spare space lands on the right and the dot is pushed to the tile's edge.
+       So measure the laid-out lines and pin the width to the longest; the flex row
+       then centres dot and text together. Re-run when the type size could have
+       changed it — a new name, the long-label step, a resize, the web font
+       arriving. */
+    function shrinkWrap(el) {
+        el.style.width = '';
+        var r = document.createRange();
+        r.selectNodeContents(el);
+        var rects = r.getClientRects(), w = 0;
+        for (var i = 0; i < rects.length; i++) w = Math.max(w, rects[i].width);
+        // A pixel of slack, so rounding cannot tip the last word onto a new line.
+        if (w) el.style.width = (Math.ceil(w) + 1) + 'px';
+    }
+    window.addEventListener('resize', function () { shrinkWrap(liveLabel); });
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(function () { shrinkWrap(liveLabel); });
+    }
+
     /* THE SCHEDULER'S PICK, DRAWN. `showing` is the whole event record — see
-       live-events.js — and this surface takes two things off it: the type, for the
-       gold tile, and the payload's text, for the bar. */
+       live-events.js — and this surface takes two things off it: whose match, for
+       the gold tile, and the payload's text, for the bar. */
+    /* WHOSE MATCH. `match.tile` is the engine's answer and always one of OUR sides
+       where there is one to name — even over somebody else's game, the side whose
+       table it moves (see `tileOf` in live-events.js) — and the division only when
+       the division holds two of ours and the match involves neither. The rest is the
+       fallback for an engine older than this page:
+       our XI, or somebody else's division. `match.team_short` is the
+       XI's snappy name on our own matches ("Women's Hawks", not "Women's Softball Hawks" —
+       authored as `short_name` in content/teams.json, the full name failing that)
+       and `match.division` the build's short form ("Div 6C TVCL") on everybody's. An event with neither falls
+       back to its type rather than leaving the brightest block on the screen empty. */
+    function attribution(ev) {
+        var m = ev.match || {};
+        return m.tile || (m.ours ? (m.team_short || m.team) : m.division) || ev.label || ev.type || '';
+    }
     function show(ev) {
         var p = DEMO ? {} : (ev.payload || {});
         var next = 1 - face;
@@ -482,10 +526,11 @@
         segs[next].classList.add('on');
         segs[face].classList.remove('on');
         face = next;
-        // THE TILE IS THE TYPE. Uppercased by the stylesheet, so the label reads as
-        // the table writes it.
-        liveLabel.textContent = ev.label || ev.type || '';
-        liveEl.classList.toggle('is-long', isLongLabel(ev.label || ev.type));
+        // THE TILE IS WHOSE MATCH. Uppercased by the stylesheet.
+        var who = attribution(ev);
+        liveLabel.textContent = who;
+        liveEl.classList.toggle('is-long', isLongLabel(who));
+        shrinkWrap(liveLabel);
         /* No `wcc-featured` relay any more. It existed so the strip could follow the
            ticker's current match rather than cycling on its own; both surfaces now
            read the same `wcc-events` broadcast, so a message from one to the other

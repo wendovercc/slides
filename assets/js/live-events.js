@@ -62,7 +62,12 @@
         five_for:          { base: 90, ttl: 900000,  repeat: 420000, label: 'Five wickets',   panel: 'profile' },
         match_finished:    { base: 88, ttl: 2700000, repeat: 300000, label: 'Match finished', panel: 'ladder' },
         abandoned:         { base: 84, ttl: 2700000, repeat: 600000, label: 'Abandoned',      panel: 'ladder' },
-        innings_closed:    { base: 74, ttl: 900000,  repeat: 300000, label: 'Innings closed', panel: 'score' },
+        /* THE LADDER, WHERE THERE IS ONE: the band has just said the score that
+         * matters, and the scoreboard beside it said it again. Half the match decided
+         * is the first moment the table can be read against it. Falls back to the
+         * scoreboard where there is no table (a friendly, a cup).
+         * > James's direction, 2026-10-01. */
+        innings_closed:    { base: 74, ttl: 900000,  repeat: 300000, label: 'Innings closed', panel: 'ladder' },
         /* A PARTNERSHIP PASSING A MARK — every fifty, and ONE type for all of them.
          *
          * It was two types, `stand_fifty` and `stand_hundred`, which stopped dead at a
@@ -396,8 +401,12 @@
         collapse:       ['score_update'],
         // An innings closing settles every running figure for that innings.
         play_resumed:   ['match_break', 'rain_break'],
+        // And the pair, the approach and the hat-trick ball: an innings that is over
+        // has no partnership still going, nobody closing in on anything, and no next
+        // ball. > James's observation, 2026-10-01.
         innings_closed: ['last_pair', 'toss', 'match_started', 'score_update', 'match_break',
-                         'new_batsman', 'spell_started'],
+                         'new_batsman', 'spell_started', 'stand', 'approaching',
+                         'on_a_hat_trick'],
         // And a verdict settles everything that described the game in progress —
         // but not its wickets, its sixes or its hundreds, which happened.
         // A swing replaces the last one: "Denham now favourites" is wrong once
@@ -535,7 +544,7 @@
      *
      * The tile is the hinge of both readings out of the corner: along the bottom,
      * WICKET → "Harrington bowled Duff 62"; up the side, WICKET → the chase it just
-     * dented, over "1st XI · TVCL Div 6C".
+     * dented, over "1st XI · Div 6C TVCL".
      *
      * THE TILE CARRIES THE TYPE, NOT THE CONTEXT, and that is a change from v1. The
      * gold block is the brightest thing on a wall and is read first, so it should say
@@ -618,22 +627,15 @@
                 // on a name — see the side-resolution note in live-strip.html.
                 pc_id: m.pc_id == null ? null : m.pc_id,
                 match_id: m.match_id == null ? null : m.match_id,
-                /* The footer, in the band directly above the gold tile. The two cases
-                 * are genuinely different. Our match: which of our XIs, division
-                 * underneath. Someone else's: the division IS the attribution, because
-                 * which two clubs is answered by the panel's own marked tiles and two
-                 * club names have never fitted 8vw. */
-                foot: m.ours ? (m.team || 'Wendover') : (m.division || 'League'),
-                foot_sub: m.ours ? (m.division || '') : '',
+                // The strip's head: the division, over either panel.
                 division: m.division || '',
                 ours: !!m.ours
             },
-            /* The gold tile: the type, and only the type. `label` is the type table's
-             * own wording, so the tile and the inspector's Type column cannot drift.
-             * (Some of those labels are written for a table rather than for a 8vw
-             * block — "Match finished" where the tile wants RESULT — which is a
-             * per-type call to make as each one is walked through.) */
-            tile: { label: typeOf(ev.type).label || ev.type, type: ev.type }
+            /* The gold tile: WHOSE MATCH. Our XI on our games, the division on
+             * everybody else's (two club names have never fitted 8vw) — the same
+             * rule as `attribution` in live-ticker.html. */
+            tile: { label: m.tile || (m.ours ? (m.team_short || m.team || 'Wendover') : m.division) ||
+                           typeOf(ev.type).label || ev.type, type: ev.type }
         };
     }
 
@@ -1070,12 +1072,11 @@
             // A new innings in the list means the previous one closed — and in a
             // two-innings game that is the moment a target exists, which is the most
             // useful thing the surface can say all afternoon.
+            var closedNow = false;    // see the score line at the foot of the innings loop
             if (mi.length > pi.length && pi.length) {
                 var closed = mi[pi.length - 1] || pi[pi.length - 1];
-                push('innings_closed', 'inn' + pi.length + 'close',
-                    say(scoreParts(dropCC(closed.club || closed.side || ''), closed)
-                        .concat([SEP, det(mi.length === 2
-                            ? 'Target ' + ((closed.runs || 0) + 1) : 'Innings closed', true)])));
+                closedNow = true;
+                push('innings_closed', 'inn' + pi.length + 'close', closedPayload(m, ctx, closed));
             }
 
             mi.forEach(function (inn, ii) {
@@ -1479,7 +1480,11 @@
                  * close would put a live-sounding line on the band beside a strip
                  * showing FINAL. The incidents above are guarded by their own
                  * freshness tests; these two describe an afternoon in progress. */
-                if (ob > pb && ob % 6 === 0 && !saidScore && !m.complete) {
+                /* AND NOT IN THE POLL AN INNINGS CLOSED. The closing line carries the
+                 * score that matters, and a score line about the new innings retires
+                 * it (see RETIRES) — in the same poll, so it was struck before it had
+                 * ever been on screen. */
+                if (ob > pb && ob % 6 === 0 && !saidScore && !m.complete && !closedNow) {
                     push('score_update', 'i' + ii + 'ov' + (ob / 6),
                          scorePayload(m, ctx, sides, inn, ii, ob,
                                       sinceLastPoll(pinn, inn, ob, pb), mi));
@@ -1577,7 +1582,27 @@
                 m._break_since = p._break_since || null;    // still off, same stoppage
             } else if (p.break_desc && !m.complete) {
                 push('play_resumed', 'resume' + p.break_desc + (p._break_since || ''),
-                     resumePayload(m, ctx, bsides, p._break_since, now));
+                     chaseStartPayload(m, ctx, p.break_desc) ||
+                     resumePayload(m, ctx, bsides, p._break_since, now, p.break_desc));
+            }
+            /* THE INNINGS CLOSES AT THE BREAK, not when the next one starts. A side
+             * that bats its overs out is not all out, so its innings can still read as
+             * open while the players are walking off: the card's only word for it is
+             * an innings break. Waiting for the chase to appear left the last over's
+             * score line on screen through the whole interval, and the target unsaid
+             * until the break was over.
+             *
+             * Same id as the next-innings path above, so whichever sees it first says
+             * it and the other is a duplicate. Pushed AFTER the break line, because it
+             * retires it: "Wendover 241/9 · Target 242" says everything "Innings
+             * break" does, and more.
+             * > James's observation, 2026-10-01 (SIM 15:55). */
+            var lastInn = mi[mi.length - 1], plastInn = pi[pi.length - 1];
+            var breakClose = !m.complete && lastInn && mi.length === pi.length &&
+                ((lastInn.closed && plastInn && !plastInn.closed) ||
+                 (/innings/i.test(m.break_desc || '') && m.break_desc !== p.break_desc));
+            if (breakClose) {
+                push('innings_closed', 'inn' + mi.length + 'close', closedPayload(m, ctx, lastInn));
             }
             if (m.complete && !p.complete) {
                 var res = m.result_club || m.result || 'Match finished';
@@ -1698,11 +1723,12 @@
                 push('match_started', 'started', startedPayload(ctx));
             }
             var pi = (p.innings || []), mi = (m.innings || []);
+            var closedNow = false;
             if (mi.length > pi.length && pi.length) {
                 var closed = mi[pi.length - 1];
+                closedNow = !!closed;
                 if (closed) push('innings_closed', 'inn' + pi.length + 'close',
-                    say(scoreParts(dropCC(closed.side || ''), closed)
-                        .concat([SEP]).concat(fixtureParts(m, ctx))));
+                                 closedPayload(m, ctx, closed));
             }
             // The coarse scoreline, when it moves. One event per distinct scoreline
             // rather than per over — this feed has no over-by-over truth to offer.
@@ -1720,7 +1746,10 @@
              * has its own type.
              * > James spotted this one, 2026-09-29. */
             var last = mi[mi.length - 1], plast = pi[pi.length - 1];
-            if (!m.complete && last &&
+            /* NOT IN THE POLL AN INNINGS CLOSED, for the reason the rich feed gives:
+             * "Haddenham are chasing Gerrards Cross" at 0/0 retired the innings-closed
+             * line it arrived with, so a division's target was never once on screen. */
+            if (!m.complete && last && !closedNow &&
                 (!plast || last.runs !== plast.runs || last.wickets !== plast.wickets)) {
                 var sides = sidesOf(m, ctx, last);
                 /* THE LOG IS KEPT PER OBSERVATION HERE, not per over: this feed has no
@@ -1798,7 +1827,7 @@
      *                     barrier rule can land when the OTHER game finishes, not
      *                     this side's own.
      *
-     *   If it stays this way  ·  Haddenham move up to 3rd, above Chesham
+     *   If it stays this way, Haddenham move up to 3rd, above Chesham
      *   Haddenham move up to 3rd, above Chesham
      *   Wendover drop to 5th, below Denham            (ours only, going down)
      *
@@ -1886,10 +1915,13 @@
                            (up ? (q.baseRank < r.baseRank && q.projRank > r.projRank)
                                : (q.baseRank > r.baseRank && q.projRank < r.projRank));
                 });
+                /* Every side named here is PRICED — a chase on or a result — because
+                 * the arrow itself is only drawn when it is (see `ladder()` in
+                 * live-ladder.js). The band never claims a move the strip isn't showing. */
                 var ctx = ctxFor(r);
                 var id = ctx.key + ':expect' + r.key + sig + ':' + now;
                 out.push(event('ladder_expected', id, ctx, [null, now], now,
-                    say([det('If it stays this way'), SEP]
+                    say([det('If it stays this way,')]
                         .concat(movePhrase(r, r.projRank, up, passed.map(name), name))),
                     { ours: !!r.ours, magnitude: Math.min(1, (r.ghostN || 1) / 3),
                       after: follows(ctx, 'probability_shift') }));
@@ -1933,7 +1965,8 @@
         return {
             id: id, type: type, label: typeOf(type).label,
             match: { key: ctx.key, ours: ctx.ours, pc_id: ctx.pc_id, match_id: ctx.match_id,
-                     team: ctx.team, opponent: ctx.opponent, division: ctx.division,
+                     team: ctx.team, team_short: ctx.team_short, tile: ctx.tile,
+                     opponent: ctx.opponent, division: ctx.division,
                      title: ctx.title },
             happened_at: when && when[1] != null ? [when[0], when[1]] : [null, now],
             received_at: now,
@@ -1979,10 +2012,14 @@
             ours: !!ours, pc_id: ours ? id : (m.pc_id != null ? m.pc_id : null),
             match_id: ours ? null : id,
             team: c.team_name || (ours ? 'Wendover' : (lr.home_club_name || m.home || '')),
+            // The XI's snappy form for the gold tile ("Women's Hawks"); see `team_short` in build.py.
+            team_short: ours ? (c.team_short || c.team_name || 'Wendover') : '',
+            // What the gold tile says for this match — see `tileOf`.
+            tile: ours ? (c.team_short || c.team_name || 'Wendover') : tileOf(id, cfg),
             opponent: c.opposition || (ours ? (m.away || '') : (lr.away_club_name || m.away || '')),
             /* THE SHORT FORM FIRST — from EITHER config, before either raw name.
              *
-             * `competition_short` is the build's own shortener ("TVCL Div 6C") and is
+             * `competition_short` is the build's own shortener ("Div 6C TVCL") and is
              * now stamped on the league rows as well as ours, so the same division is
              * labelled the same way whoever is playing in it.
              *
@@ -1991,7 +2028,7 @@
              * `c.competition` beat a shortened `lr.competition_short`, and the
              * simulator indexes its league fixtures into `byId` as well as
              * `leagueById` (live-sim.js buildDay), so on the wall every division match
-             * said "Division 6C" while the strip beside it said "TVCL Div 6C". Rank by
+             * said "Division 6C" while the strip beside it said "Div 6C TVCL". Rank by
              * the SHAPE of the answer instead: every short form, then every long one. */
             division: c.competition_short || lr.competition_short ||
                       c.competition || m.competition || lr.competition_name || '',
@@ -2007,6 +2044,36 @@
             tension: ours ? tensionOf(m) : null
         };
     }
+    /* THE GOLD TILE NAMES ONE OF OURS, EVEN ON SOMEBODY ELSE'S MATCH.
+     *
+     * The wall is for Wendover, and a division match matters to the room because of
+     * which of our sides it affects — so the tile names that side: "2nd XI" over
+     * Chesham v Tring Park, since the 2nd XI is who that result moves on the table.
+     *
+     * Read off the strip's baked views (the division table, with `wendover` on every
+     * one of our rows and their short names as `desig`): the view whose fixtures
+     * include this match. One of ours in that division → that side. More than one —
+     * the women's indoor table has two — and the match decides: the one playing in
+     * it, if either is; otherwise neither has a better claim than the other, and the
+     * tile goes back to the division's own short form (an empty answer here).
+     * > James's direction, 2026-10-01. */
+    function tileOf(matchId, cfg) {
+        var views = (cfg && cfg.views) || [];
+        for (var i = 0; i < views.length; i++) {
+            var fx = (views[i].fixtures || []).filter(function (f) {
+                return !f.ours && String(f.match_id) === String(matchId);
+            })[0];
+            if (!fx) continue;
+            var mine = (views[i].teams || []).filter(function (t) { return t.wendover || t.ours; });
+            if (mine.length === 1) return mine[0].desig || '';
+            var playing = mine.filter(function (t) {
+                return (fx.team_ids || []).indexOf(String(t.team_id)) !== -1;
+            });
+            return playing.length ? (playing[0].desig || '') : '';
+        }
+        return '';
+    }
+
     function matchTitle(m) {
         var h = (m && m.home) || '', a = (m && m.away) || '';
         return h && a ? h + ' v ' + a : (h || a || '');
@@ -2111,27 +2178,51 @@
         var a = inningsClub(m, ctx, inns[0]), b = inningsClub(m, ctx, inns[1]);
         if (!a || !b || a === b) return null;
         var ours = function (c) { return ctx.ours && isOurPlayer(ctx, c); };
-        var against = function (c) { return ours(c) ? [] : [det('against'), team(c)]; };
+        /* EVERY BAND SAYS WHO IS CHASING, AND NEVER NAMES US.
+         *
+         * The side that batted first is DEFENDING a total and the side batting is
+         * CHASING, and one of those two words is in every line — two clubs and "on
+         * top against" named the match without its shape. The defending side carries
+         * its total ("defending 200", gold: it is a total), the chasing side the
+         * chase. No possessives: "against Tring Park's chase" read the wrong way round.
+         *
+         * When the subject would be Wendover the subject goes, as on every other line
+         * ("Falling behind, Denham now favourites"); when we would be the object we
+         * are simply not named ("Denham back in the chase").
+         * > James's direction, 2026-10-01. */
+        var ua = ours(a), ub = ours(b);
+        var total = { cls: 'score', text: String(inns[0].runs || 0) };
+        // "v X" after a named subject is discretionary; after a dropped one it is what
+        // says which of our games this is, so it stays.
+        var vs = function (c, keep) {
+            if (ours(c)) return [];
+            var p = [det('v'), team(c)];
+            if (!keep) p.forEach(function (x) { x.drop = true; });
+            return p;
+        };
+        var defending = function (lead) {          // the side that batted first, on its way up
+            return ua ? [det(capitalise(lead)), det('defending'), total].concat(vs(b, true))
+                      : [team(a), det(lead), det('defending'), total].concat(vs(b));
+        };
         var head;
-        if (to === 3) head = [team(b), det('closing in on the'), ours(a) ? null : team(a), det('target')];
-        else if (to === 2 && from < 2) head = [team(b), det('now favourites')].concat(against(a));
-        else if (to === 2) head = [team(a), det('fighting back')].concat(against(b));
-        else if (to === 1 && from > 1) head = [team(b), det('\u2019s chase turns'), det(','),
-                                               team(a), det('now favourites')];
-        else if (to === 1) head = [team(b), det('back in the chase')].concat(against(a));
-        else head = [team(a), det('on top')].concat(against(b));
+        if (to === 3) head = ub ? [det('Closing in on the'), team(a), det('target')]
+                                : [team(b), det('closing in on the'), ua ? null : team(a), det('target')];
+        else if (to === 2 && from < 2) head = ub ? [det('Now favourites chasing'), team(a)]
+            : [team(b), det('now favourites')].concat(ua ? [det('in the chase')] : [det('chasing'), team(a)]);
+        else if (to === 2) head = defending('fighting back');
+        else if (to === 1 && from > 1) head = ub ? [det('Falling behind,'), team(a), det('now favourites')]
+            : ua ? [team(b), det('falling behind in the chase')]
+                 : [team(b), det('falling behind,'), team(a), det('now favourites')];
+        else if (to === 1) head = ub ? [det('Back in the chase')].concat(vs(a, true))
+                                     : [team(b), det('back in the chase')].concat(vs(a));
+        else head = defending('on top');
+        /* NO CHASE ARITHMETIC. "48 needed from 5 overs, 4 wickets in hand" is what the
+         * strip's scoreboard is showing beside it, so the band said it twice. A
+         * passage clause stays when there is one — what the last few overs were worth
+         * is not on the strip, and it is usually why the band moved. */
         var inn = inns[1];
         var why = passageClause(m, 1, balls(inn.overs), inn);
-        return say(head.concat([SEP, why ? det(why, true) : det(chaseSituation(st), true)]));
-    }
-    // "48 needed from 5 overs, 4 wickets in hand" — the balls only when the allotment
-    // is known (see live-chase.js), and counted in balls once it is down to five overs.
-    function chaseSituation(st) {
-        var from = st.balls != null
-            ? ' from ' + (st.balls <= 30 ? st.balls + ' ball' + (st.balls === 1 ? '' : 's')
-                                          : oversWord(st.balls)) : '';
-        return st.runs + ' needed' + from + ', ' + st.wkts + ' wicket' +
-               (st.wkts === 1 ? '' : 's') + ' in hand';
+        return say(head.concat(why ? [SEP, det(why, true)] : []));
     }
     /* WHICH CLUB AN INNINGS IS — by team id against the card's home and away where
      * the card has them (the division's PC card), else the innings' own club (RV
@@ -2286,8 +2377,52 @@
      * feed states — it states none — so it is a floor on the real figure, and a poll
      * lands every fifteen seconds, which makes the floor a tight one. Nothing is said
      * when the break began before we were watching. */
-    function resumePayload(m, ctx, sides, since, now) {
-        var mins = since ? Math.round((now - since) / 60000) : 0;
+    /* THE END OF THE INNINGS BREAK IS THE START OF THE CHASE, and that is the news —
+     * "Play resumes" is a rain delay's sentence, and after an innings break it said
+     * nothing a room did not already know.
+     *
+     *   Chenies & Latimer begin their chase of 241      (theirs, in our match)
+     *   The chase of 241 begins v Chenies & Latimer     (ours: never our own name)
+     *
+     * READ OFF THE FIRST INNINGS, not the second: the card can come off the break a
+     * poll before the chase's first over is in it, and the target and the side that
+     * must reach it are both already known from the innings that closed. Only for a
+     * match with one innings in the book — anything else is not the start of a
+     * chase, and falls back to the ordinary restart.
+     * > James's direction, 2026-10-01. */
+    function chaseStartPayload(m, ctx, why) {
+        var inns = (m && m.innings) || [];
+        if (!/innings/i.test(why || '') || !inns.length || inns.length > 2) return null;
+        if (inns.length === 2 && balls(inns[1].overs) > 6) return null;
+        var first = inns[0], chaser = sidesOf(m, ctx, first).other;
+        if (!chaser) return null;
+        // The first innings' total, never total plus one — see `chaseFigure`.
+        var target = chaseFigure(inns);
+        if (isOurPlayer(ctx, chaser)) {
+            var foe = sidesOf(m, ctx, first).bat;
+            return say([det('The chase of'), target, det('begins')]
+                       .concat(foe ? [det('v'), team(foe)] : []));
+        }
+        return say([team(chaser), det('begin their chase of'), target]);
+    }
+
+    /* THE FIGURE A CHASE IS CHASING: the first innings' TOTAL, not total plus one.
+     * "Chasing 247" is the score on the board the room has just watched made; 248 is
+     * a number nobody saw. One helper so every line that says it says the same one.
+     * > James's direction, 2026-10-01. */
+    function chaseFigure(inns) {
+        var first = inns && inns[0];
+        return first && first.runs != null ? { cls: 'score', text: String(first.runs) } : null;
+    }
+
+    /* TIME LOST IS A STOPPAGE'S, not a break's. Rain, bad light, the weather in
+     * general take time out of the game, and how much is the news of the restart.
+     * An innings break, tea, drinks are the game's own schedule: nothing was lost,
+     * and "8 minutes lost" after an innings break says something false.
+     * > James's observation, 2026-10-01 (SIM 16:03). */
+    var STOPPAGE_RE = /rain|weather|wet|shower|light|storm|lightning|hail/i;
+    function resumePayload(m, ctx, sides, since, now, why) {
+        var mins = since && STOPPAGE_RE.test(why || '') ? Math.round((now - since) / 60000) : 0;
         return say([det('Play resumes')].concat(whereParts(m, ctx, sides))
                    .concat(mins > 0
                        ? [SEP, det(mins + ' minute' + (mins === 1 ? '' : 's') + ' lost')] : []));
@@ -2418,7 +2553,7 @@
 
     /* THE STREAM IS UP.
      *
-     *   Wendover v Denham in TVCL Div 6C is being live streamed  ·  @WendoverCricketClub
+     *   Wendover v Denham in Div 6C TVCL is being live streamed  ·  @WendoverCricketClub
      *
      * The fixture, not a scoreline: at the moment a stream comes online the match may
      * be four minutes old, and a viewer deciding whether to go and watch wants to know
@@ -2469,7 +2604,7 @@
          * say which competition they are — so on a wall showing three divisions at
          * once "High Wycombe are playing Maidenhead & Bray" was a fixture with no
          * league attached. It is part of the same sentence rather than a group of
-         * its own: "in TVCL Div 6C" completes the clause, where a dot before it
+         * its own: "in Div 6C TVCL" completes the clause, where a dot before it
          * would make it a second fact.
          * > James's direction, 2026-09-28. */
         return say([team(home), det('are playing'), team(away),
@@ -2593,6 +2728,44 @@
      * Overs are omitted rather than faked when the feed has none: the PC card
      * sometimes carries a total and no over count, and "(0 ov)" would be a claim
      * about the innings rather than a gap in the feed. */
+    /* AN INNINGS THAT HAS CLOSED, IN THE PAST TENSE.
+     *
+     *   Gerrards Cross were bowled out for 181 v Haddenham       (the division)
+     *   Chenies & Latimer finished on 241/9                      (ours, their innings)
+     *   Bowled out for 181 v Chenies & Latimer                   (ours, our innings)
+     *
+     * PAST TENSE because by the time it is on the band the next innings has often
+     * begun and the strip is already showing its score: "Wendover 241/9 · Target
+     * 242" read as the state of the match, and it no longer was. It still repeats a
+     * figure the strip has shown, and that is the point of it — how an innings ended
+     * is the one line of the afternoon worth saying twice.
+     *
+     * HOW IT ENDED decides the verb: ten down is bowled out (and the score is the
+     * runs alone — "for 181", the wickets being the whole of the news), a declaration
+     * is a declaration, and anything else — the overs run out — finished on a score.
+     *
+     * The clubs follow the rest of the wall (`clubTag`): never ours. Our own innings
+     * drops its subject and keeps the opposition, which is what says which of our
+     * games it is; theirs in our match names them and nobody else; a division innings
+     * names both, the opponent discretionary.
+     * > James's direction, 2026-10-01. */
+    function closedPayload(m, ctx, inn) {
+        var sides = sidesOf(m, ctx, inn), club = sides.bat || '';
+        var allOut = (inn.wickets || 0) >= 10;
+        var verb = allOut ? 'bowled out for' : (inn.declared ? 'declared on' : 'finished on');
+        var fig = { cls: 'score', text: allOut ? String(inn.runs || 0)
+                                               : (inn.runs || 0) + '/' + (inn.wickets || 0) };
+        if (club && isOurPlayer(ctx, club)) {
+            return say([det(capitalise(verb)), fig]
+                       .concat(sides.other ? [det('v'), team(sides.other)] : []));
+        }
+        if (!club) return say(scoreParts(dropCC(inn.club || inn.side || ''), inn));
+        var foe = sides.other && !isOurPlayer(ctx, sides.other)
+            ? [det('v'), team(sides.other)].map(function (x) { x.drop = true; return x; })
+            : [];
+        return say([team(club), det((allOut ? 'were ' : '') + verb), fig].concat(foe));
+    }
+
     function scoreParts(club, inn) {
         return [team(club), { cls: 'score', text: (inn.runs || 0) + '/' + (inn.wickets || 0) },
                 inn.overs != null && inn.overs !== ''
@@ -2634,7 +2807,8 @@
     }
     function dropCC(name) {
         if (!name) return '';
-        var out = String(name).trim().replace(/\s+(CC|C\.C\.?|Cricket Club)$/i, '');
+        // ", Bucks" or "(Penn)" goes with it — PC's qualifier for a same-named club. See drop_cc.
+        var out = String(name).trim().replace(/\s+(CC|C\.C\.?|Cricket Club)(,\s*[^,]+|\s*\([^)]*\))?$/i, '');
         return out || String(name).trim();
     }
 
@@ -2993,11 +3167,11 @@
     /* A COUNTED NUMBER, as against an introduced one. `countWord` says "a four" because
      * one four is a thing that happened; "19 for a in the last 4 overs" is not English,
      * and neither is "needs a for his fifty". A wicket column and a run gap are both
-     * read as plain numbers — "for one", "needs six".
+     * read as plain numbers — "for one", "four down".
      *
      * THESE RUN TO TEN where the boundary counts above stop at three, and the reason is
      * what they count: a run gap and a wicket column are small by nature and land in
-     * the middle of a sentence ("needs six for a fifty", "have lost four for 12"),
+     * the middle of a sentence ("have lost four for 12"),
      * where a numeral reads as a statistic dropped into prose. A boundary count is
      * already sitting beside a figure. */
     var COUNTED_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six',
@@ -3110,7 +3284,7 @@
      *
      * Under ten runs it stands down. "3 together" is arithmetic, not a story, and a
      * stand that young is better described by the over it is part of. */
-    /* WHICH PARTNERSHIP IT IS — "opening", "second wicket", "third wicket".
+    /* WHICH PARTNERSHIP IT IS — "opening", "2nd wicket", "3rd wicket".
      *
      * A number of wickets down is a position; the partnership it names is a THING, and
      * one every follower of the game already counts in these words. It costs a word
@@ -3119,12 +3293,17 @@
      * Read off the wickets that have fallen, which is exact: nobody out is the opening
      * stand, one down is the second-wicket stand. Past the tenth there is nothing to
      * name, and the plain word takes over.
-     * > James's direction, 2026-09-29. */
-    var STAND_ORDINALS = ['opening', 'second wicket', 'third wicket', 'fourth wicket',
-                          'fifth wicket', 'sixth wicket', 'seventh wicket',
-                          'eighth wicket', 'ninth wicket', 'last wicket'];
+     * > James's direction, 2026-09-29.
+     *
+     * THE MIDDLE ONES ARE NUMERALS — "6th wicket", not "sixth wicket" — read off the
+     * band as a figure rather than a word. "Opening" and "last wicket" keep their
+     * words: they are names for those stands, not counts.
+     * > James's direction, 2026-10-01. */
     function standName(inn) {
-        return STAND_ORDINALS[(inn && inn.wickets) || 0] || 'batting';
+        var w = (inn && inn.wickets) || 0;
+        if (w === 0) return 'opening';
+        if (w === 9) return 'last wicket';
+        return w < 9 ? ordinal(w + 1) + ' wicket' : 'batting';
     }
     var STAND_MIN = 10;
     function partnershipRuns(inn) {
@@ -3519,20 +3698,55 @@
      * NO GOLD ON THE FIGURE. It is a passage's runs, not a total — see the gold rule
      * on `batFig`. The same reason the squeeze's economies are in the plain type.
      * > James's direction, 2026-09-29. */
+    /* A PASSAGE OF PLAY, in the score line's shape.
+     *
+     *   Tring Park on a charge chasing Chesham  ·  27 in 3 overs  ·  A Quill 34* …
+     *   Being squeezed v Denham  ·  9 in 4 overs  ·  R Duff 1.2  F Pardoe 2.4 an over
+     *   Denham collapse losing four for 12 in 3 overs  ·  W Vane 3–25
+     *
+     * WHO, WHAT KIND, AGAINST WHOM — then the figures. The charge and the squeeze used
+     * to put the runs in the lead ("on a charge scoring 27 in 3 overs") and name
+     * nobody they were against; they now read like the score line: the verb of the
+     * innings ("chasing" takes its object, a first innings is "v"), a dot, and the
+     * passage's own arithmetic as the next clause.
+     * > James's direction, 2026-10-01 (SIM 16:25).
+     *
+     * The opposition follows the wall's rule (`clubTag`): never ours. Our own innings
+     * drops its subject; theirs in our match is "chasing" with no object, the hole
+     * being the lesser evil, as the score line has it. The COLLAPSE keeps its own
+     * sentence — its figures are the news, so they stay in the lead. */
     function surgePayload(s, inn, sides, ours, ctx, inns) {
         var chase = chasing(inns), over = ' in ' + oversWord(s.balls);
         // The subject goes when the subject is us — the score line's rule, and for the
-        // same reason: the opposition tag below says which match this is.
+        // same reason: the opposition tag says which match this is.
         var mine = isOurPlayer(ctx, sides.bat);
         var subj = mine ? [] : [team(sides.bat || '')];
-        var lead = s.face === 'collapse'
-            ? subj.concat([det(mine ? 'Collapse losing' : 'collapse losing'),
-                           det(countedWord(s.wkts) + ' for ' + s.runs + over)])
-            : s.face === 'squeeze'
-                ? subj.concat([det(mine ? 'Being squeezed' : 'are being squeezed'),
-                               det((chase ? 'chasing ' : 'scoring ') + s.runs + over)])
-                : subj.concat([det(mine ? 'On a charge' : 'on a charge'),
-                               det((chase ? 'chasing ' : 'scoring ') + s.runs + over)]);
+        var foeOurs = !sides.other || isOurPlayer(ctx, sides.other);
+        var against = foeOurs ? []
+            : chase ? [det('chasing'), team(sides.other)]
+                    : clubTag(ctx, '', sides.other);
+        var lead, figs = [];
+        if (s.face === 'collapse') {
+            lead = subj.concat([det(mine ? 'Collapse losing' : 'collapse losing'),
+                                det(countedWord(s.wkts) + ' for ' + s.runs + over)])
+                       .concat(clubTag(ctx, '', sides.other));
+        } else {
+            var word = s.face === 'squeeze' ? (mine ? 'Being squeezed' : 'being squeezed')
+                                            : (mine ? 'On a charge' : 'on a charge');
+            /* Theirs in our match, chasing us: the TARGET is the object, since we
+             * are never named — "Chenies & Latimer on a charge chasing 241". Gold, as
+             * the chase-start line sets it.
+             * > James's direction, 2026-10-01. */
+            var hole = chase && foeOurs && !mine ? [det('chasing'), chaseFigure(inns)] : [];
+            lead = subj.concat([det(word)]).concat(hole).concat(against);
+            /* THE WICKETS IN THE PASSAGE, said as the passage's — "for the loss of one
+             * wicket". It used to be a clause of its own, "one down", which read as the
+             * innings' total beside a scoreboard showing five.
+             * > James's observation, 2026-10-01 (SIM poll 61). */
+            figs = [SEP, det(s.runs + over + (s.wkts
+                ? ' for the loss of ' + countedWord(s.wkts) + ' wicket' + (s.wkts === 1 ? '' : 's')
+                : ''))];
+        }
         /* WHOSE PASSAGE IT IS. A charge is the batters' and a squeeze is the bowlers';
          * a COLLAPSE is the bowlers' too — the men in are the ones it happened to, and
          * naming them under the word "collapse" reads as an accusation where the
@@ -3540,11 +3754,7 @@
         var pair = creasePair(inn);
         var clause = s.face === 'charge' ? pairParts(pair) : bowlerParts(s, inn, s.face);
         if (!clause.length && s.face === 'collapse') clause = pairParts(pair);
-        if (!clause.length && s.wkts && s.face !== 'collapse') {
-            clause = [det(countedWord(s.wkts) + ' down', true)];
-        }
-        return say(lead.concat(mine ? clubTag(ctx, '', sides.other) : [])
-                       .concat([SEP]).concat(clause),
+        return say(lead.concat(figs).concat([SEP]).concat(clause),
                    (s.face === 'charge' && pair.length) ? { who: pair[0].name } : null);
     }
     /* THE BOWLERS A PASSAGE BELONGS TO, and what to say about each.
@@ -3687,8 +3897,8 @@
                 : [team(club), det('are ' + verb)];
             /* AND THE SIDE ON THE OTHER END OF IT. A chase names them either way —
              * "chasing" is transitive and an object-less one is a sentence with a hole
-             * in it — except when they are us, where the hole is the lesser evil
-             * (> James's direction): "Chenies & Latimer are chasing" and nothing more.
+             * in it — and when they are us, the first innings' total stands in for
+             * them: "Chenies & Latimer are chasing 247".
              *
              * A first innings names them when there is no pair to identify the match
              * (the division's line) or when the subject has just been dropped, so our
@@ -3700,6 +3910,11 @@
                 var tag = chasing(inns) ? [team(other)] : [det('v'), team(other)];
                 if (pr.length) tag.forEach(function (x) { if (x) x.drop = true; });
                 lead = lead.concat(tag);
+            } else if (chasing(inns) && !isOurPlayer(ctx, club)) {
+                /* THE HOLE FILLED: chasing us, the first innings' total is the object
+                 * — "Chenies & Latimer are chasing 247" — as on every other chase line
+                 * (`chaseFigure`). > James's direction, 2026-10-01. */
+                lead = lead.concat([chaseFigure(inns)]);
             }
             clause = (d.fours > 0 || d.sixes > 0)
                 ? capitalise(boundaryPhrase(d.fours, d.sixes))
@@ -4398,11 +4613,18 @@
             lead.push(det(chasing(inns) ? 'chasing' : (home ? 'hosting' : 'at')));
             lead.push(team(sides.other));
         } else if (sides.other && chasing(inns)) {
+            /* CHASING US: the target is the object, since we are never named — the
+             * chase-start and passage lines' rule. Gold: a total. */
             lead.push(det('chasing'));
+            lead.push(chaseFigure(inns));
         }
+        /* THE OVERS IN THE SAME BREATH: "with 21 overs left" belongs to the moment
+         * the mark was reached, and as a clause of its own at the end of the line it
+         * read as a separate fact about the chase now.
+         * > James's direction, 2026-10-01. */
         var left = oversLeft(inns);
-        return say(lead.concat([SEP]).concat(topScorers(inn, mine ? 2 : 1))
-                       .concat(left ? [SEP, det(left)] : []));
+        if (left) lead.push(det('with ' + left));
+        return say(lead.concat([SEP]).concat(topScorers(inn, mine ? 2 : 1)));
     }
 
     /* THE LAST `n` MEN OUT, verified as his. The hat-trick's rule generalised: the
@@ -4501,7 +4723,7 @@
 
     /* ---- CLOSING IN ON A MILESTONE -------------------------------------------
      *
-     *   J Harrington 44  ·  needs six for his fifty  ·  Wendover 104/2
+     *   J Harrington needs 6 for a fifty  ·  J Harrington 44* · A Quill 12*
      *
      * WORDING PROVISIONAL, like the rest of the family.
      *
@@ -4527,9 +4749,14 @@
         var gap = mark - (b.runs || 0);
         /* HIS OWN FIGURE HAS GONE FROM THE FRONT: the pair at the end carries it, with
          * the star, and "A Quill 44 · needs six" was the same number twice under a
-         * subtraction. What is left is one sentence — who, how far, and for whom. */
+         * subtraction. What is left is one sentence — who, how far, and for whom.
+         *
+         * THE GAP IS A NUMERAL, not `countedWord`: "needs 6", not "needs six". It is
+         * the one figure the line exists to give, and it reads off the band faster as
+         * a number. Plain type, not gold — it is a gap, not a total.
+         * > James's direction, 2026-10-01. */
         return say([{ cls: 'bat', text: b.name },
-                    det('needs ' + countedWord(gap) + ' for a ' + MARK_WORDS[mark])]
+                    det('needs ' + gap + ' for a ' + MARK_WORDS[mark])]
                    .concat(clubTag(ctx, sides.bat, sides.other))
                    .concat([SEP]).concat(pairOf(inn)),
                    { who: b.name });

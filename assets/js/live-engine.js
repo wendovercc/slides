@@ -198,6 +198,9 @@
           // The baked division fixtures, so an event about somebody else's match can
           // name the clubs and the ground the lean card never carries.
           leagueById: leagueCfgById,
+          // The strip's baked division views, for which of OUR sides a division
+          // match belongs to (the gold tile — see `tileOf` in live-events.js).
+          views: ladderViews || [],
           // Where a stream can be watched. See `stream_started` in live-events.js.
           youtube: ytChannel,
           /* Lets the extractor's clip join reach back past this poll — footage lags

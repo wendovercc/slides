@@ -59,10 +59,9 @@
         html, body { width: 100vw; height: 100vh; overflow: hidden; background: transparent;
             font-family: 'Lato', -apple-system, Arial, sans-serif; color: var(--text); }
 
-        /* The column reveals with the rest of the live chrome. It carries no header:
-           what names the match is the FOOTER at its bottom end (`.foot`), sitting
-           directly on the gold tile below, which now carries the event type rather
-           than the team. */
+        /* The column reveals with the rest of the live chrome. Its head (`.head`)
+           names the division; WHOSE match it is — our XI, or somebody else's division
+           — is the gold tile directly below the column, in live-ticker.html. */
         .strip {
             position: absolute; inset: 0; display: flex; flex-direction: column;
             background: var(--matte);
@@ -104,8 +103,11 @@
            bottom edge instead, onto the ticker's gold rule, which is where the L
            joins anyway.
            > James's direction, 2026-09-28.
-           The SCOREBOARD keeps its footer: its two tiles name the clubs and the XIs
-           but nothing there says which division they are playing in. */
+           The SCOREBOARD has the same head, the division alone: its two tiles name
+           the clubs and the XIs but nothing there says which division they are
+           playing in. It used to say so in a footer, until the gold tile took over
+           naming the match and the footer had nothing left that the top couldn't say.
+           > James's direction, 2026-10-01. */
         .head {
             flex-shrink: 0; padding: 0.7vh 0.4vh 0.55vh;
             border-bottom: 0.15vh solid rgba(255,255,255,0.18);
@@ -268,7 +270,7 @@
            weight, AS IT IS WRITTEN. No uppercasing and no tracking — a club has a name,
            not a label, and "Penn & Tylers Green CC" in caps is both wider and less
            recognisable than the name on its own scorebook. The strip's other short
-           strings (the TLA, the captions, the footer) stay uppercase; these two lines
+           strings (the TLA, the captions, the head) stay uppercase; these two lines
            belong with the board's, not with the chrome's.
            > James's direction, 2026-09-28.
            WRAPS TO TWO LINES rather than ellipsing, since "Penn & Tylers Green CC" has
@@ -376,62 +378,6 @@
            which have no other way to say it. */
         .stat-tile.line.gold.done .cval { color: var(--gold); }
 
-        /* THE FOOTER: whose match this panel is about, in the band directly above the
-           gold tile.
-
-           IT CARRIES DIFFERENT THINGS ON THE TWO PANELS. The ladder's is the XI over
-           the division, as it always was — ten three-letter abbreviations name nobody.
-           The SCOREBOARD's is the DIVISION ALONE (`.foot.solo`): its own team tiles
-           now spell out the club and the XI, so repeating the XI here was the same
-           fact twice in an 8vw band. It was tried at the TOP of the scoreboard, over
-           the figures the way the match-day board heads its tiles, and put back —
-           the bottom is where the L joins and where the attribution belongs.
-           > James's direction, 2026-09-28.
-
-           The strip used to have no header of any kind, deliberately — the gold tile
-           below it named the featured XI and its division for both surfaces. The tile
-           now carries the EVENT TYPE instead (see live-ticker.html), so the
-           attribution comes back here.
-
-           BOTTOM, not top, and that is the whole point of it. At the top of a
-           full-height column it would sit the better part of a screen away from the
-           tile and the bar it belongs with, and read as a separate object; at the
-           bottom the three parts of the L are one cluster in the corner, and the
-           attribution lands on both paths out of it — up the side and along the
-           bottom. It also puts the naming block at the terminus of the gold spine,
-           where the L actually joins.
-
-           Fixed height and `flex-shrink: 0`, like `.panel-cap`, so it takes no share
-           of the tile flex: ten league tiles lose a little height rather than the
-           footer being squeezed. Solid on the matte with a hairline over it so it
-           reads as the foot of the column and not as a gap in it. */
-        .foot {
-            flex-shrink: 0; padding: 0.55vh 0.4vh 0.7vh;
-            border-top: 0.15vh solid rgba(255,255,255,0.18);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 0.2vh; text-align: center; overflow: hidden;
-        }
-        .foot-team {
-            font-size: 1.7vh; font-weight: 900; letter-spacing: 0.04em;
-            text-transform: uppercase; line-height: 1.05;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        /* Long XI names — "U11 Incredibles" — step down, exactly as the gold flag did
-           when it was carrying them. The binding constraint is the longest WORD,
-           which cannot be broken. */
-        .foot.is-long .foot-team { font-size: 1.35vh; letter-spacing: 0.01em; }
-        .foot-div {
-            font-size: 1.25vh; font-weight: 700; letter-spacing: 0.05em;
-            color: var(--muted); opacity: 0.75; line-height: 1.1;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .foot-div:empty { display: none; }
-        /* The division standing alone on the scoreboard's footer: a step up, since it
-           is the only line there and no longer a caption under a name. */
-        .foot.solo .foot-div { font-size: 1.4vh; letter-spacing: 0.06em; opacity: 0.85; }
-
         /* Chase-panel caption. Only shown once the match is over, naming the block
            so final numbers can't read as a chase still in progress — muting alone
            would be ambiguous (it looks like stale data). Fixed height like the
@@ -482,14 +428,7 @@
            together into one recess; the whole point of the pale shade is that light
            shows all the way round each of them. */
         .sbox { display: flex; flex-direction: column; gap: 0.7vh; min-height: 0;
-            padding: 0.7vh; background: var(--housing);
-            /* IT RUNS INTO THE FOOTER. The column puts 0.4vh between every pair of its
-               children, which is right between two ladder tiles and wrong here: it left
-               a thread of matte between the bottom of the scorebox and the rule over
-               the division, so the board looked as though it had come loose from the
-               thing naming it. Pulled back to nothing, the housing meets that rule and
-               the footer reads as the scoreboard's own caption. */
-            margin-bottom: -0.4vh; }
+            padding: 0.7vh; background: var(--housing); }
         /* The two blocks — one per side. They carry the flex shares and nothing else
            now that the housing is the box's: a wrapper each is still what keeps every
            tile one width and lets a side take exactly the height its own figures need.
@@ -841,12 +780,6 @@
                '>' + inner + '</div>';
     }
 
-    /* The footer: which match the panel above is about. Its content mirrors the
-       decomposition in live-events.js — our match names the XI over the division,
-       and a match of someone else's would name the division alone, since which two
-       clubs is answered by the panel's own tiles. Every view the strip holds today is
-       one of OURS (the views are baked per Wendover match), so the second case only
-       arrives when the strip starts taking its subject from the event stream. */
     /* WHAT A SCOREBOARD TILE IS LABELLED WITH: the club, and then the XI under it —
        `.sb-team` and `.sb-desig` from the match-day tile's head, which is where both
        lines and their treatment come from.
@@ -870,7 +803,7 @@
        writes it; this trims the copy on its way to the tile and nothing else. */
     function dropCC(name) {
         var out = String(name == null ? '' : name).trim()
-                    .replace(/\s+(CC|C\.C\.?|Cricket Club)$/i, '');
+                    .replace(/\s+(CC|C\.C\.?|Cricket Club)(,\s*[^,]+|\s*\([^)]*\))?$/i, '');
         return out || String(name == null ? '' : name).trim();
     }
     function clubLabel(t) { return dropCC(t.club || t.tla || ''); }
@@ -893,9 +826,7 @@
         });
         return String(label || '').length > maxChars || longest > maxWord;
     }
-    // The footer's bounds: one line at 1.7vh, clamped to two.
-    function isLongLabel(label) { return tooWide(label, 9, 6); }
-    /* The SCOREBOARD tile's bounds, and deliberately looser than the footer's — these
+    /* The SCOREBOARD tile's bounds, and deliberately looser than the old footer's — these
        are smaller faces with two lines each to wrap into, which measures out at about
        14 characters a line. Most clubs and most XIs sail inside them ("DENHAM CC",
        "1ST XI"); what does not is a long club ("Penn & Tylers Green CC") or a junior
@@ -910,7 +841,7 @@
         });
     }
     /* THE COMPETITION, ALWAYS AS THE VIEW WRITES IT. `name_short` is the gold flag's
-       own shortener — "TVCL Div 9E", league and division in the width this band
+       own shortener — "Div 9E TVCL", league and division in the width this band
        actually has — and it is baked once per view, so every match in that view is
        entitled to it, ours or anyone else's. The event's own `division` is the raw
        league string ("Division 9E"), which has no league in it and does not fit the
@@ -920,31 +851,16 @@
     function divisionOf(view, ev) {
         return view.name_short || view.name || (ev && ev.match && ev.match.division) || '';
     }
-    /* WHAT THIS COLUMN IS. Two lines: the division, and the fact that these are its
-       standings. See `.head` for why the division moved up here from the footer. */
-    function ladderHead(view) {
+    /* WHAT THIS COLUMN IS, at the top of it. The ladder's head is two lines, the
+       division and the fact that these are its standings; the scoreboard's is the
+       division alone, since a board needs no caption saying it is one. See `.head`
+       for why the division lives up here and not in a footer. */
+    function columnHead(view, what) {
         var div = divisionOf(view, showing);
+        if (!div && !what) return '';
         return '<div class="head">' +
                (div ? '<span class="head-div">' + esc(div) + '</span>' : '') +
-               '<span class="head-what">League table</span></div>';
-    }
-    function footer(view, ev, opt) {
-        /* WHOSE MATCH, from the event when there is one. Ours names the XI over the
-           division; somebody else's names the division alone, because which two
-           clubs is answered by the panel's own marked tiles and two club names have
-           never fitted 8vw — and the ticker has just said them anyway. */
-        var ours = !ev || !ev.match || ev.match.ours;
-        var team = ours ? (view.team_label || '') : divisionOf(view, ev);
-        var div = ours ? divisionOf(view, ev) : '';
-        /* THE SCOREBOARD DROPS THE XI and keeps the division: its team tiles name the
-           club and the side already. Somebody else's match has no XI line to drop —
-           the division is already all it was carrying — so the two cases land on the
-           same string, which is the point of `divisionOf`. */
-        if (opt && opt.divOnly) { div = div || team; team = ''; }
-        if (!team && !div) return '';
-        return '<div class="foot' + (team ? (isLongLabel(team) ? ' is-long' : '') : ' solo') + '">' +
-               (team ? '<span class="foot-team">' + esc(team) + '</span>' : '') +
-               '<span class="foot-div">' + esc(div) + '</span></div>';
+               (what ? '<span class="head-what">' + esc(what) + '</span>' : '') + '</div>';
     }
 
     /* One full-size figure tile (same footprint as a team tile): value over caption.
@@ -1498,7 +1414,15 @@
             /* A block with figures in it takes its share of the column; one without
                takes only its content, so the side watching can never hold height the
                side batting could be using. */
-            var f = g.flex ? r2(g.flex) : '0 0 auto';
+            /* The BASIS IS THE BLOCK'S OWN CONTENT, and the share is only of what is
+               left. At a basis of zero the heading tile's real height was never
+               reserved: a two-line club ("Chenies & Latimer") grew the badge past
+               the block's share and the tile under it — "TO BAT" — was squeezed
+               until it clipped. The figure tiles have no content basis of their own
+               (`.tile` is `flex: 1`, `min-height: 0`), so this reserves the badge
+               and the gaps and nothing else.
+               > James's observation, 2026-10-01. */
+            var f = g.flex ? r2(g.flex) + ' 1 auto' : '0 0 auto';
             return '<div class="blk" style="flex:' + f + '">' + g.html + '</div>';
         }
         var used = box.used + other.used;
@@ -1563,32 +1487,34 @@
                event IS our match, since we are already one of its two sides.
                > James's direction, 2026-09-28. */
             rows.forEach(function (r) {
-                r.focus = !!focus[String(r.key)] || !!r.ours;
+                /* EVERY ONE OF OURS, not just the featured side: a division with two
+                   of our teams expands both on somebody else's match (`wendover` is
+                   any of our sides — see `_strip_league_view` in build.py).
+                   > James's direction, 2026-10-01. */
+                r.focus = !!focus[String(r.key)] || !!r.ours || !!r.wendover;
             });
             // Wrapped, not passed bare: `map` would hand the INDEX to tile()'s
             // second argument, which is now the dialect.
             body = rows.length
-                ? ladderHead(view) + rows.map(function (r) { return tile(r); }).join('')
+                ? columnHead(view, 'League table') + rows.map(function (r) { return tile(r); }).join('')
                 : '';
         } else if (panel === 'score') {
             body = scorePanel(view, fx);
         }
-        /* 'none' leaves the band to the footer alone — an event with no match behind
+        /* 'none' leaves the band to the head alone — an event with no match behind
            it, or one whose match this strip has no view for. Deliberately not a
            collapse: the L is still describing something, and pulling the column out
            from under the tile would break the frame mid-sentence. */
         if (!body && panel !== 'none') { root.classList.remove('show'); lastKey = ''; return; }
 
-        // The panel fills whatever is left above the footer, which is anchored to the
-        // bottom. That way the edge that MOVES as the panel's content changes is its
-        // top — furthest from the corner the eye is reading. The scoreboard's footer
-        // is the division alone; the ladder's is the XI over it.
-        /* THE LADDER HAS NO FOOTER. Its head carries the division and our own row
-           carries the club and the XI, so there is nothing left for a band at the
-           bottom to say — see `.head`. The scoreboard still needs one: its tiles name
-           two clubs and neither says which division they are in. */
-        var html = body + (panel === 'ladder' ? ''
-                           : footer(view, ev, { divOnly: panel === 'score' }));
+        /* NO PANEL HAS A FOOTER NOW. The scoreboard kept one — the division, since
+           its tiles name two clubs and neither says which division they are in — until
+           the gold tile below it took over naming the match. With the XI (or, for
+           somebody else's game, the division) in the tile, the division goes to the
+           TOP of the scoreboard exactly as it already sits at the top of the ladder,
+           so the two panels head the column the same way.
+           > James's direction, 2026-10-01. */
+        var html = panel === 'ladder' ? body : columnHead(view, '') + body;
         if (html === lastKey) return;   // nothing changed — leave the DOM (and its transitions) alone
         lastKey = html;
         var before = tilePositions();

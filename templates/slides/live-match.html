@@ -124,7 +124,7 @@
                     {% if slide._set_title %}<div class="reel-tag-kicker">{{ slide._set_title }}</div>{% endif %}
                     <div class="reel-tag-fixture">
                         <span class="rt-team">{{ slide._set_subtitle }}</span>
-                        {% if slide._set_opp_club %}<span class="rt-vs">vs</span><span class="rt-opp">{{ slide._set_opp_club }}</span>{% endif %}
+                        {% if slide._set_opp_club %}<span class="rt-vs">vs</span><span class="rt-opp">{{ slide._set_opp_club | drop_cc }}</span>{% endif %}
                     </div>
                     <div id="lm-reel-label" class="reel-tag-label" style="display:none"></div>
                 </div>

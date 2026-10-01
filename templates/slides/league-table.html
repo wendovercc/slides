@@ -84,7 +84,8 @@
             <div class="league-grid row{% if is_highlight %} highlight{% endif %}">
                 {% for key, label in table.headings_list %}
                     {% if key == 'column_1' %}
-                        <span class="name">{{ row[key] }}</span>
+                        {%- set _np = row[key].split(' - ', 1) %}
+                        <span class="name">{{ _np[0] | drop_cc }}{% if _np|length > 1 %} - {{ _np[1] }}{% endif %}</span>
                     {% elif label|lower == 'pts' %}
                         <span class="pts">{{ row[key] }}</span>
                     {% else %}

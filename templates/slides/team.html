@@ -625,7 +625,7 @@
                         {% for key, label in table.headings_list %}
                             {% if key == 'column_1' %}
                                 {% set _np = row[key].split(' - ', 1) %}
-                                <span class="name">{{ _np[0] }}{% if _np|length > 1 %}<span class="team-desig">{{ _np[1] }}</span>{% endif %}</span>
+                                <span class="name">{{ _np[0] | drop_cc }}{% if _np|length > 1 %}<span class="team-desig">{{ _np[1] }}</span>{% endif %}</span>
                             {% elif label|lower == 'pts' %}
                                 <span class="pts">{{ row[key] }}</span>
                             {% else %}
@@ -665,12 +665,12 @@
                                 {% endif %}
                             </div>
                             <div class="strip-opp">
-                                {{ r.opp_club_name }}{% if r.opp_team_name %}<span class="opp-sub">{{ r.opp_team_name }}</span>{% endif %}
+                                {{ r.opp_club_name | drop_cc }}{% if r.opp_team_name %}<span class="opp-sub">{{ r.opp_team_name }}</span>{% endif %}
                             </div>
                             {% for inn in r.innings %}
                                 {% if inn.score %}
                                 <div class="strip-score">
-                                    <span class="inn-team">{{ inn.team }}</span>
+                                    <span class="inn-team">{{ inn.team | drop_cc }}</span>
                                     <span class="inn-score">{{ inn.score }}</span>
                                 </div>
                                 {% endif %}
@@ -716,7 +716,7 @@
                                 {% endif %}
                             </div>
                             <div class="fix-opp">
-                                {{ f.opp_club_name }}{% if f.opp_team_name %}<span class="opp-sub">{{ f.opp_team_name }}</span>{% endif %}
+                                {{ f.opp_club_name | drop_cc }}{% if f.opp_team_name %}<span class="opp-sub">{{ f.opp_team_name }}</span>{% endif %}
                             </div>
                             {% if f.ground_name %}
                             <div class="fix-where">

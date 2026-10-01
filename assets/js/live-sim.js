@@ -127,7 +127,7 @@
      * afternoons that have to be in every run. */
     var DAY = {
         ours: [
-            { pc_id: 7400001, team_name: '1st XI', competition_short: 'TVCL Div 4A',
+            { pc_id: 7400001, team_name: '1st XI', competition_short: 'Div 4A TVCL',
               our_club: 'Wendover CC', opposition: 'Chalfont St Peter CC', is_home: true,
               streamed: true, allot: 45, start: at('13:00'), publishAfter: mins(25),
               seed: 17,
@@ -146,7 +146,7 @@
             // by identity breaks on one of the two, so one run covers both.
             // A hundred needs an innings with enough runs in it to hold one, which a
             // 200-run chase does not — hence the beat lives on this side of the card.
-            { pc_id: 7400002, team_name: '2nd XI', competition_short: 'TVCL Div 6C',
+            { pc_id: 7400002, team_name: '2nd XI', competition_short: 'Div 6C TVCL',
               our_club: 'Wendover CC', opposition: 'Amersham CC', is_home: false,
               weBatFirst: true,
               streamed: false, allot: 40, start: at('13:15'), publishAfter: mins(8),
@@ -173,26 +173,26 @@
         // the book that posts a result at the close, and one we cannot read at all.
         league: [
             { match_id: 7410001, home: 'Chesham CC', away: 'Tring Park CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('13:00'), seed: 41 },
+              competition: 'Div 6C TVCL', allot: 40, start: at('13:00'), seed: 41 },
             { match_id: 7410002, home: 'Aylesbury Town CC', away: 'Berkhamsted CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('12:45'), seed: 53,
+              competition: 'Div 6C TVCL', allot: 40, start: at('12:45'), seed: 53,
               beats: { rainFrom: at('14:15'), abandon: true } },
             // SYNCED IN LUMPS. Somebody scoring on paper and typing it in at the
             // drinks break: the figures are real but stand still for half an hour at
             // a time, which is what walks a division tile through fresh -> aged ->
             // stale and back. The commonest kind of league score there is.
             { match_id: 7410003, home: 'Great Missenden CC', away: 'Wycombe House CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('12:55'), seed: 67,
+              competition: 'Div 6C TVCL', allot: 40, start: at('12:55'), seed: 67,
               beats: { coarseEvery: 9 } },
             // SCORED IN THE BOOK. The card exists all afternoon and never carries an
             // innings; a result appears at the close because somebody posts one.
             { match_id: 7410004, home: 'Flackwell Heath CC', away: 'Hazlemere CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('13:10'), seed: 79,
+              competition: 'Div 6C TVCL', allot: 40, start: at('13:10'), seed: 79,
               silent: true, resultOnly: true },
             // A MATCH WE CANNOT READ AT ALL — the per-match fetch failed, which
             // pc.mjs degrades to a `no-feed` card rather than failing the batch.
             { match_id: 7410005, home: 'Chalfont St Giles CC', away: 'Holmer Green CC',
-              competition: 'TVCL Div 6C', allot: 40, start: at('13:00'), seed: 91,
+              competition: 'Div 6C TVCL', allot: 40, start: at('13:00'), seed: 91,
               noFeed: true }
         ]
     };
@@ -1390,6 +1390,7 @@
                     return Object.assign({}, base, {
                         pc_id: m.pc_id,
                         team_name: m.team_name || base.team_name,
+                        team_short: m.team_short || m.team_name || base.team_short || base.team_name,
                         competition_short: m.competition_short || m.competition || base.competition_short,
                         our_club: m.our_club || base.our_club,
                         opposition: m.opposition || base.opposition,

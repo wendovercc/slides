@@ -113,7 +113,7 @@ while it is up.
 | `five_for` | 90 | 15m | 7m | profile | bowler's wickets crossing 5 |
 | `match_finished` | 88 | 45m | 5m | ladder | `complete` false→true, and `final` false→true |
 | `abandoned` | 84 | 45m | 10m | ladder | result text matching abandon/no result/wash |
-| `innings_closed` | 74 | 15m | 5m | score | a new innings appears — **this is when a target exists** |
+| `innings_closed` | 74 | 15m | 5m | ladder | a new innings appears, **or an innings break begins** (a side that bats its overs out is not all out, so the break is the card's only word for it). Never with a score line in the same poll, which would retire it unseen |
 | `on_a_hat_trick` | 76 | 2m | never | profile | 2 balls and 2 wickets — **retracted, not merely aged** |
 | `approaching` | 46 | 5m | never | profile | a batter entering the last 10 before 50 or 100 |
 | `collapse` | 72 | 12m | 5m | score | 3 wickets inside 6 overs |
@@ -643,8 +643,8 @@ events already in the store.
 ### Closing in on a milestone — forward-looking, and safe about it
 
 ```
-J Harrington 44  ·  needs six for his fifty     ·  Wendover 104/2
-W Fairhead 94    ·  needs six for his hundred   ·  Wendover 202/5
+J Harrington 44  ·  needs 6 for his fifty       ·  Wendover 104/2
+W Fairhead 94    ·  needs 6 for his hundred     ·  Wendover 202/5
 ```
 
 The second type that looks forward, and a far safer one than `on_a_hat_trick`: "he needs
@@ -1645,14 +1645,21 @@ by *kind of information*, and each surface always does the same job:
 
 | surface | carries |
 |---|---|
-| **Gold tile** — bottom left | the **type**: what kind of thing just happened |
+| **Gold tile** — bottom left | **whose match**: our XI, or the division for somebody else's |
 | **Ticker** — the bottom bar | the **text**: the event description |
-| **Strip** — the side bar | **one panel**, chosen by the type — over a **footer** naming whose match it is |
+| **Strip** — the side bar | **one panel**, chosen by the type — under a **head** naming the division |
 | **Flash** — the slide's box | the **footage**, when the event has any |
 
 Read out of the corner it is one sentence either way: along the bottom, `WICKET` →
 "Harrington bowled Duff 62"; up the side, `WICKET` → the chase it just dented, over
 "1st XI · TVCL Div 6C".
+
+> **SUPERSEDED 2026-10-01.** The gold tile names the match again: our XI ("1st XI")
+> on our games, the division's short form ("TVCL Div 6C") on everybody else's. The
+> strip's footer is gone; the division heads the scoreboard exactly as it heads the
+> ladder. The band's sentences already stand on their own (see Open questions), so the
+> type in the tile was the same news twice. The section below is kept as the history
+> of the decision it reverses.
 
 ### The tile carries the type, and that is a change from v1
 
@@ -1895,7 +1902,7 @@ division's order and each row's arrow between calls.
 
 | type | fires when | line |
 |---|---|---|
-| `ladder_expected` (46, "On course") | a row's arrow appears or changes (direction, places or projected rank) and has **held for `LADDER_HOLD_MS` (2 min)** | `If it stays this way · Haddenham move up to 3rd, above Chesham` |
+| `ladder_expected` (46, "On course") | a row's arrow appears or changes (direction, places or projected rank) and has **held for `LADDER_HOLD_MS` (2 min)** | `If it stays this way, Haddenham move up to 3rd, above Chesham` — only when the side and every side it crosses is priced — a chase on, or a result (or not playing). The ARROW obeys the same rule (`ladder()` in live-ladder.js), so a placeholder side silences both |
 | `ladder_shift` (60, "Ladder move") | the committed order changes — under the barrier rule this can be when the OTHER game finishes | `Wendover move up to 4th, above Hurley and Maidenhead Royals` |
 
 - **One event per switch**: said from the side going UP, naming whom it passes; our own
@@ -2655,8 +2662,8 @@ Nothing is baked into it, so it is honestly empty on a day with no cricket.
 > authority for the exact text until this page is re-levelled. The rules that came out
 > of it, which any new type must follow:
 >
-> - **The sentence stands on its own.** The gold tile goes back to the team and
->   division before this ships, so no line may lean on it to name the event: a fifty
+> - **The sentence stands on its own.** The gold tile is back to the team and
+>   division (done 2026-10-01), so no line may lean on it to name the event: a fifty
 >   says "reaches a fifty", a wicket maiden says "wicket maiden".
 > - **The club named is never ours** (`clubTag`). His own club takes "for", the side he
 >   is up against takes "v", and the opposition is what identifies the match on a wall
@@ -2675,10 +2682,10 @@ Nothing is baked into it, so it is honestly empty on a day with no cricket.
 >
 > **Still to do, in James's order (2026-09-29):**
 >
-> 1. **`innings_closed`** wants writing across its four axes — ours or not, first or
->    second innings, us batting or bowling, bowled out or out of overs. (The related
->    bug is FIXED: a `score_update` or `wicket` now retires it, so a closed innings no
->    longer sits on the band through the chase that followed it.)
+> 1. ~~**`innings_closed`**~~ — WRITTEN 2026-10-01 (`closedPayload`), past tense:
+>    "Gerrards Cross were bowled out for 181 v Haddenham" / "Chenies & Latimer finished
+>    on 241/9" / "Bowled out for 181 v Chenies & Latimer" (ours, subject dropped).
+>    Bowled out = ten down, the runs alone; declared on; otherwise finished on.
 > 2. **`match_break` / the innings break** alongside it, for the same reason.
 > 3. ~~**`match_finished`**~~ — WRITTEN 2026-09-30, see "The result sentence" below.
 >    **`probability_shift`** and **`ladder_shift`** are unreviewed and still on
@@ -2710,7 +2717,7 @@ who is still to bat), and the individual family above —
 `spell_ended` added, `stand` — the first event about two players rather than one — the passage family (`charge`, `squeeze`, `collapse`),
 `hat_trick`/`on_a_hat_trick`, the maidens (`wicket_maiden`, `maiden_run`) and
 `team_total`, whose **wording is still provisional**, and `match_finished` (below).
-**Still on the generic default:** `innings_closed`, `abandoned`, `rain_break`, `match_break`, and
+**Still on the generic default:** `abandoned`, `rain_break`, `match_break`, and
 `probability_shift`/`ladder_shift`, which are deliberately held back with the swing
 and highlight work. Walking them **one at a time** is the way this has gone and the
 way it should continue.

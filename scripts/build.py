@@ -1440,7 +1440,7 @@ def build_schedule(slide, teams_by_id, training_sessions, all_fixtures, location
         is_home = match.get("is_home", True)
         club = match.get("opposition_club_name", "")
         team_desig = match.get("opposition_team_name", "")
-        opp_display = club or team_desig
+        opp_display = drop_cc(club) or team_desig
         ground = match.get("ground_name") or ""
         loc_id = location_lookup.get(ground.lower())
         team = teams_by_id.get(team_id, {})
@@ -2073,10 +2073,15 @@ def drop_cc(name):
     name is a *ground*, and "Wendover CC" is what a visitor is looking for on a
     signpost. Also a Jinja filter (`| drop_cc`) for names that only exist in the
     template, e.g. league-table rows.
+
+    Takes a qualifier with it: Play-Cricket disambiguates same-named clubs as
+    "Haddenham CC, Bucks" or "Winchmore Hill CC (Penn)", and on screen those are
+    just "Haddenham" and "Winchmore Hill". The JS
+    copies (`dropCC` in live-events.js and live-strip.html) match this.
     """
     if not name:
         return name
-    out = re.sub(r"\s+(CC|C\.C\.?|Cricket Club)$", "", str(name).strip(), flags=re.I)
+    out = re.sub(r"\s+(CC|C\.C\.?|Cricket Club)(,\s*[^,]+|\s*\([^)]*\))?$", "", str(name).strip(), flags=re.I)
     return out or name
 
 
@@ -2255,11 +2260,7 @@ def _short_opponent(name):
     every row in the column is a cricket club; dropping it buys three or four
     characters of the name that actually distinguishes one row from the next.
     """
-    s = (name or "").strip()
-    for suffix in (" Cricket Club", " CC"):
-        if s.endswith(suffix):
-            return s[: -len(suffix)].strip()
-    return s
+    return drop_cc((name or "").strip())
 
 
 def _short_date(iso_date):
@@ -3056,6 +3057,10 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 "pc_id": pc_id,
                 "team": team_id,
                 "team_name": team.get("name", team_id),
+                # The XI as the gold tile says it — "Women's Hawks" for "Women's
+                # Softball Hawks". Authored per team (`short_name` in content/teams.json);
+                # the full name when there isn't one. Only the snappy surfaces use it.
+                "team_short": team.get("short_name") or team.get("name", team_id),
                 "our_club": team.get("league_table_name") or club_fallback,
                 "opposition": f.get("opposition_club_name") or f.get("opposition_team_name") or "",
                 "opposition_team": f.get("opposition_team_name") or "",
@@ -3222,7 +3227,9 @@ def _shorten_competition(name):
     that already fits is never mangled:
 
       1. an AUTHORED override (`competition_abbr` in content/config.json), which
-         always wins — some names have a form the club says and no rule would find;
+         always wins — some names have a form the club says and no rule would find
+         (and which `_competition_short` then uses as the whole line, league and
+         all — see there);
       2. " - " is a separator, not a word, so it goes;
       3. phrases that say the same thing twice (Indoor Softball → Indoor) and the
          long words with settled short forms (Division → Div, Section → Sec);
@@ -3253,7 +3260,7 @@ def _shorten_competition(name):
 
 
 def _competition_short(ev):
-    """The competition as the live chrome's gold flag says it — "TVCL Div 6C".
+    """The competition as the live chrome's gold flag says it — "Div 6C TVCL".
 
     That flag is one live band wide (~138px at wall scale), so neither the league
     name nor "Division" fits: the league comes from the authored `league_abbr` map
@@ -3266,10 +3273,22 @@ def _competition_short(ev):
     division is the more specific half and the one a reader is actually looking for;
     "Bucks" in front of a name that then clips mid-word buys nothing. Everything on
     this surface is a cricket competition our club is playing in, so which league
-    is the most guessable part of the line."""
+    is the most guessable part of the line.
+
+    FOR THE SAME REASON THE DIVISION GOES FIRST — "Div 6C TVCL". A line that
+    still runs out of room inside the limit (a narrower band, a clamp) loses its
+    end, and the end should be the league, not the division.
+    > James's direction, 2026-10-01."""
+    # AN AUTHORED SHORT FORM IS THE WHOLE LINE. It was written as the tile should
+    # say it, so no league goes after it: "Women's Indoor", not "Women's Indoor
+    # Bucks", which the band was truncating to "South Women's …".
+    # > James's direction, 2026-10-01.
+    authored = load_config().get("competition_abbr", {}).get((ev.get("competition") or "").strip())
+    if authored:
+        return authored
     div = _shorten_competition(ev.get("competition"))
     lg = load_config().get("league_abbr", {}).get((ev.get("league_name") or "").strip(), "")
-    both = " ".join(p for p in (lg, div) if p)
+    both = " ".join(p for p in (div, lg) if p)
     return div if (lg and div and len(both) > _COMP_MAX) else both
 
 
@@ -3826,7 +3845,7 @@ def build_league_config():
     (scripts/fetch_league_fixtures.py). Empty/absent → an empty list, so the Worker
     just has nothing to poll."""
     matches = [m for ms in _load_league_today().values() for m in ms]
-    # THE COMPETITION AS THE CHROME SAYS IT — "TVCL Div 6C" — stamped on every row.
+    # THE COMPETITION AS THE CHROME SAYS IT — "Div 6C TVCL" — stamped on every row.
     # The league row carries `competition_name` ("Division 6C") and no league at all,
     # so the band had nothing but the raw division to name somebody else's match with
     # while our own matches carried the short form from live-config. Same division,
@@ -4046,16 +4065,26 @@ def _strip_league_view(ev, our_team_id, by_comp):
         lt = raw["league_table"][0]
     except (ValueError, OSError, KeyError, IndexError):
         return None
+    # EVERY ONE OF OUR SIDES in the table, not just today's featured one — the
+    # women's indoor division has two. Keyed by Play-Cricket team id.
+    ours_by_pc = {str(t.get("play_cricket_team_id")): t for t in load_teams().values()
+                  if t.get("play_cricket_team_id")}
     teams = []
     for r in lt.get("values", []):
         club = _club_of(r.get("column_1"))
         tid_raw = str(r.get("team_id") or "")
         # The XI, which is what the scoreboard tile is labelled with. Some tables name
         # teams by club alone (the women's indoor softball division), leaving nothing
-        # to label with — for OUR row the fixture knows it anyway, and for anyone
-        # else's the tile falls back to the club (see live-strip.html).
+        # to label with. For anyone else's the tile falls back to the club (see
+        # live-strip.html). For OURS it is always our own SHORT name — "Women's
+        # Hawks", not the table's spelling nor "Women's Softball Hawks" — the same
+        # `short_name` the gold tile uses, so the strip and the tile agree.
+        # > James's direction, 2026-10-01.
         desig = _desig_of(r.get("column_1"))
-        if not desig and tid_raw == our_team_id:
+        mine = ours_by_pc.get(tid_raw)
+        if mine:
+            desig = mine.get("short_name") or mine.get("name") or desig
+        elif not desig and tid_raw == our_team_id:
             desig = ev.get("team_name") or ""
         tid = str(r.get("team_id") or "")
         st = standings.get(tid) or {}
@@ -4073,7 +4102,14 @@ def _strip_league_view(ev, our_team_id, by_comp):
             # in a scorecard). Kept alongside the id, which joins tile → fixture.
             "club": club,
             "team_id": tid,
+            # `ours` is TODAY'S FEATURED side — the one this view was baked for, whose
+            # fixture is the rich feed and whose side the scoreboard is read from.
+            # `wendover` is ANY of our sides, which is what decides a row is always
+            # expanded: on somebody else's match in a division we have two teams in,
+            # both of ours should stand out, not just the one the view happens to be
+            # named after.
             "ours": tid == our_team_id,
+            "wendover": bool(mine),
             "points": st.get("points"),
         })
     if not teams:
@@ -4131,7 +4167,7 @@ def _strip_friendly_view(ev, our_team_id):
     ours = {"crest": _club_crest(our_club), "tla": _team_tla(our_club, ev.get("team_name") or ""),
             "club": our_club,
             # Our own XI is named by the fixture rather than by a table row.
-            "desig": ev.get("team_name") or "",
+            "desig": ev.get("team_short") or ev.get("team_name") or "",
             "team_id": our_team_id, "ours": True}
     opp_club = ev.get("opposition") or ev.get("opposition_team") or ""
     # The crest is keyed on the CLUB, and a fixture's opposition can arrive as a

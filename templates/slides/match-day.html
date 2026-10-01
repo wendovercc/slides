@@ -111,7 +111,14 @@
         display: flex; align-items: baseline; justify-content: center; gap: 0.6vw;
         font-size: var(--t-xs); text-transform: uppercase; letter-spacing: 0.08em;
         color: rgba(255,255,255,0.55); white-space: nowrap; overflow: hidden; }
-    .md-div-name { font-weight: 700; color: var(--text); min-width: 0;
+    /* THE LEAGUE GIVES WAY FIRST. Both halves can ellipsise, but the league's
+       shrink weight is so much larger that it takes practically all the squeeze
+       and the division only starts to give once the league has gone — the division
+       is the half a reader is looking for, and the league is the guessable one.
+       > James's direction, 2026-10-01. */
+    .md-div-name { font-weight: 700; color: var(--text); min-width: 0; flex-shrink: 1;
+        overflow: hidden; text-overflow: ellipsis; }
+    .md-div-league { min-width: 0; flex-shrink: 1000;
         overflow: hidden; text-overflow: ellipsis; }
     .md-div-more { flex-shrink: 0; opacity: 0.7; }
 
@@ -726,7 +733,7 @@
 
     <div class="md-div-head" style="{{ cols }}">
         <span class="md-div-name">{{ band.division or band.name or 'Friendly' }}</span>
-        {% if band.division and band.name %}<span>{{ band.name }}</span>{% endif %}
+        {% if band.division and band.name %}<span class="md-div-league">{{ band.name }}</span>{% endif %}
         {% if band.others_hidden %}<span class="md-div-more">+{{ band.others_hidden }} more</span>{% endif %}
     </div>
 
