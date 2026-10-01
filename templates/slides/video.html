@@ -1007,9 +1007,11 @@
 
     // Tell the player where we are. `dur` is what its countdown should run over —
     // the whole clip on arrival, whatever is left of it when a hold releases.
+    // `skip` says the run of clips is the whole slide, so the player's "skip
+    // highlights" button goes on to the next slide.
     function report(extra) {
         if (window.WccSlide) {
-            WccSlide.notifyPanel(current, Object.assign({ dur: clipDuration(current) }, extra || {}));
+            WccSlide.notifyPanel(current, Object.assign({ dur: clipDuration(current), skip: count }, extra || {}));
         }
     }
 

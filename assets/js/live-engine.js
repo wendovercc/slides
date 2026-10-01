@@ -62,11 +62,6 @@
     var fails = 0;
     var timer = null;
     var pcs = opts.matches || null;   // pollable pc ids; resolved from configUrl if not given
-    // Clip news-flash: which events fire ('all' now, for testing; later a subset
-    // like ['wicket','six','other']). Baseline the backlog at first feed so only
-    // clips that land AFTER load flash; dedupe by id thereafter.
-    var flashEvents = opts.flashEvents || 'all';
-    var seenClips = null;             // null until baselined; then a {id:1} set
     var cfgById = {};                 // pc_id -> config match (crest/team attribution)
     // The club's YouTube channel, from live-config. Club-wide rather than per match,
     // so it rides beside the id map rather than on every row of it. Only one event
@@ -119,7 +114,7 @@
         // Before the pick, so a move that has just committed can be it. Asked every
         // tick, because an arrow's hold is measured on the clock, not on a poll.
         try { ladderStep(now); } catch (e) { /* a ladder fault must not stop the band */ }
-        var d = events.tick(now);
+        var d = replayAnswer(now) || events.tick(now);
         var msg = {
           type: 'wcc-events',
           // The scheduler's verdict: what to show, until when, and why it won.
@@ -192,6 +187,36 @@
         if (d && d.type === 'wcc-clock-request') clockBroadcast();
     });
 
+    /* THE BAND WHILE A REPLAY PLAYS. The player says when one starts and ends
+     * (`wcc-replay` on this window); in between, the band carries that replay's
+     * caption and nothing else, and it holds until the clip ends. Band news is never
+     * deferred for footage, only its DISPLAY waits: the scheduler is simply not asked
+     * while the clip runs, and its events go on ageing by their own clocks. An event
+     * that lands mid-replay waits about half a minute.
+     *
+     * The record is the store's, so the gold tile and the strip resolve to the
+     * replay's match exactly as they would for any other event; only the payload is
+     * built here, per tick, because its age is part of it. */
+    var replayOn = null;     // the replay record now playing, or null
+    window.addEventListener('wcc-replay', function (e) {
+      var c = e && e.detail;
+      replayOn = c && c.replay_id && events ? events.get(c.replay_id) : null;
+      eventBroadcast();
+    });
+    function replayAnswer(now) {
+      if (!replayOn || !window.WccLiveEvents || !WccLiveEvents.replayPayload) return null;
+      // The current card and config too: a wicket's caption is read off the card's
+      // frozen row, and the club tags need the match context.
+      var card = null;
+      ((prevFeed && prevFeed.matches) || []).forEach(function (m) {
+        if (String(m.pc_id) === String(replayOn.match.pc_id)) card = m;
+      });
+      var ev = Object.assign({}, replayOn, {
+        payload: WccLiveEvents.replayPayload(replayOn, now, card, eventCfg(now)) });
+      return { event: ev, until: 0, holding: true, picked: null, ranked: events.ranked(now),
+               reason: 'replay playing' };
+    }
+
     function eventCfg(now) {
         return {
           byId: cfgById,
@@ -207,6 +232,8 @@
            * the scorecard, so the wicket it belongs to was extracted a poll or two
            * ago and lives in the store, not in this batch. Newest first, this match
            * only, and only recently enough to plausibly be the same incident. */
+          // A replay already in the store, so a later row on the same ball can join it.
+          replay: function (id) { return events.get(id); },
           recent: function (matchKey) {
             var cutoff = now - 600000;
             return events.all().filter(function (ev) {
@@ -222,8 +249,11 @@
         var found = kind === 'league'
           ? WccLiveEvents.extractLeague(prevLeague, feed, now, cfg)
           : WccLiveEvents.extractLive(prevFeed, feed, now, cfg);
-        found.forEach(function (ev) { events.add(ev); });
+        /* A REPLAY IS RE-LISTED ON EVERY POLL, because the feed's clip list is
+         * cumulative; only the ones the store had not seen are this poll's. */
+        found = found.filter(function (ev) { return events.add(ev) || ev.type !== 'replay'; });
         if (kind === 'league') prevLeague = feed; else prevFeed = feed;
+        if (kind !== 'league') offerReplays(feed);
         eventBroadcast();
         /* RETRACTIONS ARE NOT EVENTS, and callers of this get the honest list. One of
          * them exists to un-say something the band is holding (see `retire_only` in
@@ -344,22 +374,25 @@
       });
     }
 
-    function eventAllowed(ev) {
-      return flashEvents === 'all' || (Array.isArray(flashEvents) && flashEvents.indexOf(ev) !== -1);
-    }
-    // Detect clips that appeared since load and hand each to the player as a flash.
-    // The player owns the timing (boundary vs immediate) + dedupe + min-gap.
-    function detectClips(feed) {
+    /* EVERY REPLAY STILL INSIDE ITS TTL, offered to the player's queue on every
+     * poll. The player de-duplicates, prefetches, expires and orders them; this only
+     * says what exists. Offering the whole fresh set each time, rather than only new
+     * rows, is what lets a prefetch that failed be retried on the next poll, inside
+     * the TTL. `WccPlayer.flash` is read fresh each time (the simulator borrows it for
+     * the length of a skip). The `wcc-replay` handshake needs `replay_id`, so a
+     * replay is offered only once the store holds it. */
+    function offerReplays(feed) {
       var flash = window.WccPlayer && window.WccPlayer.flash;
-      var firstPass = seenClips === null;
-      if (firstPass) seenClips = {};
-      ((feed && feed.matches) || []).forEach(function (m) {
-        (m.clips || []).forEach(function (c) {
-          if (c.id == null || seenClips[c.id]) return;
-          seenClips[c.id] = 1;
-          if (firstPass || !flash || !c.url || !eventAllowed(c.event)) return;
-          flash(buildFlash(m, c));
-        });
+      if (!flash || !events || !events.replays) return;
+      var byPc = {};
+      ((feed && feed.matches) || []).forEach(function (m) { byPc[String(m.pc_id)] = m; });
+      events.replays(clockNow()).forEach(function (ev) {
+        var m = byPc[String(ev.match.pc_id)];
+        var c = m && (m.clips || []).filter(function (x) { return String(x.id) === String(ev.clip.id); })[0];
+        if (!c || !c.url) return;
+        flash(Object.assign(buildFlash(m, c), {
+          replay_id: ev.id, happened_ms: WccLiveEvents.replayAt(ev)
+        }));
       });
     }
     // The clip's innings as a 1st/2nd ordinal (mirrors the today's-match reel tab):
@@ -436,7 +469,6 @@
             fails = 0; last = feed; lastStatus = 'ok';
             broadcast(feed, 'ok');
             onState(feed, 'ok');
-            detectClips(feed);
             ingest('live', feed);
             schedule(intervalFor(feed));
           })
@@ -458,7 +490,6 @@
             fails = 0; last = feed; lastStatus = 'ok';
             broadcast(feed, 'ok');
             onState(feed, 'ok');
-            detectClips(feed);
             ingest('live', feed);
             schedule(intervalFor(feed));
           });

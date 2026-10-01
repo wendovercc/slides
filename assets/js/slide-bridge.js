@@ -134,6 +134,16 @@
     // so the player's countdown can track the clip, not the whole reel.
     notifyPanel: function (i, extra) {
       current = i;
+      /* `skip` is where a run of clips ends (the "skip highlights" control), named
+       * by the controller in ITS indices. Translated to this entry's ordinals: the
+       * first kept panel at or after it, or nPanels() when the run is the end of
+       * the slide — the player reads that as "on to the next slide". */
+      if (extra && typeof extra.skip === 'number') {
+        var raw = extra.skip, ord = nPanels();
+        if (!sel) ord = Math.min(raw, count);
+        else for (var k = 0; k < sel.length; k++) if (sel[k] >= raw) { ord = k; break; }
+        extra = Object.assign({}, extra, { skip: ord });
+      }
       post('wcc-panel', extra);
     }
   };

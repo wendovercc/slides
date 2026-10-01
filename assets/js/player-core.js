@@ -50,7 +50,10 @@
     // ticker's own red when the chrome is up (see injectStyles).
     live: '<circle cx="12" cy="12" r="2.6" />' +
           '<path d="M7.8 7.8a5.9 5.9 0 0 0 0 8.4" /><path d="M16.2 7.8a5.9 5.9 0 0 1 0 8.4" /> ' +
-          '<path d="M4.9 4.9a9.9 9.9 0 0 0 0 14.2" /><path d="M19.1 4.9a9.9 9.9 0 0 1 0 14.2" />'
+          '<path d="M4.9 4.9a9.9 9.9 0 0 0 0 14.2" /><path d="M19.1 4.9a9.9 9.9 0 0 1 0 14.2" />',
+    // Skip highlights: fast-forward, two triangles to a stop bar. Not `next`'s one
+    // triangle and bar, because it moves past a run of panels, not one.
+    skip: '<path d="M3 6v12l8-6z" /><path d="M11 6v12l8-6z" /><rect x="19" y="6" width="2" height="12" />'
   };
 
   function icon(name) {
@@ -221,6 +224,11 @@
       '#wcc-bar button.live svg circle{fill:#fff;}' +
       '#wcc-bar button.live.on svg{opacity:1;stroke:#b3261e;}' +
       '#wcc-bar button.live.on svg circle{fill:#b3261e;stroke:#b3261e;}' +
+      /* Skip highlights: offered only while the panel on screen is part of a run of
+         clips the slide has declared (see setSkip). Same reveal idiom as the live
+         toggle, for the same `:not(.collapsed)` reason. */
+      '#wcc-bar button.skip{display:none;}' +
+      '#wcc-bar.skip-avail:not(.collapsed) button.skip{display:flex;}' +
       /* ---- THE DECK INSTRUMENT ---------------------------------------------
          ONE line, on the top edge of the reading area, on both surfaces and in
          every orientation. One tick per atom; the tick you are ON fills over its
@@ -263,6 +271,8 @@
       '#wcc-prog-top b{display:block;width:100%;height:100%;background:#d4af37;' +
       'transform-origin:left;transform:scaleX(0);transition:opacity 0.3s ease;}' +
       '#wcc-prog-top i.past b{opacity:0.45;}' +
+      // A slide with nothing to show today (see `slideEmpty`) leaves the map.
+      '#wcc-prog-top i.gone{display:none;}' +
       // Long decks: one tick spanning the rail, filled to how far through you are.
       // Same element structure, so everything below drives it without a special case.
       '#wcc-prog-top.cont{gap:0;padding:0;}' +
@@ -734,7 +744,7 @@
      * that flies past is still a step you saw move). */
     var CROSSFADE_MS = hosted ? 800 : 250;   // mirrors the crossfade injectStyles left in force
     function activate(i) {
-      if (i !== current) { edgeFirst = edgeLast = null; slideHold = false; }   // stale the moment we leave
+      if (i !== current) { edgeFirst = edgeLast = null; slideHold = false; setSkip(null); }   // stale the moment we leave
       reconcileWindow(i);   // before .active — a cold frame needs its src first
       var cut = !stage && !!shownAt && (Date.now() - shownAt) < CROSSFADE_MS && !!document.body;
       if (cut) document.body.classList.add('wcc-cut');
@@ -767,25 +777,68 @@
     }
     function clearTimer() { if (timer) { clearTimeout(timer); timer = null; } }
 
-    /* Queue a highlight for a news-flash. Deduped by clip id, capped so a flurry
-     * can't build a backlog. Deferred download: a clip is prefetched whole into the
-     * cache the moment it arrives and only becomes flashable once fully stored
-     * (clip._ready) — so the flash (which shows a clip just ONCE) opens on local
-     * bytes at the next slide boundary instead of streaming. Where the Cache API is
-     * absent, a clip is ready immediately (the old streaming behaviour). Kiosk drains
-     * at the next boundary; interactive drains as soon as a ready clip exists while
-     * paused. */
+    /* THE REPLAY QUEUE (docs/live-events.md, "Replays"). The engine offers every
+     * replay still inside its TTL on every poll; this decides what plays.
+     *
+     *  - DOWNLOAD IS GATED. A replay is playable only once WccHlsCache has the whole
+     *    clip, so it always opens on local bytes. A prefetch that fails leaves the
+     *    queue, and the next poll's offer retries it, inside the TTL.
+     *  - THE TTL, from the ball's own time, is checked on arrival AND at the moment
+     *    of playing: a clip that waited out a long slide is dropped, not shown late.
+     *    It is what keeps a device that lost its link for twenty minutes from coming
+     *    back to a backlog.
+     *  - ORDER: wickets ahead of boundaries when both are ready, then freshest first.
+     *  - SEEN-NESS SURVIVES A RELOAD (localStorage, per-viewer convenience only), so
+     *    a reload does not replay what the room has just watched. Either way the TTL
+     *    decides; the memory is pruned past it.
+     *
+     * Kiosk drains at the next slide boundary; interactive drains as soon as a ready
+     * clip exists while paused. Where the Cache API is absent a clip is ready at once
+     * (the old streaming behaviour). */
+    var REPLAY_TTL_MS = (window.WccLiveEvents && WccLiveEvents.REPLAY_TTL_MS) || 600000;
+    var SEEN_KEY = 'wccReplaySeen';
+    // Read on first use rather than at start, so a page that clears it as it boots
+    // (the simulator, whose every run replays the same clip ids) is heard.
+    var replaySeenMap = null;
+    function seenMap() {
+      if (!replaySeenMap) {
+        try { replaySeenMap = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}') || {}; }
+        catch (e) { replaySeenMap = {}; }
+      }
+      return replaySeenMap;
+    }
+    function replayNow() { return window.WccClock ? WccClock.now() : Date.now(); }
+    function replayAge(clip) { return clip.happened_ms == null ? 0 : replayNow() - clip.happened_ms; }
+    function replayFresh(clip) { return replayAge(clip) < REPLAY_TTL_MS; }
+    function markSeen(clip) {
+      var now = replayNow(), seen = seenMap();
+      seen[clip.id] = clip.happened_ms == null ? now : clip.happened_ms;
+      // Pruned past twice the TTL: an entry older than that can never be offered again.
+      for (var k in seen) if (now - seen[k] > 2 * REPLAY_TTL_MS) delete seen[k];
+      try { localStorage.setItem(SEEN_KEY, JSON.stringify(seen)); } catch (e) { /* private mode */ }
+    }
     function flashCacheOn() { return !!(window.WccHlsCache && WccHlsCache.supported && WccHlsCache.prefetch); }
     function enqueueFlash(clip) {
       if (!flashItem || !clip || !clip.url || clip.id == null) return;
-      if (flashQueue.some(function (c) { return c.id === clip.id; })) return;
+      if (seenMap()[clip.id] != null || !replayFresh(clip)) return;
+      if (flashQueue.some(function (c) { return c.id === clip.id; })) {
+        // Already queued. A paused deck in the hand has no boundary to wait for, so
+        // every offer is a chance to play what is ready (it may have been held back
+        // by the minimum gap when it first became ready).
+        if (interactive && !playing) drainFlash();
+        return;
+      }
       clip._ready = !flashCacheOn();          // no cache → stream immediately (as before)
       flashQueue.push(clip);
-      while (flashQueue.length > 5) flashQueue.shift();
       if (flashCacheOn()) {
-        // Start the download now; mark flashable once the whole clip is cached.
+        // Start the download now; mark playable once the whole clip is cached.
         WccHlsCache.prefetch(clip.url, clip.id).then(function (ok) {
-          if (!ok) return;
+          if (!ok) {
+            // Out of the queue, so the engine's next offer starts a fresh attempt.
+            var i = flashQueue.indexOf(clip);
+            if (i >= 0) flashQueue.splice(i, 1);
+            return;
+          }
           clip._ready = true;
           if (interactive && !playing) drainFlash();   // paused → fire as soon as ready
         });
@@ -793,26 +846,50 @@
         drainFlash();
       }
     }
-    // First queued clip that's finished downloading, or -1 — a not-yet-ready clip
-    // never blocks a later ready one.
+    // The replay to play now, or -1: expired ones are dropped on the way, a clip
+    // still downloading never blocks a ready one, a wicket beats a boundary, and
+    // among equals the freshest wins.
     function firstReadyFlash() {
-      for (var i = 0; i < flashQueue.length; i++) if (flashQueue[i]._ready) return i;
-      return -1;
+      // Expired ones out IN PLACE. Replacing the array here broke every caller that
+      // writes `flashQueue.splice(firstReadyFlash(), 1)`: that reads `flashQueue`
+      // BEFORE calling this, so it spliced a discarded copy and left the clip it was
+      // playing in the queue to play again at the next boundary.
+      for (var x = flashQueue.length - 1; x >= 0; x--) if (!replayFresh(flashQueue[x])) flashQueue.splice(x, 1);
+      var best = -1;
+      for (var i = 0; i < flashQueue.length; i++) {
+        var c = flashQueue[i];
+        if (!c._ready) continue;
+        if (best < 0) { best = i; continue; }
+        var b = flashQueue[best];
+        var cw = c.event === 'wicket', bw = b.event === 'wicket';
+        if (cw !== bw) { if (cw) best = i; continue; }
+        if (replayAge(c) < replayAge(b)) best = i;
+      }
+      return best;
     }
     function canFlashNow() {
       return !!flashItem && !flashing && firstReadyFlash() >= 0 &&
         (lastFlashAt === 0 || Date.now() - lastFlashAt >= FLASH_MIN_GAP_MS);
     }
-    // Play the first READY queued flash if allowed; `cont` (optional) runs when it
-    // ends, in place of the default resume. Returns true if a flash started.
+    // Play the best READY queued replay if allowed; `cont` (optional) runs when it
+    // ends, in place of the default resume. Returns true if one started.
     function drainFlash(cont) {
       if (!canFlashNow()) return false;
-      playFlash(flashQueue.splice(firstReadyFlash(), 1)[0], cont);
+      var at = firstReadyFlash(); playFlash(flashQueue.splice(at, 1)[0], cont);
       return true;
+    }
+    /* The engine hears about each replay's start and end, which is what puts the
+     * band in replay mode for exactly as long as the clip is up. A window event
+     * rather than a call, so neither file needs the other loaded. */
+    var gapTimer = null;
+    function announceReplay(clip) {
+      try { window.dispatchEvent(new CustomEvent('wcc-replay', { detail: clip || null })); } catch (e) {}
     }
     function playFlash(clip, cont) {
       flashing = true;
       flashCont = cont || null;
+      markSeen(clip);
+      announceReplay(clip);
       clearTimer();                       // hold the rotation while the flash is up
       send(current, 'take-over');         // pause whatever the current slide is doing
       if (flashItem.frame) flashItem.frame.classList.add('flash-active');
@@ -828,7 +905,14 @@
       if (flashTimeout) { clearTimeout(flashTimeout); flashTimeout = null; }
       if (flashItem && flashItem.frame) flashItem.frame.classList.remove('flash-active');
       try { var w = flashWin(); if (w) w.postMessage({ type: 'wcc-flash-stop' }, '*'); } catch (e) {}
+      announceReplay(null);
       var cont = flashCont; flashCont = null;
+      /* A PAUSED DECK IN THE HAND plays a ready replay as soon as it may; the minimum
+       * gap is what stops the next one now, so look again when the gap runs out. The
+       * wall needs none of this: its next slide boundary is the next chance. */
+      if (gapTimer) clearTimeout(gapTimer);
+      gapTimer = setTimeout(function () { gapTimer = null; if (interactive && !playing) drainFlash(); },
+                            FLASH_MIN_GAP_MS + 50);
       // Resume: run the boundary continuation (e.g. advance to the next slide) if the
       // flash fired at a boundary; otherwise re-anchor the slide we interrupted.
       if (cont) cont();
@@ -1005,13 +1089,16 @@
       activate(i);
       send(i, 'restart-auto');                       // rotate from panel 0, aligned to now
       clearTimer();
-      timer = setTimeout(function () {
-        // A slide boundary is the clean moment to run a queued news-flash; when it
-        // ends, carry on to the next slide (kioskAdvance). No flash → advance now.
-        if (flashQueue.length && drainFlash(kioskAdvance)) return;
-        kioskAdvance();
-      }, (items[i].duration || 20) * 1000);
+      kioskDeadline = Date.now() + (items[i].duration || 20) * 1000;
+      timer = setTimeout(kioskEnd, kioskDeadline - Date.now());
     }
+    // A slide boundary is the clean moment to run a queued news-flash; when it
+    // ends, carry on to the next slide (kioskAdvance). No flash → advance now.
+    function kioskEnd() {
+      if (flashQueue.length && drainFlash(kioskAdvance)) return;
+      kioskAdvance();
+    }
+    var kioskDeadline = 0;
     function kioskGo(delta) { kioskShow((current + delta + n) % n); }
 
     /* ---- interactive: player owns the per-panel timer ---- */
@@ -1140,8 +1227,48 @@
     // carries on through consecutive video slides); forward onto a non-video — and
     // every backward/jump move — stops (pauses) so the user regains manual control.
     function arrive(i, panel, play) { playing = play; updatePlayBtn(); interShow(i, panel); }
+    /* SLIDES WITH NOTHING TO SHOW. A live match before its first ball, or on a day
+     * whose feed has nothing for it, has no panels; on the wall it ends itself
+     * (wcc-done) and the rotation passes over it. In the hand that is not enough: a
+     * forward step landed on it, the arrival started it (it is a video item), it
+     * ended at once, and the deck was carried on and left playing, while a step back
+     * parked on a blank slide. So such a slide says so (`wcc-slide-empty`), and
+     * interactive navigation steps over it in both directions and takes its tick off
+     * the rail, until it says otherwise. Unknown = not empty: a slide that has never
+     * reported is a slide like any other. */
+    var slideEmpty = {};
+    var travel = 1;          // the direction of the last slide step, for a late report
+    function stepOver(from, dir) {
+      for (var k = 1; k < n; k++) {
+        var j = ((from + dir * k) % n + n) % n;
+        if (!slideEmpty[j]) return j;
+      }
+      return from;           // everything else is empty: stay put
+    }
+    function railGone() {
+      if (railCont) return;
+      for (var i = 0; i < n; i++) {
+        for (var t = 0; t < railSteps(i); t++) {
+          var tk = railTicks[(railFirst[i] || 0) + t];
+          if (tk) tk.classList.toggle('gone', !!slideEmpty[i]);
+        }
+      }
+    }
+    function setSlideEmpty(i, empty) {
+      if (!!slideEmpty[i] === !!empty) return;
+      if (empty) slideEmpty[i] = true; else delete slideEmpty[i];
+      railGone();
+      // The slide we are ON has just turned out to be empty (a windowed frame only
+      // reports once it loads): carry on past it, the way we were going.
+      if (empty && interactive && !hosted && i === current) {
+        var j = stepOver(current, travel);
+        if (j !== current) arrive(j, travel > 0 ? 0 : 'last', playing && travel > 0);
+      }
+    }
+
     function fwdSlide() {
-      var i = (current + 1) % n;
+      travel = 1;
+      var i = stepOver(current, 1);
       // A playing deck keeps playing across the boundary. This used to read
       // `!!items[i].video`, which stopped the deck on arrival at any static slide —
       // so a slideshow left to run advanced exactly once and then sat there. The
@@ -1150,7 +1277,8 @@
       // out. Carrying `playing` across says that, and only that.
       //
       // Arriving at a video slide still starts it even from paused: stepping
-      // forward onto a reel is a request to watch the reel.
+      // forward onto a reel is a request to watch the reel. Not where the item opts
+      // out (`autoplay: false` — a live match, whose clips are incidental).
       //
       // Record mode keeps running if — and only if — the narrator has explicitly
       // handed the deck over (AUTO), which is why it reads `autoRun` here and not
@@ -1159,9 +1287,9 @@
       // manual at every boundary. `autoRun` is what separates that from merely
       // playing because a clip happens to be rolling: a reel reaching its end must
       // NOT quietly start auto-cueing the static slides after it.
-      arrive(i, 0, (record ? rec.autoRun : playing) || !!items[i].video);
+      arrive(i, 0, (record ? rec.autoRun : playing) || (!!items[i].video && items[i].autoplay !== false));
     }
-    function backSlide() { arrive((current - 1 + n) % n, 'last', false); }
+    function backSlide() { travel = -1; arrive(stepOver(current, -1), 'last', false); }
     function goFirst() { arrive(0, 0, false); }
     function goLast() { arrive(n - 1, 0, false); }
 
@@ -1462,6 +1590,26 @@
     // is a class, not a rebuild.
     var liveBtn = null;
     var liveOn = false, liveHandler = null;
+    /* SKIP HIGHLIGHTS. A reel is stepped one clip at a time, and a slide's own tabs
+     * cannot help, because #wcc-tap takes every tap. So the slide declares, on each
+     * panel echo, where the run of clips it is in ends (`skip`, an ordinal; equal to
+     * the panel count when the run ends the slide), and the bar offers one press past
+     * it. Forgotten the moment the slide changes. */
+    var skipTo = null, skipPanels = 0;
+    function setSkip(to, panels) {
+      skipTo = to; skipPanels = panels || 0;
+      if (bar) bar.classList.toggle('skip-avail', skipTo != null);
+    }
+    function skipHighlights() {
+      if (skipTo == null) return;
+      // Both read BEFORE the reset, which zeroes the panel count as well.
+      var to = skipTo, panels = skipPanels;
+      setSkip(null);
+      clearTimer();
+      if (to >= panels) { fwdSlide(); return; }
+      send(current, 'goto-panel', { index: to });
+      if (playing) panelTimer(to); else railUpdate(to);
+    }
     /* The portrait dock's extra row is declared UP WITH THE OPTIONS, not here: boot
      * hands it in through `start`, and a `var` re-declaration at this point in the
      * function would hoist and then null it out again on the way past. See
@@ -1489,7 +1637,7 @@
     var LABEL = {
       home: 'Home', prev: 'Previous', next: 'Next', play: 'Play', pause: 'Pause',
       expand: 'Full screen', compress: 'Exit full screen', grip: 'Show or hide controls',
-      share: 'Share', live: 'Show live scores'
+      share: 'Share', live: 'Show live scores', skip: 'Skip highlights'
     };
     function button(name, cls, handler) {
       var b = document.createElement('button');
@@ -1642,6 +1790,9 @@
           liveHandler(liveOn);
         });
         bar.appendChild(liveBtn);
+        // After the live toggle, so appearing and going per panel only ever extends
+        // the row (see "LAST ON THE BAR" above).
+        bar.appendChild(button('skip', 'skip', skipHighlights));
       }
       document.body.appendChild(bar);
       // The countdown and the position rail are NOT children of the bar — they are
@@ -2517,6 +2668,14 @@
         return;
       }
 
+      // A slide reporting whether it has anything to show (see `slideEmpty`). Any
+      // frame, not only the current one: an off-screen slide going empty must still
+      // leave the rail and be stepped over.
+      if (d.type === 'wcc-slide-empty') {
+        if (interactive && !hosted && idx >= 0) setSlideEmpty(idx, !!d.empty);
+        return;
+      }
+
       // wcc-done: video ended naturally — advance slide (works in both kiosk and interactive)
       if (d.type === 'wcc-done' && idx === current) {
         // Hosted: the take decides when a beat ends, so a slide running out of its
@@ -2528,6 +2687,23 @@
           clearTimer();
           if (flashQueue.length && drainFlash(kioskAdvance)) return;
           kioskAdvance();
+        }
+        return;
+      }
+
+      /* wcc-extend: a slide whose length only it knows asks for more time than the
+       * build gave it. The live match is the one: its innings reels grow through the
+       * afternoon, so the build's fixed backstop could cut a full-time reel. Kiosk
+       * only, and only ever LATER: the slide still ends itself with wcc-done, so this
+       * moves the backstop, never the plan. */
+      if (d.type === 'wcc-extend' && idx === current) {
+        if (!interactive && !hosted && timer && d.secs > 0) {
+          var want = Date.now() + d.secs * 1000;
+          if (want > kioskDeadline) {
+            clearTimer();
+            kioskDeadline = want;
+            timer = setTimeout(kioskEnd, want - Date.now());
+          }
         }
         return;
       }
@@ -2564,6 +2740,7 @@
       } else if (d.type === 'wcc-panel' && idx === current) {
         var movedPanel = panelIndex !== d.panel;
         panelIndex = d.panel;
+        setSkip(typeof d.skip === 'number' && d.skip > d.panel ? d.skip : null, d.panels);
         setEdges(d);
         // The slide is the authority on which panel it is showing, so this is where
         // the column re-aligns — including for a panel the PLAYER's timer stepped,
@@ -2629,6 +2806,25 @@
     window.WccPlayer.isPlaying = function () { return playing; };
 
     window.WccPlayer.flash = enqueueFlash;
+    /* THE SIMULATOR'S HOOKS, and nothing in the shipping page calls them. Simulated
+     * time runs many times faster than the slide boundaries and the minimum gap, which
+     * run on the real clock, so stepping a day to "the next replay" has to be able to
+     * ask whether one is ready and play it there and then. `cont` is what to do when
+     * it ends (default: as after any flash). */
+    window.WccPlayer.replayReady = function () { return firstReadyFlash() >= 0 && !flashing; };
+    // Is a fresh replay queued but still downloading?
+    window.WccPlayer.replayPending = function () {
+      return flashQueue.some(function (c) { return !c._ready && replayFresh(c); });
+    };
+    window.WccPlayer.playReplayNow = function (cont) {
+      if (flashing || firstReadyFlash() < 0) return false;
+      lastFlashAt = 0;                       // a deliberate step is not machine-gunning
+      var at = firstReadyFlash(); playFlash(flashQueue.splice(at, 1)[0], cont);
+      return true;
+    };
+    // The page can say a slide is empty from the live feed alone, for frames the
+    // window has not loaded (they cannot report for themselves). See `slideEmpty`.
+    window.WccPlayer.setSlideEmpty = function (i, empty) { setSlideEmpty(i, empty); };
 
     /* The news-flash overlay, handed over after the fact. It is a property of the
      * LANDSCAPE stage — a full-bleed 16:9 takeover raised over a 16:9 stage — so a

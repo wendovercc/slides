@@ -8,7 +8,15 @@
 {% macro set_meta(slide) %}
     <div class="set-meta">
         <div class="meta-row">
-            {% if slide._set_date %}<span class="meta-date">{{ slide._set_date }}</span>{% endif %}
+            {% if slide._set_date %}<span class="meta-date" data-f="time">{{ slide._set_date }}</span>{% endif %}
+            {#- A LIVE MATCH's meta row (Today's Match only — `_set_live`): the status
+                token that takes the start time's place once the feed has something
+                better to say, and the YouTube badge, as the match-day board's tiles
+                carry them. Baked hidden; the slide's JS shows them. -#}
+            {% if slide.get('_set_live') %}
+            <span class="meta-status" data-f="status" hidden></span>
+            <span class="meta-yt" data-f="yt"{% if not slide.get('_set_streamed') %} hidden{% endif %} aria-label="Streamed on YouTube"><svg viewBox="0 0 24 17" aria-hidden="true"><path fill="currentColor" d="M23.5 2.65a3 3 0 0 0-2.11-2.12C19.53 0 12 0 12 0S4.47 0 2.61.53A3 3 0 0 0 .5 2.65C0 4.51 0 8.4 0 8.4s0 3.89.5 5.75a3 3 0 0 0 2.11 2.12C4.47 16.8 12 16.8 12 16.8s7.53 0 9.39-.53a3 3 0 0 0 2.11-2.12C24 12.29 24 8.4 24 8.4s0-3.89-.5-5.75Z"/><path fill="#fff" d="M9.55 12.1 16.2 8.4 9.55 4.7Z"/></svg></span>
+            {% endif %}
             {% if slide._set_is_home %}<span class="home-pill">Home</span>{% else %}<span class="away-pill">Away</span>{% endif %}
         </div>
         {% if slide._set_ground %}

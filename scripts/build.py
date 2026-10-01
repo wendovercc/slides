@@ -4396,6 +4396,15 @@ def build_live_matches(env, slide_meta):
             "_set_opp_club": opp_club,
             "_set_opp_team": opp_team if opp_team and opp_team != opp_club else "",
             "_set_date": ev.get("time") or "Today",
+            # The header's meta row behaves as the match-day board's does: the start
+            # time gives way to the live status token, and the YouTube badge shows
+            # for a streamed match (baked from the overnight broadcast match, raised
+            # at runtime by the feed). See set_meta in _set_header.html.
+            "_set_live": True,
+            "_set_streamed": bool(ev.get("streamed")),
+            # Whether the Result panel may price league points itself (TVCL Win/Lose,
+            # the only system we know — see _is_tvcl) when the feed carries none.
+            "_tvcl": _is_tvcl(ev.get("league_name")),
             "_set_is_home": ev.get("is_home", True),
             "_set_ground": ev.get("ground") or "",
             "_pc_id": ev["pc_id"],
@@ -4405,8 +4414,10 @@ def build_live_matches(env, slide_meta):
             # innings reels (skip run-up dead time, stop before the tail, cap length).
             "_clip_trim": config.get("clip_trim") or {"pre": 0, "post": 0, "max_len": 30},
             "panel_duration": default_pd,
-            # Big backstop: the slide always self-advances via wcc-done, but a full
-            # innings reel can run minutes, so don't let the player force-cut it.
+            # Opening backstop only: the slide self-advances via wcc-done, and its
+            # reels grow through the day, so it reports its own remaining length
+            # (`wcc-extend`) and the kiosk player moves this later to fit. 900s still
+            # covers an old cached player that ignores the message.
             "duration": 900,
         }
 
@@ -4465,6 +4476,10 @@ def build_live_matches(env, slide_meta):
                             # build-time; provisioning isn't). Flows into data.json
                             # via the slide_meta spread in build_slideshows.
                             "_live": True,
+                            # Which match it is, so the page can tell from the live
+                            # feed alone whether this slide has anything to show,
+                            # without loading its frame (see setSlideEmpty).
+                            "_pc_id": ev["pc_id"],
                             # _is_video: the player treats this like the last-match
                             # video reel — auto-play on forward arrival + a per-clip
                             # countdown. The reel's clips are runtime HLS (not in

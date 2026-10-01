@@ -136,12 +136,15 @@ while it is up.
 | `new_batsman` | 36 | 5m | never | profile | a batter's first ball faced, once a wicket has fallen |
 | `spell_started` | 30 | 5m | never | profile | a bowler bowling after a gap of two overs, or his first |
 | `match_break` | 26 | 10m | never | score | `break_desc` appearing that is *not* the weather |
-| `ball_clip` | 20 | 3m | never | score | a clip nothing else claims |
 | `score_update` | 12 | 9m | never | score | every whole over (ours), every changed scoreline (division) |
+| `replay` | — | 10m | never | score | every clip row with footage; **never ranked** (`band: false`), played by the player's replay queue |
 
-The last two rows are **the floor, and they are not pretending to be news**: they
-are what keeps a screen truthful when nothing has happened for ten overs. Their
-interest is low enough that any real event outranks them.
+*(2026-10-01: `ball_clip` is gone. A clip row no longer raises a band event; it is a
+`replay`. See [Replays](#replays--footage-is-rotation-content-and-the-store-decides-what-is-still-worth-it).)*
+
+The `score_update` row is **the floor, and it is not pretending to be news**: it is
+what keeps a screen truthful when nothing has happened for ten overs. Its interest is
+low enough that any real event outranks it.
 
 ### One event per thing that happened — and where that stops
 
@@ -1201,7 +1204,6 @@ lets the ingest broadcast the end state once.
 ```
 interest = base
          × 0.55  if it is not our match      (OTHER_CLUB_FACTOR)
-         + 12    if it carries footage       (CLIP_BONUS)
          + 18 × tension                      (how tight the match is, from the chase model)
          × magnitude                          (how big a swing / how many places)
          clamped to base × 1.25
@@ -1613,7 +1615,7 @@ event regardless of whose it was.
 
 ### Clips join events; they are not events
 
-> **SUPERSEDED 2026-10-01** (design, not yet built): footage becomes a `replay` record
+> **SUPERSEDED 2026-10-01** (built the same day): footage becomes a `replay` record
 > the band never shows, played by a replay queue at slide boundaries. The join below is
 > to be deleted. See [Replays](#replays--footage-is-rotation-content-and-the-store-decides-what-is-still-worth-it).
 
@@ -2262,7 +2264,8 @@ nothing has happened since we started watching — but it is a visible change fr
 
 ## Replays — footage is rotation content, and the store decides what is still worth it
 
-> James's design direction, 2026-10-01. **Not built.** Supersedes
+> James's design direction, 2026-10-01. **Built 2026-10-01** (see *As built* at the end
+> of this section). Supersedes
 > [Clips join events; they are not events](#clips-join-events-they-are-not-events), the
 > scheduler's *Footage runs to its end* hold, and settles open question 6.
 
@@ -2334,6 +2337,74 @@ it). Replays use that rather than building a second copy:
 - **Seen-ness survives a reload.** The flash keeps its seen set in memory, so a reload
   turns everything into backlog and nothing plays. The store's ids and the cache's
   per-clip markers are the better memory. Either way, the TTL is what decides.
+
+### As built (2026-10-01)
+
+- **Store** (`live-events.js`): `extractLive` turns every clip row with a `url` into a
+  `replay` record (`replayEvent`) on every poll, the first included. The store keeps
+  replays in their own list (same `byId` dedupe; no ranking, no tail broadcast, no
+  eviction order), and `store.replays(now)` returns those younger than the TTL by
+  `replayAt` (the ball's time). The rows' only other job is `stampBallTime`.
+  `attachClip`, `CLIP_BONUS`, `clipHoldMs`, the scheduler's `clipUntil` hold,
+  `ball_clip` and the unclaimed-row wicket are deleted.
+- **Engine** (`live-engine.js`): `offerReplays` hands every fresh replay to
+  `WccPlayer.flash` after each live ingest (replacing `detectClips` and its
+  first-poll baseline). While a replay plays, `replayAnswer` replaces the scheduler's
+  pick: `showing` is the replay record with a per-tick `replayPayload` caption, so the
+  gold tile, the strip's `score` panel and the chrome latch all follow it, and
+  `events.tick` is not asked until it ends.
+- **Player** (`player-core.js`): the flash queue is the replay queue. It checks the TTL
+  on arrival and again at play time, puts wickets ahead of boundaries and then the
+  freshest first, drops a failed prefetch so the next offer retries it, and keeps
+  seen-ness in `localStorage` (`wccReplaySeen`, pruned past twice the TTL). It
+  announces start and end as a `wcc-replay` window event. The 45s minimum gap
+  stays.
+
+### What a ball meant: RV's event types, and the caption (2026-10-01)
+
+RV tags more than fours, sixes and wickets, and says the number each is about in a
+`metric` field the Worker used to drop. Read off five streamed matches against their
+scorecards:
+
+| RV type | Worker `event` | `metric` | Frogbox title |
+|---|---|---|---|
+| 1001 | `wicket` | the wicket's number, 1–10 | yes |
+| 1002 / 1003 | `four` / `six` | 4 / 6 | yes |
+| 1004 | `team_milestone` | the total: 100, 200, 300 | none |
+| 1005 | `milestone` | the batter's 50 or 100 | none |
+| 1006 | `five_for` | 5 (batter = the man out, bowler = the bowler) | none |
+| 1008 | `appeal` (turned down) | 0 | "HOWZAT! … appeal for the wicket of …" |
+| 1009 | `chance` (missed) | 0 | "MISSED! A great chance …" |
+
+Anything else stays `other`. **A milestone is a row of its own on the ball that brought
+it up**, beside the shot's row. So reels (`selectReel`) and replays (`replayBall`) are
+**one per ball**: the footage of the ball's leading row (wicket, six, four, then the
+rest), carrying every kind on it. A later row for the same ball enriches the replay
+already in the store (`cfg.replay`) rather than adding a second one.
+
+**The caption says what the ball meant**, in the band's own grammar, from the rows and
+from the card and nothing else:
+
+- `REPLAY · R Cooke hits a four to reach a fifty · 34.4 overs ↻ 6m`
+- `REPLAY · T Duff hits a six to bring up 100 · 13.6 overs ↻ 6m`
+- `REPLAY · S Govekar caught by M Gedye for 40 ending a stand of 165 · bowler R Cooke · 18.5 overs ↻ 6m`.
+  The wicket is the band's `wicketParts`, off the card's frozen row.
+- `REPLAY · 200 up · 25.6 overs ↻ 6m`, `… takes a five-for`, `… survives an appeal`,
+  `… survives a chance`.
+
+**Shape rules** (James, 2026-10-01): the bowler is named only where the ball is his (a
+wicket, a five-for), not on boundaries, milestones, appeals or chances. Every club
+mention is optional (`drop`), so the ticker's `fit` takes it off before anything else
+truncates. The closing group is the ball's over and its age in the wall's own stale
+token, "14.2 overs ↻ 24m", never under a minute.
+
+A milestone's batter is checked against the card (his runs reach the mark), because
+the rows are not corrected when a scorer fixes a card. Khan's maiden hundred was
+credited to Beagley in the rows and on the live card, and only the card was put right.
+When the two disagree the name is left out and the milestone stays. **Not said:**
+counts ("his third six") and the batter's score at the ball. The rows miss balls
+bowled before the stream came on, and scorers' counters drift. `/curate` and its
+persisted JSON are untouched: `fetch_ball_events.py` keeps its own `EVENT_TYPES`.
 
 ### Two scores on screen, and only one claims to be now
 
@@ -2444,6 +2515,15 @@ balls, not the innings row existing: the card can name the openers before the fi
 ball. Today the reel is gated on `m.complete` alone; the gate becomes this per-innings
 rule.
 
+*Built 2026-10-01 (`reelReleased` / `inningsBreak`), with one refinement found in the
+simulator.* An innings that ran its overs out is not `closed` on the card until the 2nd
+innings' row appears, which can be most of the way through the interval. So
+`break_desc` is read for its **innings** word as well (never for weather). The release
+is also **sticky** until the 2nd innings has a ball, because the interval's
+`break_desc` clears when the players walk out, minutes before that ball is scored.
+Prefetch starts once an innings is closed (`reelWanted`); in the hand it starts as
+clips arrive. Rows with no `url` are left out of reels.
+
 **It is slide content, so the chrome ignores it.** No `REPLAY` caption, no hold on the
 band, no `showing` for the latch. While a ten-minute reel plays as the slide, the event
 stream carries on presenting everything else going on: the other matches of the day,
@@ -2467,8 +2547,14 @@ the one sanctioned repeat. Live replays play once and expire.
 
 ### Existing faults this depends on
 
-Both are already live for the full-time reel. The innings break makes them more
-likely.
+*Fixed 2026-10-01.* A rebuild now re-anchors on the panel's identity
+(`anchorAfterRebuild`). A clip that drops out under the screen finishes as an
+*orphan*, then hands on to the next panel that survives. Clips are revealed one by one
+as they cache. The slide reports its remaining length to the kiosk player
+(`wcc-extend`), which only ever moves its backstop later. The history follows.
+
+All three were already live for the full-time reel. The innings break would have made
+them more likely.
 
 - **A rebuild re-anchors by index, not by panel.** `onFeed` rebuilds `views` and keeps
   `idx`. Reel panels sit *before* their innings' scorecards, so revealing a reel while
@@ -2491,21 +2577,25 @@ likely.
 
 ### Costs and what is unknown
 
-- **The Worker does not pass the row's time through yet.** `normaliseMatch` in
-  `live-worker/src/rv.mjs` maps over, ball, names and the url, but not `dt_utc`. Only the
-  simulator sets `happened_ms`. So in production `stampBallTime` never fires, and the
-  replay TTL would have nothing to measure from. Adding `happened_ms` is the first step
-  of the build, and it needs a Worker deploy.
+- **The Worker passes the row's time through as `happened_ms`** *(built 2026-10-01)*,
+  in epoch milliseconds, **corrected for a clock that runs an hour slow**. The stream's
+  timestamps (`dt_utc`, `recording_started_utc`) sit `utc_off_min` behind real UTC,
+  while the match's own `date1` is right. Against YouTube's `actualStartTime`, the
+  recording anchor was 3605–3608 s early on all four BST matches checked (28 June to
+  12 September). Taken raw, every clip would look an hour old and the TTL would drop
+  all of them. `normaliseMatch` adds `utc_off_min` back. That the skew is zero in GMT
+  is an assumption, since no streamed match has fallen there yet. The offline
+  `fetch_ball_events.py` path is unaffected, because it only ever subtracts two stream
+  timestamps, so the skew cancels.
 - **The ball-to-row lag is unmeasured.** The 10-minute TTL has to absorb publication
   lag, then the download, then the wait for a boundary. Log `dt_utc` against the poll
   that first carries each row on the next streamed Saturday.
 - **The Frogbox graphics at the slide's retracted size**, read at ten feet, are
   unknown. If they are not legible, the fallback is *rotation, chrome concealed*, at the
   cost of the reflow.
-- **The simulator cannot test this yet.** `clipsUpTo` produces no fours, a constant
-  `ball`, an interpolated `over` and no bowler (see *What the simulator is NOT honest
-  about*). It needs mirroring against the 96-row sample before replay ordering means
-  anything there.
+- **The simulator mirrors the feed's rows** *(2026-10-01)*: every four, six, wicket
+  and `other`, with RV's numbering and each ball's own time. Its row lag is still an
+  assumption (see *What the simulator is NOT honest about*).
 - **Other clubs' Frogbox streams.** We only read clips for our own matches, because
   the Worker polls RV for our `pc_id`s and the division feed is PC-API, which has no
   clips. RV carries every PCS match and the PC→RV id mapping is not club-specific, so a
@@ -2540,22 +2630,53 @@ way through the afternoon.
 
 ### What the simulator is NOT honest about
 
-Worth knowing before trusting it for anything clip-shaped. `clipsUpTo` does not mirror
-`MatchStreamHighlights`; it is a stand-in written before we had a real sample:
+`clipsUpTo` was a stand-in until 2026-10-01: no fours, a constant `ball`, an `over`
+interpolated from the fall-of-wicket score, and no bowler. It now **mirrors
+`MatchStreamHighlights` field for field**, against the 96 rows of the 12 September
+streamed match as the Worker normalises them. `playInnings` logs every ball Frogbox
+would clip (four, six, wicket, and an occasional untitled `other`), and each row is
+one of those balls:
 
-- **No fours at all** — only wickets and sixes, where a real streamed match produced 58
-  four rows against 17 six rows.
-- **`ball` is a constant** — `1` for a wicket, `3` for a six.
-- **`over` is interpolated** from the batter's fall-of-wicket score against the innings
-  total, so every one of a batter's sixes is dated to the same over, and a not-out
-  batter's are all dated "now".
-- **No bowler**, where the real row names one and carries `bowler_id`.
+- **Numbering is RV's.** `over` is completed overs, so 0-based, and `ball` counts
+  every delivery in the over including wides. That is why a real row, and now a
+  simulated one, can say ball 7.
+- **Each row carries its own `happened_ms`**: the ball's time on the day's clock, with
+  the innings break and rain added back. So a replay's age is the age of its ball.
+- **Rows agree with the card.** Fours, sixes and wickets per innings match the batters'
+  columns, minus any ball bowled before the stream came online (`STREAM_ON_MS`), which
+  has no footage.
+- **`batting_team` / `bowling_team` are club names**, as RV's are, not team labels.
+  Consumers join on `innings_id` first for that reason.
+- **Titles** are drawn from the real feed's own phrasings. `other` rows have none, as
+  in the feed.
 
-None of that matters to the event stream today, since boundaries are no longer events
-and a wicket's own row only refines timing. It matters the moment anything is built on
-the replay surface. `playInnings` is already a real ball-by-ball engine and knows every
-ball's outcome — it simply discards it here — so the fix is in the adapter, and there
-is now a 96-row sample from a real streamed match to mirror field for field.
+Still not honest:
+
+- **Row lag.** A row lands `CLIP_LAG_MS` (40 s) after the card has its over, so 1 to
+  5 minutes after the ball. The real ball-to-row lag is unmeasured. Because the card
+  moves a whole over at a time, a ball bowled just before rain or a scorer stall is
+  listed only after it. That is a useful stale-replay case, but it is the simulator's,
+  not a measured one.
+- **The fours/sixes ratio.** The real match ran 58:17; the engine's weights give
+  about 48:7 over a match. These are Saturday-league weights rather than that match's
+  flat track.
+- **Ids are strings** (`c1-10.4-wicket`), not RV's integers. They are stable across
+  polls, which is the property the store's dedupe needs.
+
+### Testing replays: `v`, and the day holds while one plays
+
+Replays are the one thing the other keys cannot test. The TTL and a clip's age are
+*simulated* time, but the minimum gap between replays and the slide boundaries are
+*real* time, so `c`, `.` and a played day all let clips expire before they get a turn.
+**`v` runs the day a poll at a time until the player has a replay ready, then plays
+it there and then** (`WccPlayer.replayReady` / `playReplayNow`, simulator-only hooks),
+with the day held. **`c` plays replays inline too**: a replay is a change on screen, so
+the step stops on one and plays it. While any replay is on screen the simulated clock
+does not move (`replayOn`, from the player's `wcc-replay`), because on a real Saturday
+the clip and the day run at the same speed. Both steps wait in real time only while a
+replay is still downloading (`afterPrefetch`), so a stretch with no footage runs at full
+speed. Every run clears `wccReplaySeen`, because the simulator replays the same clip ids
+each time and a remembered one would never be offered again.
 
 ### One axis, and it is the day's own clock
 
@@ -2670,11 +2791,12 @@ holds the afternoon so far.
 
 A long skip still delivers every poll in between, in order, because the diff chain is
 what makes the store mean anything — but on a coarser spacing, and with the clip flash
-disarmed so it does not fire fifty video takeovers on its way past. `detectClips` reads
+disarmed so it does not fire fifty video takeovers on its way past. `offerReplays` reads
 `WccPlayer.flash` fresh every poll, so borrowing it is enough and the shipping engine
 needs no flag. It is given back a *turn* later rather than at the end of the loop,
-because the engine detects clips inside its poll's own promise chain, which settles after
-the synchronous skip has returned.
+because the engine offers replays inside its poll's own promise chain, which settles after
+the synchronous skip has returned. After the skip, the next poll offers whatever is still
+inside the replay TTL at the new time, as a reconnect would.
 
 ### Pausing stops the whole screen
 

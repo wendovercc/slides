@@ -274,7 +274,16 @@
          * for half an hour wants to be told the covers are off.
          * > James's direction, 2026-09-29. */
         play_resumed:      { base: 40, ttl: 600000,  repeat: null,   label: 'Play resumes',   panel: 'score' },
-        ball_clip:         { base: 20, ttl: 180000,  repeat: null,   label: 'Ball',           panel: 'score' },
+        /* FOOTAGE OF A BALL — a REPLAY, and never the band's to pick. Every clip row
+         * of a streamed match becomes one (see `replayEvent`); a player queue plays it
+         * at a slide boundary while it is fresh, and the band carries its caption for
+         * as long as it plays. `band: false` keeps it out of the ranking, which is the
+         * whole of the rule: ninety rows a match on the band would be the per-boundary
+         * events coming back through the side door. `ttl` IS the replay TTL, measured
+         * from the ball's own time. Panel 'score': the strip keeps the scoreboard as
+         * it is now, beside a picture of how it was then.
+         * > James's design, 2026-10-01. */
+        replay:            { base: 0,  ttl: 600000,  repeat: null,   label: 'Replay',         panel: 'score', band: false },
         /* THE FLOOR, and now the only snapshot type there is. `ttl` is deliberately
          * longer than the gap between two of them: a snapshot is retired by its own
          * successor (see RETIRES), so the ONLY way an old one survives is that no
@@ -422,8 +431,6 @@
     // that a title decided down the road never reaches the screen. One dial, so the
     // club-centricity of the whole surface can be tuned in a single place.
     var OTHER_CLUB_FACTOR = 0.55;
-    // Something to watch beats something to read, at equal news value.
-    var CLIP_BONUS = 12;
     // Below this, nothing is worth a screen and the chrome collapses. The floor is
     // what makes an empty afternoon read as empty instead of as a loop of stale
     // scorelines.
@@ -477,7 +484,6 @@
         var t = typeOf(type);
         var v = t.base;
         if (!ctx.ours) v *= OTHER_CLUB_FACTOR;
-        if (ctx.clip) v += CLIP_BONUS;
         // A wicket in a tight chase is a different event from a wicket on the first
         // morning of a one-sided game, and the chase model already knows which is
         // which. `tension` is 1 when the match is on a knife edge and 0 once it is
@@ -516,19 +522,12 @@
      * enough that real news is never held back by much. */
     var MIN_SHOW_MS = 10000;
 
-    /* FOOTAGE RUNS TO ITS END. A clip is not a caption that can be swapped
-     * mid-sentence: the slideshow has given way to it, and cutting it off mid-wicket
-     * because a six landed elsewhere is worse than being a few seconds late to the
-     * six. The clip plus a beat either side — a moment to register what is about to
-     * be shown, and a moment before the slideshow is handed back. */
-    function clipHoldMs(ev) {
-        return Math.round(((ev.clip && ev.clip.duration) || 30) * 1000) + 2500;
-    }
-    /* The MINIMUM a pick will be up for, which is all `dwell` means now. Kept on the
-     * record because a surface preparing to show an event still wants to know
-     * whether it is about to run footage or put up a line of text. */
-    function dwellFor(ev) {
-        return ev.clip ? clipHoldMs(ev) : MIN_SHOW_MS;
+    /* The MINIMUM a pick will be up for, which is all `dwell` means now. Footage
+     * no longer holds the band through the scheduler: a replay's caption holds it
+     * from the engine, for exactly as long as the player's clip plays (see
+     * `replayShowing` in live-engine.js). */
+    function dwellFor() {
+        return MIN_SHOW_MS;
     }
 
     /* ---- the L-frame decomposition ------------------------------------------
@@ -650,7 +649,12 @@
         var events = [], byId = {};
         var current = null;        // the event the chrome is showing, if any
         var shownSince = 0;        // when it went up
-        var clipUntil = 0;         // footage must run to its end; see `tick`
+        /* REPLAYS, held apart from the band's events. Same dedupe (`byId`), same
+         * match attribution, but none of the ranking, the tail broadcast or the
+         * eviction order: they are the player's to consume, and a streamed match
+         * lists ninety of them. Oldest out past the cap, which the TTL long since
+         * made worthless anyway. */
+        var replays = [], REPLAY_CAP = opts.replayCap || 240;
         /* WHEN EACH MATCH WAS LAST ON THE BAND, and when we first heard of it at all.
          * Coverage is measured against the later of the two: a match whose first event
          * arrived a minute ago has not been neglected, it has only just turned up, and
@@ -661,6 +665,12 @@
         function add(ev) {
             if (!ev || !ev.id) return null;
             if (byId[ev.id]) return null;                 // already known: not news twice
+            if (typeOf(ev.type).band === false) {
+                byId[ev.id] = ev;
+                replays.push(ev);
+                while (replays.length > REPLAY_CAP) delete byId[replays.shift().id];
+                return ev;
+            }
             ev.shown_at = null; ev.shown_count = 0;
             ev.superseded = false;
             ev.dwell = dwellFor(ev);
@@ -890,10 +900,10 @@
                 var mk = current.match && current.match.key;
                 if (mk) shownAt[mk] = now;
             }
-            current = null; clipUntil = 0; shownSince = 0;
+            current = null; shownSince = 0;
         }
         function answer(now, reason, rows) {
-            return { event: current, until: clipUntil || 0, holding: !!current,
+            return { event: current, until: 0, holding: !!current,
                      picked: rowFor(current, now), ranked: rows || rankedForDisplay(now),
                      reason: reason };
         }
@@ -913,8 +923,7 @@
         function tick(now) {
             now = now == null ? Date.now() : now;
             if (current && current.superseded) leave(now);
-            // Footage, and then the floor on how briefly anything may be up.
-            if (current && clipUntil && now < clipUntil) return answer(now, 'footage running');
+            // The floor on how briefly anything may be up.
             if (current && now - shownSince < MIN_SHOW_MS) return answer(now, 'minimum show time');
 
             var rows = ranked(now);
@@ -969,7 +978,6 @@
             current = best.ev;
             shownSince = now;
             current.shown_count++;
-            clipUntil = current.clip ? now + clipHoldMs(current) : 0;
             return answer(now, current.shown_count > 1 ? 'again (nothing newer)' : 'best ranked',
                           ranked(now));
         }
@@ -982,8 +990,19 @@
             current: function () { return current; },
             size: function () { return events.length; },
             // Test/inspector seam: drop everything and start the day again.
-            reset: function () { events = []; byId = {}; current = null; shownSince = 0; clipUntil = 0; }
+            /* The replays still worth playing: younger than the TTL by the BALL's
+             * time. Oldest first; the player decides the order it plays them in. */
+            replays: function (now) {
+                var ttl = typeOf('replay').ttl;
+                return replays.filter(function (ev) { return now - replayAt(ev) < ttl; });
+            },
+            reset: function () { events = []; byId = {}; current = null; shownSince = 0; replays = []; }
         };
+    }
+
+    // When a replay's ball was bowled: the row's own time, else the poll bracket.
+    function replayAt(ev) {
+        return (ev.happened_at && ev.happened_at[1]) || ev.received_at;
     }
 
     // ---- extraction: our matches (the rich RV feed) -------------------------
@@ -1021,6 +1040,29 @@
             // the passage clause is a subtraction against where the innings stood
             // several overs ago, which is memory no single poll holds.
             carryDerived(p, m);
+
+            /* --- REPLAYS, on every poll, the first one included. A row with footage
+             * is a replay whether or not we were watching when it was bowled, and the
+             * TTL (from the ball's own time, not ours) is what decides whether it is
+             * still worth playing, so a device that joins mid-afternoon still gets the
+             * last ten minutes and a reconnect does not get a backlog. The store
+             * de-duplicates the cumulative list by id. */
+            /* ONE REPLAY PER BALL. A milestone is a row of its own on the ball that
+             * brought it up, so rows are keyed by ball and a later row for the same
+             * ball ENRICHES the replay rather than adding a second one: the four that
+             * reached a fifty is one replay that knows it did. Leading rows first, so a
+             * ball's footage comes from its wicket or boundary row. */
+            var thisPoll = {};
+            (m.clips || []).filter(function (c) { return c.url && c.id != null; })
+                .sort(function (a, b) { return replayRank(a) - replayRank(b); })
+                .forEach(function (c) {
+                    var id = ctx.key + ':replay:' + replayBall(c);
+                    var have = thisPoll[id] || (cfg.replay ? cfg.replay(id) : null);
+                    if (have) { mergeReplay(have, c); return; }
+                    var ev = replayEvent(m, ctx, c, when, now, id);
+                    thisPoll[id] = ev;
+                    out.push(ev);
+                });
 
             if (!p) {
                 // First sighting. The toss is a standing fact worth announcing (it
@@ -1617,60 +1659,33 @@
                 push('match_finished', 'final', finishedPayload(m, ctx, 'result confirmed'));
             }
 
-            /* --- clips. A clip is not an event of its own: it is footage OF one, so
-             * it joins the event it shows and only stands alone when nothing claims
-             * it.
+            /* --- clips AS DATA. The footage itself is a replay, raised above; this
+             * pass takes the fact rather than the film.
              *
-             * THE JOIN MUST REACH BACK PAST THIS POLL. Footage lags the scorecard —
-             * the wicket is in the feed a poll or two before the clip of it is — so
-             * searching only the events extracted from this poll finds nothing and
-             * emits a second, duplicate wicket. The store is therefore searched too,
-             * via `cfg.recent`, which is how the pair ends up as one thing on screen.
-             * (Without a `recent` the extractor still works and still degrades to the
-             * duplicate, so a caller that has no store is not broken by this.) */
+             * THE ROW IS A BALL EVENT BEFORE IT IS FOOTAGE. `MatchStreamHighlights`
+             * carries `over_no`, `ball_no` and `dt_utc` on every row — verified
+             * complete across 96 rows of a real streamed match — which is the only
+             * per-ball truth RV has anywhere. The scorecard cannot place a boundary
+             * or a wicket in time at all.
+             *
+             * WE DO NOT WAIT FOR IT. The scorecard stays the trigger, because it is
+             * faster and because waiting would make the streamed match — the one we
+             * most want to be live on — the slowest thing on the wall. The row lands
+             * a poll or two later and corrects the record behind the event, which is
+             * invisible on the band and is exactly what `happened_at` is for.
+             *
+             * NOTHING HERE RAISES AN EVENT ANY MORE. Footage used to join the wicket
+             * it showed (and stand alone as a `wicket` or `ball_clip` when nothing
+             * claimed it); that join is gone with the replay design. A wicket's text
+             * is never held back for its footage, footage is never folded into a line
+             * already read out, and a row the scorecard never reported is shown as
+             * what it is — a replay — rather than as news in an older hand.
+             *
+             * THE STAMP MUST REACH BACK PAST THIS POLL, because the wicket it dates
+             * was extracted a poll or two ago and lives in the store: `cfg.recent`. */
             (m.clips || []).forEach(function (c) {
-                /* THE ROW IS A BALL EVENT BEFORE IT IS FOOTAGE, and this pass takes
-                 * the fact rather than the film. `MatchStreamHighlights` carries
-                 * `over_no`, `ball_no` and `dt_utc` on every row — verified complete
-                 * across 96 rows of a real streamed match — which is the only
-                 * per-ball truth RV has anywhere. The scorecard cannot place a
-                 * boundary or a wicket in time at all.
-                 *
-                 * WE DO NOT WAIT FOR IT. The scorecard stays the trigger, because it
-                 * is faster and because waiting would make the streamed match — the
-                 * one we most want to be live on — the slowest thing on the wall.
-                 * The row lands a poll or two later and corrects the record behind
-                 * the event, which is invisible on the band and is exactly what
-                 * `happened_at` is for.
-                 *
-                 * `url` is not required here: a row with no playable clip is still a
-                 * statement that a ball happened at a time, and only the footage path
-                 * below needs something to play. */
                 stampBallTime(out, c);
                 stampBallTime(cfg.recent ? cfg.recent(ctx.key) : [], c);
-                if (!c.url) return;
-                var claimed = attachClip(out, c) ||
-                              attachClip(cfg.recent ? cfg.recent(ctx.key) : [], c);
-                if (claimed) return;
-                /* A BOUNDARY ROW STOPS HERE. `four` and `six` are no longer event
-                 * types — a counter cannot date a boundary and the scorers' counters
-                 * drift, so the boundary lives as a clause on the score instead (see
-                 * `scorePayload`). Letting an unclaimed row raise one anyway would
-                 * bring them back through the side door, on the streamed match only,
-                 * which is the one place the inconsistency would be hardest to spot.
-                 * Footage of a boundary is a REPLAY, and that is its own surface. */
-                if (c.event === 'four' || c.event === 'six') return;
-                /* NOTHING CLAIMED IT — so this is a ball the scorecard never
-                 * reported. Real and commoner than it sounds: against the same
-                 * scorecard the highlight feed had 58 fours to the batters' 55 and 17
-                 * sixes to their 13, because a boundary in byes is not a batter's
-                 * four and scorers' boundary counters drift. It becomes an event in
-                 * the house grammar rather than the feed's own sentence. */
-                var type = c.event === 'wicket' ? 'wicket' : 'ball_clip';
-                var clipWhen = c.happened_ms ? [c.happened_ms, c.happened_ms] : when;
-                out.push(event(type, ctx.key + ':clip' + c.id, ctx, clipWhen, now,
-                               ballPayload(m, ctx, c, type),
-                               { clip: clipOf(c), tension: ctx.tension }));
             });
         });
         // Remember when we saw each card, so the NEXT poll can bracket against a
@@ -4806,44 +4821,6 @@
                  // to budget for until the player measures the real thing.
                  duration: c.duration || 30 };
     }
-    function clipText(c) {
-        var who = c.batter || c.dismissed || '';
-        return (c.event === 'wicket' ? 'Wicket' : c.event === 'six' ? 'Six' : c.event === 'four' ? 'Four' : 'Highlight') +
-               (who ? ' — ' + who : '');
-    }
-    // Footage of an event we already extracted this poll joins it, so a wicket and
-    // its replay are ONE thing on screen. Matched on over/ball within the same
-    // match, and only for events that could plausibly have a clip.
-    function attachClip(out, c) {
-        if (c.over == null) return false;
-        for (var i = 0; i < out.length; i++) {
-            var ev = out[i];
-            if (ev.clip) continue;
-            // An event the chrome has ALREADY shown is not amended in place: the
-            // footage is new information the room has not seen, so it goes on to earn
-            // its own screen rather than being folded into a line already read out.
-            if (ev.shown_count > 0) continue;
-            if (!kindOf(c, ev)) continue;
-            /* WHOSE BALL THIS WAS. Matched against the payload's `who` — the name
-             * the extractor put on the event — and only then against its text.
-             *
-             * It used to read the HEADLINE alone, which was right while a wicket's
-             * headline was "C Godden 2, lbw b Vane". The headline is now the scoreline
-             * (see the wicket and boundary payloads), so the name lives in the clause
-             * and a name test against the headline could never match again: every clip
-             * would have attached to the first candidate event regardless of who it was
-             * of, or to none. */
-            var who = c.dismissed || c.batter;
-            if (who && !nameMatches(ev, who)) continue;
-            ev.clip = clipOf(c);
-            // A clip changes what the event IS worth and how long it needs, so both
-            // are recomputed rather than left at their text-only values.
-            ev.interest += CLIP_BONUS;
-            ev.dwell = dwellFor(ev);
-            return true;
-        }
-        return false;
-    }
     /* THE TRUE INSTANT, off a ball row, onto the event the scorecard already gave us.
      *
      * This is the whole point of reading the highlights as data. Everywhere else an
@@ -4878,61 +4855,168 @@
     function kindOf(c, ev) {
         return c.event === 'wicket' && ev.type === 'wicket';
     }
-    /* A BALL THE SCORECARD NEVER REPORTED, written the way every other incident on
-     * this wall is written: the scoreline leads, the clause says what happened.
+    /* ---- REPLAYS -------------------------------------------------------------
      *
-     * The scoreline is the innings' CURRENT figures, not the score at that ball —
-     * which is not recoverable, because the rows carry only boundaries and wickets
-     * and never the singles in between. The over shown is the innings' own, for the
-     * same reason: pairing this ball's over with the current total would state a
-     * position the match was never in. The row's over and ball are kept on the event
-     * instead, where they date it without asserting a scoreline. */
-    /* THE SAME SHAPE AS EVERY OTHER WICKET, which is the whole of this rewrite.
+     * One record per clip row, keyed by clip id, timed by the row's own `dt_utc`
+     * (`happened_ms`). The poll bracket stands in only for a row with no time, which
+     * a corrected Worker should never send.
      *
-     * It led with the innings' current scoreline — "Wendover 15/1 (4 ov) · R Duff out
-     * (4.1)" — which is the v1 grammar the wicket line left behind, and it turns up a
-     * minute after a properly written wicket saying the same thing in an older hand.
-     * (It turns up at all because footage of a wicket the band has ALREADY shown earns
-     * its own screen rather than being folded in silently; see `attachClip`.)
-     *
-     * What it can say is thinner than a scorecard wicket — a row carries the batter,
-     * sometimes the bowler, and the ball it happened on, and never how he went or for
-     * how many — so it says those and stops. The over and ball stay because they are
-     * the one thing this path knows that the scorecard does not. */
-    function ballPayload(m, ctx, c, type) {
-        var inn = inningsOfClip(m, c);
-        var who = c.dismissed || c.batter || '';
-        var at = c.over != null ? '(' + c.over + '.' + (c.ball || 0) + ')' : '';
-        if (!inn) {
-            return say([det(c.title || clipText(c)), SEP]
-                       .concat(fixtureParts(m, ctx, at)), { who: who });
-        }
-        var sides = sidesOf(m, ctx, inn);
-        if (!who) {
-            return say([det(c.title || clipText(c)), det(at)]
-                       .concat(clubTag(ctx, sides.bat, sides.other)), { who: who });
-        }
-        var lead = [{ cls: 'bat', text: who },
-                    det(type === 'wicket' ? 'out' : ''), det(at)];
-        var credit = c.bowler
-            ? [{ cls: 'bat', text: c.bowler }].concat(clubTag(ctx, sides.other, sides.bat))
-            : clubTag(ctx, sides.bat, sides.other);
-        return say(lead.concat([SEP]).concat(credit), { who: who });
+     * `replay` carries what the CAPTION needs, and only that. The caption is built
+     * per tick (`replayPayload`), because its age is part of it. */
+    var REPLAY_RANK = { wicket: 0, six: 1, four: 2, milestone: 3, team_milestone: 4,
+                        five_for: 5, chance: 6, appeal: 7 };
+    function replayRank(c) { return c.event in REPLAY_RANK ? REPLAY_RANK[c.event] : 8; }
+    function replayBall(c) {
+        return c.over == null ? 'id' + c.id
+             : (c.innings_id != null ? c.innings_id : '') + ':' + c.over + '.' + c.ball;
     }
-    // Which innings a row belongs to — by id, then by the batting side's name.
-    function inningsOfClip(m, c) {
-        var list = (m && m.innings) || [];
-        var i;
-        if (c.innings_id != null) {
-            for (i = 0; i < list.length; i++)
-                if (String(list[i].innings_id) === String(c.innings_id)) return list[i];
+    function replayEvent(m, ctx, c, when, now, id) {
+        var at = c.happened_ms != null ? [c.happened_ms, c.happened_ms] : when;
+        var ev = event('replay', id, ctx, at, now, {}, { clip: clipOf(c) });
+        ev.replay = { kind: c.event, kinds: [], metrics: {}, names: {},
+                      over: c.over, ball: c.ball, batter: c.batter || '',
+                      bowler: c.bowler || '', dismissed: c.dismissed || '',
+                      title: c.title || '', innings_id: c.innings_id };
+        mergeReplay(ev, c);
+        return ev;
+    }
+    // Another row on the same ball: what it says joins the replay (idempotent, since
+    // every poll re-lists every row).
+    function mergeReplay(ev, c) {
+        var r = ev.replay;
+        if (r.kinds.indexOf(c.event) < 0) r.kinds.push(c.event);
+        r.metrics[c.event] = c.metric == null ? null : c.metric;
+        r.names[c.event] = c.event === 'five_for' ? (c.bowler || '') : (c.dismissed || c.batter || '');
+        if (!r.bowler && c.bowler) r.bowler = c.bowler;
+    }
+    /* THE REPLAY CAPTION: `REPLAY · J Harrington hits a four · 14.3 overs ↻ 6m`.
+     *
+     * NO SCORELINE, which is the rule that makes the whole design honest. Frogbox
+     * burns its own score into the clip, AS IT WAS AT THAT BALL, and the strip beside
+     * it has the score as it is; a team score here would be a third claim. The age is
+     * what makes the burned-in score read as a record of then.
+     *
+     * WHAT THE BALL MEANT, from two sources and little else:
+     *   - the ROWS on the ball, which RV tags: a batter's 50 or 100, the team's 100s,
+     *     a five-for, an appeal turned down, a chance missed (see CLIP_KIND in rv.mjs);
+     *   - the CARD, for a wicket: how out and for how many (an out batter's row is
+     *     frozen, so it is exact), and the stand it ended from the fall of wickets.
+     * A milestone's name is checked against the card (the batter's runs reach the
+     * mark) and left out when the two disagree; the milestone itself still stands.
+     * In the band's own grammar (`wicketParts`, `clubTag`, the "100 up" line) so a
+     * replay reads like the band's news did, with our club never named.
+     * Counts ("his third six") and the batter's score at the ball are NOT said: the
+     * rows miss balls bowled before the stream came on, and scorers' counters drift.
+     * > James's direction, 2026-10-01. */
+    function replayPayload(ev, now, m, cfg) {
+        var r = (ev && ev.replay) || {};
+        var K = r.kinds && r.kinds.length ? r.kinds : [r.kind];
+        var has = function (k) { return K.indexOf(k) >= 0; };
+        var met = function (k) { return (r.metrics || {})[k]; };
+        var name = function (k) { return (r.names || {})[k] || ''; };
+        var ctx = m ? matchCtx(m, cfg || {}, true) : null;
+        var inn = m ? replayInnings(m, r) : null;
+        var sides = (inn && ctx) ? sidesOf(m, ctx, inn) : { bat: '', other: '' };
+        var bat = function (n) { return n ? { cls: 'bat', text: n } : null; };
+        /* WHEN, AS ONE PHRASE: "14.2 overs ↻ 24m". The over and the age both say when
+         * the ball was, and together they are what makes the burned-in score read as
+         * then. The age is the wall's own token for how old a thing is (the board's
+         * and the strip's "↻ 14m" when a feed goes quiet), compact and already
+         * learned; never under a minute, so it cannot read "0m".
+         * > James's direction, 2026-10-01. */
+        var secsAgo = Math.max(60, Math.round(Math.max(0, now - replayAt(ev)) / 1000));
+        var ago = (r.over != null ? r.over + '.' + (r.ball || 0) + ' overs ' : '') +
+                  '\u21bb ' + (secsAgo < 5400 ? Math.round(secsAgo / 60) + 'm' : Math.round(secsAgo / 3600) + 'h');
+        // The batter's milestone on this ball, when the card agrees it is his.
+        var mark = met('milestone'), markWho = name('milestone');
+        var markOk = mark && MARK_WORDS[mark] && cardRuns(inn, markWho) >= mark;
+        var teamMark = met('team_milestone');
+        var who = r.dismissed || r.batter;
+        var line;
+        if (has('wicket')) {
+            line = replayWicket(r, inn, sides, ctx, met('wicket'));
+            if (has('five_for') && name('five_for')) line = line.concat([SEP, det('five wickets for'), bat(name('five_for'))]);
+        } else if (has('four') || has('six')) {
+            // NO BOWLER: the shot is the batter's. The bowler is named only where the
+            // ball is his — a wicket, a five-for. > James's direction, 2026-10-01.
+            var shot = has('six') ? 'six' : 'four';
+            line = [bat(r.batter), det('hits a ' + shot)];
+            if (markOk && nameEq(markWho, r.batter)) line.push(det('to reach a ' + MARK_WORDS[mark]));
+            if (teamMark) line = line.concat([det(markOk && nameEq(markWho, r.batter) ? 'and bring up' : 'to bring up'),
+                                              { cls: 'score', text: String(teamMark) }]);
+            if (ctx) line = line.concat(clubTag(ctx, sides.bat, sides.other));
+        } else if (has('milestone') && mark) {
+            line = markOk ? [bat(markWho), det('reaches a ' + MARK_WORDS[mark])]
+                          : [det('A ' + (MARK_WORDS[mark] || 'milestone'))];
+            if (teamMark) line = line.concat([det('and the total'), { cls: 'score', text: String(teamMark) }]);
+            if (ctx) line = line.concat(clubTag(ctx, sides.bat, sides.other));
+        } else if (has('team_milestone') && teamMark) {
+            // "100 up", as the band says it: the club named only when it is not ours.
+            line = [{ cls: 'score', text: String(teamMark) }, det('up')];
+            if (ctx && sides.bat && !isOurPlayer(ctx, sides.bat))
+                line = line.concat(optional([det('for'), team(sides.bat)]));
+        } else if (has('five_for')) {
+            line = [bat(name('five_for') || r.bowler), det('takes a five-for')];
+            if (ctx) line = line.concat(clubTag(ctx, sides.other, sides.bat));
+        } else if ((has('appeal') || has('chance')) && who) {
+            line = [bat(who), det(has('appeal') ? 'survives an appeal' : 'survives a chance')];
+            if (ctx) line = line.concat(clubTag(ctx, sides.bat, sides.other));
+        } else if (who) {
+            line = [bat(who)];
+        } else {
+            line = [det(r.title || 'Highlight')];
         }
-        if (c.batting_team) {
-            for (i = 0; i < list.length; i++)
-                if (String(list[i].side || '').toLowerCase() === String(c.batting_team).toLowerCase())
-                    return list[i];
+        return say([det('REPLAY'), SEP].concat(line).concat([SEP, det(ago)]), { who: who || '' });
+    }
+    /* A WICKET, in the band's wicket grammar off the card's frozen row: how out, by
+     * whom, for how many, and the stand it ended when that is worth saying. The row's
+     * own names when the card cannot be matched. */
+    function replayWicket(r, inn, sides, ctx, n) {
+        var who = r.dismissed || r.batter;
+        var w = inn && who ? (inn.batters || []).filter(function (b) { return nameEq(b.name, who); })[0] : null;
+        if (w && isOut(w) && ctx) {
+            var stand = null;
+            if (n) {
+                var fall = (inn.fall || []).slice().sort(function (a, b) { return a.order - b.order; });
+                var hi = fall.filter(function (f) { return f.order === n; })[0];
+                var lo = fall.filter(function (f) { return f.order === n - 1; })[0];
+                if (hi && hi.score != null) {
+                    var s = hi.score - (n === 1 ? 0 : (lo && lo.score != null ? lo.score : NaN));
+                    if (s >= STAND_NEWS) stand = s;
+                }
+            }
+            /* Every club mention optional, so it is what gives way first: the band's
+             * wicket line names the fielding side outright on a run-out ("Amersham in
+             * the field"), which on a replay is a phrase the line can do without. */
+            return wicketParts({ name: w.name, how: w.how, runs: w.runs, fielder: w.fielder },
+                               inn, sides, ctx, false, stand).map(function (p) {
+                if (p && !p.sep && (p.cls === 'team' || p.text === 'in the field'))
+                    return Object.assign({}, p, { drop: true });
+                return p;
+            });
+        }
+        return [{ cls: 'bat', text: who || 'Wicket' }, det('out')]
+            .concat(r.bowler ? [det('off'), { cls: 'bat', text: r.bowler }] : []);
+    }
+    // Mark a phrase as the first thing the band gives up when the line will not fit.
+    function optional(parts) {
+        return parts.map(function (p) { return p ? Object.assign({}, p, { drop: true }) : p; });
+    }
+    function replayInnings(m, r) {
+        var list = (m && m.innings) || [];
+        if (r.innings_id != null) {
+            for (var i = 0; i < list.length; i++)
+                if (String(list[i].innings_id) === String(r.innings_id)) return list[i];
         }
         return list[list.length - 1] || null;
+    }
+    function nameEq(a, b) {
+        return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+    }
+    // A batter's runs on the card, or -1 when the card has no such batter.
+    function cardRuns(inn, who) {
+        var b = inn && who ? (inn.batters || []).filter(function (x) { return nameEq(x.name, who); })[0] : null;
+        return b ? (b.runs || 0) : -1;
     }
     // Does this event name that player? The explicit `who` is authoritative; the
     // text is the fallback for the types that do not carry one.
@@ -4957,6 +5041,9 @@
         interestOf: interestOf,
         MIN_SHOW_MS: MIN_SHOW_MS,
         dwellFor: dwellFor,
+        replayPayload: replayPayload,
+        replayAt: replayAt,
+        REPLAY_TTL_MS: TYPES.replay.ttl,
         decompose: decompose,
         panelFor: panelFor,
         TYPES: TYPES,

@@ -234,11 +234,18 @@
     // between scorecards: a fifty is a batter's runs crossing fifty, a five-for is a
     // bowler's column, a wicket is the wickets count moving AND a named dismissal.
     // Fabricating summary lines would produce a feed no extractor could read.
+    /* RV'S OWN NUMBERING (rv.mjs OUT_KIND): 0 has not batted, 1 NOT OUT, then 2 caught,
+     * 3 lbw, 4 bowled, 5 stumped, 6 run out. The simulator used to number these its own
+     * way, 0 = not out and 1 = caught, so every consumer that reads RV's code (the
+     * live-match slide's at-crease bar, "not out" and "*") marked a caught batter as
+     * the one at the crease and missed the two who were. Ids only: the kind is still
+     * drawn by index, so no seed's cricket changes. */
+    var NOT_OUT = 1;
     var OUT_KINDS = [
-        { id: 1, kind: 'caught', how: function (f, b) { return 'c ' + f + ' b ' + b; } },
-        { id: 2, kind: 'bowled', how: function (f, b) { return 'b ' + b; } },
+        { id: 2, kind: 'caught', how: function (f, b) { return 'c ' + f + ' b ' + b; } },
+        { id: 4, kind: 'bowled', how: function (f, b) { return 'b ' + b; } },
         { id: 3, kind: 'lbw', how: function (f, b) { return 'lbw  b ' + b; } },
-        { id: 4, kind: 'run_out', how: function (f) { return 'ro (' + f + ')'; } },
+        { id: 6, kind: 'run_out', how: function (f) { return 'ro (' + f + ')'; } },
         { id: 5, kind: 'stumped', how: function (f, b) { return 'st ' + f + ' b ' + b; } }
     ];
 
@@ -246,17 +253,29 @@
         var r = rng(cfg.seed);
         var bats = cfg.batting.map(function (n, i) {
             return { name: n, runs: 0, balls: 0, fours: 0, sixes: 0, sr: null, pos: i + 1,
-                     dismissal_id: 0, out_kind: null, fielder: null, how: 'not out',
+                     dismissal_id: NOT_OUT, out_kind: null, fielder: null, how: 'not out',
                      fow_order: null, fow: null };
         });
         var bowls = cfg.bowling.slice(0, 6).map(function (n) {
-            return { name: n, balls: 0, maidens: 0, runs: 0, wickets: 0, wides: 0, no_balls: 0 };
+            return { name: n, balls: 0, maidens: 0, runs: 0, wickets: 0, wides: 0, no_balls: 0,
+                     first: null };   // the over this bowler came on in
+
         });
         var extras = { total: 0, nb: 0, wd: 0, b: 0, lb: 0 };
         var runs = 0, wkts = 0, balls = 0;
         var striker = 0, nonStriker = 1, nextIn = 2;
         var fall = [];
         var snaps = [];            // one per completed over
+        /* EVERY BALL FROGBOX WOULD CLIP, in the order bowled, numbered as RV numbers
+         * them: `over` is completed overs (0-based, so the first over is 0, which reads
+         * as "0.3" in scorecard notation) and `ball` counts every DELIVERY in the over,
+         * wides included, which is why a real row can say ball 7. This is what
+         * `clipsUpTo` turns into highlight rows, so a replay can be dated to its ball. */
+        var log = [];
+        /* "Other" rows (match_event_type 1004/1005: ~5 in a real 96-row match, no
+         * title) are drawn from their OWN generator, so adding them did not move a
+         * single ball of any existing seed's cricket. */
+        var rOther = rng(cfg.seed + 7);
         /* PER-BALL OUTCOME WEIGHTS, set to look like Saturday league cricket rather
          * than a T20 highlights package: about five and a half an over, a dozen-odd
          * fours and a couple of sixes an innings. Worth getting right rather than
@@ -278,18 +297,22 @@
 
         function snapshot(overNo) {
             var at = [bats[striker], bats[nonStriker]].filter(function (b) {
-                return b && b.dismissal_id === 0;
+                return b && b.dismissal_id === NOT_OUT;
             }).map(clone);
-            var out = bats.filter(function (b) { return b.dismissal_id !== 0; });
+            var out = bats.filter(function (b) { return b.dismissal_id !== NOT_OUT; });
             snaps.push({
                 over: overNo, runs: runs, wickets: wkts, overs: fmtOvers(balls),
                 extras: clone(extras),
-                batters: bats.filter(function (b) { return b.balls > 0 || b.dismissal_id !== 0 || b.pos <= nextIn; }).map(clone),
+                batters: bats.filter(function (b) { return b.balls > 0 || b.dismissal_id !== NOT_OUT || b.pos <= nextIn; }).map(clone),
                 yet_to_bat: bats.filter(function (b) { return b.pos > nextIn; }).map(function (b) { return b.name; }),
                 at_crease: at,
                 last_wicket: out.length ? clone(out[out.length - 1]) : null,
                 fall: out.map(function (b, i) { return { order: i + 1, score: b.fow, who: b.name.split(' ').pop() }; }),
-                bowling: bowls.filter(function (b) { return b.balls > 0; }).map(function (b) {
+                // In BOWLING ORDER, as the Worker emits it (RV's `number`): who came
+                // on first, not the squad order, which put a first change on top.
+                bowling: bowls.filter(function (b) { return b.balls > 0; }).sort(function (a, b) {
+                    return a.first - b.first;
+                }).map(function (b) {
                     return { name: b.name, overs: fmtOvers(b.balls), maidens: b.maidens,
                              runs: b.runs, wickets: b.wickets, wides: b.wides, no_balls: b.no_balls,
                              econ: b.balls ? +(b.runs / (b.balls / 6)).toFixed(2) : null };
@@ -320,11 +343,13 @@
                                     bowls[bowlerIdx].balls >= maxOvers * 6));
             lastBowler = bowlerIdx;
             var bw = bowls[bowlerIdx];
-            var overRuns = 0, overLegal = 0;
+            if (bw.first == null) bw.first = over;
+            var overRuns = 0, overLegal = 0, dlv = 0;
             for (var ball = 0; ball < 6; ball++) {
                 if (wkts >= 10) break;
                 if (cfg.target != null && runs >= cfg.target) break;
                 var b = bats[striker];
+                dlv++;
                 // A wide costs a run and does not count as a ball, so it is settled
                 // before the ball is counted rather than by un-counting it after.
                 if (r() < pWide) {
@@ -354,6 +379,13 @@
                     b.sr = b.balls ? +(b.runs / b.balls * 100).toFixed(1) : null;
                     wkts++;
                     if (kind.kind !== 'run_out') bw.wickets++;
+                    log.push({ event: 'wicket', over: over, ball: dlv, batter: b.name,
+                               bowler: bw.name, dismissed: b.name, metric: wkts });
+                    // A FIVE-FOR is a row of its own on the fifth wicket's ball, as RV
+                    // lists it (1006: batter = the man out, bowler = the bowler).
+                    if (kind.kind !== 'run_out' && bw.wickets === 5)
+                        log.push({ event: 'five_for', over: over, ball: dlv, batter: b.name,
+                                   bowler: bw.name, dismissed: b.name, metric: 5 });
                     fall.push(runs);
                     if (nextIn < 11) { striker = nextIn++; } else { striker = nonStriker; }
                     continue;
@@ -367,9 +399,32 @@
                            : s < pDot + pOne + pTwo + pThree + pFour ? 4 : 6;
                 // A batter on his way to a hundred turns some of the dots over.
                 if (isHero && scored === 0 && r() < 0.45) scored = 1;
+                var wasB = b.runs, wasT = runs;
                 b.runs += scored; runs += scored; overRuns += scored; bw.runs += scored;
                 if (scored === 4) b.fours++;
                 if (scored === 6) b.sixes++;
+                if (scored === 4 || scored === 6) {
+                    log.push({ event: scored === 4 ? 'four' : 'six', over: over, ball: dlv,
+                               batter: b.name, bowler: bw.name, dismissed: null, metric: scored });
+                } else if (scored === 0 && rOther() < 0.013) {
+                    /* AN APPEAL TURNED DOWN OR A CHANCE MISSED, RV's 1008 and 1009 — the
+                     * two that used to be "other". Never on a scoring ball. */
+                    log.push({ event: rOther() < 0.5 ? 'appeal' : 'chance', over: over, ball: dlv,
+                               batter: b.name, bowler: bw.name, dismissed: null, metric: 0 });
+                }
+                /* MILESTONES ARE ROWS OF THEIR OWN on the ball that brought them up, as
+                 * RV lists them: a batter's 50 or 100 (1005) and the team's hundreds
+                 * (1004), each beside the shot's own row when it was a boundary. */
+                [50, 100].forEach(function (mk) {
+                    if (wasB < mk && b.runs >= mk)
+                        log.push({ event: 'milestone', over: over, ball: dlv, batter: b.name,
+                                   bowler: bw.name, dismissed: null, metric: mk });
+                });
+                [100, 200, 300].forEach(function (mk) {
+                    if (wasT < mk && runs >= mk)
+                        log.push({ event: 'team_milestone', over: over, ball: dlv, batter: b.name,
+                                   bowler: bw.name, dismissed: null, metric: mk });
+                });
                 b.sr = b.balls ? +(b.runs / b.balls * 100).toFixed(1) : null;
                 if (scored % 2 === 1) { var t = striker; striker = nonStriker; nonStriker = t; }
             }
@@ -378,12 +433,12 @@
             if (overLegal === 6 && overRuns === 0) bw.maidens++;
             // Ends of over: swap, snapshot.
             var tt = striker; striker = nonStriker; nonStriker = tt;
-            if (bats[striker].dismissal_id !== 0) { var sw = striker; striker = nonStriker; nonStriker = sw; }
+            if (bats[striker].dismissal_id !== NOT_OUT) { var sw = striker; striker = nonStriker; nonStriker = sw; }
             snapshot(over + 1);
             if (wkts >= 10) break;
             if (cfg.target != null && runs >= cfg.target) break;
         }
-        return { snaps: snaps, total: runs, wickets: wkts, balls: balls };
+        return { snaps: snaps, total: runs, wickets: wkts, balls: balls, log: log };
     }
 
     // A shower over one of our matches, so the rain-break event type is in every run
@@ -617,7 +672,8 @@
                     video_id: (cfg.streamed && elapsed >= STREAM_ON_MS)
                         ? 'sim-' + cfg.pc_id : null,
                     innings: inns,
-                    clips: cfg.streamed ? clipsUpTo(inns, t, cfg.allot) : [],
+                    clips: cfg.streamed && elapsed >= STREAM_ON_MS
+                        ? clipsUpTo([first, second], sides, n1, elapsed, whenElapsed) : [],
                     /* The scorer's own cursor, which is what brackets an event's
                      * happened_at — so it is stamped in REAL time, not in the
                      * simulated clock. The two must share a time base with
@@ -659,10 +715,6 @@
         };
     }
 
-    /* Highlight clips, as frogbox delivers them: one per wicket and per six on the
-     * streamed match, arriving a poll after the runs. The URL is a real CORS-open
-     * test stream so the news-flash path can actually play something; swap it for a
-     * dead URL to exercise the failure branch. */
     /* CLIP FOOTAGE comes from the club's own R2 store — the ball-event clips the
      * offline player already caches, which are real cricket and, crucially, the right
      * LENGTH. The stand-in before this was a public HLS test stream that ran for
@@ -709,50 +761,72 @@
      * be a lie about the same event). */
     function clipUrl(id) {
         if (!clipPool.length) return CLIP_FALLBACK;
-        var h = 0, s = String(id);
-        for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-        return clipPool[h % clipPool.length];
+        return clipPool[hashOf(String(id)) % clipPool.length];
     }
     /* The clip list is CUMULATIVE, as RV's is: every poll returns every highlight of
      * the match so far, not the new ones. That is what the store's dedupe-by-id is
      * for, and shipping a simulator that only ever offered new clips would leave that
      * path untested.
      *
-     * Each clip is dated by the INCIDENT, not by the poll carrying it: a wicket that
-     * fell at the fall-of-wicket score is placed at the over that score was reached,
-     * converted back to the day's own time through OVER_MS. Without this, footage of a
-     * wicket from twenty overs ago arrives stamped "just now" and the scheduler treats
-     * an old replay as the day's latest news. */
-    function clipsUpTo(inns, t, allot) {
+     * MIRRORED FIELD FOR FIELD on a real streamed match's 96 rows (2026-09-12: 58
+     * fours, 17 sixes, 15 wickets, 5 team milestones, 1 batter's fifty), as the Worker
+     * normalises them, with RV's own kinds and `metric` (see CLIP_KIND in rv.mjs). Each row
+     * is a ball the innings engine actually bowled, so its over, ball, batter and
+     * bowler agree with the scorecard, and its `happened_ms` is THAT BALL's time on the
+     * day's clock: a replay's age, and the TTL that judges it, are only testable if
+     * every row carries its own instant rather than the poll's.
+     *
+     * A row lands CLIP_LAG_MS after the scorecard has the over, never before it: the
+     * card is the faster of the two in reality, and the extractor is written for that
+     * order. Rows before the stream came online are not listed, as Frogbox has no
+     * footage of them. */
+    var CLIP_LAG_MS = 40000;   // unmeasured; see "ball-to-row lag" in docs/live-events.md
+    var CLIP_TITLES = {
+        four: ['{b} plays it for 4', '{w} delivers, {b} gets 4', 'Shot, 4 runs to {b}',
+               '{b} adds 4 more to the score', '{b} hits {w} for a boundary'],
+        six: ['{b} smashes it for 6', 'Shot, 6 runs to {b}', '6 RUNS! {b} goes over the top',
+              '{b} hits {w} for 6!', '{b} takes advantage, 6 more'],
+        wicket: ['{w} takes the wicket of {b}', '{b} dismissed by {w}',
+                 '{b} is gone, {w} strikes again'],
+        // Frogbox's own voice on the two that have one, naming the fielding club as
+        // the real rows do; the milestone and five-for rows carry no title at all.
+        appeal: ['HOWZAT! {f} appeal for the wicket of {b}'],
+        chance: ['MISSED! A great chance for a wicket for {f}'],
+        milestone: [''], team_milestone: [''], five_for: [''], other: ['']
+    };
+    function hashOf(s) {
+        var h = 0;
+        for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return h;
+    }
+    function clipsUpTo(played, sides, n1, elapsed, whenElapsed) {
         var out = [];
-        inns.forEach(function (inn, ii) {
-            var oversNow = ballsIn(inn.overs) / 6;
-            (inn.batters || []).forEach(function (b) {
-                // Which over a dismissal happened in, estimated from the team score
-                // when the batter fell against the score now.
-                var frac = inn.runs > 0 && b.fow != null ? Math.min(1, b.fow / inn.runs) : 1;
-                var atOver = Math.max(0, Math.floor(frac * oversNow));
-                var agoMs = Math.max(0, (oversNow - atOver)) * OVER_MS;
-                if (b.dismissal_id && b.fow != null) {
-                    var wid = 'c' + ii + 'w' + b.name.replace(/\W/g, '');
-                    out.push({ id: wid, url: clipUrl(wid),
-                               event: 'wicket', title: 'Wicket — ' + b.name,
-                               over: atOver, ball: 1, happened_ms: clockNow() - agoMs,
-                               batting_team: inn.side, innings_id: inn.innings_id,
-                               batter: b.name, dismissed: b.name, bowler: null,
-                               // A ball-event clip is a handful of seconds. The dwell is
-                               // only an estimate either way — the flash reports its own
-                               // `wcc-flash-done` when the footage actually ends.
-                               duration: 8 });
-                }
-                for (var s = 0; s < (b.sixes || 0); s++) {
-                    var sid = 'c' + ii + '6' + b.name.replace(/\W/g, '') + s;
-                    out.push({ id: sid, url: clipUrl(sid),
-                               event: 'six', title: b.name + ' six',
-                               over: atOver, ball: 3, happened_ms: clockNow() - agoMs,
-                               batting_team: inn.side, innings_id: inn.innings_id,
-                               batter: b.name, bowler: null, duration: 8 });
-                }
+        played.forEach(function (inn, ii) {
+            var off = ii === 0 ? 0 : n1;           // overs of play before this innings
+            var bat = sides[ii], bowl = sides[1 - ii];
+            inn.log.forEach(function (e) {
+                // The ball's own moment in play, within its over (a 7th delivery sits
+                // at the over's end rather than spilling into the next).
+                var ballEl = (off + e.over + (Math.min(e.ball, 6) - 0.5) / 6) * OVER_MS;
+                if (ballEl < STREAM_ON_MS) return;
+                if ((off + e.over + 1) * OVER_MS + CLIP_LAG_MS > elapsed) return;
+                var id = 'c' + (ii + 1) + '-' + e.over + '.' + e.ball + '-' + e.event;
+                var tpl = CLIP_TITLES[e.event];
+                out.push({ id: id, url: clipUrl(id), event: e.event,
+                           innings_id: ii + 1, over: e.over, ball: e.ball,
+                           title: tpl[hashOf(id) % tpl.length]
+                               .replace('{b}', e.batter).replace('{w}', e.bowler)
+                               .replace('{f}', bowl.club),
+                           metric: e.metric == null ? null : e.metric,
+                           // RV's batting_team_name is the CLUB, not the team label —
+                           // which is why consumers join on innings_id first.
+                           batting_team: bat.club, bowling_team: bowl.club,
+                           batter: e.batter, bowler: e.bowler, dismissed: e.dismissed,
+                           happened_ms: dayEpoch + whenElapsed(ballEl),
+                           // A ball-event clip is a handful of seconds. The dwell is
+                           // only an estimate either way — the flash reports its own
+                           // `wcc-flash-done` when the footage actually ends.
+                           duration: 8 });
             });
         });
         return out;
@@ -1053,7 +1127,7 @@
         }
         return Promise.all(work).then(function () { return runTo(target, coarse); });
     }
-    /* DISARMING THE CLIP FLASH for the length of a skip. `detectClips` reads
+    /* DISARMING THE CLIP FLASH for the length of a skip. `offerReplays` reads
      * `WccPlayer.flash` fresh every poll (live-engine.js), so borrowing it is enough —
      * nothing in the shipping engine has to know that a skip is happening.
      *
@@ -1146,18 +1220,90 @@
         (function step() {
             if (!seeking) return;               // any other key cancels it
             if (showingId() !== from) return stop(null);
+            /* A REPLAY IS A CHANGE ON SCREEN TOO, and it is played inline: the step
+             * stops on it and plays it with the day held, so stepping with `c` sees
+             * the footage the room would. (Skipped past otherwise: see `v`.) */
+            if (replayOn) return stop(null);
+            if (playReadyReplay()) return stop(null);
             if (simTime >= DAY_MS) return stop('the day ran out');
             if (simTime >= limit) return stop('nothing changed on screen in an hour');
             var was = simTime;
             advance(ourGap()).then(function () {
                 // Defensive: a clock that did not move would spin here for ever.
                 if (simTime === was) return stop('the clock did not move');
-                step();
+                // Let a clip offered on this poll finish prefetching, so the step
+                // stops on it rather than polls past it.
+                afterPrefetch(step);
             });
         })();
         function stop(why) {
             seeking = false;
             if (why) console.log('[sim] ' + why + ' — still showing ' + (showingNow() || 'nothing'));
+            hud();
+        }
+    }
+    /* A REPLAY HOLDS THE DAY. The clip runs on the real clock, and at x60 half a minute
+     * of footage would carry half an hour of cricket underneath it, so its caption
+     * would read "31 min ago" by the end and the band's news would race past unseen.
+     * On a real Saturday the clip and the day run at the same speed; holding the
+     * simulated clock for its length is what makes that true here. The player says
+     * when one starts and ends (`wcc-replay`, as the engine hears it). */
+    var replayOn = false;
+    window.addEventListener('wcc-replay', function (e) { replayOn = !!(e && e.detail); hud(); });
+    /* EVERY RUN IS A FRESH DAY. The player remembers which replays it has played
+     * across a reload (`wccReplaySeen`), which is right on a real Saturday and wrong
+     * here: the simulator replays the same clip ids on every run, so a remembered one
+     * would never be offered again. Cleared as the script parses, before any poll. */
+    try { localStorage.removeItem('wccReplaySeen'); } catch (e) { /* private mode */ }
+    // Play a replay the player has ready, holding the day, and say whether one went.
+    /* WAIT FOR A DOWNLOAD, NOT FOR EVERY POLL. After a poll, a replay it offered may
+     * still be prefetching; the step waits (real time, briefly) only while one is,
+     * so a stretch with no footage runs at full speed and a clip is not stepped past. */
+    var PREFETCH_WAIT_MS = 4000;
+    function afterPrefetch(then) {
+        var p = window.WccPlayer, until = Date.now() + PREFETCH_WAIT_MS;
+        (function look() {
+            if (p && p.replayPending && p.replayPending() && Date.now() < until) return setTimeout(look, 100);
+            then();
+        })();
+    }
+    function playReadyReplay() {
+        var p = window.WccPlayer;
+        if (!p || !p.replayReady || !p.replayReady()) return false;
+        // When it ends, stay held: the day is paused, so the deck is too.
+        return p.playReplayNow(function () {});
+    }
+
+    /* TO THE NEXT REPLAY: run the day a poll at a time until the player has a replay
+     * ready, then play it there and then, with the day held. Neither `c` nor `.` can
+     * test replays: the TTL and the clip's age are SIMULATED time, while the minimum
+     * gap between replays and the slide boundaries are REAL time, so any compressed
+     * stepping lets clips expire before they get a turn. After each poll it waits only
+     * while a replay is still downloading (`afterPrefetch`), so it stops on the clip's
+     * own poll rather than several polls past it. */
+    function toNextReplay() {
+        if (moving || seeking) return;
+        setPlaying(false);
+        var limit = simTime + SEEK_GIVE_UP_MS;
+        seeking = true;
+        hud();
+        (function step() {
+            if (!seeking) return;
+            var p = window.WccPlayer;
+            if (replayOn) return stop(null);          // the player started one itself
+            if (p && p.replayReady && p.replayReady()) { stop(null); playReadyReplay(); return; }
+            if (!p || !p.replayReady) return stop('this player has no replay hooks');
+            if (simTime >= DAY_MS) return stop('the day ran out');
+            if (simTime >= limit) return stop('no replay in an hour');
+            var was = simTime;
+            advance(ourGap()).then(function () {
+                if (simTime === was) return stop('the clock did not move');
+                afterPrefetch(step);
+            });
+        })();
+        function stop(why) {
+            seeking = false;
+            if (why) console.log('[sim] ' + why);
             hud();
         }
     }
@@ -1172,7 +1318,8 @@
             var deck = deckApi();
             if (deck && deckWasPlaying) deck.setPlaying(true);
             deckWasPlaying = null;
-            autoTimer = setInterval(function () { advance(TICK_MS * RATES[rateIdx]); }, TICK_MS);
+            // Not while a replay is on screen: see `replayOn`.
+            autoTimer = setInterval(function () { if (!replayOn) advance(TICK_MS * RATES[rateIdx]); }, TICK_MS);
         } else {
             holdDeck(0);
         }
@@ -1314,7 +1461,8 @@
             '   poll ' + polls + ' ours / ' + leaguePolls + ' league   ' + inPlay + ' in play' +
             '\nchrome: ' + (showingNow() || '— nothing above the floor') +
             '\nnext:   ' + (nx ? hhmm(nx.at) + '  ' + nx.label : '— nothing left today') +
-            '\nk play/pause · c to the next change on screen · [ ] speed · . a poll (' +
+            (replayOn ? '\n▶ REPLAY — the day is held while it plays' : '') +
+            '\nk play/pause · c to the next change on screen · v next replay · [ ] speed · . a poll (' +
                 (ourGap() / 1000) + 's)' +
             '\n> +5m · o next over · e next incident · b back 1m · r restart · h hide';
         head.style.left = (Math.max(0, Math.min(1, simTime / DAY_MS)) * 100).toFixed(2) + '%';
@@ -1347,6 +1495,7 @@
             if (nx) advance(nx.at - simTime + 1);
         }
         else if (k === 'c') { e.preventDefault(); toNextShowing(); }
+        else if (k === 'v') { e.preventDefault(); toNextReplay(); }
         /* `b`, and NOT `,`: the comma is already prev-slide on the hardware this is driven
          * from (not in player-core.js — it arrives from outside the page), so the two fought
          * exactly as `f` and Space once did on the keys player-core does own. */

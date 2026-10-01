@@ -727,8 +727,21 @@ window.addEventListener('message', (e) => {
     updateLiveChrome();
 });
 
+/* WHICH LIVE SLIDES HAVE NOTHING TO SHOW, from the feed alone: the same rule the
+   live-match slide applies to itself (not in the feed, or no ball yet), said here for
+   every one of them because a windowed frame that is not loaded cannot say it. The
+   interactive player steps over an empty slide and takes it off the rail. */
+let _liveSlides = [];          // [{ i, pc }] — deck index and pc id of each live-match slide
+function markEmptyLiveSlides(feed) {
+    if (!window.WccPlayer || !WccPlayer.setSlideEmpty) return;
+    _liveSlides.forEach(({ i, pc }) => {
+        const m = feed && (feed.matches || []).find(x => String(x.pc_id) === String(pc));
+        WccPlayer.setSlideEmpty(i, !m || m.phase === 'no-feed' || m.phase === 'pre');
+    });
+}
 function onLiveState(feed) {
     _liveContent = liveHasContent(feed);
+    markEmptyLiveSlides(feed);
     updateLiveChrome();
     // The button's EXISTENCE is the day's signal, so it is offered on first content
     // and never withdrawn by a quiet spell — only by the portrait swap (below). It
@@ -1465,6 +1478,7 @@ async function init() {
         // clips didn't store), so tell it what actually survived: the step column and
         // the item list must agree about what slide 4 is.
         if (portrait) portrait.keep(finalSlides.map(s => s._i));
+        _liveSlides = finalSlides.map((s, i) => (s._pc_id != null ? { i, pc: s._pc_id } : null)).filter(Boolean);
         WccPlayer.start({
             items: finalSlides.map(s => ({
                 slug: s.slug,
@@ -1483,6 +1497,10 @@ async function init() {
                 // video slide → auto-plays on forward arrival. `videos` is the
                 // injected-deck form of the same thing (no build, so no _videos).
                 video: isVideoSlide(s),
+                // …except a live match: it is a scorecard that happens to carry clips,
+                // not a reel the reader asked to watch, so a paused deck stepping onto
+                // it stays paused. It keeps the video item's per-clip countdown.
+                autoplay: !s._live,
                 frame: frames[s._i],
             })),
             onShow: i => {

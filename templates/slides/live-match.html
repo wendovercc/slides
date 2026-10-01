@@ -19,6 +19,22 @@
     #lm-reel[hidden] { display: none; }
     #lm-reel-video { position: absolute; top: 0; left: 0; width: 100%; height: auto; display: block; z-index: 0; }
 
+    /* THE META ROW AS THE MATCH-DAY BOARD HAS IT. The start time gives way to the
+       status token (live-status.js, the board's vocabulary and colours, so the two
+       cannot give different accounts of one match), and YouTube's play button shows
+       for a streamed match. The board's own rules (`.md-status`, `.md-yt`), restated
+       for the set header's row. */
+    .set-meta .meta-date[hidden], .set-meta .meta-status[hidden], .set-meta .meta-yt[hidden] { display: none; }
+    .set-meta .meta-status { font-weight: 900; letter-spacing: 0.06em; }
+    .set-meta .meta-status.live  { color: #ff6b6b; }
+    .set-meta .meta-status.brk   { color: var(--gold); }
+    .set-meta .meta-status.res   { color: var(--light-blue); }
+    .set-meta .meta-status.stale { color: #ff9b3d; }
+    .set-meta .meta-status.off   { color: var(--muted); font-weight: 400; opacity: 0.6; }
+    .set-meta .meta-status.wait, .set-meta .meta-status.play { color: var(--text); font-weight: 700; }
+    .set-meta .meta-yt { --yt-red: #ff0000; flex-shrink: 0; display: inline-flex; align-items: center; color: var(--yt-red); }
+    .set-meta .meta-yt svg { height: 1.15em; width: auto; display: block; }
+
     /* Own tab strip — reuses the set-nav look; populated + driven by JS (the match
        decides which tabs exist, so this isn't a build-time carousel). */
     /* Tab typography comes from the base's `.panel-tab`; min-height reserves the
@@ -42,7 +58,9 @@
     .sc-score .ov { font-size: var(--t-sm); font-weight: 400; color: var(--muted); margin-left: 0.4vw; }
 
     .table { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .bat-grid  { grid-template-columns: 1.8fr 1.6fr 4vw 3vw 3vw 4.5vw 5vw; }
+    /* SR at 6vw: a strike rate is up to five characters ("133.3") at row size, and
+       4.5vw ran it into the runs column. Taken from the two flexible columns. */
+    .bat-grid  { grid-template-columns: 1.8fr 1.6fr 4vw 3vw 3vw 6vw 5vw; }
     .bowl-grid { grid-template-columns: 1fr 6vw 5vw 5vw 5vw 6vw; }
     .col-headers { display: grid; gap: 0 0.6vw; padding: 0.4vh 0 0.6vh;
         border-bottom: var(--hair) solid rgba(255,255,255,0.25); font-size: var(--t-xs);
@@ -55,7 +73,14 @@
     .row.at-crease, .row.now-bowling { background: rgba(212,175,55,0.10); box-shadow: inset 0.3vw 0 0 var(--accent); }
     .name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; padding-right: 0.4vw; }
     .row.at-crease .name, .row.now-bowling .name { font-weight: 700; padding-left: 0.7vw; }
-    .out { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.5; font-size: var(--t-sm); }
+    /* The bowler at the OTHER END: in the attack, not bowling this over. The same bar
+       at a lighter weight, as the two batters' bars would be if only one were facing. */
+    .row.other-end { background: rgba(212,175,55,0.04); box-shadow: inset 0.3vw 0 0 rgba(212,175,55,0.4); }
+    .row.other-end .name { padding-left: 0.7vw; }
+    /* How-out at --t-ms in Lato, as the Last Match scorecard sets it (scorecard.html):
+       a step below that was effectively unreadable from ten feet. */
+    .out { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 0.5; font-size: var(--t-ms);
+        font-family: 'Lato', Arial, sans-serif; }
     .out.notout { color: var(--accent); opacity: 0.85; }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
     .num.dim { opacity: 0.45; } .num.z { opacity: 0.2; }
@@ -68,7 +93,12 @@
     .empty { opacity: 0.4; font-size: var(--t-sm); padding-top: 1vh; }
 
     /* Pre-match view — the spoiler-safe tale of the tape (shared _tape partial),
-       baked server-side into #lm-intro-tmpl and cloned into the panel by JS. */
+       baked server-side into #lm-intro-tmpl and cloned into the panel by JS.
+       Tighter at the top than the shared tape: this slide spends height on its own
+       tab strip, and at the shared spacing four top performers ran over the
+       footer's rule. Scoped to the panel so the last-match tape is untouched. */
+    .lm-view .tape { margin-top: 0; }
+    .lm-view .tape .crest { margin-top: 0; }
 
     /* Result view — a two-column tale-of-the-tape mirroring the last-match Result
        slide (match-result.html): crest + club + score + result pill + performers
@@ -81,6 +111,9 @@
     .crest img { width: 6vw; height: 6vw; border-radius: 50%; object-fit: contain; background: #fff; padding: 0.4vw; box-sizing: border-box; }
     .tc-name { font-size: var(--t-md); font-weight: 900; line-height: 1.05; margin-top: 1.2vh; }
     .tc-score { font-size: var(--t-md); font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; margin-top: 0.8vh; }
+    /* The overs as the match-day board sets them (`.sb-ov`): the supporting figure,
+       smaller and light blue, "(45 ov)", beside the gold score. */
+    .tc-score .tc-ov { font-size: var(--t-sm); font-weight: 400; color: var(--light-blue); margin-left: 0.4vw; }
     .tc-result-row { margin-top: 3vh; }
     .result-pill { font-weight: bold; font-size: var(--t-sm); letter-spacing: 0.12em; text-transform: uppercase;
         padding: 0.35vh 0.9vw; border-radius: var(--radius); }
@@ -132,6 +165,8 @@
         </div>
     </div>
     <script src="/assets/js/live-key.js?v={{ asset_version }}"></script>
+    <script src="/assets/js/live-status.js?v={{ asset_version }}"></script>
+    <script src="/assets/js/tvcl-points.js?v={{ asset_version }}"></script>
     <script src="/assets/js/live-window.js?v={{ asset_version }}"></script>
     <script src="/assets/js/hls.min.js?v={{ asset_version }}"></script>
     <script src="/assets/js/hls-cache.js?v={{ asset_version }}"></script>
@@ -146,6 +181,7 @@
     var OPP_NAME = {{ (slide._set_opp_club or '') | tojson }};
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
     var PANEL_MS = {{ slide.panel_duration | tojson }} * 1000;
+    var TVCL = {{ (slide._tvcl or false) | tojson }};
     var CLIP_TRIM = {{ (slide._clip_trim or {'pre': 0, 'post': 0, 'max_len': 30}) | tojson }};
     var CLIP_BACKSTOP_MS = 45000;   // per-clip hard stop if a clip stalls / never ends
 
@@ -161,6 +197,9 @@
 
     var feed = null, feedSeen = false;
     var views = [], tabs = [], idx = 0;
+    // The panel on screen is no longer in `views` (a reel dropped out under it), and
+    // `idx` already names the panel to go to when it ends. See anchorAfterRebuild.
+    var orphan = false, curView = null;
     var tabsKey = '', lastTab = null, announced = -1, shown = false;
     // Current-clip playback state. Each reel clip is its own panel (mirroring the
     // last-match video reel), so there's one clip in flight at a time; `clipTok`
@@ -194,20 +233,17 @@
         v.push({ tab: 'Pre-match', kind: 'intro' });
         (m.innings || []).forEach(function (inn, i) {
             var tab = (i === 0 ? '1st' : i === 1 ? '2nd' : (i + 1) + 'th') + ' Innings';
-            // Highlight reel before the scorecard — only once the result is visible
-            // (m.complete) and only if the innings has selectable clips (streamed).
+            // Highlight reel before the scorecard, once that innings' reel is released
+            // (reelReleased) and only if it has selectable clips (streamed).
             // One panel PER clip (not one reel panel) so prev/next step clip-by-clip
-            // like the last-match video reel; the tab groups them by innings. Gated:
-            // an innings' reel appears only once EVERY one of its clips is fully
-            // cached (clipReady), so the user only ever sees instant cache-backed
-            // playback — until then this innings shows just its scorecard.
-            if (m.complete) {
-                var rc = selectReel(m, i);
-                if (rc.length && rc.every(clipReady)) {
-                    rc.forEach(function (clip) {
-                        v.push({ tab: tab, kind: 'clip', inn: i, clip: clip, label: tab });
-                    });
-                }
+            // like the last-match video reel; the tab groups them by innings. Gated
+            // PER CLIP: a clip appears once it is fully cached (clipReady), so the
+            // user only ever sees instant cache-backed playback, and one clip that
+            // keeps failing costs only itself rather than hiding the whole innings.
+            if (reelReleased(m, i)) {
+                selectReel(m, i).filter(clipReady).forEach(function (clip) {
+                    v.push({ tab: tab, kind: 'clip', inn: i, clip: clip, label: tab });
+                });
             }
             v.push({ tab: tab, kind: 'batting', inn: i });
             v.push({ tab: tab, kind: 'bowling', inn: i });
@@ -216,30 +252,119 @@
         return { m: m, views: v };
     }
 
+    /* WHEN AN INNINGS' REEL IS IN THE ROTATION (docs/live-events.md, "Innings reels
+     * are the slide's content, not replays").
+     *
+     * In someone's hand, every clip as soon as it is cached: a phone gets no live
+     * replays at all, and someone opening the deck at three o'clock has missed every
+     * one, so the reel is their only catch-up, and they can step past it.
+     *
+     * On the wall, a reel that grew through the innings would replay itself on every
+     * pass of the slide, so: the 1st innings' reel through the innings break, then
+     * both at full time. When the 2nd innings' first ball is scored the 1st innings'
+     * reel drops out (the clip on screen finishes; see anchorAfterRebuild). */
+    var INTERACTIVE = /(^|[?&])interactive=1(&|$)/.test(location.search.replace(/^\?/, ''));
+    function ballsIn(overs) {
+        var p = String(overs || '0').split('.');
+        return (parseInt(p[0], 10) || 0) * 6 + (p.length > 1 ? (parseInt(p[1], 10) || 0) : 0);
+    }
+    /* The innings break, read off the card: the 1st innings closed and no ball yet
+     * bowled in the 2nd. "No ball" means overs, not the innings row existing, as the
+     * scorer can name the openers before the first ball. A rain break or drinks can't
+     * satisfy it. `break_desc` is read only for its "innings" word: an innings that
+     * ran its overs out is not `closed` on the card until the 2nd innings' row
+     * appears, which can be most of the way through the interval. */
+    /* STICKY until the 2nd innings has a ball: the interval's `break_desc` clears
+     * when the players walk out, which is minutes before the first ball is scored,
+     * and an innings that ran its overs out still isn't `closed` in that gap. */
+    var breakSeen = false;
+    function inningsBreak(m) {
+        var inns = m.innings || [], first = inns[0], second = inns[1];
+        if (!first || m.complete) return false;
+        if (second && ballsIn(second.overs) > 0) { breakSeen = false; return false; }
+        if (first.closed || (!second && /innings/i.test(m.break_desc || ''))) breakSeen = true;
+        return breakSeen;
+    }
+    function reelReleased(m, i) {
+        if (INTERACTIVE || m.complete) return true;
+        return i === 0 && inningsBreak(m);
+    }
+    /* Start fetching an innings' reel before it is released, so it is cache-ready
+     * when it is: in the hand, as clips arrive; on the wall, once the innings is
+     * over (most of its clips are cached already, having played as live replays). */
+    function reelWanted(m, i) {
+        var inn = (m.innings || [])[i];
+        return reelReleased(m, i) || !!(inn && inn.closed);
+    }
+
+    /* The header's start time / status slot and YouTube badge, as the match-day board
+     * paints its tiles' (applyMatch in match-day.html): the status replaces the time
+     * once it says more than "Awaiting", and the badge is raised by a feed that knows
+     * of a stream, never lowered by one that says nothing. Guarded, because an older
+     * cached live-status.js must not stop the slide (see the asset-cache-skew note). */
+    function paintMeta(m, data) {
+        var row = document.querySelector('.set-meta .meta-row');
+        if (!row) return;
+        var timeEl = row.querySelector('[data-f="time"]'), stEl = row.querySelector('[data-f="status"]');
+        var st = (window.WccStatus && WccStatus.ours)
+            ? WccStatus.ours(m, (data && data.status) || 'ok', data) : null;
+        var show = !!st && st.cls !== 'wait';
+        if (stEl) {
+            if (show) { stEl.className = 'meta-status ' + st.cls; stEl.textContent = st.text; }
+            stEl.hidden = !show;
+        }
+        if (timeEl) timeEl.hidden = show;
+        var yt = row.querySelector('[data-f="yt"]');
+        if (yt && m && m.streamed) yt.hidden = false;
+    }
+
     // ---- reel clip selection ----
     function nameKey(n) { return String(n == null ? '' : n).toLowerCase().trim(); }
     function isOurs(t) { return /wendover/i.test(String(t || '')); }
     function byOverBall(a, b) {
         return ((a.over || 0) - (b.over || 0)) || ((a.ball || 0) - (b.ball || 0)) || ((a.id || 0) - (b.id || 0));
     }
-    // Clips for one innings, filtered + ordered for the reel. Include every wicket,
-    // six and 'other' event; then, for each Wendover batsman who did NOT hit a six,
-    // add their first four (the feed only knows event type, so "best shot" = a four).
+    /* Clips for one innings, filtered + ordered for the reel.
+     *
+     * ONE CLIP PER BALL. RV lists a milestone as a row of its own on the same ball as
+     * the shot that brought it up (a four, the team's 100 and a batter's 50 can all be
+     * one ball), so the rows are grouped by ball and the ball is played once: the
+     * footage of its leading row (wicket, then six, then four, then the rest), with
+     * every kind on the ball carried as `kinds`.
+     *
+     * WHICH BALLS: every wicket, six, milestone, five-for, appeal, chance and anything
+     * unknown; then, for each of our batters who did NOT hit a six, their first four
+     * (the feed only knows the event type, so "best shot" = a four). A four that
+     * brought up a milestone is in by being a milestone. */
+    var FOOTAGE_RANK = { wicket: 0, six: 1, four: 2, milestone: 3, team_milestone: 4,
+                         five_for: 5, chance: 6, appeal: 7 };
+    function rankOf(c) { return c.event in FOOTAGE_RANK ? FOOTAGE_RANK[c.event] : 8; }
     function selectReel(m, innIdx) {
         var inn = (m.innings || [])[innIdx];
         if (!inn) return [];
         var innId = inn.innings_id, side = nameKey(inn.side);
         var pool = (m.clips || []).filter(function (c) {
+            if (!c.url) return false;   // a row with no footage (yet) is not reel material
             if (innId != null && c.innings_id != null) return String(c.innings_id) === String(innId);
             // Fallback join by batting-team name when ids are absent ("Denham CC"
             // vs "Denham CC 1st XI" — prefix match).
             var bt = nameKey(c.batting_team);
             return bt && side.indexOf(bt) === 0;
         });
-        var chosen = [], fours = [];
+        var byBall = {}, keys = [];
         pool.forEach(function (c) {
-            if (c.event === 'wicket' || c.event === 'six' || c.event === 'other') chosen.push(c);
-            else if (c.event === 'four') fours.push(c);
+            var k = c.over == null ? 'id' + c.id : c.over + '.' + c.ball;
+            if (!byBall[k]) { byBall[k] = []; keys.push(k); }
+            byBall[k].push(c);
+        });
+        var balls = keys.map(function (k) {
+            var rows = byBall[k].slice().sort(function (a, b) { return rankOf(a) - rankOf(b); });
+            return Object.assign({}, rows[0], { kinds: rows.map(function (r) { return r.event; }) });
+        });
+        var chosen = [], fours = [];
+        balls.forEach(function (c) {
+            if (c.kinds.length === 1 && c.event === 'four') fours.push(c);
+            else chosen.push(c);
         });
         // Which of our batsmen already have a six in this innings.
         var oursSix = {};
@@ -283,7 +408,7 @@
 
     // ---- view renderers ----
     function scoreline(inn) {
-        return '<div class="scoreline"><span class="sc-club">' + esc(sideClub(inn.side)) + '</span>' +
+        return '<div class="scoreline"><span class="sc-club">' + esc(dropCC(sideClub(inn.side))) + '</span>' +
             '<span class="sc-score">' + (inn.runs || 0) + '/' + (inn.wickets || 0) +
             '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span></div>';
     }
@@ -300,9 +425,11 @@
                 '<span class="num highlight">' + (b.runs || 0) + (at ? '<span class="not-out-star">*</span>' : '') + '</span></div>';
         });
         // Yet-to-bat next, then Extras at the very bottom. No Total row — the
-        // innings total is already the gold score in the scoreline above.
+        // innings total is already the gold score in the scoreline above. The
+        // yet-to-bat names carry no "yet to bat": a dimmed name with an empty
+        // dismissal says it already.
         (inn.yet_to_bat || []).forEach(function (nm) {
-            rows.push('<div class="row bat-grid dnb"><span class="name">' + esc(nm) + '</span><span class="out">yet to bat</span>' +
+            rows.push('<div class="row bat-grid dnb"><span class="name">' + esc(nm) + '</span><span class="out"></span>' +
                 '<span></span><span></span><span></span><span></span><span class="num"></span></div>');
         });
         var ex = inn.extras || {}, parts = [];
@@ -317,19 +444,79 @@
             '<span class="col-num">B</span><span class="col-num">4</span><span class="col-num">6</span>' +
             '<span class="col-num">SR</span><span class="col-num">R</span></div>' + rows.join('') + '</div>';
     }
+    /* WHO IS IN THE ATTACK. RV never says who is bowling, so the slide works it out
+     * from the card it has seen, poll by poll: whoever's over count went up most
+     * recently bowled the last over, and the one before that is at the other end.
+     * Overs alternate ends, so:
+     *   - a bowler MID-OVER (overs ending .1-.5) is bowling now, and the other end is
+     *     whoever bowled before him;
+     *   - BETWEEN OVERS the next over is the other end's, so the bowler due is the one
+     *     who did NOT bowl the last over, and the one who did is at the other end.
+     * Remembered per innings, from the polls this slide has seen. A device that has
+     * just loaded knows only a mid-over bowler, or on a streamed match the bowler of
+     * the latest highlight row, until it watches an over change hands. Shown only on
+     * an open innings. */
+    var attack = {};          // innings key -> { balls: {name: n}, order: [names, latest first] }
+    function oversBalls(o) {
+        var p = String(o == null ? '0' : o).split('.');
+        return (parseInt(p[0], 10) || 0) * 6 + (p.length > 1 ? (parseInt(p[1], 10) || 0) : 0);
+    }
+    function midOver(b) { return /\.[1-5]$/.test(String(b.overs)); }
+    function bringToFront(order, name) {
+        var i = order.indexOf(name);
+        if (i >= 0) order.splice(i, 1);
+        order.unshift(name);
+    }
+    function trackAttack(m) {
+        (m && m.innings || []).forEach(function (inn, i) {
+            var key = inn.innings_id != null ? String(inn.innings_id) : 'i' + i;
+            var st = attack[key];
+            var fresh = !st;
+            if (fresh) st = attack[key] = { balls: {}, order: [] };
+            (inn.bowling || []).forEach(function (b) {
+                var n = oversBalls(b.overs), was = st.balls[b.name];
+                if (!fresh && n > (was || 0)) bringToFront(st.order, b.name);
+                st.balls[b.name] = n;
+            });
+            if (fresh) {
+                // Nothing watched yet: the latest highlight row names a recent bowler,
+                // and a bowler mid-over is certainly the most recent of all.
+                var rows = (m.clips || []).filter(function (c) {
+                    return c.bowler && (c.innings_id == null || inn.innings_id == null ||
+                                        String(c.innings_id) === String(inn.innings_id));
+                }).sort(function (a, b) { return (a.happened_ms || 0) - (b.happened_ms || 0); });
+                var last = rows[rows.length - 1];
+                var known = (inn.bowling || []).map(function (b) { return b.name; });
+                if (last) known.forEach(function (n) { if (nameKey(n) === nameKey(last.bowler)) bringToFront(st.order, n); });
+            }
+            // Mid-over trumps memory: that bowler is bowling now.
+            (inn.bowling || []).forEach(function (b) { if (midOver(b)) bringToFront(st.order, b.name); });
+        });
+    }
+    // { now: name|null, other: name|null } for an innings, or nothing once it has closed.
+    function attackOf(inn, i) {
+        if (!inn || inn.closed) return {};
+        var st = attack[inn.innings_id != null ? String(inn.innings_id) : 'i' + i];
+        if (!st || !st.order.length) return {};
+        var last = st.order[0], before = st.order[1] || null;
+        var lastRow = (inn.bowling || []).filter(function (b) { return b.name === last; })[0];
+        if (lastRow && midOver(lastRow)) return { now: last, other: before };
+        return { now: before, other: last };
+    }
     function bowlingView(m, inn) {
         var bowlSide = (inn.side === m.home) ? m.away : m.home;
+        var on = attackOf(inn, (m.innings || []).indexOf(inn));
         var rows = (inn.bowling || []).length ? (inn.bowling).map(function (b) {
-            // Mid-over (overs ending .1–.5) = currently bowling → gold bar. Not on a
-            // closed innings — nobody is mid-over once it has ended.
-            var now = !inn.closed && /\.[1-5]$/.test(String(b.overs));
-            return '<div class="row bowl-grid' + (now ? ' now-bowling' : '') + '"><span class="name">' + esc(b.name) + '</span>' +
+            // The attack (see trackAttack): full bar for the bowler on, a lighter one
+            // for the other end. Neither on a closed innings.
+            var cls = b.name === on.now ? ' now-bowling' : b.name === on.other ? ' other-end' : '';
+            return '<div class="row bowl-grid' + cls + '"><span class="name">' + esc(b.name) + '</span>' +
                 '<span class="num">' + esc(b.overs) + '</span><span class="num dim">' + num(b.maidens) + '</span>' +
                 '<span class="num">' + (b.runs || 0) + '</span><span class="num highlight">' + (b.wickets || 0) + '</span>' +
                 '<span class="num dim">' + (b.econ != null ? b.econ : '<span class="z">·</span>') + '</span></div>';
         }).join('') : '<div class="empty">No bowling yet</div>';
         return scoreline(inn) +
-            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(sideClub(bowlSide)) + '</span>' +
+            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(dropCC(sideClub(bowlSide))) + '</span>' +
             '<span class="col-num">O</span><span class="col-num">M</span><span class="col-num">R</span>' +
             '<span class="col-num">W</span><span class="col-num">Econ</span></div>' + rows + '</div>';
     }
@@ -340,6 +527,13 @@
         bowl: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="currentColor"/><g fill="none" stroke="#0a1c3a" stroke-width="1.1" stroke-linecap="round" opacity="0.55"><path d="M12 4.2 Q 14 12 12 19.8"/><path d="M10.7 6.7 l2.6 0.5"/><path d="M10.2 9.3 l2.9 0.4"/><path d="M10.1 12 l3 0"/><path d="M10.2 14.7 l2.9 -0.4"/><path d="M10.7 17.3 l2.6 -0.5"/></g></svg>',
         field: '<svg class="perf-icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><rect x="6" y="7" width="1.9" height="13" rx="0.95"/><rect x="11.05" y="7" width="1.9" height="13" rx="0.95"/><rect x="16.1" y="7" width="1.9" height="13" rx="0.95"/><rect x="5.4" y="5.3" width="6.3" height="1.6" rx="0.8"/><rect x="12.3" y="5.3" width="6.3" height="1.6" rx="0.8"/></g></svg>'
     };
+    // A club without its "CC" (and any ", Bucks"/"(Penn)" qualifier) — the same rule
+    // as build's drop_cc and live-events.js's dropCC.
+    function dropCC(name) {
+        if (!name) return '';
+        var out = String(name).trim().replace(/\s+(CC|C\.C\.?|Cricket Club)(,\s*[^,]+|\s*\([^)]*\))?$/i, '');
+        return out || String(name).trim();
+    }
     // Club name only — drop the team designation after it (the header already
     // names the team). Mirrors build's tc-name convention.
     function clubOnly(name) {
@@ -365,7 +559,7 @@
     function resultClub(res) {
         var s = String(res == null ? '' : res);
         var vm = s.match(/^(.*?\S)\s+(\b(?:won|win|lost|conceded)\b.*)$/i);
-        return vm ? sideClub(vm[1]) + ' ' + vm[2] : s;
+        return vm ? dropCC(sideClub(vm[1])) + ' ' + vm[2] : s;
     }
     // The 1st-innings side's card vs the other's — order-sorted by the feed, so
     // innings[0] is chronologically first.
@@ -377,15 +571,32 @@
         });
         return { ours: ours, opp: opp };
     }
-    // Short innings total for the column headline — mirrors build's _short_innings_total
-    // ("139/6 (45.0)", "150 ao (48.2)").
+    // The column headline as the match-day board writes a score line (scoreText +
+    // `.sb-ov` there): "139/6", "150 ao", "201/8 dec", then "(45 ov)" in the small
+    // light-blue supporting style. Returns HTML.
     function shortTotal(inn) {
         if (!inn) return '';
         var runs = inn.runs || 0, wkts = inn.wickets, overs = inn.overs || '', score;
         if (wkts == null) score = String(runs);
+        else if (inn.declared) score = runs + '/' + Number(wkts) + ' dec';
         else if (Number(wkts) >= 10) score = runs + ' ao';
         else score = runs + '/' + Number(wkts);
-        return overs ? (score + ' (' + esc(overs) + ')') : score;
+        return esc(score) + (overs ? '<span class="tc-ov">(' + esc(overs) + ' ov)</span>' : '');
+    }
+    /* WHAT THE RESULT WAS WORTH, as the match-day board prices it (pricePoints
+       there): the Worker's own figure on the innings first, else TVCL arithmetic
+       (tvcl-points.js) where the division is TVCL, else nothing and the badge is the
+       verdict alone. A washout is the same for both sides. */
+    function pointsFor(m, inn) {
+        if (!inn) return null;
+        if (inn.points != null) return inn.points;
+        if (!TVCL || !window.WccPoints) return null;
+        var inns = m.innings || [];
+        var pts = WccPoints.tvcl(inns, m.result || m.leader_text || '');
+        if (!pts) return null;
+        if (pts[0] === pts[1]) return pts[0];
+        var i = inns.indexOf(inn);
+        return i < 0 ? null : pts[i];
     }
     // Decision letters (W/L for each side, or a shared D/T/A/NR) from the result
     // text, falling back to comparing the two innings totals when it's not yet a
@@ -486,19 +697,19 @@
     function resultView(m) {
         var si = sideInnings(m), v = verdict(m);
         var ourCol = {
-            crest: OUR_CREST, name: si.ours ? sideClub(si.ours.side) : (OUR_NAME || 'Wendover'),
+            crest: OUR_CREST, name: dropCC(si.ours ? sideClub(si.ours.side) : (OUR_NAME || 'Wendover')),
             score: shortTotal(si.ours), result: v && v.our, label: v && RESULT_LABELS[v.our],
-            // League points come from the feed (worker-computed, TVCL only); absent for
-            // non-TVCL matches → the pill shows the result without a points suffix.
-            points: si.ours ? si.ours.points : null,
+            // League points: the feed's own (worker-computed, TVCL only), else priced
+            // here as the board prices them (pointsFor); none → the verdict alone.
+            points: pointsFor(m, si.ours),
             // Our batting + our bowling (= the bowlers in the opposition's innings) +
             // our fielders (credited from the opposition's dismissals).
             performers: teamPerformers(si.ours && si.ours.batters, si.opp && si.opp.bowling, si.opp && si.opp.batters)
         };
         var oppCol = {
-            crest: OPP_CREST, name: si.opp ? sideClub(si.opp.side) : (OPP_NAME || 'Opposition'),
+            crest: OPP_CREST, name: dropCC(si.opp ? sideClub(si.opp.side) : (OPP_NAME || 'Opposition')),
             score: shortTotal(si.opp), result: v && v.opp, label: v && RESULT_LABELS[v.opp],
-            points: si.opp ? si.opp.points : null,
+            points: pointsFor(m, si.opp),
             performers: teamPerformers(si.opp && si.opp.batters, si.ours && si.ours.bowling, si.ours && si.ours.batters)
         };
         // Left = the side that batted first (mirrors match-result's _our_left = we_bat_first).
@@ -507,7 +718,7 @@
         var cols = ourFirst ? [ourCol, oppCol] : [oppCol, ourCol];
         var res = resultClub(m.result || m.leader_text || '');
         var foot = res ? '<div class="result-foot"><div class="result-summary">' + esc(res) +
-            (!m.final ? '<span class="prov"> · to be confirmed</span>' : '') + '</div></div>' : '';
+            (!m.final ? '<span class="prov"> \u2013 result to be confirmed</span>' : '') + '</div></div>' : '';
         return '<div class="result-columns">' + teamCol(cols[0]) +
             '<div class="col-divider"></div>' + teamCol(cols[1]) + '</div>' + foot;
     }
@@ -522,9 +733,11 @@
         if (!toss) return;
         // Club name only, not "Wendover CC Friendly XI": our side from the feed
         // winner name, the opposition from the baked clean club name (OPP_NAME).
-        // Fall back to the feed's pre-composed text if either part is missing.
-        var who = toss.is_wendover ? clubOnly(toss.winner)
-                                   : (OPP_NAME || clubOnly(toss.winner));
+        // Without its "CC" too (dropCC), as the tape's own columns and the match-day
+        // board name every club. Fall back to the feed's pre-composed text if either
+        // part is missing.
+        var who = dropCC(toss.is_wendover ? clubOnly(toss.winner)
+                                          : (OPP_NAME || clubOnly(toss.winner)));
         var text = (who && toss.decision)
             ? who + ' won the toss and elected to ' + toss.decision
             : (toss.text || '');
@@ -640,7 +853,16 @@
         detachClip();
     }
     // Chromium (the Pi wall) can't play HLS natively — hls.js does; Safari can.
+    /* A PLAIN MEDIA FILE GOES STRAIGHT TO THE ELEMENT. Frogbox highlights are always
+       `.m3u8`, so in production this is always HLS — but the match-day simulator
+       borrows the club's R2 ball-event clips, which are MP4, and hls.js cannot open
+       one: every reel clip failed at once and the slide moved on with the overlay up.
+       Same rule as the replay overlay (`isHls` in live-flash.html). */
+    function isHls(url) { return /\.m3u8(\?|#|$)/i.test(String(url || '')); }
     function attachClip(url, tok) {
+        // `preload="none"` on the element: a plain file must be asked to load, or no
+        // metadata arrives, `onMeta` never runs and nothing plays or shows a frame.
+        if (!isHls(url)) { reelVideo.preload = 'auto'; reelVideo.src = url; reelVideo.load(); return; }
         if (reelVideo.canPlayType('application/vnd.apple.mpegurl')) { reelVideo.src = url; return; }
         if (window.Hls && Hls.isSupported()) {
             var hlsOpts = { enableWorker: true, lowLatencyMode: false };
@@ -718,6 +940,13 @@
     function dwellRemaining() { return dwellTimer ? Math.max(0, dwellUntil - Date.now()) : null; }
     // Next panel, or end the slide (→ the deck advances) after the last one.
     function autoAdvance() {
+        // An orphaned panel has already been re-anchored: `idx` IS the next panel.
+        if (orphan) {
+            orphan = false;
+            if (idx >= views.length) { done(); return; }
+            gotoPanel(idx, true);
+            return;
+        }
         if (idx >= views.length - 1) { done(); return; }
         gotoPanel(idx + 1, true);
     }
@@ -726,7 +955,18 @@
     // Per-clip dwell reported to the interactive countdown — the trimmed cap if we
     // have one, else the stall backstop.
     function clipDwellSecs() { return CLIP_TRIM.max_len || (CLIP_BACKSTOP_MS / 1000); }
-    function notifyPanel(i, durSecs) { if (window.WccSlide) WccSlide.notifyPanel(i, { dur: durSecs || 0 }); }
+    // A clip panel also names where its run of clips ends, which is what the
+    // player's "skip highlights" button jumps to: the innings' scorecard.
+    function notifyPanel(i, durSecs) {
+        if (!window.WccSlide) return;
+        var extra = { dur: durSecs || 0 };
+        if (views[i] && views[i].kind === 'clip') {
+            var j = i;
+            while (j < views.length && views[j].kind === 'clip') j++;
+            extra.skip = j;
+        }
+        WccSlide.notifyPanel(i, extra);
+    }
     function hideReel() { teardownClip(); reelEl.hidden = true; }
 
     // Render + (optionally) start panel i. play=true starts the clip / arms the
@@ -734,8 +974,10 @@
     // repaint). Stepping to a clip always replays it from the top, like last-match.
     function gotoPanel(i, play) {
         if (!views.length) { done(); return; }
+        orphan = false;
         idx = Math.max(0, Math.min(views.length - 1, i));
         var v = views[idx], m = ourMatch();
+        curView = v;
         clearDwell();
         if (!v) { viewEl.innerHTML = ''; hideReel(); return; }
         setActive(v.tab);
@@ -769,6 +1011,49 @@
         if (play) armDwell();
     }
 
+    /* WHICH PANEL IS WHICH, across a rebuild. A rebuild can insert panels ahead of
+     * the one on screen (a reel revealed while its innings' scorecard is up) or take
+     * them away under it (a reel dropping out when the 2nd innings starts), so an
+     * index means nothing from one feed to the next. A panel is its tab, its kind and,
+     * for a clip, the clip. */
+    function panelKey(v) {
+        if (!v) return null;
+        return v.tab + '|' + v.kind + '|' + (v.clip ? v.clip.id : '');
+    }
+    function indexOfKey(list, key) {
+        for (var i = 0; i < list.length; i++) if (panelKey(list[i]) === key) return i;
+        return -1;
+    }
+    /* Find the panel on screen in the rebuilt list. If it has gone, anchor on the
+     * next panel of the OLD list that still exists, so a dropped reel hands on to
+     * its innings' scorecard rather than to whatever now sits at the old index (and
+     * a clip 5 of 20 can no longer clamp past the end and end the slide early).
+     * Returns { idx, gone }; idx may equal views.length when nothing after survives. */
+    function anchorAfterRebuild(oldViews, oldIdx) {
+        var cur = oldViews[oldIdx];
+        if (!cur) return { idx: Math.min(oldIdx, Math.max(0, views.length - 1)), gone: false };
+        var j = indexOfKey(views, panelKey(cur));
+        if (j >= 0) return { idx: j, gone: false };
+        for (var k = oldIdx + 1; k < oldViews.length; k++) {
+            j = indexOfKey(views, panelKey(oldViews[k]));
+            if (j >= 0) return { idx: j, gone: true };
+        }
+        return { idx: views.length, gone: true };
+    }
+    /* HOW LONG IS LEFT, reported to the player. The build cannot know: a live match's
+     * reels grow through the afternoon, and a full-time pair can outrun any fixed
+     * backstop (the build's 900s would advance the deck mid-way through the 2nd
+     * innings reel). The kiosk player only ever moves its slide backstop LATER on
+     * this; the slide still ends itself with wcc-done. An older player ignores it. */
+    var EXTEND_SLACK_S = 30;
+    function reportLength() {
+        if (!shown || !views.length) return;
+        var secs = EXTEND_SLACK_S;
+        for (var i = Math.min(idx, views.length - 1); i < views.length; i++)
+            secs += views[i].kind === 'clip' ? clipDwellSecs() : PANEL_MS / 1000;
+        try { parent.postMessage({ type: 'wcc-extend', secs: secs }, '*'); } catch (e) {}
+    }
+
     function refreshViews() {
         var built = buildViews();
         views = built.views;
@@ -776,9 +1061,19 @@
         var key = tabs.join('|');
         if (key !== tabsKey) { tabsKey = key; renderTabs(); }
     }
+    /* NOTHING TO SHOW, said out loud, so the interactive player can step over this
+     * slide and take it off its rail (the wall needs none of it: `done()` already
+     * passes the rotation on). Only once the feed has answered, since an empty list
+     * before the first feed means "not heard yet", not "nothing on". Re-posted on
+     * every feed, so a reloaded frame says it again. */
+    function reportEmpty() {
+        if (!feedSeen) return;
+        try { parent.postMessage({ type: 'wcc-slide-empty', empty: !views.length }, '*'); } catch (e) {}
+    }
     // Report the panel count to the player so interactive nav can step panels;
     // re-registers only when the count changes.
     function announceCount() {
+        reportEmpty();
         var c = Math.max(1, views.length);
         if (c === announced) return;
         announced = c; controller.count = c;
@@ -800,12 +1095,13 @@
     }
     function clipReady(c) { return !gateOn() || (c && c.id != null && !!readySet[c.id]); }
 
-    // As soon as the feed says the match is complete, start downloading every reel
-    // clip in the background — even off-screen — so a reel is cache-ready by the time
-    // the slide is shown. Serial (one clip at a time) to spare the pavilion SIM.
+    // Download each wanted reel's clips in the background — even off-screen — so a
+    // reel is cache-ready by the time it is released (reelWanted). Serial (one clip
+    // at a time) to spare the pavilion SIM.
     function ensurePrefetch(m) {
-        if (!gateOn() || !m || !m.complete) return;
+        if (!gateOn() || !m) return;
         (m.innings || []).forEach(function (inn, i) {
+            if (!reelWanted(m, i)) return;
             selectReel(m, i).forEach(function (c) {
                 if (c.id == null || readySet[c.id] || queued[c.id]) return;
                 queued[c.id] = true;
@@ -836,21 +1132,42 @@
     // nothing until the slide has actually been shown (no off-screen playback).
     function onFeed(data) {
         feed = data; feedSeen = true;
+        paintMeta(ourMatch(), data);
+        trackAttack(ourMatch());
         ensurePrefetch(ourMatch());
-        var cur = views[idx];
-        var wasClip = cur && cur.kind === 'clip';
+        var oldViews = views, oldIdx = idx, wasOrphan = orphan;
+        var cur = wasOrphan ? null : views[idx];
+        var wasClip = wasOrphan || (cur && cur.kind === 'clip');
         var wasIntro = cur && cur.kind === 'intro';
+        var oldAnnounced = announced;
         refreshViews();
         announceCount();
         if (!views.length) { if (shown) done(); return; }
-        if (idx > views.length - 1) idx = views.length - 1;
+        if (wasOrphan) {
+            // Still finishing a clip that already left the list: keep pointing at the
+            // panel it hands on to, unless that one has gone too.
+            var nxt = oldViews[oldIdx] ? indexOfKey(views, panelKey(oldViews[oldIdx])) : -1;
+            idx = nxt >= 0 ? nxt : Math.min(oldIdx, views.length);
+        } else {
+            var a = anchorAfterRebuild(oldViews, oldIdx);
+            idx = a.idx;
+            orphan = a.gone && shown && wasClip;
+            if (!orphan && idx > views.length - 1) idx = views.length - 1;
+        }
         if (!shown) return;
+        reportLength();
         // Never interrupt a playing clip or the static pre-match panel (both run
         // their own dwell); once the strip rebuilds, just keep the pre-match tab lit.
-        if (wasClip) return;
-        // Keep the pre-match panel in place (don't reset its dwell), but let a
-        // newly-available toss appear and keep its tab lit after the strip rebuilds.
-        if (wasIntro) { setActive(views[idx].tab); injectToss(); applyLiveXi(); return; }
+        // The bridge is told where we are if the index moved, or if a new count made
+        // it re-register (which resets its idea of the current panel to 0).
+        if (wasClip) {
+            if (!orphan && (idx !== oldIdx || announced !== oldAnnounced)) notifyPanel(idx, clipDwellSecs());
+            return;
+        }
+        if (wasIntro) {
+            if (idx !== oldIdx || announced !== oldAnnounced) notifyPanel(idx, PANEL_MS / 1000);
+            setActive(views[idx].tab); injectToss(); applyLiveXi(); return;
+        }
         // Repaint the scorecard in place — but NOT at the cost of its clock.
         // gotoPanel() always clears the dwell and only re-arms it when play=true,
         // so a feed tick landing mid-panel used to leave the panel with no timer at
@@ -879,6 +1196,7 @@
         refreshViews(); announceCount();
         if (!views.length) { done(); return; }
         gotoPanel(0, true);
+        reportLength();
     }
 
     // ---- slide-bridge controller ----
@@ -891,7 +1209,8 @@
         try { reelVideo.pause(); } catch (e) {}
     }
     function resumeCurrent() {
-        var v = views[idx];
+        // An orphaned clip is still the panel on screen, though `idx` has moved on.
+        var v = orphan ? curView : views[idx];
         if (!v) return;
         if (v.kind !== 'clip') { armDwell(); return; }
         // Continue a held clip if one is loaded; otherwise open it fresh.
