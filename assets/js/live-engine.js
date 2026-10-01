@@ -94,9 +94,31 @@
     var EVENT_TICK_MS = opts.eventTickMs || 1000;
     var EVENT_CAP = opts.eventCap || 60;
 
+    /* THE LEAGUE TABLES, for the ladder's story. The same views the strip is baked
+     * with (build.py `build_live_strip` writes them to /live-strip.json as well), so
+     * the engine runs the strip's own ladder over EVERY division — not only the one
+     * the strip happens to be drawing — and the arrows on the column and the
+     * league-position events in the band are one calculation. Null until loaded, or
+     * for good on a page that cannot load it: no table, no ladder events. */
+    var ladderViews = null, ladderState = {};
+    function ladderStep(now) {
+        if (!ladderViews || !events || !window.WccLadder ||
+            !window.WccLiveEvents || !WccLiveEvents.extractLadder) return;
+        var byPc = {}, byLg = {};
+        ((prevFeed && prevFeed.matches) || []).forEach(function (m) { if (m.pc_id != null) byPc[String(m.pc_id)] = m; });
+        ((prevLeague && prevLeague.matches) || []).forEach(function (m) { if (m.match_id != null) byLg[String(m.match_id)] = m; });
+        var cardOf = function (fx) { return fx.ours ? byPc[String(fx.match_id)] : byLg[String(fx.match_id)]; };
+        var staleOf = WccLadder.staleness ? WccLadder.staleness(function () { return prevLeague; }) : null;
+        WccLiveEvents.extractLadder(ladderState, ladderViews, cardOf, staleOf, now, eventCfg(now))
+            .forEach(function (ev) { events.add(ev); });
+    }
+
     function eventBroadcast() {
         if (!events) return;
         var now = clockNow();
+        // Before the pick, so a move that has just committed can be it. Asked every
+        // tick, because an arrow's hold is measured on the clock, not on a poll.
+        try { ladderStep(now); } catch (e) { /* a ladder fault must not stop the band */ }
         var d = events.tick(now);
         var msg = {
           type: 'wcc-events',
@@ -112,7 +134,7 @@
                      freshness: Math.round(r.freshness * 100) / 100,
                      novelty: Math.round(r.novelty * 100) / 100,
                      coverage: Math.round(r.coverage * 100) / 100,
-                     superseded: !!r.superseded };
+                     superseded: !!r.superseded, waiting: !!r.waiting };
           }),
           // The showing event's own figures, so a band can print them plainly.
           picked: d.picked ? { score: Math.round(d.picked.score * 10) / 10,
@@ -170,10 +192,8 @@
         if (d && d.type === 'wcc-clock-request') clockBroadcast();
     });
 
-    function ingest(kind, feed) {
-        if (!events || !window.WccLiveEvents) return;
-        var now = clockNow();
-        var cfg = {
+    function eventCfg(now) {
+        return {
           byId: cfgById,
           // The baked division fixtures, so an event about somebody else's match can
           // name the clubs and the ground the lean card never carries.
@@ -191,6 +211,11 @@
             }).reverse();
           }
         };
+    }
+    function ingest(kind, feed) {
+        if (!events || !window.WccLiveEvents) return;
+        var now = clockNow();
+        var cfg = eventCfg(now);
         var found = kind === 'league'
           ? WccLiveEvents.extractLeague(prevLeague, feed, now, cfg)
           : WccLiveEvents.extractLive(prevFeed, feed, now, cfg);
@@ -529,6 +554,13 @@
      * simulator already knows the day's matches, so it hands the match map straight
      * in. Both loops start at once; in manual mode that first poll is the only one
      * until something asks for the next. */
+    // Both modes: the tables are baked context, the same for a real day and a
+    // simulated one (the simulator runs on the build's own fixtures).
+    fetch(opts.ladderUrl || '/live-strip.json', { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d && d.views) ladderViews = d.views; })
+      .catch(function () { /* no tables → no ladder events; everything else stands */ });
+
     if (transport) {
       if (opts.cfgById) cfgById = opts.cfgById;
       // The simulator supplies ids of its own, which skips the config fetch above —

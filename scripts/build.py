@@ -4189,6 +4189,9 @@ def build_live_strip(env):
     data = {"date": _today().isoformat(), "views": views}
     html = env.get_template("live-strip.html").render(strip_json=json.dumps(data))
     (out_dir / "index.html").write_text(html)
+    # The same views, for the ENGINE: it runs the strip's ladder over every division
+    # to announce expected and actual league moves (live-ladder.js / extractLadder).
+    (SITE / "live-strip.json").write_text(json.dumps(data) + "\n")
     modes = ", ".join(f"{v['team_label']}:{v['mode']}" for v in views) or "none"
     print(f"  live-strip → /live-strip/ ({len(views)} view(s): {modes})")
 

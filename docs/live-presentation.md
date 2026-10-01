@@ -164,7 +164,8 @@ The vertical partner of the ticker footer: the same player-owned chrome, showing
 
 - **One equal tile per team**, in current league position order. Channels: fill
   **colour** = result lean (the points green/red, never washed out), fill **height**
-  = certainty, bat/bowl glyph = live role, clock = decided but not yet published,
+  = certainty — **in play only**; a decided match wears the match-day board's verdict
+  badge top-right instead (`WON · 22`), bat/bowl glyph = live role, clock = decided but not yet published,
   muted dot = match on but the feed is silent, dimmed tile = no match today, ghost
   arrow = a *pending* move the table hasn't taken yet.
 - Whenever the ladder is *not* what the band is carrying, the panel is the match as a

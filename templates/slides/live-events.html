@@ -276,6 +276,7 @@
             var cls = ['ev-grid', 'row'];
             if (showing && ev.id === showing.id) cls.push('showing');
             else if (r.superseded) cls.push('gone');
+            else if (r.waiting) cls.push('below');
             else if (r.score < (d.floor || 0)) cls.push('below');
             if (ev.clip) cls.push('hasclip');
             return '<div class="' + cls.join(' ') + '">' +
@@ -284,7 +285,8 @@
                     esc(ev.match.ours ? (ev.match.team || 'Ours') : (ev.match.division || 'League')) + '</span>' +
                 // `headline` IS the whole line now — `say()` derives it from the same
                 // parts the bar draws, so this column and the band cannot disagree.
-                '<span class="what">' + esc(ev.payload.headline || '') + '</span>' +
+                '<span class="what">' + esc(ev.payload.headline || '') +
+                    (r.waiting ? ' <i>(waiting for the event it follows)</i>' : '') + '</span>' +
                 '<span class="t' + (h.unknown ? ' unknown' : '') + '">' + esc(h.text) + '</span>' +
                 '<span class="t">' + ago(now - ev.received_at) + '</span>' +
                 '<span class="t' + (ev.shown_at ? '' : ' never') + '">' +

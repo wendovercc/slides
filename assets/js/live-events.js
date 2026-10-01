@@ -110,6 +110,12 @@
         wicket:            { base: 70, ttl: 300000,  repeat: 180000, label: 'Wicket',         panel: 'score' },
         fifty:             { base: 64, ttl: 480000,  repeat: 300000, label: 'Fifty',          panel: 'profile' },
         ladder_shift:      { base: 60, ttl: 900000,  repeat: 420000, label: 'Ladder move',    panel: 'ladder' },
+        /* WHERE THE TABLE IS HEADING — fired by the same logic that puts an arrow on a
+         * ladder row, once the arrow has held for `LADDER_HOLD_MS`. Just under the
+         * swing, because it is the swing's consequence and follows it on screen (see
+         * `after`); withdrawn silently if the arrow goes. See `extractLadder`.
+         * > James's direction, 2026-10-01. */
+        ladder_expected:   { base: 46, ttl: 900000,  repeat: 420000, label: 'On course',      panel: 'ladder' },
         rain_break:        { base: 56, ttl: 1800000, repeat: 600000, label: 'Rain',           panel: 'score' },
         /* THE PASSAGE OF PLAY CHANGING CHARACTER — the two events a scoreboard can
          * never show. It displays a number going up; it cannot say that the number has
@@ -394,6 +400,9 @@
                          'new_batsman', 'spell_started'],
         // And a verdict settles everything that described the game in progress —
         // but not its wickets, its sixes or its hundreds, which happened.
+        // A swing replaces the last one: "Denham now favourites" is wrong once
+        // "Wendover fighting back" is true.
+        probability_shift: ['probability_shift'],
         match_finished: ['last_pair', 'toss', 'match_started', 'score_update', 'match_break',
                          'probability_shift', 'new_batsman', 'spell_started'],
         abandoned:      ['last_pair', 'toss', 'match_started', 'score_update', 'match_break',
@@ -655,6 +664,13 @@
             ev.dwell = dwellFor(ev);
             // What this event retires in its own match — see RETIRES. Same match
             // only: a score in one game says nothing about the state of another.
+            /* RETIREMENT BY ID, for the one family whose "same match" is the wrong
+             * scope: an expected ladder move belongs to a TEAM, and both sides of one
+             * fixture can carry one. `retire_ids` names exactly the events that have
+             * stopped being true. */
+            (ev.retire_ids || []).forEach(function (id) {
+                if (byId[id]) byId[id].superseded = true;
+            });
             var kill = ev.retires || RETIRES[ev.type];
             if (kill) {
                 for (var s = 0; s < events.length; s++) {
@@ -773,12 +789,26 @@
         // Rank everything showable, best first. The scheduler's working, exposed
         // because the inspector slide renders exactly this — the point is to be able
         // to see WHY one event beat another, not just which won.
+        /* AN EVENT THAT FOLLOWS ANOTHER WAITS FOR IT. `after` names the event this one
+         * is the consequence of — the swing an expected ladder move comes from, the
+         * result an actual one comes from — and while that event is still in the
+         * running and has not yet been on screen, this one scores nothing. It is
+         * released the moment its predecessor has been shown, retired, or has decayed
+         * below the floor, so a predecessor that never makes the band cannot hold its
+         * consequence back for ever. */
+        function waiting(ev, now) {
+            var pre = ev.after ? byId[ev.after] : null;
+            if (!pre || pre.superseded || pre.shown_count > 0) return false;
+            return pre.interest * freshness(pre, now) * novelty(pre, now) *
+                   coverage(pre, now) >= SHOW_FLOOR;
+        }
         function ranked(now) {
             return events.map(function (ev) {
                 var f = freshness(ev, now), n = novelty(ev, now), c = coverage(ev, now);
+                var held = waiting(ev, now);
                 return { ev: ev, freshness: f, novelty: n, coverage: c,
-                         superseded: !!ev.superseded,
-                         score: ev.superseded ? 0 : ev.interest * f * n * c };
+                         superseded: !!ev.superseded, waiting: held,
+                         score: (ev.superseded || held) ? 0 : ev.interest * f * n * c };
             }).sort(function (a, b) {
                 return b.score - a.score || b.ev.received_at - a.ev.received_at;
             });
@@ -995,9 +1025,9 @@
                 // frames everything after it); a match already decided when we
                 // joined is the answer to "what happened?" and belongs on screen.
                 if (m.toss && m.toss.text) push('toss', 'toss', tossPayload(m, ctx));
-                if (m.complete) push('match_finished', 'result',
-                    say(resultParts(m.result_club || m.result || 'Match finished', m, ctx)
-                        .concat([SEP, det(m.final ? '' : 'to be confirmed')])));
+                if (m.complete) push(abandonedCard(m) ? 'abandoned' : 'match_finished', 'result',
+                    abandonedCard(m) ? abandonedPayload(m, ctx)
+                        : finishedPayload(m, ctx, m.final ? '' : 'result to be confirmed'));
                 return;
             }
             // A LATER START is not a first sighting. A match that begins at three
@@ -1526,22 +1556,11 @@
                      { ours: his, tension: ctx.tension });
             });
 
-            // --- a swing worth remarking on. The chase model is the authority on
-            // who is winning; this fires when its answer moves a long way between
-            // polls, which is what a collapse or a counter-attack looks like from
-            // the outside.
-            var ps = chaseP(p), ns = chaseP(m);
-            if (ps != null && ns != null) {
-                var d = Math.abs(ns - ps);
-                if (d >= 0.15) {
-                    // Keyed on the MOVE, not on the clock: a second-resolution
-                    // timestamp collides whenever two polls land in the same second.
-                    push('probability_shift', 'swing' + Math.round(ps * 100) + '_' + Math.round(ns * 100),
-                        say(swingParts(m, ps, ns).concat(
-                            [SEP, det('Win probability ' + pct(ps) + ' \u2192 ' + pct(ns), true)])),
-                        { magnitude: Math.min(1, d / 0.5) });
-                }
-            }
+            // --- a swing worth remarking on: the chase crossing into a new band.
+            // See `swingCheck` — after the innings loop on purpose, so the passage
+            // log it quotes already holds this poll.
+            var sw = swingCheck(m, ctx, now);
+            if (sw) push('probability_shift', sw.id, sw.payload, { magnitude: sw.magnitude });
 
             /* --- breaks, and the two ways an afternoon ends.
              *
@@ -1565,17 +1584,12 @@
                 var aband = /abandon|no result|wash|cancel/i.test(res);
                 push(aband ? 'abandoned' : 'match_finished', 'result',
                     aband ? abandonedPayload(m, ctx)
-                          : say(resultParts(res, m, ctx)
-                                .concat([SEP, det(m.final ? '' : 'to be confirmed', true), SEP])
-                                .concat(fixtureParts(m, ctx))));
+                          : finishedPayload(m, ctx, m.final ? '' : 'result to be confirmed'));
             }
             // Confirmation is its own small event: the surface has been hedging with
-            // "to be confirmed" and can now stop.
+            // "result to be confirmed" and can now stop.
             if (m.complete && p.complete && m.final && !p.final) {
-                push('match_finished', 'final',
-                    say(resultParts(m.result_club || m.result || 'Result confirmed', m, ctx)
-                        .concat([SEP, det('confirmed', true), SEP])
-                        .concat(fixtureParts(m, ctx))));
+                push('match_finished', 'final', finishedPayload(m, ctx, 'result confirmed'));
             }
 
             /* --- clips. A clip is not an event of its own: it is footage OF one, so
@@ -1657,20 +1671,15 @@
                 out.push(event(type, ctx.key + ':' + id, ctx, when, now, payload, extra));
             };
             if (!p) {
-                if (m.complete) push('match_finished', 'result',
-                    say(resultParts(m.result_club || m.result || 'Match finished', m, ctx)
-                        .concat([SEP]).concat(ctx.division
-                            ? [det(ctx.division)] : fixtureParts(m, ctx))));
+                if (m.complete) push(abandonedCard(m) ? 'abandoned' : 'match_finished', 'result',
+                    abandonedCard(m) ? abandonedPayload(m, ctx) : finishedPayload(m, ctx));
                 return;
             }
             if (m.complete && !p.complete) {
                 var res = m.result_club || m.result || 'Match finished';
                 var aband = /abandon|no result|wash|cancel/i.test(res);
                 push(aband ? 'abandoned' : 'match_finished', 'result',
-                     aband ? abandonedPayload(m, ctx)
-                           : say(resultParts(res, m, ctx).concat([SEP])
-                                 .concat(fixtureParts(m, ctx))
-                                 .concat([SEP, det(ctx.division)])));
+                     aband ? abandonedPayload(m, ctx) : finishedPayload(m, ctx));
                 return;
             }
             /* THE MATCH GETTING UNDER WAY. The one state change the stream used to
@@ -1723,6 +1732,10 @@
                  * as six consecutive ones. */
                 var lob = balls(last.overs);
                 if (lob) logOver(m, mi.length - 1, lob, last);
+                /* THE DIVISION'S CHASES SWING TOO, on the same bands. Only when the
+                 * scoreline moves, which is the only time this card's price can. */
+                var lsw = swingCheck(m, ctx, now);
+                if (lsw) push('probability_shift', lsw.id, lsw.payload, { magnitude: lsw.magnitude });
                 /* THE SAME MILESTONE, and the one place it says nothing the strip is not
                  * already showing: this card carries no batters, so there is no clause to
                  * name them with. It goes out anyway because the CROSSING is a moment and
@@ -1770,24 +1783,147 @@
         return out;
     }
 
-    /* A ladder move, handed in rather than derived. The strip owns the ladder — it
-     * has the baked league table, the baseline/projected orders and the points port
-     * — and re-deriving all that here would be a second copy of the thing the docs
-     * already warn about. So the strip announces a committed move and this turns it
-     * into an event like any other. Until that wiring exists the simulator is the
-     * only source, which is enough to design the algorithm against. */
+    /* ---- THE LEAGUE TABLE'S STORY -------------------------------------------
+     *
+     * Two events, both read off the strip's own ladder (`WccLadder.rows`, one copy of
+     * the arithmetic for the column and the band):
+     *
+     *   ladder_expected   an ARROW — "if it stays this way" there will be a switch.
+     *                     The arrow is baseline rank → projected rank, so this fires
+     *                     exactly when one appears or changes, once it has held for
+     *                     LADDER_HOLD_MS (a chase near a tipping point would otherwise
+     *                     announce itself every poll). An arrow that goes is SILENT:
+     *                     its event is retired, never contradicted.
+     *   ladder_shift      the ladder actually MOVED — a committed swap, which under the
+     *                     barrier rule can land when the OTHER game finishes, not
+     *                     this side's own.
+     *
+     *   If it stays this way  ·  Haddenham move up to 3rd, above Chesham
+     *   Haddenham move up to 3rd, above Chesham
+     *   Wendover drop to 5th, below Denham            (ours only, going down)
+     *
+     * ONE EVENT PER SWITCH, NOT TWO. A swap puts an arrow on both rows; the band says
+     * it once, from the side going UP, naming the side it passes — except that our
+     * own side going down is always said from our side. Both clubs are always named.
+     *
+     * `st` is the caller's memory between calls (the order last seen, each row's
+     * arrow and how long it has stood). Called by the engine on every tick, so the
+     * hold is measured on the clock rather than on a poll arriving.
+     * > James's direction, 2026-10-01. */
+    var LADDER_HOLD_MS = 120000;
+    function extractLadder(st, views, cardOf, staleOf, now, cfg) {
+        var out = [];
+        if (!window.WccLadder || !st) return out;
+        cfg = cfg || {};
+        (views || []).forEach(function (view) {
+            // Only a view that HAS a ladder: a points system, and a table that does
+            // not already count today (`ladder()` returns the league order untouched
+            // for those, so nothing would ever move anyway).
+            if (!view.win_points || view.table_counts_today || (view.teams || []).length < 3) return;
+            var rows = WccLadder.rows(view, cardOf, staleOf);
+            var vk = String(view.pc_id != null ? view.pc_id : (view.name || ''));
+            var vs = st[vk] || (st[vk] = { order: null, arrows: {} });
+            var byKey = {};
+            rows.forEach(function (r) { byKey[r.key] = r; });
+            var name = function (r) { return dropCC(r.club || r.tla || ''); };
+            var ctxFor = function (r) {
+                var fx = WccLadder.fixtureForTeam(view, r.key);
+                if (fx) return matchCtx(fx.ours ? { pc_id: fx.match_id } : { match_id: fx.match_id },
+                                        cfg, !!fx.ours);
+                return matchCtx({ pc_id: view.pc_id }, cfg, true);
+            };
+            // What this side's move follows: the swing in its match not yet shown
+            // (expected), or its match's result (actual). See `waiting` in the store.
+            var follows = function (ctx, type) {
+                if (!cfg.recent) return null;
+                var ev = cfg.recent(ctx.key).filter(function (e) {
+                    return e.type === type && !e.superseded && e.shown_count === 0;
+                })[0];
+                return ev ? ev.id : null;
+            };
+
+            /* ACTUAL: the committed order against the one last seen. */
+            var order = rows.map(function (r) { return r.key; });
+            if (vs.order) {
+                var was = {};
+                vs.order.forEach(function (k, i) { was[k] = i; });
+                rows.forEach(function (r, i) {
+                    if (was[r.key] == null || was[r.key] === i) return;
+                    var up = i < was[r.key];
+                    if (!up && !r.ours) return;
+                    // Whom it passed: above it before and below it now, or the reverse.
+                    var passed = rows.filter(function (q, j) {
+                        return q !== r && was[q.key] != null &&
+                               (up ? (was[q.key] < was[r.key] && j > i)
+                                   : (was[q.key] > was[r.key] && j < i));
+                    });
+                    var ctx = ctxFor(r);
+                    out.push(event('ladder_shift',
+                        ctx.key + ':ladder' + r.key + '@' + (i + 1) + '/' + r.ptsNow, ctx, [null, now], now,
+                        say(movePhrase(r, i + 1, up, passed.map(name), name)),
+                        { ours: !!r.ours, magnitude: Math.min(1, Math.abs(was[r.key] - i) / 3),
+                          after: follows(ctx, 'match_finished') }));
+                });
+            }
+            vs.order = order;
+
+            /* EXPECTED: each row's arrow, held before it is said. */
+            rows.forEach(function (r) {
+                var sig = r.ghost ? r.ghost + r.ghostN + '@' + r.projRank : '';
+                var a = vs.arrows[r.key] || (vs.arrows[r.key] = { sig: '', since: now, said: '', id: null });
+                if (sig !== a.sig) { a.sig = sig; a.since = now; }
+                // The arrow it announced has gone or changed: retire what was said.
+                if (a.id && a.said !== sig) {
+                    out.push(event('ladder_expected', 'retract:' + a.id + ':' + now, ctxFor(r),
+                        [null, now], now, say([]), { retire_ids: [a.id], retire_only: true }));
+                    a.id = null; a.said = '';
+                }
+                if (!sig || a.said === sig || now - a.since < LADDER_HOLD_MS) return;
+                var up = r.ghost === 'up';
+                if (!up && !r.ours) return;
+                var passed = rows.filter(function (q) {
+                    return q !== r && q.baseRank != null &&
+                           (up ? (q.baseRank < r.baseRank && q.projRank > r.projRank)
+                               : (q.baseRank > r.baseRank && q.projRank < r.projRank));
+                });
+                var ctx = ctxFor(r);
+                var id = ctx.key + ':expect' + r.key + sig + ':' + now;
+                out.push(event('ladder_expected', id, ctx, [null, now], now,
+                    say([det('If it stays this way'), SEP]
+                        .concat(movePhrase(r, r.projRank, up, passed.map(name), name))),
+                    { ours: !!r.ours, magnitude: Math.min(1, (r.ghostN || 1) / 3),
+                      after: follows(ctx, 'probability_shift') }));
+                a.said = sig; a.id = id;
+            });
+        });
+        return out;
+    }
+    // "Haddenham move up to 3rd, above Chesham" / "Wendover drop to 5th, below Denham".
+    function movePhrase(r, to, up, passed, name) {
+        var list = passed.slice(0, 3);
+        var parts = [team(name(r)), det((up ? 'move up to ' : 'drop to ') + ordinal(to))];
+        if (list.length) {
+            parts.push(det(up ? ', above' : ', below'));
+            list.forEach(function (n, i) {
+                if (i) parts.push(det(i === list.length - 1 ? 'and' : ','));
+                parts.push(team(n));
+            });
+        }
+        return parts;
+    }
+
+    /* A ladder move handed in from outside (`handle.addLadderMove`) — the seam the
+     * strip was going to use before the engine derived moves itself. Kept for a
+     * console or a test; nothing in the wall calls it now. */
     function ladderEvent(move, now, cfg) {
         if (!move || !move.club) return null;
         var ctx = matchCtx({ pc_id: move.pc_id, match_id: move.match_id,
                              home: move.club, away: '' }, cfg || {}, !!move.ours);
-        var dir = move.places > 0 ? 'up' : 'down';
         var n = Math.abs(move.places || 0);
         return event('ladder_shift', ctx.key + ':ladder' + move.club + move.to, ctx,
             [move.since || null, now], now,
-            say([team(dropCC(move.club)),
-                 det(dir + ' ' + n + (n === 1 ? ' place' : ' places') + ' to ' + ordinal(move.to)),
-                 SEP, det((move.division || ctx.division || '') +
-                          (move.reason ? ' \u00b7 ' + move.reason : ''), true)]),
+            say(movePhrase({ club: move.club }, move.to, move.places > 0, [],
+                           function (r) { return dropCC(r.club); })),
             { magnitude: Math.min(1, n / 3) });
     }
 
@@ -1821,7 +1957,10 @@
              * nothing has replaced it. It retires and is then thrown away, because
              * "T Duff did not take a hat-trick after all" is not news and must never
              * reach a screen. The store drops it in `add`. */
-            retire_only: !!extra.retire_only
+            retire_only: !!extra.retire_only,
+            // See `waiting` in the store, and `retire_ids` in `add`.
+            after: extra.after || null,
+            retire_ids: extra.retire_ids || null
         };
     }
     // Everything a surface needs to say WHICH match an event belongs to, resolved
@@ -1896,15 +2035,116 @@
         return prevList[ii] || null;
     }
     function balls(overs) { return window.WccChase ? WccChase.ballsOf(overs) : 0; }
-    function chaseP(card) {
-        var st = window.WccChase ? WccChase.chaseState((card && card.innings) || []) : null;
-        return st ? st.p : null;
+    /* ---- THE SWING -----------------------------------------------------------
+     *
+     * A CROSSING, NOT A JUMP. This fired when the chase model moved 15 points between
+     * two polls, which made it a property of how often we poll — the same afternoon
+     * polled twice as often never swung at all — and it could fire four times in a
+     * quarter of an hour on one chase. It now fires when the chase crosses into a new
+     * BAND of the chasing side's chance:
+     *
+     *     0  < 0.2   the defending side on top
+     *     1  < 0.5   the defending side favourites
+     *     2  < 0.8   the chasing side favourites
+     *     3          the chasing side closing in
+     *
+     * with SWING_MARGIN of hysteresis either side of every edge, so a chase sitting
+     * on 50% does not flip every poll. The first band a chase is seen in is set
+     * silently: that is a state, not a swing. With no allotment known the model caps
+     * its certainty (see live-chase.js), so only the favourite changing can fire.
+     *
+     * NO PERCENTAGES. The model is an approximation — fine for a fill height, not a
+     * figure to quote — so the line says what happened in words, then WHY: the
+     * passage that did it ("30–3 in the last 5 overs", the passage clause), or failing
+     * that where the chase stands.
+     *
+     *   Denham’s chase turns, Wendover now favourites  ·  30–3 in the last 5 overs
+     *   Wendover now favourites against Denham  ·  48 needed from 5 overs, 4 wickets in hand
+     *   Wendover closing in on the Denham target  ·  12 needed from 18 balls, 6 wickets in hand
+     *   Denham fighting back  ·  …                       (we were chasing)
+     *
+     * ALWAYS THE OPPOSITION on our games and BOTH clubs on a division's. Wendover
+     * may be the subject; as an object it is dropped ("the target", no "against
+     * Wendover"), and every line names the other side somewhere.
+     * > James's direction, 2026-10-01. */
+    var SWING_EDGES = [0.2, 0.5, 0.8], SWING_MARGIN = 0.05;
+    /* AND A GAP BETWEEN SWINGS IN ONE MATCH, except for the favourite changing. A
+     * see-saw chase crosses the "on top" edge back and forth for an hour (measured
+     * on the simulated day: six swings in two hours on one division game), and every
+     * crossing but the flip is a shade of the last one. A crossing held back is not
+     * lost: the band is only moved when the event goes out, so one still true when
+     * the gap ends is said then. */
+    var SWING_GAP_MS = 600000;
+    function swingBand(p, from) {
+        var k;
+        if (from == null) {
+            k = 0;
+            while (k < 3 && p >= SWING_EDGES[k]) k++;
+            return k;
+        }
+        k = from;
+        while (k < 3 && p >= SWING_EDGES[k] + SWING_MARGIN) k++;
+        while (k > 0 && p < SWING_EDGES[k - 1] - SWING_MARGIN) k--;
+        return k;
     }
-    function pct(p) { return Math.round(p * 100) + '%'; }
-    function swingParts(m, was, now) {
-        var inns = m.innings || [];
-        var chasing = dropCC((inns[1] && (inns[1].club || inns[1].side)) || '');
-        return [team(chasing), det(now > was ? 'back in it' : 'losing their grip')];
+    // The chase's band this poll against the one carried on the card (`_swing`, the
+    // `_spells` precedent): an event when it has changed, else null.
+    function swingCheck(m, ctx, now) {
+        var inns = (m && m.innings) || [];
+        if (m.complete || inns.length !== 2) return null;
+        var st = window.WccChase ? WccChase.chaseState(inns) : null;
+        if (!st || st.p == null) return null;
+        if (!m._swing) { m._swing = { band: swingBand(st.p, null) }; return null; }
+        var from = m._swing.band, to = swingBand(st.p, from);
+        if (to === from) return null;
+        var flip = (from < 2) !== (to < 2);
+        if (!flip && m._swing.at != null && now - m._swing.at < SWING_GAP_MS) return null;
+        m._swing.band = to; m._swing.at = now;
+        var payload = swingPayload(m, ctx, st, from, to);
+        if (!payload) return null;
+        return { id: 'swing' + from + '>' + to + '@' + balls(inns[1].overs), payload: payload,
+                 // The favourite changing is the big one.
+                 magnitude: flip ? 1 : 0.6 };
+    }
+    function swingPayload(m, ctx, st, from, to) {
+        var inns = m.innings;
+        var a = inningsClub(m, ctx, inns[0]), b = inningsClub(m, ctx, inns[1]);
+        if (!a || !b || a === b) return null;
+        var ours = function (c) { return ctx.ours && isOurPlayer(ctx, c); };
+        var against = function (c) { return ours(c) ? [] : [det('against'), team(c)]; };
+        var head;
+        if (to === 3) head = [team(b), det('closing in on the'), ours(a) ? null : team(a), det('target')];
+        else if (to === 2 && from < 2) head = [team(b), det('now favourites')].concat(against(a));
+        else if (to === 2) head = [team(a), det('fighting back')].concat(against(b));
+        else if (to === 1 && from > 1) head = [team(b), det('\u2019s chase turns'), det(','),
+                                               team(a), det('now favourites')];
+        else if (to === 1) head = [team(b), det('back in the chase')].concat(against(a));
+        else head = [team(a), det('on top')].concat(against(b));
+        var inn = inns[1];
+        var why = passageClause(m, 1, balls(inn.overs), inn);
+        return say(head.concat([SEP, why ? det(why, true) : det(chaseSituation(st), true)]));
+    }
+    // "48 needed from 5 overs, 4 wickets in hand" — the balls only when the allotment
+    // is known (see live-chase.js), and counted in balls once it is down to five overs.
+    function chaseSituation(st) {
+        var from = st.balls != null
+            ? ' from ' + (st.balls <= 30 ? st.balls + ' ball' + (st.balls === 1 ? '' : 's')
+                                          : oversWord(st.balls)) : '';
+        return st.runs + ' needed' + from + ', ' + st.wkts + ' wicket' +
+               (st.wkts === 1 ? '' : 's') + ' in hand';
+    }
+    /* WHICH CLUB AN INNINGS IS — by team id against the card's home and away where
+     * the card has them (the division's PC card), else the innings' own club (RV
+     * names it). Shared by the result line and the swing. */
+    function inningsClub(m, ctx, inn) {
+        var home = dropCC(ctx.home_club || m.home || ''),
+            away = dropCC(ctx.away_club || m.away || '');
+        if (inn.team_batting_id != null && m.home_team_id != null) {
+            if (String(inn.team_batting_id) === String(m.home_team_id)) return home;
+            if (String(inn.team_batting_id) === String(m.away_team_id)) return away;
+            return '';
+        }
+        return dropCC(inn.club || inn.side || '');
     }
     /* THE TOSS, and the first type phrased for the L-frame rather than for a bar
      * standing on its own.
@@ -2079,6 +2319,86 @@
         return say([det('Match abandoned at')].concat(fixtureParts(m, ctx))
                    .concat([SEP, det(pts)]));
     }
+    /* A MATCH DECIDED, said as how it ended and then who won.
+     *
+     *   Denham are bowled out  ·  Wendover win by 34 runs – result to be confirmed
+     *   Denham chase down the target to win by 2 wickets – result to be confirmed
+     *   Wendover chase down the Denham target to win by 2 wickets
+     *   Gerrards Cross run out of overs  ·  Haddenham win by 34 runs
+     *   Amersham beat Wooburn Narkovians                (a division card with no score)
+     *
+     * THE ONE PLACE WENDOVER IS NAMED AS A SUBJECT. Everywhere else the band leaves
+     * our own name out (see `clubTag`), but a result with the winner left out is not a
+     * result. The object-case rule still holds: when WE set the target the chase is
+     * "the target", not "the Wendover target". A division match names both clubs
+     * every time and leaves the division to the strip.
+     *
+     * THE WAY IT ENDED IS READ OFF THE SCORECARD, not the feed's prose — RV lags with
+     * "trails by…" until the scorer publishes, and PC carries no margin at all. Only
+     * the three endings the card can prove are said: the chase passing the target,
+     * the chasing side bowled out, the chasing side reaching the first innings'
+     * overs (which needs an allotment, see `WccChase.allotmentOvers`). A defended
+     * total with no provable ending falls back to "A beat B by 34 runs".
+     *
+     * ANYTHING THE SCORECARD CANNOT EXPLAIN goes out in the feed's own words with
+     * the fixture beside it: a DLS target, a concession, an awarded match, a card
+     * that is not two innings. A margin worked out from the runs would be wrong for
+     * every one of those.
+     * > James's direction, 2026-09-30. */
+    function abandonedCard(m) {
+        return /abandon|no result|wash|cancel/i.test(m.result_club || m.result || '');
+    }
+    function finishedPayload(m, ctx, hedge) {
+        return say(finishedParts(m, ctx).concat([det(hedge ? '– ' + hedge : '')]));
+    }
+    function finishedParts(m, ctx) {
+        var home = dropCC(ctx.home_club || m.home || ''),
+            away = dropCC(ctx.away_club || m.away || '');
+        var ours = function (club) { return ctx.ours && isOurPlayer(ctx, club); };
+        var plural = function (n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); };
+        var clubOf = function (inn) { return inningsClub(m, ctx, inn); };
+        var text = String(m.result_club || m.result || '');
+        var odd = /dls|d\/l|duckworth|revised|conced|forfeit|award/i.test(text);
+        var inns = m.innings || [];
+
+        if (inns.length === 2 && !odd) {
+            var i1 = inns[0], i2 = inns[1];
+            var a = clubOf(i1), b = clubOf(i2);          // a set the target, b chased it
+            var r1 = i1.runs || 0, r2 = i2.runs || 0;
+            if (a && b && a !== b) {
+                if (r2 > r1) {
+                    return [team(b), det('chase down the'), ours(a) ? null : team(a),
+                            det('target to win by ' + plural(10 - (i2.wickets || 0), 'wicket'))];
+                }
+                var allot = window.WccChase ? WccChase.allotmentOvers(i1) : null;
+                var how = (i2.wickets || 0) >= 10 ? 'are bowled out'
+                        : (allot && balls(i2.overs) >= allot * 6) ? 'run out of overs' : '';
+                if (r1 > r2) {
+                    var by = plural(r1 - r2, 'run');
+                    if (how) return [team(b), det(how), SEP, team(a), det('win by ' + by)];
+                    return ours(b) ? [team(a), det('win by ' + by)]
+                                   : [team(a), det('beat'), team(b), det('by ' + by)];
+                }
+                if (how) return [team(b), det(how),
+                                 det(ours(a) ? 'level on ' + r1 : 'level with'),
+                                 ours(a) ? null : team(a), det(ours(a) ? '' : 'on ' + r1),
+                                 SEP, det('Match tied')];
+                return [team(a), det('and'), team(b), det('tie on ' + r1)];
+            }
+        }
+        // No scorecard to read (a division match kept in the book), so the winner
+        // comes from the card's one structural fact about it.
+        if (!odd && home && away && !ctx.ours) {
+            var won = m.result_applied_to != null ? String(m.result_applied_to) : '';
+            if (won && won === String(m.home_team_id)) return [team(home), det('beat'), team(away)];
+            if (won && won === String(m.away_team_id)) return [team(away), det('beat'), team(home)];
+            if (/\btie/i.test(text)) return [team(home), det('and'), team(away), det('tie')];
+            if (/\bdraw/i.test(text)) return [team(home), det('and'), team(away), det('draw')];
+        }
+        var said = resultParts(text || 'Match finished', m, ctx);
+        return ctx.ours ? said : said.concat([SEP]).concat(fixtureParts(m, ctx));
+    }
+
     /* IS THIS CARD SAYING A STREAM IS RUNNING? Returns a stable marker rather than a
      * boolean, so a card can be compared with the one before it. See the call site for
      * why the three signals are ranked the way they are. */
@@ -2850,6 +3170,7 @@
         m._falls = (p && p._falls) || {};
         m._surges = (p && p._surges) || {};
         m._once = (p && p._once) || {};
+        m._swing = (p && p._swing) || null;
     }
     /* A LATCH FOR A FACT THAT IS TRUE ONCE PER INNINGS.
      *
@@ -4404,6 +4725,8 @@
         extractLive: extractLive,
         extractLeague: extractLeague,
         ladderEvent: ladderEvent,
+        extractLadder: extractLadder,
+        LADDER_HOLD_MS: LADDER_HOLD_MS,
         interestOf: interestOf,
         MIN_SHOW_MS: MIN_SHOW_MS,
         dwellFor: dwellFor,

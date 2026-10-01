@@ -30,6 +30,9 @@
             --rule: 1.875vw;
             /* Match the points badges elsewhere (--accent-win / --accent-loss). */
             --win: 45, 122, 45; --loss: 139, 26, 26;   /* rgb triples */
+            /* The verdict badge's other outcomes — `--accent-draw` / `--accent-amber`
+               from the slide bases, which this page does not load. */
+            --draw: #1a5c7a; --amber: #7a5c00;
             /* THE SCOREBOX AND ITS APERTURES — the match-day board's scoreboard, in
                this column's terms.
 
@@ -122,7 +125,8 @@
 
         /* One tile per team, ordered by league position. Channels:
            - FILL colour   = result lean (green win / red loss), always the full points colour
-           - FILL height   = certainty (a band rising from the bottom; full tile = settled)
+           - FILL height   = certainty (a band rising from the bottom) — IN PLAY ONLY
+           - VERDICT badge = a decided match, top-right ("WON · 22"), in place of the fill
            - bat/bowl ICON = live role (top-left)
            - GHOST arrow   = a pending, not-yet-committed move up/down the table
            Role/dot top-left, ghost arrow bottom-right, TLA centred; text stays white on
@@ -189,6 +193,24 @@
         /* Certainty fill: full points colour, rising from the bottom to `height`. */
         .fill { position: absolute; left: 0; right: 0; bottom: 0; z-index: 0;
             transition: height 0.6s ease; }
+        /* ON A LADDER ROW IT IS A BAR IN THE MARGIN, not a wash behind the type — the
+           match-day board's `.sq-fill` on its division squares, for the same reason:
+           a saturated block behind small type made both harder to read. Same two
+           channels (colour = lean, height = certainty, rising from the bottom), moved
+           out of the text to the tile's LEFT-hand edge (tried right first; the left
+           puts it on the edge the position number reads from). The "To win" aperture keeps
+           its wash, as the board's `.sb-fill` does: that one sits behind a big figure
+           in a cell built to take it.
+           > James's direction, 2026-09-30 — trial. */
+        /* FLUSH ON THE OUTER EDGE, not inset: the strip has no padding, so the tile's
+           left edge IS the column's, and the bar sits in it as an edge stripe —
+           square where it meets the frame, rounded on its inner side. */
+        .tile.row > .fill, .tile.focus > .fill { left: 0; right: auto; width: 0.6vh;
+            border-radius: 0 99px 99px 0; }
+        /* The position number steps in to clear the bar, which can rise to 95% of
+           the tile. The clock needs no room: it is only on a decided tile, and a
+           decided tile has no bar. */
+        .tile.row > .pos, .tile.focus > .pos { left: 1vh; }
         .tla { position: relative; z-index: 1;
             font-size: 3.2vh; font-weight: 900; letter-spacing: 0.02em; text-align: center; }
 
@@ -598,11 +620,12 @@
         .dot { position: absolute; top: 0.75vh; right: 0.7vh; z-index: 1;
             width: 1.1vh; height: 1.1vh;
             border-radius: 50%; background: rgba(255,255,255,0.55); }
-        .dot.live { background: #b3261e; animation: strip-pulse 1.8s infinite; }
+        /* The match-day board's `● Live` red (`.md-status.live`), so one state is one colour. */
+        .dot.live { background: #ff6b6b; animation: strip-pulse 1.8s infinite; }
         @keyframes strip-pulse {
-            0%   { box-shadow: 0 0 0 0 rgba(179,38,30,0.6); }
-            70%  { box-shadow: 0 0 0 0.9vh rgba(179,38,30,0); }
-            100% { box-shadow: 0 0 0 0 rgba(179,38,30,0); }
+            0%   { box-shadow: 0 0 0 0 rgba(255,107,107,0.6); }
+            70%  { box-shadow: 0 0 0 0.9vh rgba(255,107,107,0); }
+            100% { box-shadow: 0 0 0 0 rgba(255,107,107,0); }
         }
 
         /* The provisional-result clock — decided, not yet published. Kept when the
@@ -611,6 +634,26 @@
         .role { position: absolute; bottom: 0.6vh; left: 0.6vh; z-index: 1;
             width: 3vh; height: 3vh; color: #fff; }
         .role svg { width: 100%; height: 100%; display: block; }
+
+        /* THE VERDICT BADGE, top-right, on a finished game's tile — the match-day
+           board's `.res` at this column's size: the same outcome colours, the same
+           "verdict, then what it was worth" ("WON · 22"), points only where the
+           division can be priced. It REPLACES the fill: the swingometer is a claim
+           about a game still being played, and a decided one has a verdict instead.
+           Sits on the position number's line, which is the one row of the tile the
+           centred content leaves clear. Max-width so a long verdict ("ABANDONED · 7")
+           ellipsises rather than running over the position.
+           > James's direction, 2026-09-30. */
+        .res { position: absolute; top: 0.45vh; right: 0.45vh; z-index: 2;
+            max-width: calc(100% - 3.4vh); overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; font-size: 1.15vh; font-weight: 700; line-height: 1.5;
+            letter-spacing: 0.06em; text-transform: uppercase; padding: 0 0.45em;
+            border-radius: var(--radius); color: #fff; }
+        .res[data-v="W"] { background: rgb(var(--win)); }
+        .res[data-v="L"] { background: rgb(var(--loss)); }
+        .res[data-v="T"] { background: var(--draw); }
+        .res[data-v="D"] { background: #444; color: #ccc; }
+        .res[data-v="A"], .res[data-v="C"], .res[data-v="NR"] { background: var(--amber); color: #ffe; }
 
         /* Ghost arrow, bottom-right: white, the pending move (shape carries direction,
            the numeral its size — places, not points). */
@@ -644,6 +687,9 @@
      withdrawn as too stale to show — the two surfaces giving different accounts of
      the same match, which is the thing every shared module here exists to stop. -->
 <script src="/assets/js/live-status.js?v={{ asset_version }}"></script>
+<!-- The ladder model (tile state, points, display order, arrows), shared with the
+     engine so the arrows and the league-position events are one calculation. -->
+<script src="/assets/js/live-ladder.js?v={{ asset_version }}"></script>
 <!-- The event model: the per-type panel mapping and its fallback chains live in the
      type table, so the strip asks which panel an event wants rather than deciding
      for itself. Pure and DOM-free — nothing here starts a feed. -->
@@ -779,6 +825,9 @@
         if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + (t.ghost === 'up' ? '▲' : '▼') +
             (t.ghostN > 1 ? '<i>' + t.ghostN + '</i>' : '') + '</span>';
         if (t.idle === 'nodata') inner += '<span class="dot"></span>';
+        if (t.verdict) inner += '<span class="res" data-v="' + esc(t.verdict) + '">' +
+            esc(VERDICT_LABELS[t.verdict] + (t.settledPts != null ? ' \u00b7 ' + t.settledPts : '')) +
+            '</span>';
 
         /* `data-p` is what the dimension lines subtract, and it is `ptsNow` — the
            figure `ladder()` put the rows in order by (the table's points plus anything
@@ -788,6 +837,7 @@
         var pts = t.ptsNow != null ? t.ptsNow : t.points;
         return '<div class="' + cls.join(' ') + '"' + (t.key ? ' data-k="' + esc(t.key) + '"' : '') +
                (t.focus && pts != null ? ' data-p="' + esc(pts) + '"' : '') +
+               (t.focus && t.done ? ' data-done="1"' : '') +
                '>' + inner + '</div>';
     }
 
@@ -997,169 +1047,6 @@
        stamped on a simulated afternoon. */
     var lastLeague = null;
 
-    // ---- side resolution ----------------------------------------------------
-    // Everything here binds by ID, never by name. Both feeds identify sides
-    // structurally — RV per innings/team with `is_home`, PC with `team_batting_id`
-    // against `home_team_id` — and the baked fixture says which team id is at home,
-    // so a tile resolves to 'home' or 'away' and the two meet there.
-    //
-    // This used to be a name join, and it was the wrong idea: a scorecard names a
-    // side by TEAM ("Wendover CC Friendly XI"), our context by CLUB ("Wendover CC"),
-    // with an arbitrary designation tail between them — and a club's own name can
-    // itself end in "XI" ("Captain Scott Invitation XI Sunday 1st XI"), so no amount
-    // of suffix-stripping is safe. A failed join was silent and looked like two
-    // unrelated rendering bugs.
-
-    // Which side of its fixture a tile's team is.
-    function tileSide(team, fx) {
-        if (!fx || !team.team_id || !fx.home_team_id) return null;
-        return String(team.team_id) === String(fx.home_team_id) ? 'home' : 'away';
-    }
-    // Which side an innings belongs to. RV states it outright; PC gives the batting
-    // team's id to compare against the card's home team.
-    function inningsSide(card, inn) {
-        if (typeof inn.is_home === 'boolean') return inn.is_home ? 'home' : 'away';
-        if (inn.team_batting_id && card.home_team_id)
-            return String(inn.team_batting_id) === String(card.home_team_id) ? 'home' : 'away';
-        return null;
-    }
-    var other = function (side) { return side === 'home' ? 'away' : 'home'; };
-
-    // Win/loss for one side of a completed match — again without reading prose.
-    // Published results come from the feed's own verdict (RV states it per team, PC
-    // as the winning team's id). Between "decided" and "published" neither exists
-    // yet, so fall back to the scorecard: whoever has more runs is winning. A tie,
-    // draw or abandonment leans neither way.
-    function outcomeFor(card, side) {
-        var t = (card.teams || []).filter(function (x) {
-            return (x.is_home ? 'home' : 'away') === side; })[0];
-        if (t && t.outcome) {
-            return t.outcome === 'won' ? 'win' : t.outcome === 'lost' ? 'loss' : null;
-        }
-        if ('result_applied_to' in card) {   // PC card: null = nobody won
-            if (!card.result_applied_to) return null;
-            var winner = String(card.result_applied_to) === String(card.home_team_id) ? 'home' : 'away';
-            return winner === side ? 'win' : 'loss';
-        }
-        var runs = {};
-        (card.innings || []).forEach(function (inn) {
-            var s = inningsSide(card, inn);
-            if (s) runs[s] = (runs[s] || 0) + (inn.runs || 0);
-        });
-        if (runs.home == null || runs.away == null || runs.home === runs.away) return null;
-        return (runs[side] > runs[other(side)]) ? 'win' : 'loss';
-    }
-
-    // ---- resources + win probability ---------------------------------------
-    // The model itself lives in assets/js/live-chase.js, because the event
-    // extractor (live-events.js) now prices `probability_shift`/`ladder_shift` off
-    // the same numbers and the two surfaces must not disagree about who is winning.
-    // Only the strip-specific mirroring stays here.
-    //
-    // Absent module → no lean and no certainty, which is exactly the first-innings
-    // presentation: a role glyph and nothing claimed. A cache that serves this page
-    // newer than its scripts degrades to that rather than throwing (see the
-    // asset-cache-skew note).
-    function ballsOf(overs) { return window.WccChase ? WccChase.ballsOf(overs) : 0; }
-    function allotmentOvers(first) { return window.WccChase ? WccChase.allotmentOvers(first) : null; }
-    function chaseState(inns) { return window.WccChase ? WccChase.chaseState(inns) : null; }
-
-    // A match card + WHICH SIDE of it a tile is -> that tile's channels. The single
-    // point where feed shapes become tile state; everything above it is model,
-    // everything below it is paint. A side we can't resolve (a seeded match with no
-    // team ids) reads as a silent feed rather than guessing.
-    /* IS THIS MATCH ACTUALLY ON? — the board's `cls: 'play'`, which is what the
-       silent dot is supposed to mean and what it had stopped meaning. A break counts:
-       the game is under way, the players are just off the field. */
-    function onNow(card) {
-        return !!card && (card.phase === 'live' || card.phase === 'break' || !!card.break_desc);
-    }
-
-    /* THREE IDLE STATES, matching the three the match-day board draws (`WccStatus`
-       classes 'play' / 'wait' / 'off'):
-
-         'nodata'  THE DOT — the match is ON and we have no score for it. Either
-                   nobody is scoring it ball by ball, or the score we had has been
-                   withdrawn as stale. "Match on but no data", which is what the dot
-                   has always said it meant.
-         'quiet'   NO MARK, ordinary tile — a fixture today that has not started, or
-                   one the feed has said nothing about. The board is deliberately
-                   silent here too ("rather than asserting 'not started' about a game
-                   we simply haven't heard from"), and a dot would be this tile
-                   claiming a game is under way when it is not.
-         'none'    DIMMED — no fixture at all today. Not playing, not waiting.
-
-       The dot used to go on ALL of these but the last, so a side yet to start looked
-       exactly like one in play with an unscored card — which is what made two of the
-       division's four games indistinguishable from the other two. */
-    function assess(card, side, ourSide, stale) {
-        if (!card) return { idle: 'quiet' };
-        /* NO FEED is the board's third class and the strip has no third mark for it,
-           so it lands on 'quiet' — the honest half of the choice, since the alternative
-           was to keep asserting a game was in play when the truth is we could not
-           reach it. It does mean a fetch failure now looks like a game not yet
-           started; see the note in the commit. */
-        if (card.phase === 'no-feed') return { idle: 'quiet' };
-        if (!side) return { idle: 'quiet' };
-        var inns = card.innings || [];
-        if (card.complete) {
-            var lean = outcomeFor(card, side);
-            // `final` is the scorer's confirmation (our rich feed only). Decided but
-            // unconfirmed shows the clock instead of a role glyph.
-            var prov = card.final === false;
-            return { lean: lean, certainty: lean ? 1 : 0, provisional: prov };
-        }
-        /* THE TOSS PUTS THE GLYPHS UP BEFORE A BALL IS BOWLED. Until it did, the role
-           came only from the last innings in the card, so between the toss and the
-           first ball both tiles sat blank — `idle: 'nodata'`, the same state as a
-           feed saying nothing at all — while the feed in fact knew exactly who was
-           about to bat. A role and no lean is already the first-innings presentation
-           (`certainty = 0` below), so this is that same state, half an hour earlier.
-
-           `phase: 'pre'` no longer short-circuits above for the same reason: a
-           pre-match card with the toss in it has something to say. One without still
-           lands on `nodata`, through the innings check here. */
-        if (!inns.length) {
-            var firstBat = window.WccChase ? WccChase.battingFirst(card, ourSide) : null;
-            // No toss either: the dot only if the game is actually under way — a
-            // scoreless card for a match nobody is scoring. Before the start, quiet.
-            if (!firstBat) return { idle: onNow(card) ? 'nodata' : 'quiet' };
-            return { role: firstBat === side ? 'bat' : 'bowl', certainty: 0 };
-        }
-        /* A SCORE THE BOARD HAS WITHDRAWN MUST NOT BE LADDERED. `stale` is the
-           match-day board's own judgement, computed by the caller from the same
-           `live-status.js` bands the squares use — so the two surfaces cannot give
-           different accounts of the same match.
-
-           The board strikes three things on a stale square: the batting-half marker,
-           the chase pricing (`setSwing(null)`) and the score itself, which the status
-           token replaces. Those are exactly this tile's role glyph, its lean and
-           certainty, and its TLA-with-a-dot — so withdrawing to the silent-feed state
-           is the same decision made in the strip's own vocabulary. It also settles
-           the ladder for free: with no `p` on the row, `expectedPoints` falls back to
-           neutral, so no ghost arrow and no projected reorder rides a score we have
-           just said we do not trust. */
-        if (stale) return { idle: 'nodata' };
-        var cur = inns[inns.length - 1];
-        var batting = inningsSide(card, cur) === side;
-        /* `live` is what the dot reports: this match has a card, it has an innings in
-           it, it is not complete and the score is not stale — which is precisely "we
-           are receiving scores for this game". It is not the same as `role`, which
-           said WHICH SIDE was in; that pair has gone (see `.dot`). */
-        var out = { role: batting ? 'bat' : 'bowl', live: true };
-        var chase = chaseState(inns);
-        if (chase) {
-            // p is the chasing side's; mirror it for the side defending.
-            var p = batting ? chase.p : 1 - chase.p;
-            out.lean = p >= 0.5 ? 'win' : 'loss';
-            out.certainty = Math.min(0.95, Math.abs(2 * p - 1));
-            out.p = p;
-        } else {
-            out.certainty = 0;   // first innings — a role, no lean
-        }
-        return out;
-    }
-
     // The chase panel's numbers, live or final. Deliberately NOT part of a tile's
     // state: the panel describes the match, not the side, and it has to outlive the
     // innings that produced it.
@@ -1195,139 +1082,41 @@
        feed's own clock and returns how long they have stood. Calling it once per
        render matches what the board does, and it is idempotent while the figures
        hold still. */
-    function staleCard(fx, card) {
-        var S = window.WccStatus;
-        if (!S || !fx || fx.ours || !card || card.complete) return false;
-        var inns = card.innings || [];
-        var cur = inns.length ? inns[inns.length - 1] : null;
-        var age = S.observe('l' + fx.match_id, card, lastLeague);
-        if (!cur || S.closed(card, cur)) return false;
-        return S.band(age) === 'stale';
-    }
-    function fixtureForTeam(view, teamId) {
-        var fxs = view.fixtures || [];
-        for (var i = 0; i < fxs.length; i++) {
-            if ((fxs[i].team_ids || []).indexOf(teamId) !== -1) return fxs[i];
-        }
-        return null;
-    }
+    // The rule itself is WccLadder.staleness, shared with the engine.
+    var staleCard = L && L.staleness ? L.staleness(function () { return lastLeague; })
+                                     : function () { return false; };
+    // ---- the ladder model ---------------------------------------------------
+    // Side resolution, tile state, points and the ladder itself live in
+    // assets/js/live-ladder.js, shared with the engine so the arrows here and the
+    // league-position events in the band are one calculation.
+    // GUARDED, per the asset-cache-skew note: a page that cannot load the module
+    // draws nothing (see `render`) rather than throwing at load and taking the
+    // feed listeners down with it.
+    var L = window.WccLadder || null;
+    var tileSide = L && L.tileSide, inningsSide = L && L.inningsSide, other = L && L.other,
+        assess = L && L.assess, settledPoints = L && L.settledPoints;
 
-    // ---- league points ------------------------------------------------------
-    // TVCL Win/Lose (Match Rules §9), in tvcl-points.js because the match-day
-    // board badges finished games with the same figures. Absent script (a page
-    // newer than its cached assets) prices nothing, which the ladder already
-    // treats as "not final" and so holds position for.
-    function tvclPoints(inns, resultText) {
-        return window.WccPoints ? WccPoints.tvcl(inns, resultText) : null;
-    }
-
-    // What one side actually earned, once its match is decided. Prefers the
-    // server-computed figure on our own rich card; falls back to the port above for
-    // the division's other matches. Null when it can't be priced — which the ladder
-    // treats as "not final", so it holds position rather than guessing.
-    function settledPoints(view, card, side) {
-        if (!view.tvcl || !card || !card.complete) return null;
-        var inns = card.innings || [];
-        if (inns.length < 2) return null;
-        var idx = -1;
-        for (var i = 0; i < inns.length; i++) if (inningsSide(card, inns[i]) === side) { idx = i; break; }
-        if (idx < 0) return null;
-        if (inns[idx].points != null) return inns[idx].points;
-        var pts = tvclPoints(inns, card.result);
-        return pts ? pts[idx] : null;
-    }
-
-    // A LOSS IS NOT ZERO. TVCL gives the beaten side batting + bowling bonus points
-    // — a team bowled out for 150 that took 6 wickets still banks 8. So the value of
-    // an unfinished match is a blend, and even a near-certain loss is worth
-    // something. This average stands in for the loser's bonus while a match is
-    // still running; once it's decided, settledPoints() replaces it with the real
-    // figure. Deliberately a single documented constant, not a model.
-    var LOSS_BONUS = 7;
-    function expectedPoints(p, winPoints) {
-        return p * winPoints + (1 - p) * LOSS_BONUS;
-    }
-
-    // ---- the ladder ---------------------------------------------------------
-    // Three orders, doing three different jobs:
-    //   DISPLAY   — where tiles actually sit. League order, with a swap applied only
-    //               when BOTH teams involved are final (settled, or not playing at
-    //               all). An unfinished match is a barrier: nothing may jump a team
-    //               whose result is still unknown, so the ladder moves once, when
-    //               it's earned, instead of twice.
-    //   BASELINE  — every unfinished match priced at its neutral expectation.
-    //   PROJECTED — the same, but priced at what's ACTUALLY happening out there.
-    // The ghost is BASELINE → PROJECTED, so it means "how today is going versus what
-    // was expected of it" — not "who has a fixture". At the first ball the two
-    // orders are identical and the strip is arrow-free; arrows appear only as
-    // matches diverge, and grow as certainty does.
-    function ladder(view, rows) {
-        var wp = view.win_points;
-        // No points system, or a table that may already count today, and the whole
-        // overlay is unsafe — show the league's own order and no arrows.
-        if (!wp || view.table_counts_today) return rows;
-
-        var neutral = expectedPoints(0.5, wp);
-        rows.forEach(function (r) {
-            var known = r.points != null;
-            r.ptsNow = known ? r.points + (r.settledPts || 0) : null;
-            r.final = r.idle === 'none' || r.settledPts != null;
-            var pending = known && !r.final && r.idle !== 'none';
-            r.base = known ? r.ptsNow + (pending ? neutral : 0) : null;
-            // p is only known once a chase is on; before that a match sits at its
-            // neutral value, which is exactly why nothing moves in a first innings.
-            r.proj = known ? r.ptsNow + (pending ? expectedPoints(r.p != null ? r.p : 0.5, wp) : 0) : null;
-        });
-        if (rows.some(function (r) { return r.ptsNow == null; })) return rows;
-
-        // DISPLAY: adjacent swaps only, and only between two final teams.
-        var out = rows.slice(), swapped = true, guard = 0;
-        while (swapped && guard++ < 50) {
-            swapped = false;
-            for (var i = 0; i + 1 < out.length; i++) {
-                var a = out[i], b = out[i + 1];
-                if (a.final && b.final && b.ptsNow > a.ptsNow) {
-                    out[i] = b; out[i + 1] = a; swapped = true;
-                }
-            }
-        }
-
-        // GHOST: rank under BASELINE vs under PROJECTED. Shown only for matches
-        // still in play — a settled team has nothing pending, and its tile has
-        // already moved.
-        var byBase = rows.slice().sort(function (x, y) { return y.base - x.base || rows.indexOf(x) - rows.indexOf(y); });
-        var byProj = rows.slice().sort(function (x, y) { return y.proj - x.proj || rows.indexOf(x) - rows.indexOf(y); });
-        rows.forEach(function (r) {
-            if (r.final || r.idle) return;
-            var move = byBase.indexOf(r) - byProj.indexOf(r);
-            if (move > 0) { r.ghost = 'up'; r.ghostN = move; }
-            else if (move < 0) { r.ghost = 'down'; r.ghostN = -move; }
-        });
-        return out;
-    }
+    /* SHORTER THAN THE BOARD'S for the three long ones: "ABANDONED · 7" does not fit
+       an 8vw tile beside its position number. `Abd` is the scorebook's own
+       abbreviation. > James's direction, 2026-09-30. */
+    var VERDICT_LABELS = { W: 'Won', L: 'Lost', D: 'Drew', T: 'Tied',
+                           A: 'Abd', C: 'Canc', NR: 'NR' };
+    // ---- resources + win probability ---------------------------------------
+    // The model itself lives in assets/js/live-chase.js, because the event
+    // extractor (live-events.js) now prices `probability_shift`/`ladder_shift` off
+    // the same numbers and the two surfaces must not disagree about who is winning.
+    // Only the strip-specific mirroring stays here.
+    //
+    // Absent module → no lean and no certainty, which is exactly the first-innings
+    // presentation: a role glyph and nothing claimed. A cache that serves this page
+    // newer than its scripts degrades to that rather than throwing (see the
+    // asset-cache-skew note).
+    function ballsOf(overs) { return window.WccChase ? WccChase.ballsOf(overs) : 0; }
+    function allotmentOvers(first) { return window.WccChase ? WccChase.allotmentOvers(first) : null; }
+    function chaseState(inns) { return window.WccChase ? WccChase.chaseState(inns) : null; }
 
     function leagueTiles(view) {
-        var rows = (view.teams || []).map(function (team) {
-            var fx = fixtureForTeam(view, team.team_id);
-            var card = fx ? cardFor(view, fx) : null;
-            var side = fx ? tileSide(team, fx) : null;
-            /* Which side of THIS tile's fixture is Wendover, for the toss to be read
-               against — `battingFirst` needs it to put "we bat" on the home/away axis
-               the tiles bind to. Only our own fixture has a toss in the feed at all
-               (the league feed carries none), and there we are one of the two sides,
-               so the tile's own `ours` flag answers it without a lookup. */
-            var ourSide = (fx && fx.ours && side) ? (team.ours ? side : other(side)) : null;
-            var state = fx ? assess(card, side, ourSide, staleCard(fx, card)) : { idle: 'none' };
-            /* The identity comes along now, not just the tag: an expanded row draws
-               the crest, the club and the XI, and it is the same team object the
-               scoreboard reads those off. */
-            var t = { key: team.team_id, tla: team.tla, ours: team.ours, points: team.points,
-                      crest: team.crest, club: team.club, desig: team.desig,
-                      settledPts: fx ? settledPoints(view, card, side) : null };
-            for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
-            return t;
-        });
-        rows = ladder(view, rows);
+        var rows = L.rows(view, function (fx) { return cardFor(view, fx); }, staleCard);
         /* THE POSITION IS STAMPED AFTER THE ORDERING, never before: `ladder()` may
            reorder for a settled result, and a number carried through from the baked
            table would then be a rank the column is no longer in. */
@@ -1378,7 +1167,8 @@
         return teams.map(function (team, i) {
             var state = assess(card, sides[i], ourSide, stale);
             var t = { tla: team.tla, crest: team.crest, club: team.club,
-                      desig: team.desig, ours: team.ours };
+                      desig: team.desig, ours: team.ours,
+                      settledPts: settledPoints(view, card, sides[i]) };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
             return t;
         });
@@ -1488,6 +1278,12 @@
             var top = a.offsetTop + a.offsetHeight - a.offsetHeight * LINK_INSET;
             var bot = b.offsetTop + b.offsetHeight * LINK_INSET;
             if (!(bot > top)) continue;
+            /* NO LINE ONCE EITHER END HAS A RESULT. The badge beside it says what the
+               result was worth, and a gap drawn next to it cannot say whether it is
+               before or after those points — and with a finished side held behind one
+               still playing, it would be measured the wrong way round as well.
+               > James's direction, 2026-10-01. */
+            if (a.getAttribute('data-done') || b.getAttribute('data-done')) continue;
             var pa = parseFloat(a.getAttribute('data-p'));
             var pb = parseFloat(b.getAttribute('data-p'));
             // No points system, or a table we cannot price today — the rule still
@@ -1633,10 +1429,9 @@
                again would be a second opinion where the whole point is that the
                ladder, the board and this tile give one.
 
-               It also settles the result state for free. The board drops its
-               apertures at the close and posts a verdict badge instead; the strip has
-               no badge, so the tile keeps the fill and `assess` makes it a full one in
-               the outcome's colour — certainty 1, which is what a decided match is. */
+               A DECIDED MATCH PAINTS NO FILL HERE: `assess` gives it a verdict and no
+               lean, so the swingometer goes and each side's heading tile wears the
+               verdict badge instead, as the board's tiles do at the close. */
             var chasing = tiles[1] || {};
             if (stats) {
                 var ct = chaseTiles(stats, { lean: chasing.lean, certainty: chasing.certainty },
@@ -1724,6 +1519,7 @@
     }
 
     function render() {
+        if (!L) return;
         /* NO PICK, NO CHROME. The scheduler found nothing above the floor, which is
            the honest state of an empty afternoon — the same collapse the ticker does,
            and the whole reason "nothing" became sayable in v2.

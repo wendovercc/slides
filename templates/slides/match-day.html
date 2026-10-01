@@ -696,9 +696,9 @@
     .res[data-v="A"], .res[data-v="C"], .res[data-v="NR"] { background: var(--accent-amber); color: #ffe; }
     /* On an other-game tile it keeps its shape and the score beside it gives way —
        the verdict is the point of the line once the game is over. The max-width is
-       the backstop for the other direction: the three long verdicts ("Abandoned ·
-       7") can outrun a ~10vw tile, and an ellipsis on the badge is better than a
-       clipped score. */
+       the backstop for the other direction: the long verdicts ("Cancelled", "No
+       result") can outrun a ~10vw tile, and an ellipsis on the badge is better than a
+       clipped score. Abandoned is already `Abd` for that reason. */
     .sq-res { flex-shrink: 0; max-width: 65%; font-size: calc(var(--t-xxs) * var(--sq-u)); }
     /* On one of our own tiles it rides the right-hand end of the score line, a rung
        up in size because the tile is two to six columns wide and the figure it sits
@@ -1004,8 +1004,10 @@
        the scorecard has decided itself but the scorer hasn't published, and a game
        we can't read at all gets NO badge rather than a guessed one — a badge is
        worth having only when it is certainly right. */
+    // `Abd`, as the strip writes it: the one long verdict that has to fit a tile
+    // beside a score. > James's direction, 2026-09-30.
     var VERDICT_LABELS = { W: 'Won', L: 'Lost', D: 'Drew', T: 'Tied',
-                           A: 'Abandoned', C: 'Cancelled', NR: 'No result' };
+                           A: 'Abd', C: 'Cancelled', NR: 'No result' };
     /* The badge itself, and the only painter either kind of tile needs: the outcome
        is an attribute, so the element keeps whichever size class it was baked with.
        Independent of the scores — a game kept in the book posts its result with no

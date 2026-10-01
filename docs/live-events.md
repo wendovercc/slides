@@ -1858,11 +1858,91 @@ once it is decided — and has already mirrored it onto the right side. Asking t
 again would be a second opinion where the entire point of the shared module is that the
 ladder, the board and this tile give one.
 
-**That settles the result state for free, and differently from the board.** The board
-drops its apertures at the close and posts a verdict badge instead. The strip has no
-badge, so the tile keeps its fill and `assess` makes it a full one in the outcome's
-colour — certainty 1, which is what a decided match is. Without that, a finished match on
-the scoreboard would carry no outcome colour at all for the half hour it stays on screen.
+**A decided match has a verdict, not a lean — the same as the board.** The board drops
+its apertures at the close and posts a verdict badge; the strip now does the same.
+`assess` returns `verdict` (W/L/T/D/A/C/NR, `verdictFor`) and no lean for a complete
+card, confirmed or not, so the fill goes from the ladder rows and from "To win", and each
+side's tile wears the badge top-right — `WON · 22`, points only where `settledPoints` can
+price them (TVCL). The provisional clock stays bottom-left until `final`. A TVCL washout
+now prices at 7 each with no innings behind it, as the board's `pricePoints` does, so an
+abandoned game settles the ladder instead of standing as a barrier. The strip's labels
+are shorter than the board's for the long verdicts (`ABD · 7`, `CANC`, `NR`), since
+"ABANDONED · 7" does not fit an 8vw tile. **Trial:** on the ladder rows the fill is now
+a slim bar on the tile's left-hand edge (right tried first) (the board's `.sq-fill`), not a wash behind
+the type; "To win" keeps its wash, as the board's aperture does.
+> James's direction, 2026-09-30.
+
+**The point-difference lines go once either end has a result** (`data-done` on the
+focus tile, checked in `drawLinks`). The badge says what the result was worth, and a
+gap beside it cannot say whether it is before or after those points; with a finished
+side held behind one still playing it would be measured the wrong way round as well.
+> James's direction, 2026-10-01.
+
+**The ladder model is `assets/js/live-ladder.js`** (`WccLadder`), moved out of the
+strip with no change in behaviour (400 randomised division states compared, identical):
+side resolution, `assess`, `verdictFor`, `settledPoints`, `expectedPoints`, `ladder` and
+`rows(view, cardOf, staleOf)`. Pure and DOM-free like `live-chase.js`, so the engine can
+run it over EVERY division.
+
+#### The league table's story (`extractLadder`)
+
+The engine loads the strip's own views from `/live-strip.json` (written by
+`build_live_strip` beside the page) and, on **every tick**, runs `WccLadder.rows` over each
+division against its latest cards — the same arithmetic, stale-score rule
+(`WccLadder.staleness`) and barrier the strip draws with, so the arrows on the column
+and the events in the band are one calculation. `st` (`ladderState`) remembers each
+division's order and each row's arrow between calls.
+
+| type | fires when | line |
+|---|---|---|
+| `ladder_expected` (46, "On course") | a row's arrow appears or changes (direction, places or projected rank) and has **held for `LADDER_HOLD_MS` (2 min)** | `If it stays this way · Haddenham move up to 3rd, above Chesham` |
+| `ladder_shift` (60, "Ladder move") | the committed order changes — under the barrier rule this can be when the OTHER game finishes | `Wendover move up to 4th, above Hurley and Maidenhead Royals` |
+
+- **One event per switch**: said from the side going UP, naming whom it passes; our own
+  side going down is always said from our side (`Wendover drop to 5th, below Denham`).
+  Both clubs always named; Wendover named as the subject, as on a result.
+- **An arrow that goes is silent**: its event is retracted by id (`retire_ids`, a
+  `retire_only` event) — an expected move belongs to a TEAM, and both sides of one
+  fixture can carry one, so per-match `RETIRES` is the wrong scope.
+- **Ordering — `after`**: an expected move names the not-yet-shown swing in its match, an
+  actual move its match's unshown result, and scores 0 (`waiting`, flagged in the
+  inspector) until that predecessor has been shown, retired, or fallen below the floor.
+- The simulator's scripted `LADDER_MOVES` are gone: its afternoon's ladder events are
+  now the real algorithm's. Measured on the simulated day: swing 17:56/18:00 → expected
+  "up to 5th" 18:02 → retracted and re-said as "up to 4th" 18:06 → retracted on the
+  18:16 swing → result 18:28 → `ladder_shift` "up to 4th, above Hurley and Maidenhead
+  Royals" held behind the result.
+- An expected event about a side whose own game is over can still fire when
+  its row moves because of somebody else's game (Amersham, posted without a score, so
+  never priced and never final).
+
+#### The swing (`probability_shift`, `swingCheck`)
+
+**A crossing, not a jump.** It used to fire on a 15-point move between two polls — a
+property of the poll rate, and four times in a quarter of an hour on one chase. It now
+fires when the chasing side's chance crosses into a new band — `< 0.2` defenders on top,
+`< 0.5` defenders favourites, `< 0.8` chasers favourites, above that chasers closing in —
+with **0.05 of hysteresis** either side of each edge. The first band a chase is seen in
+is set silently. **`SWING_GAP_MS` (10 min)** between swings in one match, except when the
+favourite changes; a held-back crossing still goes out when the gap ends if it is still
+true. A new swing retires the last one in the match. Division chases swing too, checked
+whenever their scoreline moves.
+
+**No percentages** — what happened in words, then why: the passage clause if there is
+one, else where the chase stands.
+
+| crossing | line |
+|---|---|
+| chasers become favourites | `Wendover now favourites against Denham · 27 needed from 7 overs, 2 wickets in hand` |
+| chasers closing in | `Wendover closing in on the Denham target · 26–0 in the last 3 overs` |
+| chasers slip back from closing in | `Denham fighting back · 19–1 in the last 5 overs` |
+| defenders become favourites | `Wendover’s chase turns, Denham now favourites · 10–1 in the last 3 overs` |
+| defenders on top | `The Lee on top against Tring Park · 50–3 in the last 9 overs` |
+| chasers recover from that | `Wendover back in the chase against Denham · 40 needed from 8 overs, 2 wickets in hand` |
+
+The opposition is always named on our games and both clubs on a division's; Wendover
+may be the subject, and as an object is dropped ("the target", no "against Wendover").
+> James's direction, 2026-10-01.
 
 Between the innings there is no fill: `chaseState` needs two innings, so the To-bat
 slot's target figure stands on its own until the chase begins.
@@ -2103,7 +2183,7 @@ states matching the board's three classes:
 | live, scored | `In play` | bat/bowl glyph |
 | live, scored, stale | `↻ 40m` | **• dot** (withdrawn) |
 | no feed | `No feed` | no mark |
-| complete | `Result` | fill (lean) |
+| complete | `Result` | verdict badge (`WON · 22`), no fill |
 
 Withdrawing to the dot settles the ladder for free: with no `p` on the row,
 `expectedPoints` falls back to neutral and `if (r.final || r.idle) return` skips the
@@ -2600,8 +2680,9 @@ Nothing is baked into it, so it is honestly empty on a day with no cricket.
 >    bug is FIXED: a `score_update` or `wicket` now retires it, so a closed innings no
 >    longer sits on the band through the chase that followed it.)
 > 2. **`match_break` / the innings break** alongside it, for the same reason.
-> 3. **`match_finished`**, **`probability_shift`** and **`ladder_shift`** are
->    unreviewed and still on their old text.
+> 3. ~~**`match_finished`**~~ — WRITTEN 2026-09-30, see "The result sentence" below.
+>    **`probability_shift`** and **`ladder_shift`** are unreviewed and still on
+>    their old text.
 > 4. **The ladder's red/green fill** is unreviewed.
 > 5. **`team_total` would like the overs remaining in a first innings too.** It has
 >    them in a chase only, because the allotment is inferred from the first innings'
@@ -2628,11 +2709,37 @@ who is still to bat), and the individual family above —
 `hundred`/`fifty`/`five_for` rewritten, `new_batsman`, `spell_started` and
 `spell_ended` added, `stand` — the first event about two players rather than one — the passage family (`charge`, `squeeze`, `collapse`),
 `hat_trick`/`on_a_hat_trick`, the maidens (`wicket_maiden`, `maiden_run`) and
-`team_total`, whose **wording is still provisional**. **Still on the generic default:** `innings_closed`,
-`match_finished`, `abandoned`, `rain_break`, `match_break`, and
+`team_total`, whose **wording is still provisional**, and `match_finished` (below).
+**Still on the generic default:** `innings_closed`, `abandoned`, `rain_break`, `match_break`, and
 `probability_shift`/`ladder_shift`, which are deliberately held back with the swing
 and highlight work. Walking them **one at a time** is the way this has gone and the
 way it should continue.
+
+#### The result sentence (`match_finished`, `finishedPayload`)
+
+How it ended, then who won — read off the scorecard, never the feed's prose:
+
+| ending | line |
+|---|---|
+| chasing side bowled out | `Denham are bowled out · Wendover win by 34 runs` |
+| chasing side reaches the first innings' overs | `Gerrards Cross run out of overs · Haddenham win by 34 runs` |
+| target passed, we set it | `Denham chase down the target to win by 2 wickets` |
+| target passed, anyone else set it | `Wendover chase down the Denham target to win by 2 wickets` |
+| defended, ending unprovable (first innings all out, so no allotment) | `Wendover beat Denham by 30 runs` / `Denham win by 30 runs` |
+| tie | `Denham are bowled out level on 180 · Match tied` |
+| division card with no score (kept in the book) | `Amersham beat Wooburn Narkovians` (from `result_applied_to`); `… and … tie` / `draw` |
+| DLS / concession / award / not two innings | the feed's own words (`resultParts`), plus the fixture on a division match |
+
+- **Wendover is named here, as a subject** — the one exception to the never-our-name
+  rule, because a result without its winner is not a result. The object case still
+  holds: we set "the target", never "the Wendover target".
+- **Division lines name both clubs and no division** (the strip carries that).
+- **The hedge is ours only**: `– result to be confirmed` while `complete && !final`,
+  and the separate `final` event repeats the sentence with `– result confirmed`. The
+  division feed has no `final`, so it never hedges.
+- `abandoned` keeps `abandonedPayload`, now on first sighting too.
+
+> James's direction, 2026-09-30.
 
 **2. Some type labels are written for a table, not for an 8vw block.** The tile
 renders `TYPES[].label`, so `match_finished` puts "MATCH FINISHED" in the corner where

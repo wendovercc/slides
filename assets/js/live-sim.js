@@ -934,18 +934,9 @@
         return Promise.resolve(kind === 'league' ? leagueFeed() : liveFeed());
     }
 
-    /* Ladder moves, announced rather than derived — the strip owns the league table
-     * and the points maths, so in production it is the strip that will call
-     * `addLadderMove` when a move commits (see live-events.js). Until that wiring
-     * exists the simulator stands in for it, which is enough to design the
-     * scheduling against: what matters here is that a ladder move competes with a
-     * wicket for the screen, not where the number came from. */
-    var LADDER_MOVES = [
-        { at: at('16:20'), club: 'Wendover CC', ours: true, places: 2, to: 4,
-          division: 'TVCL Div 6C', reason: 'Amersham chase falling away' },
-        { at: at('17:05'), club: 'Chesham CC', places: -1, to: 6,
-          division: 'TVCL Div 6C', reason: 'Tring Park result posted' }
-    ];
+    /* No scripted ladder moves any more: the engine derives them from the baked
+     * tables and these same cards (extractLadder in live-events.js), so the simulated
+     * afternoon's ladder events are the real algorithm's. */
 
     // Match identity for the extractor and the chrome's labels (team name, division),
     // keyed the way both feeds key their cards. Built with the fixtures, for the same
@@ -976,11 +967,6 @@
         ours.concat(others).forEach(function (f) {
             (f.marks || []).forEach(function (mk) { timeline.push(mk); });
         });
-        LADDER_MOVES.forEach(function (mv) {
-            timeline.push({ at: mv.at, kind: 'ladder',
-                            label: mv.club.replace(/ CC$/, '') + ' ' +
-                                   (mv.places > 0 ? 'up' : 'down') + ' to ' + mv.to });
-        });
         timeline = timeline.filter(function (mk) { return mk.at >= 0 && mk.at <= DAY_MS; })
                            .sort(function (a, b) { return a.at - b.at; });
     }
@@ -996,14 +982,6 @@
     function deliverLeague() {
         leaguePolls++;
         return handle ? Promise.resolve(handle.pollLeague()) : Promise.resolve();
-    }
-    // Guarded: the asset cache can serve this page an older engine that has no such
-    // seam, and a missing ladder move is not worth a broken clock.
-    function deliverLadder() {
-        if (!handle || !handle.addLadderMove) return;
-        LADDER_MOVES.forEach(function (mv) {
-            if (!mv.fired && simTime >= mv.at) { mv.fired = true; handle.addLadderMove(mv); }
-        });
     }
     /* HOW OFTEN OUR OWN FEED IS POLLED RIGHT NOW: the engine's own question
      * (`intervalFor`), asked of the same feed. Fast only while something is genuinely in
@@ -1065,7 +1043,6 @@
         if (due > target) return Promise.resolve();
         simTime = due;
         clockPark(simTime);
-        deliverLadder();
         // Both, if both fall due on the same instant — which is a real arrival pattern
         // and the one worth having in a simulation of two feeds.
         var work = [];
