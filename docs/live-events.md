@@ -1292,7 +1292,9 @@ Three things still override the raw score, and each is there for a stated reason
 **Footage runs to its end.** A clip is not a caption that can be swapped mid-sentence:
 the slideshow has given way to it, and cutting it off mid-wicket because a six landed
 elsewhere is worse than being a few seconds late to the six. Clip length plus a beat
-either side.
+either side. *(2026-10-01: to move from the scheduler's pick to the replay caption,
+which holds the band while the player's replay plays. See
+[Replays](#replays--footage-is-rotation-content-and-the-store-decides-what-is-still-worth-it).)*
 
 **Nothing may appear for an instant** (`MIN_SHOW_MS`, 10s). Decisions are taken
 whenever the clock moves, and the two feeds ingest on different cadences, so without a
@@ -1610,6 +1612,10 @@ could never match again, and every clip would have attached to the first candida
 event regardless of whose it was.
 
 ### Clips join events; they are not events
+
+> **SUPERSEDED 2026-10-01** (design, not yet built): footage becomes a `replay` record
+> the band never shows, played by a replay queue at slide boundaries. The join below is
+> to be deleted. See [Replays](#replays--footage-is-rotation-content-and-the-store-decides-what-is-still-worth-it).
 
 A clip is footage **of** something, so it joins the event it shows — matched on
 kind and player within the match — and only stands alone when nothing claims it.
@@ -2254,6 +2260,259 @@ One consequence worth knowing: on a fresh load mid-innings the chrome stays down
 the first event, which can be up to an over. That is the doctrine working as written —
 nothing has happened since we started watching — but it is a visible change from v1.
 
+## Replays — footage is rotation content, and the store decides what is still worth it
+
+> James's design direction, 2026-10-01. **Not built.** Supersedes
+> [Clips join events; they are not events](#clips-join-events-they-are-not-events), the
+> scheduler's *Footage runs to its end* hold, and settles open question 6.
+
+### What it replaces
+
+Live footage reaches the screen today by **two routes that never meet**:
+
+- **The flash.** `detectClips` (`live-engine.js`) hands every clip id it has not seen
+  to `WccPlayer.flash`, filtered by `flashEvents`, which is still `'all'` from testing.
+  The player prefetches the whole clip into `wcc-hls-v1`, then plays it at the next slide
+  boundary (immediately on a paused interactive device), at least 45s after the last one,
+  from a queue of five that drops its oldest.
+- **The band.** `extractLive` stamps a wicket's true instant off its row, and
+  `attachClip` folds the footage into an unshown wicket (`CLIP_BONUS`). A wicket clip
+  nothing claims becomes a second `wicket`, and boundary clips are dropped. When the
+  scheduler picks an event with a clip, it holds the band for clip length plus a beat,
+  saying "footage running".
+
+Nothing tells the player to play what the band is holding. The band can sit on a
+wicket for half a minute with no picture, and the picture can arrive a minute later
+under a different sentence. The flash also has **no age test**: a device that loses its
+link for twenty minutes comes back to a backlog of clips that all count as new, and up
+to five of them play one per boundary, twenty minutes late.
+
+### Every ball, at the next boundary
+
+**During a streamed match every row with footage is a replay**: every four, every six,
+every wicket, every "other". The objection that removed `four` and `six` as *events*
+does not reach footage. That objection was that a counter cannot date a boundary, and a
+highlight row carries `dt_utc`, `over_no` and `ball_no`. The rule stands for the band;
+boundaries still live as a clause on the score. Footage of them is a different surface.
+
+**Timing is unchanged, and it is the slideshow's.** A replay plays at the next slide
+boundary, in the slide's box, exactly as the flash does now. The clips are already
+minutes old, so a few seconds more is free, and a clean cut between slides is worth
+more than those seconds. A paused interactive device still plays one as soon as it is
+ready.
+
+**It costs the rotation, and that is accepted.** A streamed match produced about ninety
+rows (58 fours, 17 sixes, 15 wickets): roughly fifteen an hour, so seven or eight
+minutes an hour of the deck at thirty seconds each. On a streamed afternoon the replay
+*is* the most interesting thing on the wall. There is one camera today, so one match.
+
+### The store admits; a replay queue presents
+
+The event stream already knows how to answer *"is this still worth showing?"* (dedupe,
+match attribution, freshness from when it happened, a received time that differs from
+it). Replays use that rather than building a second copy:
+
+- **Every clip row becomes a `replay` record in the store**, keyed by clip id and
+  timed by `dt_utc`. A row with no playable `url` still stamps the instant on its
+  scorecard incident (`stampBallTime`, unchanged).
+- **A `replay` never competes for the band.** The scheduler's ranking skips it.
+  Ninety rows a match on the band would be the per-boundary events coming back through
+  the side door, crowding out wickets and results.
+- **A replay queue in the player consumes them.** At each slide boundary it plays the
+  best unplayed replay that is still fresh and fully cached. It **expires anything past
+  the TTL** (10 minutes, measured from `dt_utc`), which is the test the flash lacks and
+  what keeps a reconnect from replaying a backlog. Order is freshness first, with
+  wickets ahead of boundaries when two are ready together.
+- **The join goes.** `attachClip`, `CLIP_BONUS` and the band's footage hold are
+  deleted, not tuned. A wicket's text is never held back for its footage, and footage
+  is never folded into a line already read out. The scorecard stays the trigger for the
+  news, and the row stays the correction for its timing.
+- **Download is still gated.** A replay is playable only once `WccHlsCache.prefetch`
+  has the whole clip, so a replay always opens on local bytes. A prefetch that fails
+  goes back to be retried on the next poll, inside the TTL, rather than sitting
+  unplayable in a slot.
+- **Seen-ness survives a reload.** The flash keeps its seen set in memory, so a reload
+  turns everything into backlog and nothing plays. The store's ids and the cache's
+  per-clip markers are the better memory. Either way, the TTL is what decides.
+
+### Two scores on screen, and only one claims to be now
+
+Frogbox burns its own graphics into the clip, including the score **as it was at that
+ball**. The chrome beside it carries the score **as it is**. Two scores are not the
+problem. Two scores that **both claim to be current** are, and that is exactly what the
+band's grammar would produce: every incident line leads with the current scoreline, so
+"Wendover 87/3" would sit beside a burned-in 64/2 and the room could not tell which was
+wrong.
+
+The options, and why this one:
+
+- **Tandem (the replay is the band's event).** It keeps the L explaining the picture,
+  but it collides the two scores. It also couples the scheduler's pick to slide
+  boundaries it does not control, and it floods the band. *Deferring* the band's news
+  until the footage is ready would make the streamed match, the one we most want to be
+  live on, the slowest thing on the wall. That is the same reason rows are not waited
+  for.
+- **Rotation, chrome concealed (v1's full-bleed).** The Frogbox graphics are
+  self-sufficient and nothing contradicts them, but the L would reflow twice a replay,
+  about fifteen times an hour. Covering it without reflowing loses the match and
+  division context and stalls the band.
+- **Rotation, chrome carries on regardless.** It is simple, but the words drift off
+  onto another match while the picture plays, and the two scores collide at random.
+- **Chosen: rotation, with the chrome in a replay mode.** It carries the replay's
+  *identity* and its *age*, and never a score of its own.
+
+### The chrome while a replay plays
+
+| surface | carries |
+|---|---|
+| **Gold tile** | that clip's match: our XI, as for any other event |
+| **Ticker** | a `REPLAY` caption in house grammar **with no scoreline**, and how long ago it was: `REPLAY · J Harrington four off W Vane (14.3) · 6 min ago` |
+| **Strip** | unchanged: the current scoreboard for that match |
+| **Flash** | the footage, in the slide's box, with its own Frogbox graphics |
+
+**The age is what makes the burned-in score honest.** Once the band says *6 min ago*,
+the scorebug in the picture is plainly a record of then. The strip's current scoreboard
+beside it stops contradicting the picture and starts adding to it: there is what
+happened, and here is where it stands now.
+
+**The band holds the caption until the clip ends.** *Footage runs to its end* survives
+in this narrower form. An event that lands mid-replay waits about thirty seconds, which
+is small against TTLs of five minutes and up. The scheduler's clock keeps running for
+those events; only the band's display is held.
+
+**A replay counts as `showing`** for the chrome latch, because the L has something to
+say. On a quiet spell with the L retracted, a replay therefore brings it up. That is
+consistent with *Putting the chrome away*, though it is a reflow; watch for it.
+
+**Wording is part of the wording pass.** The `REPLAY` caption follows the band's rules
+(scorecard notation, no apostrophes, our club never named), and its "ago" uses the
+row's `dt_utc`, not the poll that delivered it.
+
+### Innings reels are the slide's content, not replays
+
+> Agreed 2026-10-01. Live replays and innings reels are **two different things**, and
+> only the first touches the chrome.
+
+The live-match slide already walks the match in order: **Pre-match → 1st innings clips
+→ 1st innings scorecard → 2nd innings clips → 2nd innings scorecard → Result**
+(`buildViews` in `templates/slides/live-match.html`). Each clip is its own panel, the
+innings tab groups them, and the slide ends itself (`wcc-done`) after its last panel.
+The reel uses the same filter at both points: `selectReel` keeps every wicket, six and
+"other", plus the first four of each of our batters who did not hit a six.
+
+**When each innings' reel is in the rotation — on the wall:**
+
+| match state | 1st innings reel | 2nd innings reel |
+|---|---|---|
+| 1st innings in play | no | no |
+| **innings break**: 1st innings closed, no ball yet bowled in the 2nd | **yes** | no |
+| 2nd innings in play | **drops out** | no |
+| match `complete` | yes | yes |
+
+**In someone's hand, a clip joins its innings' reel as soon as it is cached** (agreed
+2026-10-01). It is the same split as the live chrome toggle: the wall decides for a
+room, while a reader is there to decide for themselves. On the wall, a reel that grows
+through the innings would replay itself on every pass of the slide. By late in the
+innings it would be ten minutes of footage the room saw minutes ago, standing in front
+of the scorecard. In the hand none of that costs anything, because the reader steps
+past it, and the early release is worth more there than anywhere:
+
+- **A phone gets no live replays at all.** Portrait has no flash overlay, so the
+  slide's reel is the only footage a phone sees during the innings.
+- **It is the only catch-up.** Live replays play once and expire, so someone who opens
+  the deck at three o'clock has missed every one. The reel is how they see the first
+  wicket.
+
+The player already knows which kind of surface it is (`interactive`), so this is one
+condition in `buildViews`, not a second slide.
+
+**Skipping a reel in one press.** Releasing clips early only works if the reader can
+get past them. Today they `next` through one clip at a time, and the slide's innings
+tabs cannot help: `#wcc-tap` is a full-viewport gesture layer over every slide, so a
+tap never reaches the slide's tabs. The skip therefore belongs to the **player's
+control bar**: a *skip highlights* button that appears only while the current panel is
+part of a run of clips, and jumps to the first panel after the run (the innings'
+scorecard). That needs the slide to tell the player which panels form the run.
+`WccSlide.notifyPanel` already carries per-panel metadata (`dur`), so the run can go
+the same way. The last-match `video.html` reels have the same one-at-a-time problem,
+and the same button should serve both.
+
+**The break is read off the card, not off `break_desc`.** The test is that the 1st
+innings is closed and the 2nd has no ball bowled. A rain break or drinks mid-innings
+cannot satisfy it, so it needs no weather vocabulary. "No ball bowled" means overs or
+balls, not the innings row existing: the card can name the openers before the first
+ball. Today the reel is gated on `m.complete` alone; the gate becomes this per-innings
+rule.
+
+**It is slide content, so the chrome ignores it.** No `REPLAY` caption, no hold on the
+band, no `showing` for the latch. While a ten-minute reel plays as the slide, the event
+stream carries on presenting everything else going on: the other matches of the day,
+the ladder, and this match's own `innings_closed`. A reel is retrospective by
+construction, since its tab says *1st Innings*, so its burned-in Frogbox scores claim
+nothing about now. That is the same footing as the last-match reels.
+
+**The replay TTL does not apply.** The TTL governs live replays only. An innings reel
+is a record and plays whole, however old its clips are. It also costs no network, since
+every clip was cached when it played (or was prefetched) as a live replay. The reel's
+prefetch should still start when the 1st innings closes rather than at `complete`,
+to fill any gaps.
+
+**Dropping out mid-reel.** When the 2nd innings starts, the clip on screen finishes and
+the slide moves on to the 1st innings scorecard. The remaining clips are dropped, not
+deferred; live replays outrank background from here. This needs a fix, below, because
+today's rebuild is by index.
+
+**The same reel then returns at full time**, as part of the whole-match walk. That is
+the one sanctioned repeat. Live replays play once and expire.
+
+### Existing faults this depends on
+
+Both are already live for the full-time reel. The innings break makes them more
+likely.
+
+- **A rebuild re-anchors by index, not by panel.** `onFeed` rebuilds `views` and keeps
+  `idx`. Reel panels sit *before* their innings' scorecards, so revealing a reel while
+  a scorecard is up shifts what `idx` points at. The repaint then lands on a clip panel
+  and holds it, with a scorecard's dwell. Removing a reel mid-clip clamps `idx`. Playing
+  clip 5 of 20 when the reel drops out leaves `idx` past the end of the new list, so the
+  slide ends and skips the scorecards. The fix is to re-anchor on the panel's identity
+  (tab, kind, clip id) across a rebuild. When the panel has gone, re-anchor on the next
+  panel that still exists.
+- **The slide's 900s backstop can cut the full-time reel.** `build.py` gives
+  `live-match-*` slides `duration: 900`. A real streamed match's `selectReel` subset is
+  roughly forty clips at up to thirty seconds each, so the two innings plus scorecards
+  can run past fifteen minutes. The deck would then advance mid-way through the 2nd
+  innings reel, and the next visit starts again from Pre-match. The 2nd innings reel and
+  the Result would never be reached. The tea reel (about twenty clips) fits; full time
+  may not. Size the backstop from the panel list, or let the slide report its own
+  length.
+- **A reel is revealed only when every clip is cached.** One clip that keeps failing
+  hides the whole innings. Reveal the cached clips instead.
+
+### Costs and what is unknown
+
+- **The Worker does not pass the row's time through yet.** `normaliseMatch` in
+  `live-worker/src/rv.mjs` maps over, ball, names and the url, but not `dt_utc`. Only the
+  simulator sets `happened_ms`. So in production `stampBallTime` never fires, and the
+  replay TTL would have nothing to measure from. Adding `happened_ms` is the first step
+  of the build, and it needs a Worker deploy.
+- **The ball-to-row lag is unmeasured.** The 10-minute TTL has to absorb publication
+  lag, then the download, then the wait for a boundary. Log `dt_utc` against the poll
+  that first carries each row on the next streamed Saturday.
+- **The Frogbox graphics at the slide's retracted size**, read at ten feet, are
+  unknown. If they are not legible, the fallback is *rotation, chrome concealed*, at the
+  cost of the reflow.
+- **The simulator cannot test this yet.** `clipsUpTo` produces no fours, a constant
+  `ball`, an interpolated `over` and no bowler (see *What the simulator is NOT honest
+  about*). It needs mirroring against the 96-row sample before replay ordering means
+  anything there.
+- **Other clubs' Frogbox streams.** We only read clips for our own matches, because
+  the Worker polls RV for our `pc_id`s and the division feed is PC-API, which has no
+  clips. RV carries every PCS match and the PC→RV id mapping is not club-specific, so a
+  division match streamed by another club may well expose `MatchStreamHighlights` the
+  same way. Unverified; `scripts/probe_live.py <their pc_id> --clips` on a streamed
+  fixture would settle it.
+
 ## Testing it: the match-day simulator
 
 There is no live cricket most days and none at all out of season, so
@@ -2768,7 +3027,11 @@ either: the board shows the score with a `↻ 14m` chip and a tile has no chip. 
 would be answered by a third mark in the bottom-left slot — a hollow dot to the filled
 one.
 
-**6. Which events take over the screen.** Footage currently means takeover. Every
+**6. Which events take over the screen.** *Settled 2026-10-01: every ball with
+footage, as rotation content at slide boundaries, admitted by a 10-minute TTL, with the
+band in a score-free replay mode. See
+[Replays](#replays--footage-is-rotation-content-and-the-store-decides-what-is-still-worth-it).
+The rest of this item is the history.* Footage currently means takeover. Every
 wicket clip pausing the slideshow may be too much; a minimum gap between takeovers is
 one constant away. This is also where the **REPLAY** direction lands: a clip is to
 become an event in its own right, with its own caption, score and team graphics —
