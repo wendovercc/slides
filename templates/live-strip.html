@@ -588,6 +588,15 @@
             white-space: nowrap; font-size: 1.15vh; font-weight: 700; line-height: 1.5;
             letter-spacing: 0.06em; text-transform: uppercase; padding: 0 0.45em;
             border-radius: var(--radius); color: #fff; }
+        /* ON THE LADDER IT SITS UNDER THE NAME, centred, as the last line of the
+           tile's own stack — tag (or crest, club, XI) and then what the game came to,
+           read top to bottom, rather than tucked in a corner the eye has to go and
+           find. The scoreboard keeps it top-right.
+           > James's direction, 2026-10-01 — trial. */
+        .tile.row.has-res { flex-direction: column; gap: 0.3vh; }
+        .tile.row > .res, .tile.focus > .res { position: relative; top: auto; right: auto;
+            flex-shrink: 0; max-width: calc(100% - 2vh); }
+        .tile.focus > .res { margin-top: 0.5vh; }
         .res[data-v="W"] { background: rgb(var(--win)); }
         .res[data-v="L"] { background: rgb(var(--loss)); }
         .res[data-v="T"] { background: var(--draw); }
@@ -595,11 +604,20 @@
         .res[data-v="A"], .res[data-v="C"], .res[data-v="NR"] { background: var(--amber); color: #ffe; }
 
         /* Ghost arrow, bottom-right: white, the pending move (shape carries direction,
-           the numeral its size — places, not points). */
-        .ghost { position: absolute; bottom: 0.7vh; right: 0.9vh; z-index: 1;
-            font-size: 2.8vh; line-height: 1; color: #fff; opacity: 0.9; }
-        .ghost i { font-style: normal; font-size: 1.9vh; font-weight: 900;
-            margin-left: 0.15vh; vertical-align: 0.35vh; }
+           the numeral its size — places, not points).
+           SIZED TO THE LIVE DOT it shares the corner column with: the triangle is
+           the dot's 1.1vh, and it stands on the same 0.7vh margin from the
+           edge, so the two marks read as one family rather than a dot and a sign.
+           DRAWN, NOT TYPED: a ▲ is drawn at whatever size its font decides, and at
+           1.6vh it still stood well over the dot on the wall. A triangle in an SVG box
+           is exactly 1.1vh; the numeral's figures (~0.72em in Lato) come to the same.
+           > James's direction, 2026-10-01. */
+        .ghost { position: absolute; bottom: 0.7vh; right: 0.7vh; z-index: 1;
+            display: flex; align-items: center; gap: 0.25vh;
+            line-height: 1; color: #fff; opacity: 0.9; }
+        .ghost svg { width: 1.1vh; height: 1.1vh; display: block; fill: currentColor; }
+        .ghost i { font-style: normal; font-size: 1.4vh; font-weight: 900;
+            font-variant-numeric: tabular-nums; }
 
         /* Committed ladder moves ride this (FLIP, see playMoves). Long enough to
            read as a climb rather than a jump-cut; the fill keeps its own timing. */
@@ -650,6 +668,11 @@
 
     // PLACEHOLDER bat/bowl marks (swap for the club's icons): a bat blade + handle,
     // and a seamed ball.
+    // The ghost arrow's triangles — see `.ghost`.
+    var GHOST_TRI = {
+        up: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0.5 L10 9.5 L0 9.5 Z"/></svg>',
+        down: '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 0.5 L10 0.5 L5 9.5 Z"/></svg>'
+    };
     var GLYPH = {
         bat: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="12.5" y="2.5" width="5" height="13" rx="2.5" transform="rotate(38 15 9)"/><rect x="6.8" y="14.5" width="3" height="7" rx="1.5" transform="rotate(38 8.3 18)"/></svg>',
         bowl: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="currentColor"/><path d="M7.5 4.2 Q13 12 7.5 19.8" fill="none" stroke="#0a1c3a" stroke-width="1.6" stroke-linecap="round"/></svg>',
@@ -709,6 +732,8 @@
         // The ladder's own two shapes — see the CSS. Never on the scoreboard, whose
         // tiles are already the expanded form and have no table around them.
         else cls.push(t.focus ? 'focus' : 'row');
+        // A table line with a verdict stacks it under the tag — see `.res`.
+        if (!badge && t.verdict) cls.push('has-res');
         // The panel decides this, not the tile — see badgeIsLong.
         if (badge && opt.long) cls.push('is-long');
         if (t.idle === 'none') cls.push('idle-none');
@@ -761,7 +786,7 @@
         // The arrow carries direction, the numeral how far — a one-place nudge and a
         // four-place surge are very different things, and the arrow alone hid that.
         // Bare arrow for a single place, so the common case stays quiet.
-        if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + (t.ghost === 'up' ? '▲' : '▼') +
+        if (t.ghost) inner += '<span class="ghost ' + t.ghost + '">' + GHOST_TRI[t.ghost] +
             (t.ghostN > 1 ? '<i>' + t.ghostN + '</i>' : '') + '</span>';
         if (t.idle === 'nodata') inner += '<span class="dot"></span>';
         if (t.verdict) inner += '<span class="res" data-v="' + esc(t.verdict) + '">' +
@@ -776,7 +801,7 @@
         var pts = t.ptsNow != null ? t.ptsNow : t.points;
         return '<div class="' + cls.join(' ') + '"' + (t.key ? ' data-k="' + esc(t.key) + '"' : '') +
                (t.focus && pts != null ? ' data-p="' + esc(pts) + '"' : '') +
-               (t.focus && t.done ? ' data-done="1"' : '') +
+               (t.done ? ' data-done="1"' : '') +
                '>' + inner + '</div>';
     }
 
@@ -1182,6 +1207,12 @@
        than a new dependency.
        CHAINED IN RENDERED ORDER: expanded row 1 to 2, 2 to 3. Rules radiating from our
        own row would cross each other, and consecutive rules never can. */
+    // Does any tile strictly between `a` and `b` (in column order) have a result?
+    function settledBetween(a, b) {
+        for (var el = a.nextElementSibling; el && el !== b; el = el.nextElementSibling)
+            if (el.getAttribute && el.getAttribute('data-done')) return true;
+        return false;
+    }
     function drawLinks() {
         if (!root.querySelectorAll) return;
         var old = root.querySelector('.links');
@@ -1200,6 +1231,14 @@
                still playing, it would be measured the wrong way round as well.
                > James's direction, 2026-10-01. */
             if (a.getAttribute('data-done') || b.getAttribute('data-done')) continue;
+            /* NOR ONCE ANY ROW BETWEEN THEM HAS ONE. Those rows are ordered on points
+               that include today's result while the two ends are still on their
+               morning's, so the rule spans a stretch of table measured at two
+               different times — the same muddle as a finished end, one row in. And
+               with results coming in all round, a standing gap is not what the column
+               should be spending its attention on.
+               > James's direction, 2026-10-01. */
+            if (settledBetween(a, b)) continue;
             var pa = parseFloat(a.getAttribute('data-p'));
             var pb = parseFloat(b.getAttribute('data-p'));
             // No points system, or a table we cannot price today — the rule still
