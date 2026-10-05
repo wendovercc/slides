@@ -1,0 +1,20 @@
+{
+  "title": "U15s",
+  "description": "Hurricanes, Spitfires",
+  "homepage_rank": 11,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-u15-hurricanes"
+    },
+    {
+      "slug": "last-match-u15-hurricanes"
+    },
+    {
+      "slug": "team-u15-spitfires"
+    },
+    {
+      "slug": "last-match-u15-spitfires"
+    }
+  ]
+}

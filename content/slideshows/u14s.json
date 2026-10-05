@@ -1,0 +1,14 @@
+{
+  "title": "U14s",
+  "description": "Hurricanes",
+  "homepage_rank": 12,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-u14-hurricanes"
+    },
+    {
+      "slug": "last-match-u14-hurricanes"
+    }
+  ]
+}

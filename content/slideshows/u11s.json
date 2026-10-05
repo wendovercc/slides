@@ -1,0 +1,26 @@
+{
+  "title": "U11s",
+  "description": "Incredibles, Invincibles, Girls",
+  "homepage_rank": 15,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-u11-incredibles"
+    },
+    {
+      "slug": "last-match-u11-incredibles"
+    },
+    {
+      "slug": "team-u11-invincibles"
+    },
+    {
+      "slug": "last-match-u11-invincibles"
+    },
+    {
+      "slug": "team-u11-girls"
+    },
+    {
+      "slug": "last-match-u11-girls"
+    }
+  ]
+}

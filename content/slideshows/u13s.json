@@ -1,0 +1,26 @@
+{
+  "title": "U13s",
+  "description": "Hurricanes, Spitfires, Girls",
+  "homepage_rank": 13,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-u13-hurricanes"
+    },
+    {
+      "slug": "last-match-u13-hurricanes"
+    },
+    {
+      "slug": "team-u13-spitfires"
+    },
+    {
+      "slug": "last-match-u13-spitfires"
+    },
+    {
+      "slug": "team-u13-girls"
+    },
+    {
+      "slug": "last-match-u13-girls"
+    }
+  ]
+}

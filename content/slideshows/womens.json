@@ -1,0 +1,26 @@
+{
+  "title": "Womens",
+  "description": "1st XI, Kites, Hawks",
+  "homepage_rank": 9,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-womens-1st-xi"
+    },
+    {
+      "slug": "last-match-womens-1st-xi"
+    },
+    {
+      "slug": "team-womens-softball-kites"
+    },
+    {
+      "slug": "last-match-womens-softball-kites"
+    },
+    {
+      "slug": "team-womens-softball-hawks"
+    },
+    {
+      "slug": "last-match-womens-softball-hawks"
+    }
+  ]
+}

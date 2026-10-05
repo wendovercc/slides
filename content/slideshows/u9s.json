@@ -1,0 +1,14 @@
+{
+  "title": "U9s",
+  "description": "U9",
+  "homepage_rank": 17,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-u9"
+    },
+    {
+      "slug": "last-match-u9"
+    }
+  ]
+}

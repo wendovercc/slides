@@ -1,0 +1,26 @@
+{
+  "title": "Seniors",
+  "description": "1st XI, 2nd XI, Friendly XI",
+  "homepage_rank": 8,
+  "refresh_interval_seconds": 300,
+  "slides": [
+    {
+      "slug": "team-1st-xi"
+    },
+    {
+      "slug": "last-match-1st-xi"
+    },
+    {
+      "slug": "team-2nd-xi"
+    },
+    {
+      "slug": "last-match-2nd-xi"
+    },
+    {
+      "slug": "team-friendly-xi"
+    },
+    {
+      "slug": "last-match-friendly-xi"
+    }
+  ]
+}
