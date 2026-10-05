@@ -3305,6 +3305,33 @@ def _todays_events():
                          _load_yt_broadcasts(), _load_live_seed()), teams_by_id
 
 
+def _next_match_day():
+    """The next day after today with a fixture for any of our teams:
+    {"date": "2026-10-11", "time": "10:15", "teams": [team ids]} — the earliest
+    start that day and every team playing, in start order — or None. For the
+    homepage's Match Day card, which says when the next one is on a day with
+    nothing to poll (as a screen card says when its next booking is)."""
+    fx = FETCHED / "fixtures.json"
+    all_fixtures = _with_sim_fixtures(
+        json.loads(fx.read_text()).get("all_fixtures", {}) if fx.exists() else {})
+    today, best, day = _today(), None, []
+    for team_id, fixtures in all_fixtures.items():
+        for f in fixtures or []:
+            iso = _iso_from_dmy(f.get("match_date", ""))
+            if not iso or iso <= today.isoformat():
+                continue
+            if best is None or iso < best:
+                best, day = iso, []
+            if iso == best:
+                day.append((f.get("match_time") or "99:99", team_id))
+    if not best:
+        return None
+    day.sort()
+    teams = list(dict.fromkeys(t for _, t in day))
+    first = day[0][0]
+    return {"date": best, "time": None if first == "99:99" else first, "teams": teams}
+
+
 def live_poll_window(matches):
     """(poll_from, poll_until) for today's matches — the only span in which a client
     should touch the live feed at all. Both are NAIVE LOCAL ISO strings ("…T11:30"),
@@ -3468,6 +3495,8 @@ def build_live_config():
     out = {"generated_at": int(datetime.now().timestamp()),
            "date": _today().isoformat(),
            "poll_from": poll_from, "poll_until": poll_until, "matches": matches,
+           # When the next one is, for the homepage card on a day with none.
+           "next_match_day": _next_match_day(),
            # THE CLUB'S CHANNEL, once, at the top rather than on every match row.
            # A stream starting is the one event whose whole point is where to go and
            # watch it, and the handle is a club-wide constant, not a property of a

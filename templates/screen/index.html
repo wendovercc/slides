@@ -449,17 +449,30 @@
         function renderLive() {
             const el = document.querySelector('[data-live]');
             if (!el) return;
-            const set = (type, meta, time, kind) =>
+            const set = (type, meta, time, kind, after) =>
                 el.innerHTML = ctxItem(type, null, meta ? `<span class="ctx-meta">${meta}</span>` : '',
-                                       time, kind || 'now');
+                                       time, kind || 'now') + (after || '');
+            /* WHEN THE NEXT ONE IS — the build's `next_match_day` (the first day after
+               today with any of our fixtures), as a screen card says when its next
+               booking is: a Match badge, "Sun 11 Oct 10:15", and who is playing. */
+            const nextDay = (cfg) => {
+                const n = cfg && cfg.next_match_day;
+                if (!n || !n.date) return '';
+                const d = new Date(n.date + 'T' + (n.time || '00:00'));
+                const when = n.time ? fmtWhen(d)
+                    : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+                const teams = (n.teams || []).map(t => TEAM_NAMES[t] || t);
+                const meta = teams.slice(0, 3).join(', ') + (teams.length > 3 ? ` +${teams.length - 3}` : '');
+                return ctxItem('match', null, meta ? `<span class="ctx-meta">${esc(meta)}</span>` : '', when, 'next');
+            };
             const key = window.WccLiveKey && WccLiveKey.get();
-            if (!key) return set('nokey', 'Live scores need a device key');
 
             fetch('/live-config.json', { cache: 'no-store' }).then(r => r.json()).then(cfg => {
                 const ms = cfg.matches || [];
                 const win = window.WccLiveWindow && WccLiveWindow.parse(cfg);
                 const st = win ? WccLiveWindow.state(win) : 'open';
-                if (!ms.length || st === 'closed') return set('nomatch', '');
+                if (!key) return set('nokey', 'Live scores need a device key', null, 'now', ms.length ? '' : nextDay(cfg));
+                if (!ms.length || st === 'closed') return set('nomatch', '', null, 'now', nextDay(cfg));
                 // Teams playing today, and when the first of them starts.
                 const teams = ms.map(m => m.team_name).filter(Boolean);
                 const first = ms.map(m => m.time).filter(Boolean).sort()[0] || null;
@@ -494,7 +507,10 @@
                     // 403, offline, a Worker blip: we know a match is on and nothing
                     // more, so say exactly that.
                     .catch(() => pending());
-            }).catch(() => {});
+            }).catch(() => {
+                // No config at all: still say what we can about the key.
+                if (!key) set('nokey', 'Live scores need a device key');
+            });
         }
         renderLive();
 {% endif %}
