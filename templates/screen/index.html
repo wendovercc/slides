@@ -466,8 +466,13 @@
                 const pending = () => set('matchday', teams.join(' · '), first);
                 if (st !== 'open') return pending();
 
+                // Pairs rules ride along, as the engine sends them (live-engine.js
+                // pairsParam), so the Worker can price a pairs score.
+                const pairs = ms.filter(m => m.pairs && (m.pairs.start || m.pairs.penalty))
+                    .map(m => 'pairs=' + m.pc_id + ':' + (m.pairs.start || 0) + ':' +
+                              (m.pairs.penalty || 0) + ':' + (m.overs_allotted || ''));
                 const url = 'https://live.wendovercc.org/state.json?' +
-                    ms.map(m => 'pc=' + encodeURIComponent(m.pc_id)).join('&');
+                    ms.map(m => 'pc=' + encodeURIComponent(m.pc_id)).concat(pairs).join('&');
                 fetch(url, { headers: { 'Authorization': 'Bearer ' + key } })
                     .then(r => r.ok ? r.json() : Promise.reject(r.status))
                     .then(feed => {
@@ -479,7 +484,11 @@
                         if (!on.length) return pending();
                         set('live', on.map(m => {
                             const c = byId[String(m.pc_id)] || {};
-                            return [c.team_name, m.score_text].filter(Boolean).join(' ');
+                            // RV's score_text is the RAW pairs score; a pairs match
+                            // shows its priced total, or no figure when unpriced.
+                            const inn = (m.innings || [])[(m.innings || []).length - 1];
+                            const score = m.pairs ? (inn && inn.priced ? String(inn.runs) : '') : m.score_text;
+                            return [c.team_name, score].filter(Boolean).join(' ');
                         }).join(' · '));
                     })
                     // 403, offline, a Worker blip: we know a match is on and nothing
