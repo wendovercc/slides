@@ -831,7 +831,9 @@
                     .replace(/\s+(CC|C\.C\.?|Cricket Club)(,\s*[^,]+|\s*\([^)]*\))?$/i, '');
         return out || String(name == null ? '' : name).trim();
     }
-    function clubLabel(t) { return dropCC(t.club || t.tla || ''); }
+    // `label` is the build's display name where it differs from the club — two of
+    // our sides in one division read "Wendover Kites" / "Wendover Hawks".
+    function clubLabel(t) { return t.label || dropCC(t.club || t.tla || ''); }
     function desigLabel(t) {
         var d = String(t.desig || '').trim().toLowerCase();
         if (!d) return '';
@@ -1114,7 +1116,7 @@
         var stale = staleCard(fx, card);
         return teams.map(function (team, i) {
             var state = assess(card, sides[i], ourSide, stale);
-            var t = { tla: team.tla, crest: team.crest, club: team.club,
+            var t = { tla: team.tla, crest: team.crest, club: team.club, label: team.label,
                       desig: team.desig, ours: team.ours,
                       settledPts: settledPoints(view, card, sides[i]) };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];

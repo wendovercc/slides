@@ -343,7 +343,7 @@
                scoreboard reads those off. */
             var t = { key: team.team_id, tla: team.tla, ours: team.ours, wendover: team.wendover,
                       points: team.points,
-                      crest: team.crest, club: team.club, desig: team.desig,
+                      crest: team.crest, club: team.club, label: team.label, desig: team.desig,
                       settledPts: fx ? settledPoints(view, card, side) : null };
             for (var k in state) if (state.hasOwnProperty(k)) t[k] = state[k];
             return t;

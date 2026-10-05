@@ -174,11 +174,21 @@
 <script>
 (function () {
     var PC_ID = {{ slide._pc_id | tojson }};
+    // Pairs rules for the Worker to price with, baked overnight (build _pairs_param).
+    var PAIRS = {{ slide._pairs_param | tojson }};
     var OUR_CREST = {{ (slide._our_crest or '/assets/images/wcc-logo.png') | tojson }};
     var OPP_CREST = {{ slide._opp_crest | tojson }};
     var OUR_NAME = {{ (slide._set_subtitle or 'Wendover') | tojson }};
     var OUR_CLUB = {{ (slide._set_our_club or '') | tojson }};
     var OPP_NAME = {{ (slide._set_opp_club or '') | tojson }};
+    // Whose side is whose, STRUCTURALLY: the feed marks each innings and team home
+    // or away, and the fixture says which we are. A name test cannot tell two of
+    // our own sides apart (Kites v Hawks are both "Wendover").
+    var IS_HOME = {{ (slide._set_is_home if slide._set_is_home is not none else true) | tojson }};
+    // The names to say, where "Wendover" isn't enough — two of ours in a division
+    // ("Wendover Kites"), and the other side when it is another of ours.
+    var OUR_LABEL = {{ (slide._our_label or '') | tojson }};
+    var OPP_LABEL = {{ (slide._opp_label or '') | tojson }};
     var ENDPOINT = 'https://live.wendovercc.org/state.json';
     var PANEL_MS = {{ slide.panel_duration | tojson }} * 1000;
     var TVCL = {{ (slide._tvcl or false) | tojson }};
@@ -321,6 +331,17 @@
     // ---- reel clip selection ----
     function nameKey(n) { return String(n == null ? '' : n).toLowerCase().trim(); }
     function isOurs(t) { return /wendover/i.test(String(t || '')); }
+    // Our innings / team, by home-away when the feed says, by name only as a fallback.
+    function oursInn(inn) {
+        return typeof inn.is_home === 'boolean' ? inn.is_home === IS_HOME : isOurs(inn.side);
+    }
+    function oursTeam(t) {
+        return typeof t.is_home === 'boolean' ? t.is_home === IS_HOME : isOurs(t.club || t.team_name || '');
+    }
+    // What each side is called on this slide.
+    function ourName() { return OUR_LABEL || dropCC(OUR_CLUB) || 'Wendover'; }
+    function oppName(side) { return OPP_LABEL || dropCC(OPP_NAME || clubOnly(side || '')) || 'Opposition'; }
+    function innName(inn) { return oursInn(inn) ? ourName() : oppName(inn.side); }
     function byOverBall(a, b) {
         return ((a.over || 0) - (b.over || 0)) || ((a.ball || 0) - (b.ball || 0)) || ((a.id || 0) - (b.id || 0));
     }
@@ -342,7 +363,7 @@
     function selectReel(m, innIdx) {
         var inn = (m.innings || [])[innIdx];
         if (!inn) return [];
-        var innId = inn.innings_id, side = nameKey(inn.side);
+        var innId = inn.innings_id, side = nameKey(inn.side), oursBatting = oursInn(inn);
         var pool = (m.clips || []).filter(function (c) {
             if (!c.url) return false;   // a row with no footage (yet) is not reel material
             if (innId != null && c.innings_id != null) return String(c.innings_id) === String(innId);
@@ -369,11 +390,11 @@
         // Which of our batsmen already have a six in this innings.
         var oursSix = {};
         chosen.forEach(function (c) {
-            if (c.event === 'six' && isOurs(c.batting_team) && c.batter) oursSix[nameKey(c.batter)] = true;
+            if (c.event === 'six' && oursBatting && c.batter) oursSix[nameKey(c.batter)] = true;
         });
         var gotFour = {};
         fours.sort(byOverBall).forEach(function (f) {
-            if (!isOurs(f.batting_team) || !f.batter) return;
+            if (!oursBatting || !f.batter) return;
             var k = nameKey(f.batter);
             if (oursSix[k] || gotFour[k]) return;   // hit a six, or already has their four
             gotFour[k] = true;
@@ -411,7 +432,7 @@
         // Pairs: the priced total alone, or no figure when it couldn't be priced.
         var fig = inn.pairs ? (inn.priced ? String(inn.runs || 0) : '')
                             : (inn.runs || 0) + '/' + (inn.wickets || 0);
-        return '<div class="scoreline"><span class="sc-club">' + esc(dropCC(sideClub(inn.side))) + '</span>' +
+        return '<div class="scoreline"><span class="sc-club">' + esc(innName(inn)) + '</span>' +
             '<span class="sc-score">' + fig +
             '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span></div>';
     }
@@ -510,7 +531,7 @@
         return { now: before, other: last };
     }
     function bowlingView(m, inn) {
-        var bowlSide = (inn.side === m.home) ? m.away : m.home;
+        var bowlName = oursInn(inn) ? oppName((inn.side === m.home) ? m.away : m.home) : ourName();
         var on = attackOf(inn, (m.innings || []).indexOf(inn));
         var rows = (inn.bowling || []).length ? (inn.bowling).map(function (b) {
             // The attack (see trackAttack): full bar for the bowler on, a lighter one
@@ -522,7 +543,7 @@
                 '<span class="num dim">' + (b.econ != null ? b.econ : '<span class="z">·</span>') + '</span></div>';
         }).join('') : '<div class="empty">No bowling yet</div>';
         return scoreline(inn) +
-            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(dropCC(sideClub(bowlSide))) + '</span>' +
+            '<div class="table"><div class="col-headers bowl-grid"><span>Bowling · ' + esc(bowlName) + '</span>' +
             '<span class="col-num">O</span><span class="col-num">M</span><span class="col-num">R</span>' +
             '<span class="col-num">W</span><span class="col-num">Econ</span></div>' + rows + '</div>';
     }
@@ -557,7 +578,7 @@
     // can't be split reliably ("Captain Scott Invitation XI Sunday 1st XI", or a
     // friendly side with no "CC" suffix), so clubOnly() is only a last-ditch fallback.
     function sideClub(name) {
-        return isOurs(name) ? (OUR_CLUB || clubOnly(name)) : (OPP_NAME || clubOnly(name));
+        return isOurs(name) ? ourName() : (OPP_NAME || clubOnly(name));
     }
     // A side-led result ("<side> won/lost/conceded by …") with the winning side
     // shown as its clean club name (via sideClub) instead of the club+team
@@ -572,7 +593,7 @@
     function sideInnings(m) {
         var ours = null, opp = null;
         (m.innings || []).forEach(function (inn) {
-            if (isOurs(inn.side)) { if (!ours) ours = inn; }
+            if (oursInn(inn)) { if (!ours) ours = inn; }
             else if (!opp) opp = inn;
         });
         return { ours: ours, opp: opp };
@@ -613,13 +634,17 @@
         // RV's prose or the raw runs, which can both name the wrong winner.
         if (m.pairs) {
             var won = (m.teams || []).filter(function (x) { return x.outcome === 'won'; })[0];
-            if (won) return isOurs(won.club || won.name || '') ? { our: 'W', opp: 'L' } : { our: 'L', opp: 'W' };
+            if (won) return oursTeam(won) ? { our: 'W', opp: 'L' } : { our: 'L', opp: 'W' };
             if (/\btied?\b/i.test(m.result || '')) return { our: 'T', opp: 'T' };
             var ps = sideInnings(m);
             if (!(ps.ours && ps.opp && ps.ours.priced && ps.opp.priced && m.complete)) return null;
             var po = ps.ours.runs || 0, pp = ps.opp.runs || 0;
             return po > pp ? { our: 'W', opp: 'L' } : pp > po ? { our: 'L', opp: 'W' } : { our: 'T', opp: 'T' };
         }
+        // A side's own verdict from the feed first — structural, so it is right even
+        // when both sides are ours; the result prose only when there is none.
+        var wonT = m.complete ? (m.teams || []).filter(function (x) { return x.outcome === 'won'; })[0] : null;
+        if (wonT) return oursTeam(wonT) ? { our: 'W', opp: 'L' } : { our: 'L', opp: 'W' };
         var t = String(m.result || m.leader_text || '');
         if (/tie|tied/i.test(t)) return { our: 'T', opp: 'T' };
         if (/draw|drawn/i.test(t)) return { our: 'D', opp: 'D' };
@@ -712,10 +737,22 @@
                             : '<span class="result-pill" style="visibility:hidden">&nbsp;</span>') + '</div>' +
             '<div class="tc-performers">' + col.performers.map(perfLine).join('') + '</div></div>';
     }
+    /* THE RESULT LINE, with the winner named as this slide names the sides —
+       "Wendover Kites won by 9 runs", not the feed's "Wendover CC". The winner is
+       the feed's per-side verdict (structural); the "won by …" clause is the
+       Worker's (pairs: its priced margin, never RV's "by 6 wickets"). Falls back to
+       the old name-matched rewrite when the feed has no verdict yet. */
+    function resultLine(m) {
+        var s = String((m.pairs ? m.result_club : (m.result_club || m.result || m.leader_text)) || '');
+        var wonT = (m.teams || []).filter(function (x) { return x.outcome === 'won'; })[0];
+        var at = s.search(/\bwon\b/i);
+        if (wonT && at >= 0) return (oursTeam(wonT) ? ourName() : oppName()) + ' ' + s.slice(at);
+        return m.pairs ? s : resultClub(s);
+    }
     function resultView(m) {
         var si = sideInnings(m), v = verdict(m);
         var ourCol = {
-            crest: OUR_CREST, name: dropCC(si.ours ? sideClub(si.ours.side) : (OUR_NAME || 'Wendover')),
+            crest: OUR_CREST, name: ourName(),
             score: shortTotal(si.ours), result: v && v.our, label: v && RESULT_LABELS[v.our],
             // League points: the feed's own (worker-computed, TVCL only), else priced
             // here as the board prices them (pointsFor); none → the verdict alone.
@@ -725,17 +762,16 @@
             performers: teamPerformers(si.ours && si.ours.batters, si.opp && si.opp.bowling, si.opp && si.opp.batters)
         };
         var oppCol = {
-            crest: OPP_CREST, name: dropCC(si.opp ? sideClub(si.opp.side) : (OPP_NAME || 'Opposition')),
+            crest: OPP_CREST, name: oppName(si.opp && si.opp.side),
             score: shortTotal(si.opp), result: v && v.opp, label: v && RESULT_LABELS[v.opp],
             points: pointsFor(m, si.opp),
             performers: teamPerformers(si.opp && si.opp.batters, si.ours && si.ours.bowling, si.ours && si.ours.batters)
         };
         // Left = the side that batted first (mirrors match-result's _our_left = we_bat_first).
         var first = (m.innings || [])[0];
-        var ourFirst = first ? isOurs(first.side) : true;
+        var ourFirst = first ? oursInn(first) : true;
         var cols = ourFirst ? [ourCol, oppCol] : [oppCol, ourCol];
-        // Pairs: the Worker's priced (or winner-only) line, never RV's leader_text.
-        var res = m.pairs ? (m.result_club || '') : resultClub(m.result || m.leader_text || '');
+        var res = resultLine(m);
         var foot = res ? '<div class="result-foot"><div class="result-summary">' + esc(res) +
             (!m.final ? '<span class="prov"> \u2013 result to be confirmed</span>' : '') + '</div></div>' : '';
         return '<div class="result-columns">' + teamCol(cols[0]) +
@@ -755,8 +791,11 @@
         // Without its "CC" too (dropCC), as the tape's own columns and the match-day
         // board name every club. Fall back to the feed's pre-composed text if either
         // part is missing.
-        var who = dropCC(toss.is_wendover ? clubOnly(toss.winner)
-                                          : (OPP_NAME || clubOnly(toss.winner)));
+        // The toss winner by the feed's own team flag (won_toss + home/away), so it is
+        // right when both sides are ours; the name test only without one.
+        var tt = (m.teams || []).filter(function (x) { return x.won_toss; })[0];
+        var who = tt ? (oursTeam(tt) ? ourName() : oppName(toss.winner))
+                     : (toss.is_wendover ? ourName() : oppName(toss.winner));
         var text = (who && toss.decision)
             ? who + ' won the toss and elected to ' + toss.decision
             : (toss.text || '');
@@ -796,7 +835,7 @@
         if (!m) return null;
         var names = [];
         (m.innings || []).forEach(function (inn) {
-            if (!isOurs(inn.side)) return;
+            if (!oursInn(inn)) return;
             (inn.batters || []).forEach(function (b) { if (b && b.name) names.push(b.name); });
             (inn.yet_to_bat || []).forEach(function (n) { if (n) names.push(n); });
         });
@@ -820,8 +859,9 @@
         if (!xi) return;
         var cols = viewEl.querySelectorAll('.tape-col');
         for (var i = 0; i < cols.length; i++) {
-            var nm = cols[i].querySelector('.tc-name');
-            if (!nm || !isOurs(nm.textContent)) continue;
+            // Our column is marked by the tape partial — by name it could be either
+            // when both sides are ours.
+            if (cols[i].getAttribute('data-ours') !== '1') continue;
             var rows = cols[i].querySelectorAll('.perf-row');
             for (var j = 0; j < rows.length; j++) {
                 var who = rows[j].querySelector('.perf-who');
@@ -1269,7 +1309,8 @@
             var w = window.WccLiveWindow ? WccLiveWindow.state(pollWindow) : 'open';
             if (w === 'closed') return;
             if (w === 'early') { clearTimeout(timer); timer = setTimeout(poll, WccLiveWindow.msUntilOpen(pollWindow)); return; }
-            fetch(ENDPOINT + '?pc=' + encodeURIComponent(PC_ID), { headers: { 'Authorization': 'Bearer ' + key } })
+            fetch(ENDPOINT + '?pc=' + encodeURIComponent(PC_ID) + (PAIRS ? '&pairs=' + PAIRS : ''),
+                  { headers: { 'Authorization': 'Bearer ' + key } })
                 .then(function (r) {
                     if (r.status === 403) { forbidden = true; return null; }
                     return r.ok ? r.json() : null;

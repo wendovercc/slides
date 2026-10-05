@@ -1351,8 +1351,16 @@ def prepare_league_tables(league_data):
         rows = table["values"]
         ours = [r for r in rows if str(r.get("team_id") or "") in teams_by_pc_id]
         if len(ours) > 1:
+            shared = _shared_division_names()
             for r in ours:
-                desig = _our_desig(teams_by_pc_id[str(r["team_id"])])
+                team = teams_by_pc_id[str(r["team_id"])]
+                # "Wendover Kites", as the board, the strip and the match slides
+                # name it (_shared_division_names); the club + designation form only
+                # where the sides don't take a shared name (a 1st and 2nd XI).
+                if team["id"] in shared:
+                    r["column_1"] = shared[team["id"]]["club"]
+                    continue
+                desig = _our_desig(team)
                 if desig:
                     r["column_1"] = f"{r['column_1']} {desig}"
         table["rows"] = rows
@@ -2373,6 +2381,9 @@ def _versus(record):
 # is not the season's fastest scoring, and a single tidy over is not its most
 # economical spell.
 FAST_SCORING_MIN_RUNS = 30
+# The same bar for a Pairs innings (four overs a pair — see fetch_player_stats'
+# PAIRS_KNOCK_MIN_RUNS, which lets those innings into the knocks list at 15).
+PAIRS_FAST_SCORING_MIN_RUNS = 20
 ECONOMY_MIN_BALLS = 24
 
 # Fewer cards than this and the Records tab is mostly empty grid — the younger
@@ -2543,7 +2554,8 @@ def build_highlights(records, team_filter):
             "label": "Best strike rate", "category": "bat",
             "pool": ties(
                 knocks, lambda r: r["score"] / r["balls"],
-                lambda r: r.get("balls") and r.get("score", 0) >= FAST_SCORING_MIN_RUNS,
+                lambda r: r.get("balls") and r.get("score", 0) >= (
+                    PAIRS_FAST_SCORING_MIN_RUNS if r.get("pairs") else FAST_SCORING_MIN_RUNS),
             ),
             "render": lambda r: (
                 f"{r['score'] / r['balls'] * 100:.0f}",
@@ -2683,9 +2695,17 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
             opp_club, opp_team_desig = _split_opp_name(
                 sc.get("opposition_name", ""), sc.get("opposition_club_name", "")
             )
+            # The other side is another of ours: its shared name, headline and
+            # sub-line, as the match-day board and strip name it.
+            twin = _shared_name_by_pc(sc.get("opposition_team_id"))
+            if twin:
+                opp_club, opp_team_desig = twin["club"], twin["desig"]
             our_short = _short_innings_total(sc.get("our_total"))
             their_short = _short_innings_total(sc.get("their_total"))
-            our_inn = {"team": "Wendover", "score": our_short}
+            # Our own innings line too, where we have a shared name — "Wendover"
+            # alone beside "Wendover Hawks" would not say which is which.
+            our_name = (_shared_division_names().get(team_id) or {}).get("club") or "Wendover"
+            our_inn = {"team": our_name, "score": our_short}
             their_inn = {"team": opp_club, "score": their_short}
             innings = [our_inn, their_inn] if sc.get("we_bat_first", True) else [their_inn, our_inn]
             results.append({
@@ -2733,6 +2753,9 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
                 opp_club, opp_team_desig = _split_opp_name(
                     m.get("opposition_name") or "", opp_club
                 )
+            twin = _shared_name_by_pc(m.get("opposition_team_id"))
+            if twin:
+                opp_club, opp_team_desig = twin["club"], twin["desig"]
             entry = {
                 "date_iso": iso,
                 "date_label": _fmt_date_future(iso, today),
@@ -3182,6 +3205,23 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
             "ground": loc_names.get(loc_id, s.get("location", "")),
         })
 
+    # ONE EVENT PER GAME. A game between two teams of ours (Kites v Hawks, President's
+    # Day) is a fixture in BOTH teams' lists under one match id, and every consumer
+    # would otherwise carry it twice: the Worker's poll list (the match polled twice,
+    # the band telling it from whichever entry was read last), two Today's Match
+    # slides in the live deck, two strip views. The HOME side's event is kept — a
+    # fixed rule, so every surface agrees whose point of view it is — and carries the
+    # other side as `_twin` (just what its tile, heading and labels need).
+    events = _fold_twins(events, by_id)
+    # The names the live surfaces say the sides by where "Wendover" isn't enough
+    # ("Wendover Kites", or "Hurricanes" v "Spitfires") — after the fold, since an
+    # intra-club game's names come from both of its events (_side_labels).
+    for m in events:
+        if m.get("type") == "match":
+            our_label, opp_label = _side_labels(m)
+            if our_label or opp_label:
+                m["our_label"], m["opp_label"] = our_label, opp_label
+
     # Which of today's matches is on the stream. Done as a matching pass over the
     # whole day rather than per fixture: a broadcast belongs to ONE game, and only
     # by comparing it against every candidate can we tell which.
@@ -3223,6 +3263,26 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
     events.sort(key=lambda e: (e.get("time") or "99:99",
                                e.get("team_name") or e.get("title") or ""))
     return events
+
+
+def _fold_twins(events, by_id):
+    """Collapse each match id that appears under two of our teams into one event —
+    the home side's, else the first — with the other as a slim `_twin`. `by_id` (the
+    seed's pc_id index) is repointed at the survivor."""
+    by_pc, out = {}, []
+    for e in events:
+        pid = str(e.get("pc_id") or "")
+        keep = by_pc.get(pid) if pid else None
+        if keep is None:
+            if pid:
+                by_pc[pid] = e
+            out.append(e)
+            continue
+        home, away = (e, keep) if e.get("is_home") and not keep.get("is_home") else (keep, e)
+        home["_twin"] = {k: away.get(k) for k in ("team", "team_name", "team_short", "is_home")}
+        out[out.index(keep)] = home
+        by_pc[pid] = by_id[pid] = home
+    return out
 
 
 def _todays_events():
@@ -3842,12 +3902,21 @@ def _match_pre(ev, stats, all_fixtures):
     # band above already says "Wendover Friendly" (or the occasion). A league game
     # between two of ours keeps the usual club-and-team form.
     # > James's direction, 2026-10-01.
+    shared = _shared_division_names()
     if _intra_club(ev) and not ev.get("competition_id"):
         a, b = _distinguishing(*_our_two_sides(ev))
         our_club, our_team, opp_club, opp_team = a, "", b, ""
-    elif _intra_club(ev) and ev.get("_twin"):
-        # The other side's own name as our team list spells it, not PC's.
-        opp_team = ev["_twin"].get("team_name") or opp_team
+    else:
+        # Two of ours in one division: "Wendover Kites" over "Womens Softball",
+        # for our side and — when it is the other of ours — the opposition too.
+        if ev.get("team") in shared:
+            our_club, our_team = shared[ev["team"]]["club"], shared[ev["team"]]["desig"]
+        twin = ev.get("_twin") if _intra_club(ev) else None
+        if twin and twin.get("team") in shared:
+            opp_club, opp_team = shared[twin["team"]]["club"], shared[twin["team"]]["desig"]
+        elif twin:
+            # The other side's own name as our team list spells it, not PC's.
+            opp_team = twin.get("team_name") or opp_team
     ours = {"club": our_club,
             "team": our_team,
             "crest": ev.get("our_crest") or "/assets/images/wcc-logo.png",
@@ -3895,6 +3964,93 @@ def _distinguishing(a, b):
         mid = ws[lo:len(ws) - hi]
         return " ".join(w for w, _ in (mid or ws))
     return cut(wa), cut(wb)
+
+
+def _shared_division_names():
+    """How our sides are named where two or more of them share a division:
+    {team_id: {"club": "Wendover Kites", "desig": "Womens Softball"}}.
+
+    The headline is the club plus whatever tells our sides apart, and the small
+    line is what they have in common — so in the women's indoor division the two
+    read "Wendover Kites" and "Wendover Hawks", both over "Womens Softball", rather
+    than "Wendover" twice with the difference buried in the small line. Derived
+    from the team names in content/teams.json, grouped by `play_cricket_league_id`;
+    apostrophes go from the shared line (the wall's house style). A division with
+    one side of ours is not in the map, and keeps the usual club-over-team form.
+    > James's direction, 2026-10-05."""
+    by_div = {}
+    for t in load_teams().values():
+        if t.get("play_cricket_league_id"):
+            by_div.setdefault(str(t["play_cricket_league_id"]), []).append(t)
+    out = {}
+    for ts in by_div.values():
+        if len(ts) < 2:
+            continue
+        split = _split_shared([t.get("name") or t["id"] for t in ts])
+        # Only when what tells them apart is a NAME: a 1st and 2nd XI would come out
+        # "Wendover 1st" over "XI", and "Wendover" over "1st XI" already reads right.
+        if any(re.search(r"\d", distinct) for distinct, _ in split):
+            continue
+        for t, (distinct, common) in zip(ts, split):
+            out[t["id"]] = {"club": f"{OUR_CLUB} {distinct}".strip(),
+                            "desig": re.sub(r"['’]", "", common)}
+    return out
+
+
+def _split_shared(names):
+    """[(distinct, common)] per name: the words every name shares at either end
+    (compared as _side_key does, so "Women's" and "Women" agree) against the rest.
+    A name left with no words of its own keeps them all as its distinct part."""
+    def words(n):
+        return [(w, _side_key(w)) for w in
+                re.sub(r"\s+-\s+", " ", re.sub(r"\bUnder\s+(\d+)", r"U\1", n or "", flags=re.I)).split()]
+    ws = [words(n) for n in names]
+    shortest = min(len(w) for w in ws)
+    lo = 0
+    while lo < shortest and len({w[lo][1] for w in ws}) == 1:
+        lo += 1
+    hi = 0
+    while hi < shortest - lo and len({w[-1 - hi][1] for w in ws}) == 1:
+        hi += 1
+    out = []
+    for w in ws:
+        mid = w[lo:len(w) - hi]
+        common = w[:lo] + w[len(w) - hi:] if hi else w[:lo]
+        out.append((" ".join(x for x, _ in (mid or w)), " ".join(x for x, _ in common)))
+    return out
+
+
+def _shared_name_by_pc(pc_team_id):
+    """The shared-division name ({"club", "desig"}) of the team of ours with this
+    Play-Cricket team id, or None — for naming an opponent that is another of our
+    sides ("Wendover Kites" over "Womens Softball")."""
+    shared = _shared_division_names()
+    for t in load_teams().values():
+        if str(t.get("play_cricket_team_id") or "") == str(pc_team_id or "") and t["id"] in shared:
+            return shared[t["id"]]
+    return None
+
+
+def _side_labels(ev):
+    """(ours, theirs) display names for one of our fixtures where the sides need
+    more than "Wendover": our side's shared-division name ("Wendover Kites"), and
+    the opposition's when it is another team of ours in that division. Either is
+    None when the usual club name serves. Looked up by team id for ours, and for
+    theirs by the PC team id of the other side of the fixture."""
+    shared = _shared_division_names()
+    ours = (shared.get(ev.get("team")) or {}).get("club")
+    theirs = None
+    if _intra_club(ev):
+        opp_pc = str(ev.get("opposition_team_id") or "")
+        for t in load_teams().values():
+            if str(t.get("play_cricket_team_id")) == opp_pc and t["id"] in shared:
+                theirs = shared[t["id"]]["club"]
+        # Two of ours with no shared-division name (an intra-club friendly — the
+        # President's Day XIs): what tells them apart, as the match-day tile and
+        # the last-match package already name them ("Hurricanes" v "Spitfires").
+        if not (ours and theirs):
+            ours, theirs = _distinguishing(*_our_two_sides(ev))
+    return ours, theirs
 
 
 def _our_two_sides(ev):
@@ -3968,20 +4124,8 @@ def match_day_layout(events, stats=None, all_fixtures=None):
     handed."""
     matches = [e for e in events if e.get("type") == "match"]
     matches.sort(key=lambda e: (e.get("time") or "99:99"))
-    # ONE TILE PER GAME. A game between two teams of ours is a fixture in each
-    # team's list under one match id, and both would bind the same live card — the
-    # same match drawn twice, side by side. The first is kept and carries the other
-    # as `_twin`, which is where its tile and heading find the second side's name.
-    by_pc, single = {}, []
-    for e in matches:
-        pid = str(e.get("pc_id") or "")
-        if pid and pid in by_pc:
-            by_pc[pid]["_twin"] = e
-            continue
-        if pid:
-            e = by_pc[pid] = dict(e)
-        single.append(e)
-    matches = single
+    # One tile per game: a game between two teams of ours arrives already folded
+    # into one event, the home side's, carrying the other as `_twin` (_fold_twins).
 
     groups, by_comp = [], {}
     for ev in matches:
@@ -4022,6 +4166,9 @@ def match_day_layout(events, stats=None, all_fixtures=None):
             # Whether the division's results can be priced — see _is_tvcl. The
             # other-game tiles badge points only where it's true.
             "tvcl": _is_tvcl(lg.get("name") or take[0].get("league_name")),
+            # A Pairs division's flat points per verdict (W 4, L 0 …), which the
+            # badges fall back on as the strip's ladder does — see _flat_points.
+            "flat_points": _flat_points(take[0]),
             # The heading's two halves as the live chrome writes them: our XI as the
             # gold corner tile says it ("1st XI"), and the division as the ladder's
             # head says it ("Div 6C TVCL"). See _match_day_heading for the sides.
@@ -4275,6 +4422,31 @@ def _legend_points(lt):
     return out
 
 
+def _pairs_param(ev):
+    """`<pc>:<start>:<penalty>:<overs>` for a Pairs fixture whose rules fetched,
+    else None. Sent to the Worker as `&pairs=` beside the match id — it polls by id,
+    reads no config, and RV carries no start or penalty, so the rules Play-Cricket
+    gave the overnight build are how the live score gets priced (rv.mjs
+    pairsFromParams). Nothing live asks Play-Cricket for them."""
+    p = ev.get("pairs") or {}
+    if not ev.get("pc_id") or not (p.get("start") or p.get("penalty")):
+        return None
+    return f"{ev['pc_id']}:{p.get('start') or 0}:{p.get('penalty') or 0}:{ev.get('overs_allotted') or ''}"
+
+
+def _flat_points(ev):
+    """A Pairs division's flat match points off its committed table's legend
+    (_legend_points), or None. Pairs only, as for the strip's `flat_points`."""
+    comp = str(ev.get("competition_id") or "")
+    p = FETCHED / f"league_table_{comp}.json"
+    if ev.get("pairs") is None or not comp or not p.exists():
+        return None
+    try:
+        return _legend_points(json.loads(p.read_text())["league_table"][0]) or None
+    except (ValueError, OSError, KeyError, IndexError):
+        return None
+
+
 def _strip_league_view(ev, our_team_id, by_comp):
     """A league VIEW for one of our matches today: the division as an ordered list
     of teams (current league position), plus the day's fixtures in that division so
@@ -4298,6 +4470,7 @@ def _strip_league_view(ev, our_team_id, by_comp):
     ours_by_pc = {str(t.get("play_cricket_team_id")): t for t in load_teams().values()
                   if t.get("play_cricket_team_id")}
     teams = []
+    shared = _shared_division_names()
     for r in lt.get("values", []):
         club = _club_of(r.get("column_1"))
         tid_raw = str(r.get("team_id") or "")
@@ -4310,7 +4483,12 @@ def _strip_league_view(ev, our_team_id, by_comp):
         # > James's direction, 2026-10-01.
         desig = _desig_of(r.get("column_1"))
         mine = ours_by_pc.get(tid_raw)
-        if mine:
+        # Two of ours in this division: the row reads as the match-day board's
+        # tile does — "Wendover Kites" over "Womens Softball" (_shared_division_names).
+        label = shared.get(mine["id"]) if mine else None
+        if label:
+            desig = label["desig"]
+        elif mine:
             desig = mine.get("short_name") or mine.get("name") or desig
         elif not desig and tid_raw == our_team_id:
             desig = ev.get("team_name") or ""
@@ -4324,6 +4502,9 @@ def _strip_league_view(ev, our_team_id, by_comp):
             "crest": _club_crest(club),
             # The scoreboard labels its two sides under their crests with the XI.
             "desig": desig,
+            # DISPLAY-ONLY club line, when it isn't just the club: `club` below is a
+            # join key and must stay as the feeds write it.
+            **({"label": label["club"]} if label else {}),
             "tla": _team_tla(club, desig),
             # The club name is what the live feeds name a batting side by, so it's
             # the join key for "is this tile's team batting?" (team ids don't appear
@@ -4380,7 +4561,7 @@ def _strip_league_view(ev, our_team_id, by_comp):
         # (Bucks rules 4.6.1) — so the table's own legend prices a result exactly:
         # the ladder settles a finished pairs game from these. Only for Pairs:
         # another non-TVCL league may well award bonus points this can't see.
-        "flat_points": _legend_points(lt) if ev.get("pairs") is not None else None,
+        "flat_points": _flat_points(ev),
         # True when the table snapshot may ALREADY include today's results, in
         # which case adding today's points again would double-count and jump a
         # tile twice. See _table_counts_today.
@@ -4504,13 +4685,19 @@ def build_live_matches(env, slide_meta):
         opp_club = ev.get("opposition") or ""
         opp_team = ev.get("opposition_team") or ""
         slug = f"live-match-{ev['team']}"
+        # Two of ours in one division: each side by its own name, as the match-day
+        # board and the strip name it — "Wendover Kites" — and the other side the
+        # same way when it is the other of ours (_side_labels).
+        our_label, opp_label = _side_labels(ev)
         slide = {
             "template": "live-match", "title": "Today's Match",
             "_set_title": "Today's Match",
-            "_set_subtitle": ev.get("team_name") or ev["team"],
+            # Two of ours: each side by its own name ("Wendover Hawks vs Wendover
+            # Kites"), since "Women's Softball Hawks vs Wendover" says neither well.
+            "_set_subtitle": (our_label if opp_label else None) or ev.get("team_name") or ev["team"],
             "_set_our_club": ev.get("our_club") or "",
-            "_set_opp_club": opp_club,
-            "_set_opp_team": opp_team if opp_team and opp_team != opp_club else "",
+            "_set_opp_club": opp_label or opp_club,
+            "_set_opp_team": "" if opp_label else (opp_team if opp_team and opp_team != opp_club else ""),
             "_set_date": ev.get("time") or "Today",
             # The header's meta row behaves as the match-day board's does: the start
             # time gives way to the live status token, and the YouTube badge shows
@@ -4524,6 +4711,9 @@ def build_live_matches(env, slide_meta):
             "_set_is_home": ev.get("is_home", True),
             "_set_ground": ev.get("ground") or "",
             "_pc_id": ev["pc_id"],
+            "_pairs_param": _pairs_param(ev),
+            "_our_label": our_label,
+            "_opp_label": opp_label,
             "_our_crest": ev.get("our_crest") or "/assets/images/wcc-logo.png",
             "_opp_crest": ev.get("opp_crest"),
             # Display-time trim applied to each frogbox HLS clip in the post-match
@@ -4565,7 +4755,8 @@ def build_live_matches(env, slide_meta):
             "_our_form": our_form,
             "_our_performers": team_current_performers(stats, ev["team"],
                                                        published_names=published_names or None),
-            "_opp_club_name": opp_club,
+            "_opp_club_name": opp_label or opp_club,
+            "_our_club_name": our_label,
             "_opp_form": fixture.get("opposition_form") or [],
             "_opp_performers": opp_preview_performers(fixture.get("opposition_players")),
             "_division": competition_display,
@@ -5012,6 +5203,7 @@ def build_slides(env):
             # with skip_when_empty rather than the slide vanishing everywhere.
             # The pollable ids on the board, for the standalone self-poll path.
             slide["_pc_ids"] = [m["pc_id"] for m in slide["_matches"] if m.get("pc_id")]
+            slide["_pairs_params"] = [x for x in map(_pairs_param, slide["_matches"]) if x]
             slide["_empty"] = not slide["_matches"]
 
         if slide.get("template") == "league-table" and "_data" in slide:
@@ -5177,9 +5369,14 @@ def team_current_performers(stats, team_id, n_bat=2, n_bowl=2, published_names=N
         out = is_out(p["name"])
         if b["innings"] > 0:
             sr = f"{b['runs'] / b['balls'] * 100:.0f}" if b["balls"] > 0 else "-"
+            # No average off Pairs innings (`unrated`): a pairs batter is never
+            # really out, so a side that only plays pairs shows strike rate alone.
+            unrated = b.get("unrated", 0)
+            parts = [] if b["innings"] == unrated else [f"avg {avg(b['runs'], b['innings'] - b['not_outs'] - unrated)}"]
+            parts.append(f"SR {sr}")
             bats.append({"category": "bat", "name": p["name"], "_rank": b["runs"], "out": out,
                          "primary": str(b["runs"]), "unit": "runs",
-                         "secondary": f"avg {avg(b['runs'], b['innings'] - b['not_outs'])} · SR {sr}"})
+                         "secondary": " · ".join(parts)})
         if bw["wickets"] > 0:
             econ = f"{bw['runs'] / (bw['balls'] / 6):.1f}" if bw["balls"] > 0 else "-"
             bowls.append({"category": "bowl", "name": p["name"], "_rank": bw["wickets"], "out": out,
@@ -5205,9 +5402,11 @@ def opp_preview_performers(opp_performers, n_bat=2, n_bowl=2):
     out = []
     for b in (opp_performers.get("batting") or [])[:n_bat]:
         hs = b.get("high_score")
-        secondary = f"avg {fig(b.get('average'))}"
+        # Pairs-only batting has no average (fetch_fixtures `unrated`): HS alone.
+        parts = [] if b.get("innings") and b.get("innings") == b.get("unrated") else [f"avg {fig(b.get('average'))}"]
         if hs is not None:
-            secondary += f" · HS {hs}{'*' if b.get('high_score_not_out') else ''}"
+            parts.append(f"HS {hs}{'*' if b.get('high_score_not_out') else ''}")
+        secondary = " · ".join(parts)
         out.append({"category": "bat", "name": b["name"], "out": False,
                     "primary": str(b.get("runs", 0)), "unit": "runs", "secondary": secondary})
     for b in (opp_performers.get("bowling") or [])[:n_bowl]:
@@ -5366,6 +5565,17 @@ def build_match_packages(env, slide_meta):
         intra_club = bool(opp_club) and opp_club == OUR_CLUB
         our_side = title if intra_club and title else OUR_CLUB
         opp_side = opp_team if intra_club and opp_team else opp_club
+        # Two of ours in one division name themselves "Wendover Kites" / "Wendover
+        # Hawks" — on the match-day board, the strip and Today's Match alike — and
+        # the package says the same, the opposition too when it is the other of ours.
+        shared = _shared_division_names()
+        if team_id in shared:
+            our_side = shared[team_id]["club"]
+        if intra_club:
+            opp_pc = str(m.get("opposition_team_id") or "")
+            for t in load_teams().values():
+                if str(t.get("play_cricket_team_id")) == opp_pc and t["id"] in shared:
+                    opp_side = shared[t["id"]]["club"]
         date_formatted = fmt_match_date(m.get("match_date", ""))
         ground = m.get("ground_name") or ""
         is_home = m.get("is_home", True)
@@ -5394,13 +5604,11 @@ def build_match_packages(env, slide_meta):
         labels = ["1st Innings", "2nd Innings"]
         innings_present = []   # unique innings labels with any content (for the strip)
         innings_members = []   # (innings_idx, slug, phase_label, slide_fields)
-        innings_bat_club = {}  # innings_idx -> batting club (for the reel title)
         for i, (bat_club, total, batting, bowl_club, bowling) in enumerate(ordered):
             if not batting and not bowling:
                 continue
             label = labels[i]
             innings_present.append(label)
-            innings_bat_club[i] = bat_club
             if total and total.get("pairs"):
                 batting = label_pairs(batting)
             _score, _overs = _split_innings_total(total)
@@ -5496,9 +5704,11 @@ def build_match_packages(env, slide_meta):
             # A solid top-left tag conceals the Frogbox HIGHLIGHTS/QR bug and shows
             # the innings + the batting team's crest (WCC's for our innings, the
             # opposition's otherwise) — the same crest used on the intro/result.
-            bat_club = innings_bat_club.get(innings_idx, "")
-            bat_crest = ("/assets/images/wcc-logo.png"
-                         if "wendover" in bat_club.lower() else m.get("opposition_crest"))
+            # Which side is batting, by batting ORDER (we know who batted first) — a
+            # name test reads "Wendover" in both of two of our own sides, and in
+            # neither once an intra-club friendly names them "Hurricanes"/"Spitfires".
+            we_bat = (innings_idx == 0) == bool(we_bat_first)
+            bat_crest = "/assets/images/wcc-logo.png" if we_bat else m.get("opposition_crest")
             # The tag names both sides in full (club + XI), ordered by who batted
             # FIRST in the match — a fixed order across both reels — with a gold dot
             # on whoever is batting in this one. The order and the dot together are
@@ -5510,7 +5720,6 @@ def build_match_packages(env, slide_meta):
             # Intra-club, the tag's two-level club/XI split collapses the same way
             # the headlines do: the club line would be the identical word above both
             # sides, so the designation stands alone as the side's name.
-            we_bat = "wendover" in bat_club.lower()
             ours = {"club": our_side, "desig": "" if intra_club else title,
                     "batting": we_bat}
             theirs = {"club": opp_side, "desig": "" if intra_club else opp_team,

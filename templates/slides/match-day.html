@@ -780,6 +780,7 @@
                 --tile-w: {{ tile_w }}; --tile-h: {{ tile_h }}; --tile-u: {{ (tile_h * u_w) | round(3) }}"
          {% if ev.pc_id != None %}data-pc="{{ ev.pc_id }}"{% endif %}
          data-home="{{ 1 if ev.is_home else 0 }}" data-tvcl="{{ 1 if band.tvcl else 0 }}"
+         {% if band.flat_points %}data-flat="{{ band.flat_points | tojson | forceescape }}"{% endif %}
          data-span="{{ m.span }}"
          data-us="{{ us_club }}" data-them="{{ them_club }}"
          data-us-crest="{{ (m.pre.home if ev.is_home else m.pre.away).crest or '' }}"
@@ -882,6 +883,7 @@
         band is, not of the card the feed sends. -#}
     <div class="sq" style="grid-column: {{ o.col }}; grid-row: {{ o.row }}"
          data-mid="{{ o.match_id }}" data-tvcl="{{ 1 if band.tvcl else 0 }}"
+         {% if band.flat_points %}data-flat="{{ band.flat_points | tojson | forceescape }}"{% endif %}
          data-home="{{ o.home.club | drop_cc }}" data-away="{{ o.away.club | drop_cc }}">
         {#- The batting side's half, sunk behind everything else (see `.sq-bat`).
             Baked hidden: before a ball, nobody is in. -#}
@@ -941,6 +943,8 @@
     var LIVE_ENABLED = {{ 'true' if live_enabled else 'false' }}
         && !!(window.WccLiveKey && window.WccLiveKey.get());
     var PCS = {{ (slide._pc_ids or []) | tojson }};
+    // Pairs rules for the Worker to price with, baked overnight (build _pairs_param).
+    var PAIRS = {{ (slide._pairs_params or []) | tojson }};
 
     /* THE BOARDS ARE PATCHED, NOT RE-RENDERED. Every tile's position, span and row
      * is decided at build time by match_day_layout() and written into the markup as
@@ -1033,7 +1037,16 @@
        is an attribute, so the element keeps whichever size class it was baked with.
        Independent of the scores — a game kept in the book posts its result with no
        innings behind it, and the verdict is still the thing to show. */
-    function setRes(el, v, pts) {
+    /* A PAIRS DIVISION'S FLAT POINTS for a verdict — the table's own legend, baked
+       on the tile (`data-flat`) — for when nothing else prices the result. The same
+       figures the strip's ladder settles on, so the two agree. */
+    function flatPoints(tile, v) {
+        var raw = tile && tile.getAttribute('data-flat');
+        if (!raw || !v) return null;
+        try { var fp = JSON.parse(raw); return fp[v] != null ? fp[v] : null; } catch (e) { return null; }
+    }
+    function setRes(el, v, pts, tile) {
+        if (pts == null) pts = flatPoints(tile, v);
         el.hidden = !v;
         if (!v) return;
         el.setAttribute('data-v', v);
@@ -1322,7 +1335,7 @@
                    to. */
                 setLine(el, k, zoneInn, !zoneInn && !decided);
             }
-            setRes(f(el, k + '-res'), mine ? vs.us : vs.them, mine ? pUs : pThem);
+            setRes(f(el, k + '-res'), mine ? vs.us : vs.them, mine ? pUs : pThem, el);
         }
         /* The connector, now the crests have been placed. `playing` is a zone holding
            apertures — it flexes tall, and the connector is cut for two zones of the
@@ -1512,8 +1525,8 @@
             batting: scoring, decided: !!vSecond,
             withdrawn: stale && playing === second,
             ageText: playing === second ? chip : null });
-        setRes(f(el, 'a-res'), vFirst, pointsFor(rec, first, tvcl));
-        setRes(f(el, 'b-res'), vSecond, pointsFor(rec, second, tvcl));
+        setRes(f(el, 'a-res'), vFirst, pointsFor(rec, first, tvcl), el);
+        setRes(f(el, 'b-res'), vSecond, pointsFor(rec, second, tvcl), el);
     }
 
     function render(feed, transport) {
@@ -1563,7 +1576,8 @@
             var w = window.WccLiveWindow ? WccLiveWindow.state(pollWindow) : 'open';
             if (w === 'closed') return;                                   // terminal
             if (w === 'early') { clearTimeout(timer); timer = setTimeout(poll, WccLiveWindow.msUntilOpen(pollWindow)); return; }
-            var qs = '?' + pcs.map(function (x) { return 'pc=' + encodeURIComponent(x); }).join('&');
+            var qs = '?' + pcs.map(function (x) { return 'pc=' + encodeURIComponent(x); })
+                .concat(PAIRS.map(function (x) { return 'pairs=' + x; })).join('&');
             fetch(ENDPOINT + qs, { headers: { 'Authorization': 'Bearer ' + key } })
                 .then(function (r) {
                     if (r.ok) return r.json().then(function (feed) { render(feed, 'ok'); schedule(); });

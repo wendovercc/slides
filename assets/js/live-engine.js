@@ -361,9 +361,19 @@
     // Worker URL: ?pc= the resolved ids (works pre-deploy + shares the cache key
     // with standalone slides); a bare URL only as a fallback when the config gave
     // us nothing, letting the Worker's own config drive if it has one.
+    /* THE PAIRS RULES GO WITH THE IDS. The Worker polls by id and reads no config,
+       and RV carries no start or penalty, so a pairs match's rules — baked into
+       live-config overnight from Play-Cricket — ride along as `pairs=pc:start:pen:overs`
+       for the Worker to price with (rv.mjs pairsFromParams). */
+    function pairsParam(pc) {
+      var c = cfgById[String(pc)] || {}, p = c.pairs || {};
+      if (!(p.start || p.penalty)) return null;
+      return 'pairs=' + pc + ':' + (p.start || 0) + ':' + (p.penalty || 0) + ':' + (c.overs_allotted || '');
+    }
     function url() {
       if (pcs && pcs.length)
-        return endpoint + '?' + pcs.map(function (p) { return 'pc=' + encodeURIComponent(p); }).join('&');
+        return endpoint + '?' + pcs.map(function (p) { return 'pc=' + encodeURIComponent(p); })
+          .concat(pcs.map(pairsParam).filter(Boolean)).join('&');
       return endpoint;
     }
 

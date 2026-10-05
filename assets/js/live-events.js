@@ -2080,6 +2080,13 @@
             away_club: lr.away_club_name || m.away || '',
             ground: lr.ground_name || m.ground_name || '',
             our_club: c.our_club || '',
+            /* THE NAMES OUR SIDES GO BY where "Wendover" isn't enough — two of ours in
+             * one division are "Wendover Kites" / "Wendover Hawks" (build _side_labels),
+             * and the other side too when it is another of ours. With `is_home`, which
+             * is what tells two of our own sides apart: never their names. */
+            our_label: ours ? (c.our_label || '') : '',
+            opp_label: ours ? (c.opp_label || '') : '',
+            is_home: ours && typeof c.is_home === 'boolean' ? c.is_home : null,
             // The fixture's scheduled start, "13:00", for an event describing a match
             // that has not begun. Baked into live-config by the daily build.
             start_time: c.time || lr.match_time || '',
@@ -2277,7 +2284,7 @@
             if (String(inn.team_batting_id) === String(m.away_team_id)) return away;
             return '';
         }
-        return dropCC(inn.club || inn.side || '');
+        return sideName(ctx, inn.is_home, inn.club || inn.side || '');
     }
     /* THE TOSS, and the first type phrased for the L-frame rather than for a bar
      * standing on its own.
@@ -2304,9 +2311,16 @@
          * mixing the feed's `winner_club` with a name from somewhere else. It also
          * sidesteps matching `winner_club` against the card's home/away, which is the
          * name-join trap the strip's own comments warn about at length. */
-        var ours = dropCC(ctx.our_club || ''), theirs = dropCC(ctx.opponent || '');
+        var ours = ourClub(ctx) || dropCC(ctx.our_club || ''),
+            theirs = ctx.opp_label || dropCC(ctx.opponent || '');
         var winner = '', other = '';
-        if (typeof t.is_wendover === 'boolean' && ours && theirs) {
+        // Who won it, by the feed's own team flag where there is one: `is_wendover`
+        // is true of BOTH sides when both are ours.
+        var tw = ((m && m.teams) || []).filter(function (x) { return x.won_toss; })[0];
+        if (tw && typeof tw.is_home === 'boolean' && typeof ctx.is_home === 'boolean' && ours && theirs) {
+            winner = tw.is_home === ctx.is_home ? ours : theirs;
+            other  = tw.is_home === ctx.is_home ? theirs : ours;
+        } else if (typeof t.is_wendover === 'boolean' && ours && theirs) {
             winner = t.is_wendover ? ours : theirs;
             other  = t.is_wendover ? theirs : ours;
         } else {
@@ -2553,7 +2567,7 @@
                                 : [team(pw), det('beat'), team(pl), det('by ' + pby)];
             }
             var wt = (m.teams || []).filter(function (t) { return t.outcome === 'won'; })[0];
-            var wc = wt ? dropCC(wt.club || '') : '';
+            var wc = wt ? sideName(ctx, wt.is_home, wt.club) : '';
             if (!wc && m.result_applied_to != null && home && away)
                 wc = String(m.result_applied_to) === String(m.home_team_id) ? home
                    : String(m.result_applied_to) === String(m.away_team_id) ? away : '';
@@ -2863,6 +2877,17 @@
         if (inn.team_batting_id != null && m.home_team_id != null) {
             return String(inn.team_batting_id) === String(m.home_team_id)
                 ? { bat: home, other: away } : { bat: away, other: home };
+        }
+        /* OUR OWN CARD (RV): each team says whether it is at home, and so does each
+         * innings — so the pairing is structural. Matching names never paired here:
+         * the card's home/away are full team names ("Wendover CC Women Softball
+         * Kites") and the innings' is the club, so `other` always came back empty and
+         * every phrase that names the opposition on our games went unsaid. */
+        if (typeof inn.is_home === 'boolean' && (m.teams || []).length) {
+            var bt = m.teams.filter(function (t) { return t.is_home === inn.is_home; })[0];
+            var ot = m.teams.filter(function (t) { return t.is_home !== inn.is_home; })[0];
+            return { bat: sideName(ctx, inn.is_home, (bt && bt.club) || inn.club || inn.side),
+                     other: ot ? sideName(ctx, !inn.is_home, ot.club) : '' };
         }
         var bat = dropCC(inn.club || inn.side || '');
         if (bat && bat === away) return { bat: away, other: home };
@@ -4009,7 +4034,18 @@
      *
      * Unresolvable is taken as NOT ours. The lean is a courtesy to our own players,
      * and claiming one on a guess is the one way it could be wrong in public. */
-    function ourClub(ctx) { return ctx.ours ? (dropCC(ctx.our_club || '') || 'Wendover') : ''; }
+    function ourClub(ctx) {
+        return ctx.ours ? (ctx.our_label || dropCC(ctx.our_club || '') || 'Wendover') : '';
+    }
+    /* THE NAME A SIDE OF OUR OWN MATCH GOES BY, decided by home/away against the
+     * fixture — the only test that separates two of our own sides — and named as the
+     * wall names it everywhere else: ours by `ourClub`, theirs by its label when it is
+     * another of ours, else its club. Anywhere else, the club as given. */
+    function sideName(ctx, isHome, club) {
+        if (ctx && ctx.ours && typeof isHome === 'boolean' && typeof ctx.is_home === 'boolean')
+            return isHome === ctx.is_home ? ourClub(ctx) : (ctx.opp_label || dropCC(club || ''));
+        return dropCC(club || '');
+    }
     function isOurPlayer(ctx, club) {
         var our = ourClub(ctx);
         return !!(our && club && dropCC(club).toLowerCase() === our.toLowerCase());

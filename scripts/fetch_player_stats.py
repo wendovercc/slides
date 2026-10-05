@@ -26,6 +26,9 @@ API_BASE = "http://play-cricket.com/api/v2"
 # merge several teams needs nothing like all of them.
 KNOCK_MIN_RUNS = 25
 KNOCKS_PER_TEAM = 25
+# The same bar for a Pairs innings: four overs a pair, so 25 is most of an
+# innings and a softball or U9-U12 side might go weeks without a record.
+PAIRS_KNOCK_MIN_RUNS = 15
 
 # Bowling spells worth recording, for the highlights tab's best-figures and
 # most-economical cards. Two overs keeps a one-over cameo off the economy card.
@@ -370,7 +373,8 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                 # which are an honours-board feed with a fixed meaning — this
                 # one is just "the season's biggest innings", gated low enough
                 # that junior teams have a table at all.
-                if performances is not None and runs >= KNOCK_MIN_RUNS:
+                knock_bar = KNOCK_MIN_RUNS if rated else PAIRS_KNOCK_MIN_RUNS
+                if performances is not None and runs >= knock_bar:
                     performances["knocks"].append({
                         "date": iso_date,
                         "home_away": "H" if is_home else "A",
@@ -383,6 +387,8 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                         "fours": fours,
                         "sixes": sixes,
                         "not_out": not_out,
+                        # A Pairs innings, so the build applies the pairs bars.
+                        **({} if rated else {"pairs": True}),
                     })
 
                 if performances is not None and runs >= 100:

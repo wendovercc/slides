@@ -18,7 +18,7 @@
     <div class="tape">
         <div class="tape-cols">
             {% for c in columns %}
-            <div class="tape-col">
+            <div class="tape-col"{% if c is sameas our_col %} data-ours="1"{% endif %}>
                 <div class="crest">
                     {% if c.crest %}<img src="{{ c.crest }}" alt="{{ c.name }}">{% endif %}
                 </div>

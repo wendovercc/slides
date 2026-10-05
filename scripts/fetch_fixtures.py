@@ -230,9 +230,12 @@ def empty_bowling():
     return {"balls": 0, "maidens": 0, "runs": 0, "wickets": 0, "best": None}
 
 
-def merge_batting(b, runs, balls, not_out):
+def merge_batting(b, runs, balls, not_out, rated=True):
     b["innings"] += 1
-    if not_out:
+    if not rated:
+        # A Pairs innings: no dismissal to average over (fetch_player_stats.is_pairs).
+        b["unrated"] = b.get("unrated", 0) + 1
+    elif not_out:
         b["not_outs"] += 1
     b["runs"] += runs
     b["balls"] += balls
@@ -254,7 +257,7 @@ def merge_bowling(b, balls, maidens, runs, wickets):
 
 
 def derived_batting(b):
-    outs = b["innings"] - b["not_outs"]
+    outs = b["innings"] - b["not_outs"] - b.get("unrated", 0)
     b["average"] = round(b["runs"] / outs, 2) if outs > 0 else None
 
 
@@ -520,6 +523,7 @@ def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token, befo
 
             home_team_id = str(detail.get("home_team_id", ""))
             away_team_id = str(detail.get("away_team_id", ""))
+            rated = pairs_rules(detail) is None
 
             for innings in detail.get("innings", []):
                 batting_team_id = str(innings.get("team_batting_id", ""))
@@ -546,6 +550,7 @@ def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token, befo
                             int(bat.get("runs") or 0),
                             int(bat.get("balls") or 0),
                             is_not_out(how_out),
+                            rated,
                         )
 
                 if fielding_team_id == opp_team_id:
@@ -595,6 +600,7 @@ def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token, befo
             "name": p["name"],
             "innings": b["innings"],
             "not_outs": b["not_outs"],
+            "unrated": b.get("unrated", 0),
             "runs": b["runs"],
             "average": b["average"],
             "high_score": b["high_score"],
