@@ -166,6 +166,17 @@ def resolve_opposition_crest(lm, cache):
     return _download_crest(url, slug) or url
 
 
+def today_date():
+    """Build's notion of today; WCC_TODAY pins it for off-day testing."""
+    override = os.environ.get("WCC_TODAY")
+    if override:
+        try:
+            return datetime.strptime(override, "%Y-%m-%d").date()
+        except ValueError:
+            print(f"  WCC_TODAY={override!r} invalid — using real date")
+    return date.today()
+
+
 def parse_date(date_str):
     try:
         return datetime.strptime(date_str, "%d/%m/%Y").date()
@@ -425,7 +436,7 @@ def fetch_opposition_data(opp_team_id, opp_site_id, season_year, api_token, befo
         print(f"    WARNING: failed to fetch opposition matches: {e}", file=sys.stderr)
         return None
 
-    cutoff = before_date or date.today()
+    cutoff = before_date or today_date()
     strict = before_date is not None  # last-match preview excludes the match day itself
     their_matches = [
         m for m in data.get("matches", [])
@@ -634,7 +645,7 @@ def main():
     data = api_get("matches.json", api_token, site_id=site_id, season=season_year)
     all_matches = data.get("matches", [])
 
-    today = date.today()
+    today = today_date()
 
     # Find the earliest upcoming match per team (for next-match slides)
     # and collect all upcoming matches per team (for schedule slides)
