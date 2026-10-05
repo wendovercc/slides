@@ -1478,7 +1478,10 @@ async function init() {
         // clips didn't store), so tell it what actually survived: the step column and
         // the item list must agree about what slide 4 is.
         if (portrait) portrait.keep(finalSlides.map(s => s._i));
-        _liveSlides = finalSlides.map((s, i) => (s._pc_id != null ? { i, pc: s._pc_id } : null)).filter(Boolean);
+        // `_live`, not just `_pc_id`: an innings reel carries `_pc_id` too (its
+        // curation and stored clips are keyed by it), and a reel of a finished match
+        // is never in the live feed, so would be stepped over as empty.
+        _liveSlides = finalSlides.map((s, i) => (s._live && s._pc_id != null ? { i, pc: s._pc_id } : null)).filter(Boolean);
         WccPlayer.start({
             items: finalSlides.map(s => ({
                 slug: s.slug,
