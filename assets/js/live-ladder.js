@@ -57,6 +57,8 @@
             var winner = String(card.result_applied_to) === String(card.home_team_id) ? 'home' : 'away';
             return winner === side ? 'win' : 'loss';
         }
+        // A pairs score the Worker couldn't price decides nothing between two sides.
+        if ((card.innings || []).some(function (i) { return i.pairs && !i.priced; })) return null;
         var runs = {};
         (card.innings || []).forEach(function (inn) {
             var s = inningsSide(card, inn);
@@ -208,7 +210,14 @@
     // the division's other matches. Null when it can't be priced — which the ladder
     // treats as "not final", so it holds position rather than guessing.
     function settledPoints(view, card, side) {
-        if (!view.tvcl || !card || !card.complete) return null;
+        if (!card || !card.complete) return null;
+        // Flat match points (a pairs division, from the table's own legend):
+        // the verdict alone prices it. No verdict readable → not final.
+        if (view.flat_points) {
+            var v = verdictFor(card, side);
+            return v && view.flat_points[v] != null ? view.flat_points[v] : null;
+        }
+        if (!view.tvcl) return null;
         var inns = card.innings || [];
         var idx = -1;
         for (var i = 0; i < inns.length; i++) if (inningsSide(card, inns[i]) === side) { idx = i; break; }

@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+from html import unescape as html_unescape
 import io
 import json
 import os
@@ -185,6 +186,7 @@ def merge_blocks(blocks):
         b, rb = block["batting"], result["batting"]
         for key in ("innings", "not_outs", "runs", "balls", "fours", "sixes", "fifties", "hundreds"):
             rb[key] += b[key]
+        rb["unrated"] = rb.get("unrated", 0) + b.get("unrated", 0)
         if b["high_score"] is not None:
             if rb["high_score"] is None or b["high_score"] > rb["high_score"]:
                 rb["high_score"] = b["high_score"]
@@ -200,7 +202,8 @@ def merge_blocks(blocks):
             ):
                 rbl["best"] = new
     rb = result["batting"]
-    outs = rb["innings"] - rb["not_outs"]
+    # Pairs innings (fetch_player_stats `unrated`) never count as dismissals.
+    outs = rb["innings"] - rb["not_outs"] - rb.get("unrated", 0)
     rb["average"] = round(rb["runs"] / outs, 2) if outs > 0 else None
     rb["strike_rate"] = round(rb["runs"] / rb["balls"] * 100, 2) if rb["balls"] > 0 else None
     rbl = result["bowling"]
@@ -245,6 +248,12 @@ def _strictest_filling(values, target_rows, floor, ceiling):
     return best
 
 
+def _rated_innings(b):
+    """Innings that can qualify a batting average: Pairs innings (`unrated`, see
+    fetch_player_stats.is_pairs) never had a dismissal to average over."""
+    return b["innings"] - b.get("unrated", 0)
+
+
 def qualification_thresholds(entries, lb_config, rows):
     """Qualification bars for the "best average" tables.
 
@@ -271,7 +280,7 @@ def qualification_thresholds(entries, lb_config, rows):
     # average of None (no dismissals / no wickets) is excluded downstream, so
     # counting them here would relax the bar for rows that never render.
     innings = [
-        e["block"]["batting"]["innings"]
+        _rated_innings(e["block"]["batting"])
         for e in entries
         if e["block"]["batting"].get("average") is not None
     ]
@@ -322,7 +331,7 @@ def build_batting_leaderboard(slide, stats_data, lb_config):
     avg_rows = sorted(
         [
             e for e in entries
-            if e["block"]["batting"]["innings"] >= min_innings
+            if _rated_innings(e["block"]["batting"]) >= min_innings
             and e["block"]["batting"].get("average") is not None
         ],
         key=lambda e: e["block"]["batting"]["average"],
@@ -1713,6 +1722,40 @@ def extras_breakdown_str(total):
     return ", ".join(parts)
 
 
+def label_pairs(batting):
+    """Pairs scorecard: Play-Cricket records no dismissal for anyone (every batter
+    bats out their overs), so the dismissal cell carries which pair they batted in
+    instead — consecutive batting positions, "Pair 1" for 1 and 2. Only when that
+    reading is safe: an even card with no dismissal recorded anywhere. An odd card
+    (a short side, someone batting twice) is left unlabelled rather than guessed;
+    a card that does record dismissals is left exactly as recorded."""
+    if any((b.get("how_out") or "").strip() for b in batting or []):
+        return batting
+    if not batting or len(batting) % 2:
+        # Still no "not out": format_dismissal's reading of an empty how_out,
+        # which in Pairs would claim something nobody recorded.
+        return [{**b, "how_out_abbr": ""} for b in batting or []]
+    return [{**b, "how_out_abbr": f"Pair {i // 2 + 1}"} for i, b in enumerate(batting)]
+
+
+def pairs_adjustment(total):
+    """(net, parts) for a Pairs innings' scorecard row: what the start and the
+    wicket deductions add to the raw runs (+180), and how ("start 200, 4 wkts −20").
+    None when not a Pairs innings. The row keeps the card summing to the headline
+    score, which is the priced total, not the bat + extras."""
+    pairs = (total or {}).get("pairs")
+    if not pairs or not pairs.get("priced", True):
+        return None
+    start = int(pairs.get("start") or 0)
+    wkts = int(total.get("wickets") or 0)
+    deducted = int(pairs.get("penalty") or 0) * wkts
+    parts = [f"start {start}"] if start else []
+    if deducted:
+        parts.append(f"{wkts} {'wkt' if wkts == 1 else 'wkts'} −{deducted}")
+    net = start - deducted
+    return (f"+{net}" if net >= 0 else f"−{-net}"), ", ".join(parts)
+
+
 def team_performers(batting, bowling, opp_batting, max_extra=2):
     """A team's headline performers from its own card: best batting + best bowling
     always, then up to `max_extra` other notable ones (50+, 3+ wkt hauls, multi-
@@ -1865,13 +1908,38 @@ def _scorecard_row_scale(rows, capacity):
     return max(0.8, round(capacity / rows, 3))
 
 
+def innings_score(total):
+    """The innings' score as the match is decided on it: raw runs, or for a Pairs
+    match (fetch_fixtures.pairs_rules) start + runs - penalty x wickets. None when
+    the total or its runs are missing."""
+    if not total or total.get("runs") in (None, ""):
+        return None
+    try:
+        runs = int(total["runs"])
+        pairs = total.get("pairs")
+        # `priced` False: the card can't prove `runs` raw (fetch_fixtures.pairs_raw),
+        # so it's shown as entered rather than risk adding the start twice.
+        if pairs and pairs.get("priced", True):
+            runs += int(pairs.get("start") or 0) - int(pairs.get("penalty") or 0) * int(total.get("wickets") or 0)
+        return runs
+    except (ValueError, TypeError):
+        return None
+
+
 def _split_innings_total(total):
     """(score, overs) — e.g. ("184/7", "45.0"). Split because the two want
     different type where they're shown together: the score is the headline, the
     overs are supporting detail in the smaller muted style. Either may be "".
+
+    A Pairs score is the priced total alone ("295"): wickets there are a deduction
+    already inside it, not a count of the side's resources, and "295/4" would read
+    as four down with six to come.
     """
     if not total:
         return "", ""
+    if total.get("pairs"):
+        score = innings_score(total)
+        return ("" if score is None else str(score)), str(total.get("overs") or "")
     runs = total.get("runs", 0)
     wickets = total.get("wickets") or None
     if wickets is None:
@@ -1905,6 +1973,19 @@ def result_summary(result, our_total, their_total, we_bat_first, our_club, opp_c
     winner_total = our_total if we_won else their_total
     loser_total = their_total if we_won else our_total
     winner_bat_first = we_bat_first if we_won else not we_bat_first
+    # Pairs: every side bats its overs out and a wicket only costs runs, so the
+    # margin is always in runs, between the priced scores — "by 6 wickets" would
+    # describe resources a pairs side never had.
+    if our_total.get("pairs") or their_total.get("pairs"):
+        w, l = innings_score(winner_total), innings_score(loser_total)
+        priced = all((t.get("pairs") or {}).get("priced", True) for t in (winner_total, loser_total))
+        if not priced or w is None or l is None or w <= l:
+            # A total we couldn't verify, or scores that don't bear the result out:
+            # the winner is Play-Cricket's, a margin would be ours, so say only the
+            # part that's known.
+            return f"{winner_club} won"
+        margin = w - l
+        return f"{winner_club} won by {margin} {'run' if margin == 1 else 'runs'}"
     try:
         if winner_bat_first:
             margin = int(winner_total.get("runs") or 0) - int(loser_total.get("runs") or 0)
@@ -2742,7 +2823,7 @@ def build_team(slide, teams_by_id, fixtures_data, stats_data, lb_config, records
         avg_bat_rows = sorted(
             [
                 e for e in entries
-                if e["block"]["batting"]["innings"] >= min_innings
+                if _rated_innings(e["block"]["batting"]) >= min_innings
                 and e["block"]["batting"].get("average") is not None
             ],
             key=lambda e: e["block"]["batting"]["average"],
@@ -3076,6 +3157,14 @@ def todays_events(teams_by_id, training_sessions, all_fixtures, loc_lookup,
                 "our_crest": "/assets/images/wcc-logo.png",
                 "opp_crest": _club_crest(f.get("opposition_club_name") or f.get("opposition_team_name")),
             }
+            # PAIRS (fetch_fixtures: start + per-wicket penalty, and the overs). The
+            # Worker prices the live score from these and decides the match on
+            # them; every live surface keys its "is this ordinary cricket" off
+            # `pairs`. A Pairs fixture whose rules didn't fetch still says so, with
+            # no rules: the score stays unpriced, the narratives stay off.
+            if (f.get("game_type") or "").lower() == "pairs" or f.get("pairs"):
+                m["pairs"] = f.get("pairs") or {}
+                m["overs_allotted"] = f.get("overs_allotted")
             events.append(m)
             if pc_id:
                 by_id[str(pc_id)] = m
@@ -3974,9 +4063,15 @@ def build_league_config():
     ours, _ = _todays_events()
     league_of = {str(e.get("competition_id")): (e.get("league_name") or "")
                  for e in ours if e.get("competition_id")}
+    # A division our own Pairs fixture is in plays Pairs throughout: its other games
+    # carry the flag too, so the band and the ladder treat them the same way even
+    # before (or without) the Worker's own `pairs` on the card.
+    pairs_comps = {str(e.get("competition_id")) for e in ours
+                   if e.get("pairs") is not None and e.get("competition_id")}
     matches = [dict(m, competition_short=_competition_short({
                    "competition": m.get("competition_name"),
-                   "league_name": league_of.get(str(m.get("competition_id")), "")}))
+                   "league_name": league_of.get(str(m.get("competition_id")), "")}),
+                   **({"pairs": {}} if str(m.get("competition_id")) in pairs_comps else {}))
                for m in matches]
     out = {"generated_at": int(datetime.now().timestamp()),
            "date": _today().isoformat(), "matches": matches}
@@ -4164,6 +4259,22 @@ def _table_counts_today(raw, ev):
     return (when.hour, when.minute) >= (hh, mm)
 
 
+# Play-Cricket's table legend codes -> the verdicts the live ladder prices.
+_LEGEND_VERDICTS = {"w": "W", "l": "L", "t": "T", "a": "A", "c": "C"}
+
+
+def _legend_points(lt):
+    """{"W": 4, "L": 0, "T": 2, "A": 2, "C": 2} from a table's `key` legend
+    ("p - Played,&nbsp;w - Won (4),&nbsp;l - Lost (0), …"). Flat match points per
+    verdict, as the division awards them; {} when the legend gives none."""
+    key = html_unescape(lt.get("key") or "")
+    out = {}
+    for code, pts in re.findall(r"(?:^|,)\s*(\w+)\s*-\s*[^,(]*\((-?\d+)\)", key):
+        if code.lower() in _LEGEND_VERDICTS:
+            out[_LEGEND_VERDICTS[code.lower()]] = int(pts)
+    return out
+
+
 def _strip_league_view(ev, our_team_id, by_comp):
     """A league VIEW for one of our matches today: the division as an ordered list
     of teams (current league position), plus the day's fixtures in that division so
@@ -4265,6 +4376,11 @@ def _strip_league_view(ev, our_team_id, by_comp):
         # (Match Rules §9). Off for any other league, which just means the ladder
         # can't price a result and so never reorders for it.
         "tvcl": _is_tvcl(ev.get("league_name")),
+        # A PAIRS division's match points are flat — no bonus points in Pairs
+        # (Bucks rules 4.6.1) — so the table's own legend prices a result exactly:
+        # the ladder settles a finished pairs game from these. Only for Pairs:
+        # another non-TVCL league may well award bonus points this can't see.
+        "flat_points": _legend_points(lt) if ev.get("pairs") is not None else None,
         # True when the table snapshot may ALREADY include today's results, in
         # which case adding today's points again would double-count and jump a
         # tile twice. See _table_counts_today.
@@ -5285,6 +5401,8 @@ def build_match_packages(env, slide_meta):
             label = labels[i]
             innings_present.append(label)
             innings_bat_club[i] = bat_club
+            if total and total.get("pairs"):
+                batting = label_pairs(batting)
             _score, _overs = _split_innings_total(total)
             scoreline = {"_bat_club": bat_club, "_score_readable": _score, "_score_overs": _overs}
             if batting:
@@ -5293,8 +5411,10 @@ def build_match_packages(env, slide_meta):
                     "_mode": "batting", "_batting": batting,
                     "_extras": extras,
                     "_extras_parts": extras_breakdown_str(total), **scoreline,
+                    "_pairs_adj": pairs_adjustment(total),
                     "_row_scale": _scorecard_row_scale(
-                        len(batting) + (1 if extras is not None else 0), SC_BAT_ROWS),
+                        len(batting) + (1 if extras is not None else 0)
+                        + (1 if total and total.get("pairs") else 0), SC_BAT_ROWS),
                 }))
             if bowling:
                 innings_members.append((i, f"{slug_prefix}-innings-{i + 1}-bowling", label, {

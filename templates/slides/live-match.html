@@ -408,8 +408,11 @@
 
     // ---- view renderers ----
     function scoreline(inn) {
+        // Pairs: the priced total alone, or no figure when it couldn't be priced.
+        var fig = inn.pairs ? (inn.priced ? String(inn.runs || 0) : '')
+                            : (inn.runs || 0) + '/' + (inn.wickets || 0);
         return '<div class="scoreline"><span class="sc-club">' + esc(dropCC(sideClub(inn.side))) + '</span>' +
-            '<span class="sc-score">' + (inn.runs || 0) + '/' + (inn.wickets || 0) +
+            '<span class="sc-score">' + fig +
             '<span class="ov">(' + esc(inn.overs) + ' ov)</span></span></div>';
     }
     function battingView(m, inn) {
@@ -417,12 +420,15 @@
             var at = b.dismissal_id === 1;
             // The "not out"/"*" facts stay on a closed innings (scorecard convention);
             // only the gold live-row highlight is dropped once the innings has ended.
-            var how = at ? '<span class="out notout">not out</span>' : '<span class="out">' + esc(b.how || '') + '</span>';
+            // Pairs: no dismissal column and no star — a pairs batter who is out bats
+            // on, so neither "not out" nor "b Smith" says how the innings stands.
+            var how = inn.pairs ? '<span class="out"></span>'
+                : at ? '<span class="out notout">not out</span>' : '<span class="out">' + esc(b.how || '') + '</span>';
             return '<div class="row bat-grid' + (at && !inn.closed ? ' at-crease' : '') + '"><span class="name">' + esc(b.name) + '</span>' + how +
                 '<span class="num dim">' + num(b.balls) + '</span><span class="num dim">' + num(b.fours) + '</span>' +
                 '<span class="num dim">' + num(b.sixes) + '</span>' +
                 '<span class="num dim">' + (b.sr != null ? b.sr : '<span class="z">·</span>') + '</span>' +
-                '<span class="num highlight">' + (b.runs || 0) + (at ? '<span class="not-out-star">*</span>' : '') + '</span></div>';
+                '<span class="num highlight">' + (b.runs || 0) + (at && !inn.pairs ? '<span class="not-out-star">*</span>' : '') + '</span></div>';
         });
         // Yet-to-bat next, then Extras at the very bottom. No Total row — the
         // innings total is already the gold score in the scoreline above. The
@@ -577,7 +583,8 @@
     function shortTotal(inn) {
         if (!inn) return '';
         var runs = inn.runs || 0, wkts = inn.wickets, overs = inn.overs || '', score;
-        if (wkts == null) score = String(runs);
+        if (inn.pairs) score = inn.priced ? String(runs) : '';   // see scoreline
+        else if (wkts == null) score = String(runs);
         else if (inn.declared) score = runs + '/' + Number(wkts) + ' dec';
         else if (Number(wkts) >= 10) score = runs + ' ao';
         else score = runs + '/' + Number(wkts);
@@ -602,6 +609,17 @@
     // text, falling back to comparing the two innings totals when it's not yet a
     // verdict-shaped string.
     function verdict(m) {
+        // Pairs: the Worker's own verdict per side, or the priced result — never
+        // RV's prose or the raw runs, which can both name the wrong winner.
+        if (m.pairs) {
+            var won = (m.teams || []).filter(function (x) { return x.outcome === 'won'; })[0];
+            if (won) return isOurs(won.club || won.name || '') ? { our: 'W', opp: 'L' } : { our: 'L', opp: 'W' };
+            if (/\btied?\b/i.test(m.result || '')) return { our: 'T', opp: 'T' };
+            var ps = sideInnings(m);
+            if (!(ps.ours && ps.opp && ps.ours.priced && ps.opp.priced && m.complete)) return null;
+            var po = ps.ours.runs || 0, pp = ps.opp.runs || 0;
+            return po > pp ? { our: 'W', opp: 'L' } : pp > po ? { our: 'L', opp: 'W' } : { our: 'T', opp: 'T' };
+        }
         var t = String(m.result || m.leader_text || '');
         if (/tie|tied/i.test(t)) return { our: 'T', opp: 'T' };
         if (/draw|drawn/i.test(t)) return { our: 'D', opp: 'D' };
@@ -716,7 +734,8 @@
         var first = (m.innings || [])[0];
         var ourFirst = first ? isOurs(first.side) : true;
         var cols = ourFirst ? [ourCol, oppCol] : [oppCol, ourCol];
-        var res = resultClub(m.result || m.leader_text || '');
+        // Pairs: the Worker's priced (or winner-only) line, never RV's leader_text.
+        var res = m.pairs ? (m.result_club || '') : resultClub(m.result || m.leader_text || '');
         var foot = res ? '<div class="result-foot"><div class="result-summary">' + esc(res) +
             (!m.final ? '<span class="prov"> \u2013 result to be confirmed</span>' : '') + '</div></div>' : '';
         return '<div class="result-columns">' + teamCol(cols[0]) +

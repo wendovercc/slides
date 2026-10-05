@@ -66,12 +66,28 @@ def is_not_out(how_out):
     return s == "not out" or s.startswith("retired")
 
 
+def is_pairs(detail):
+    """Same test as fetch_fixtures.pairs_rules: a start or a per-dismissal penalty
+    (PC sends None for both on a Standard match), or the game type itself."""
+    def num(key):
+        try:
+            return float(detail.get(key) or 0)
+        except (ValueError, TypeError):
+            return 0
+    return bool(num("starting_runs") or num("dismissal_penalty")
+                or (detail.get("game_type") or "").lower() == "pairs")
+
+
 def empty_stats_block():
     return {
         "matches": 0,
         "batting": {
             "innings": 0,
             "not_outs": 0,
+            # Innings with no meaningful dismissal (Pairs: a wicket costs the
+            # side runs and the batter bats on). Counted as innings for runs and
+            # strike rate, kept out of the average's denominator and qualifier.
+            "unrated": 0,
             "runs": 0,
             "balls": 0,
             "high_score": None,
@@ -91,10 +107,12 @@ def empty_stats_block():
     }
 
 
-def merge_batting(block, runs, balls, fours, sixes, not_out):
+def merge_batting(block, runs, balls, fours, sixes, not_out, rated=True):
     b = block["batting"]
     b["innings"] += 1
-    if not_out:
+    if not rated:
+        b["unrated"] = b.get("unrated", 0) + 1
+    elif not_out:
         b["not_outs"] += 1
     b["runs"] += runs
     b["balls"] += balls
@@ -112,7 +130,7 @@ def merge_batting(block, runs, balls, fours, sixes, not_out):
 def compute_derived(block):
     """Add derived batting and bowling stats to a stats block in place."""
     b = block["batting"]
-    outs = b["innings"] - b["not_outs"]
+    outs = b["innings"] - b["not_outs"] - b.get("unrated", 0)
     b["average"] = round(b["runs"] / outs, 2) if outs > 0 else None
     b["strike_rate"] = round(b["runs"] / b["balls"] * 100, 2) if b["balls"] > 0 else None
 
@@ -216,7 +234,7 @@ def _our_keeper_id(detail, our_pc_team_id):
     return None
 
 
-def _fmt_innings_total(innings):
+def _fmt_innings_total(innings, pairs=None):
     """Format an innings dict to a display string like '325-3' or '43 ao'."""
     if not innings:
         return None
@@ -228,6 +246,16 @@ def _fmt_innings_total(innings):
     if wickets is None or wickets == "":
         return str(runs_int)
     wickets_int = int(wickets)
+    bat = innings.get("bat") or []
+    try:
+        card_raw = bool(bat) and sum(int(b.get("runs") or 0) for b in bat) + int(innings.get("total_extras") or 0) == runs_int
+    except (ValueError, TypeError):
+        card_raw = False
+    if pairs and not card_raw:
+        return str(runs_int)    # a bare total, usually already priced: as entered
+    if pairs:
+        # Priced Pairs score (start + runs − penalty × wickets), no wicket count.
+        return str(runs_int + pairs[0] - pairs[1] * wickets_int)
     return f"{runs_int} ao" if wickets_int >= 10 else f"{runs_int}-{wickets_int}"
 
 
@@ -281,17 +309,23 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
     ) or ""
     iso_date, year = _match_date_to_iso(match_date_str)
 
+    pairs = ((int(float(detail.get("starting_runs") or 0)), int(float(detail.get("dismissal_penalty") or 0)))
+             if is_pairs(detail) else None)
+
     # Pre-scan to gather innings totals so batting records can include the opposition total.
     our_inn_total = None
     opp_inn_total = None
     for innings in innings_list:
         batting_id = str(innings.get("team_batting_id", ""))
         if batting_id == our_pc_team_id:
-            our_inn_total = _fmt_innings_total(innings)
+            our_inn_total = _fmt_innings_total(innings, pairs)
         else:
-            opp_inn_total = _fmt_innings_total(innings)
+            opp_inn_total = _fmt_innings_total(innings, pairs)
 
     match_players = set()
+    # Pairs (starting_runs / dismissal_penalty set, see fetch_fixtures.pairs_rules):
+    # no batter is ever really out, so these innings can't rate an average.
+    rated = not is_pairs(detail)
 
     for innings in innings_list:
         batting_team_id = str(innings.get("team_batting_id", ""))
@@ -324,10 +358,10 @@ def process_match(detail, our_teams_by_pc_id, players, competitions, form, match
                 team_stats = ensure_team_stats(player, our_team_id)
                 comp_stats = ensure_competition_stats(team_stats, competition_id) if competition_id else None
 
-                merge_batting(player["stats"]["all"], runs, balls, fours, sixes, not_out)
-                merge_batting(team_stats["all"], runs, balls, fours, sixes, not_out)
+                merge_batting(player["stats"]["all"], runs, balls, fours, sixes, not_out, rated)
+                merge_batting(team_stats["all"], runs, balls, fours, sixes, not_out, rated)
                 if comp_stats:
-                    merge_batting(comp_stats, runs, balls, fours, sixes, not_out)
+                    merge_batting(comp_stats, runs, balls, fours, sixes, not_out, rated)
 
                 match_players.add(player_id)
 

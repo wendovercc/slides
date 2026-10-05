@@ -990,6 +990,9 @@
     // The site's innings format: "172 ao", "220/4 dec", "141/6" — as text.
     function scoreText(inn) {
         if (!inn || inn.runs == null) return '';
+        // Pairs: the priced total alone (wickets are a deduction inside it, not
+        // resources), and nothing at all for a score the Worker couldn't price.
+        if (inn.pairs) return inn.priced ? String(inn.runs) : '';
         var w = inn.wickets == null ? 0 : inn.wickets;
         return inn.declared ? (inn.runs + '/' + w + ' dec')
              : (w >= 10 ? (inn.runs + ' ao') : (inn.runs + '/' + w));
@@ -1136,6 +1139,8 @@
         if (inns.length !== 2 || oi < 0) return none;
         var mine = inns[oi], theirs = inns[1 - oi];
         if (mine.runs == null || theirs.runs == null) return none;
+        // A pairs score the Worker couldn't price is no basis for a verdict.
+        if ((mine.pairs && !mine.priced) || (theirs.pairs && !theirs.priced)) return none;
         return mine.runs > theirs.runs ? { us: 'W', them: 'L' }
              : theirs.runs > mine.runs ? { us: 'L', them: 'W' } : { us: 'T', them: 'T' };
     }
@@ -1273,7 +1278,8 @@
             f(el, k + '-line').hidden = holds;
 
             if (holds) {
-                setNum(f(el, k + '-total'), zoneInn ? zoneInn.runs : null);
+                // Pairs: the priced total, or none (see scoreText).
+                setNum(f(el, k + '-total'), !zoneInn || (zoneInn.pairs && !zoneInn.priced) ? null : zoneInn.runs);
                 setNum(f(el, k + '-wkts'), zoneInn ? zoneInn.wickets : null);
                 setNum(f(el, k + '-overs'), zoneInn ? zoneInn.overs : null);
                 /* The contextual aperture. TO WIN the moment a target exists — which
@@ -1283,7 +1289,15 @@
                    negative number. */
                 var target = inns.length > 1 ? inns[inns.length - 2] : null;
                 var lbl = f(el, k + '-ctx-label'), ctx = f(el, k + '-ctx');
-                if (target && target.runs != null && zoneInn) {
+                // Pairs: the target only between two PRICED scores; and no "last
+                // man", since a pairs batter who is out bats on.
+                if (zoneInn && zoneInn.pairs) {
+                    var priced = zoneInn.priced && target && target.priced && target.runs != null;
+                    var needP = priced ? target.runs + 1 - (zoneInn.runs || 0) : null;
+                    lbl.textContent = priced ? 'To win' : '';
+                    setNum(ctx, needP == null ? null : (needP > 0 ? needP : 0));
+                    setSwing(f(el, k + '-ctx-fill'), null);
+                } else if (target && target.runs != null && zoneInn) {
                     lbl.textContent = 'To win';
                     var need = target.runs + 1 - (zoneInn.runs || 0);
                     setNum(ctx, need > 0 ? need : 0);

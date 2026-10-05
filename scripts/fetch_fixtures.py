@@ -195,6 +195,27 @@ def overs_to_balls(overs_str):
     return complete * 6 + remainder
 
 
+def pairs_rules(detail):
+    """{"start": 200, "penalty": 5} for a Pairs match, else None.
+
+    Pairs cricket (Bucks Cricket Competitions rules §11; our women's indoor
+    softball) starts each innings on a fixed total and deducts a fixed penalty per
+    dismissal, the batter batting on. Play-Cricket records both on the match, but
+    an innings' `runs` is RAW — no start, no deductions — so anything that reads
+    it as the score gets the wrong total and, in a close game, the wrong winner.
+    Detected on the numbers themselves rather than on `game_type`, so a format
+    with a start or a penalty under another name is still priced."""
+    def num(key):
+        try:
+            return int(float(detail.get(key) or 0))
+        except (ValueError, TypeError):
+            return 0
+    start, penalty = num("starting_runs"), num("dismissal_penalty")
+    if not start and not penalty and (detail.get("game_type") or "").lower() != "pairs":
+        return None
+    return {"start": start, "penalty": penalty}
+
+
 def is_not_out(how_out):
     s = (how_out or "").strip().lower()
     return s in ("not out", "no") or s.startswith("retired")
@@ -305,8 +326,14 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
             if (how_out or "").strip().lower() in ("dnb", "did not bat"):
                 continue
             pid = str(bat.get("batsman_id", ""))
+            # An unregistered player has no id. Normally left off, but a Pairs card
+            # is only readable whole: every batter bats the same overs, the pairs
+            # are read off consecutive positions, and a missing row leaves the
+            # card summing short of the score. So a named row is kept there.
             if not pid or pid == "0":
-                continue
+                if not (pairs and (bat.get("batsman_name") or "").strip()):
+                    continue
+                pid = None
             rows.append({
                 "id": pid,
                 "name": bat.get("batsman_name", ""),
@@ -328,10 +355,15 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
         for bowl in (inn or {}).get("bowl", []):
             pid = str(bowl.get("bowler_id", ""))
             if not pid or pid == "0":
-                continue
+                # As for batting: a Pairs card keeps its unregistered bowlers,
+                # keyed by name (they have nothing else) and carrying no id.
+                name = (bowl.get("bowler_name") or "").strip()
+                if not (pairs and name):
+                    continue
+                pid = "name:" + name
             if pid not in acc:
                 acc[pid] = {
-                    "id": pid,
+                    "id": None if pid.startswith("name:") else pid,
                     "name": bowl.get("bowler_name", ""),
                     "wickets": 0, "runs": 0, "balls": 0, "maidens": 0,
                 }
@@ -359,7 +391,24 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
                 "penalty": int(inn.get("extra_penalty_runs") or 0),
                 "total": int(inn.get("total_extras") or 0),
             },
+            # Present only for a Pairs match: `runs` above stays raw, and the
+            # build prices the score from these (build.innings_score).
+            **({"pairs": {**pairs, "priced": pairs_raw(inn)}} if pairs else {}),
         }
+
+    def pairs_raw(inn):
+        """Is this innings' `runs` provably RAW, so start/penalty may be applied?
+        Only when its card sums to it (bat + extras == runs). A Pairs innings
+        entered as a bare total (no card — e.g. 7373852's 288 v 243) is usually
+        already priced, and pricing it again would add a second start."""
+        bat = (inn or {}).get("bat") or []
+        try:
+            return bool(bat) and (sum(int(b.get("runs") or 0) for b in bat)
+                                  + int(inn.get("total_extras") or 0)) == int(inn.get("runs") or 0)
+        except (ValueError, TypeError):
+            return False
+
+    pairs = pairs_rules(detail)
 
     batted_first_id = str(detail.get("batted_first") or "")
     we_bat_first = batted_first_id == our_pc_id
@@ -396,6 +445,9 @@ def fetch_our_match_scorecard(match, our_pc_id, api_token):
         "competition_id": str(match.get("competition_id", "")),
         "competition_name": match.get("competition_name", "") or "",
         "is_home": is_home,
+        # Overs per side as the fixture was set up (PC `no_of_overs`); None if unset.
+        "overs_allotted": int(detail.get("no_of_overs") or 0) or None
+                          if str(detail.get("no_of_overs") or "").isdigit() else None,
         "result": result_char,
         "result_description": result_description,
         "toss_won_by_us": toss_won_by_us,
@@ -693,10 +745,36 @@ def main():
                 "opposition_team_id": opp_team_id_raw or None,
                 "opposition_form": None,
                 "opposition_players": None,
+                # "Standard" / "Pairs" — the fixture list has the type but not its
+                # rules; a Pairs fixture in the coming week gets them below.
+                "game_type": match.get("game_type") or None,
             })
 
     for tid in all_upcoming:
         all_upcoming[tid].sort(key=lambda m: parse_date(m["match_date"]) or date.max)
+
+    # PAIRS RULES FOR THE COMING WEEK. A Pairs fixture's start and per-wicket
+    # penalty are on its match_detail before a ball is bowled (verified on an
+    # unplayed fixture). The live layer needs them on the day — the Results Vault
+    # feed carries neither — so build_live_config can hand them to the Worker.
+    # A week ahead, not just today, so a replay build (WCC_TODAY) and a Saturday
+    # build for a Sunday both have them. One call per such fixture; none at all
+    # outside the softball/junior weeks.
+    horizon = today.toordinal() + 6
+    for entries in all_upcoming.values():
+        for entry in entries:
+            d = parse_date(entry["match_date"])
+            if (entry.get("game_type") or "").lower() != "pairs" or not d or d.toordinal() > horizon:
+                continue
+            try:
+                detail = (api_get("match_detail.json", api_token, match_id=entry["match_id"])
+                          .get("match_details") or [{}])[0]
+            except Exception as e:
+                print(f"    WARNING: no Pairs rules for {entry['match_id']}: {e}", file=sys.stderr)
+                continue
+            entry["pairs"] = pairs_rules(detail)
+            overs = str(detail.get("no_of_overs") or "")
+            entry["overs_allotted"] = int(overs) if overs.isdigit() and int(overs) > 0 else None
 
     print(f"  {len(upcoming)} team(s) with upcoming fixtures")
 

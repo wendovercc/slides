@@ -79,7 +79,7 @@
      * a known length, so a per-competition table baked at build time would settle every
      * league game without a feed at all. Until then, an inference is all this is. */
     function allotmentOvers(first) {
-        if (!first || (first.wickets || 0) >= 10 || first.declared) return null;
+        if (!first || first.pairs || (first.wickets || 0) >= 10 || first.declared) return null;
         var b = ballsOf(first.overs);
         return (b > 0 && b % 6 === 0) ? b / 6 : null;
     }
@@ -93,6 +93,10 @@
     // grows on its own as the game runs out of road.
     function chaseState(inns) {
         if (!inns || inns.length !== 2) return null;
+        // PAIRS: no model. Wickets cost runs instead of resources, so the DLS-style
+        // split below would price a pairs chase on a premise the game doesn't have.
+        // Null is every surface's "nothing claimed" — no lean, no swing, no par.
+        if (inns[0].pairs || inns[1].pairs) return null;
         var first = inns[0], cur = inns[1];
         var firstRuns = first.runs || 0;
         var target = firstRuns + 1;

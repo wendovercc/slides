@@ -124,6 +124,16 @@
                 <span class="num highlight">{{ slide._extras }}</span>
             </div>
             {% endif %}
+            {#- Pairs cricket: the start and the per-wicket deductions, so the card
+                still sums to the headline score (build.pairs_adjustment). -#}
+            {% if slide._pairs_adj %}
+            <div class="row bat-grid extras-row">
+                <span class="name">Pairs</span>
+                <span class="out">{{ slide._pairs_adj[1] }}</span>
+                <span></span><span></span><span></span><span></span>
+                <span class="num highlight">{{ slide._pairs_adj[0] }}</span>
+            </div>
+            {% endif %}
         {% else %}
             <div class="empty">No batting data</div>
         {% endif %}

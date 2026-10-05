@@ -1011,6 +1011,33 @@
     // happened before we were watching, and announcing a morning's wickets at once
     // is the bug this guards against. Standing facts that are still news — the toss,
     // a result already posted — are emitted, because those are states, not changes.
+    /* WHAT THE BAND MAY SAY ABOUT A PAIRS MATCH. Pairs (start on a total, a wicket
+     * costs runs and the batter bats on) breaks the premise of most of the story
+     * events: a wicket is not a batter leaving, "all out" and "last pair" do not
+     * exist, a stand is a fixed four overs, and a team figure is only true once
+     * priced. Until each of those has a pairs reading of its own, a pairs match
+     * says only what stays literally true — the fixture's milestones, a batter's
+     * or bowler's own figures, replays, and the result (finishedParts has a pairs
+     * branch). An allowlist rather than a blocklist, so an event type added later
+     * stays quiet on pairs until someone decides what it should say. */
+    var PAIRS_SAFE = {
+        toss: 1, match_started: 1, stream_started: 1, play_resumed: 1, match_break: 1,
+        rain_break: 1, abandoned: 1, match_finished: 1, replay: 1, retraction: 1,
+        fifty: 1, hundred: 1, approaching: 1, five_for: 1, hat_trick: 1,
+        on_a_hat_trick: 1, wicket_maiden: 1, maiden_run: 1, spell_started: 1, spell_ended: 1
+    };
+    function pairsGate(out, feed, idKey, cfgBy) {
+        var pairs = {};
+        ((feed && feed.matches) || []).forEach(function (m) {
+            var c = (cfgBy || {})[String(m[idKey])] || {};
+            if (m.pairs || c.pairs) pairs[String(m[idKey])] = true;
+        });
+        return out.filter(function (ev) {
+            var id = ev.match && (ev.match.pc_id != null && ev.match.ours ? ev.match.pc_id : ev.match.match_id);
+            return !pairs[String(id)] || PAIRS_SAFE[ev.type];
+        });
+    }
+
     function extractLive(prev, next, now, cfg) {
         cfg = cfg || {};
         var out = [];
@@ -1691,7 +1718,7 @@
         // Remember when we saw each card, so the NEXT poll can bracket against a
         // real instant even when the scorer's cursor is missing.
         (next && next.matches || []).forEach(function (m) { m._received_at = now; });
-        return out;
+        return pairsGate(out, next, 'pc_id', cfg.byId);
     }
 
     // ---- extraction: the division's other matches (the lean PC feed) --------
@@ -1824,7 +1851,7 @@
             }
         });
         (next && next.matches || []).forEach(function (m) { m._received_at = now; });
-        return out;
+        return pairsGate(out, next, 'match_id', cfg.leagueById);
     }
 
     /* ---- THE LEAGUE TABLE'S STORY -------------------------------------------
@@ -2511,6 +2538,29 @@
         var odd = /dls|d\/l|duckworth|revised|conced|forfeit|award/i.test(text);
         var inns = m.innings || [];
 
+        /* PAIRS. No "chase down the target by N wickets" and no "bowled out": the
+         * margin is runs between the PRICED scores, and when either couldn't be
+         * priced only the winner is said — from the card's own verdict, never from
+         * the raw runs or RV's prose (which said "by 6 wickets" on 2026-10-04). */
+        if (m.pairs || inns.some(function (i) { return i.pairs; })) {
+            var p1 = inns[0], p2 = inns[1];
+            var pa = p1 && clubOf(p1), pb = p2 && clubOf(p2);
+            if (!odd && inns.length === 2 && p1.priced && p2.priced && pa && pb && pa !== pb) {
+                var s1 = p1.runs || 0, s2 = p2.runs || 0;
+                if (s1 === s2) return [team(pa), det('and'), team(pb), det('tie on ' + s1)];
+                var pw = s1 > s2 ? pa : pb, pl = s1 > s2 ? pb : pa, pby = plural(Math.abs(s1 - s2), 'run');
+                return ours(pl) ? [team(pw), det('win by ' + pby)]
+                                : [team(pw), det('beat'), team(pl), det('by ' + pby)];
+            }
+            var wt = (m.teams || []).filter(function (t) { return t.outcome === 'won'; })[0];
+            var wc = wt ? dropCC(wt.club || '') : '';
+            if (!wc && m.result_applied_to != null && home && away)
+                wc = String(m.result_applied_to) === String(m.home_team_id) ? home
+                   : String(m.result_applied_to) === String(m.away_team_id) ? away : '';
+            var pf = wc ? [team(wc), det('win')] : [det('Match finished')];
+            return ctx.ours ? pf : pf.concat([SEP]).concat(fixtureParts(m, ctx));
+        }
+
         if (inns.length === 2 && !odd) {
             var i1 = inns[0], i2 = inns[1];
             var a = clubOf(i1), b = clubOf(i2);          // a set the target, b chased it
@@ -2766,10 +2816,9 @@
      * > James's direction, 2026-10-01. */
     function closedPayload(m, ctx, inn) {
         var sides = sidesOf(m, ctx, inn), club = sides.bat || '';
-        var allOut = (inn.wickets || 0) >= 10;
+        var allOut = !inn.pairs && (inn.wickets || 0) >= 10;
         var verb = allOut ? 'bowled out for' : (inn.declared ? 'declared on' : 'finished on');
-        var fig = { cls: 'score', text: allOut ? String(inn.runs || 0)
-                                               : (inn.runs || 0) + '/' + (inn.wickets || 0) };
+        var fig = { cls: 'score', text: allOut ? String(inn.runs || 0) : figureOf(inn) };
         if (club && isOurPlayer(ctx, club)) {
             return say([det(capitalise(verb)), fig]
                        .concat(sides.other ? [det('v'), team(sides.other)] : []));
@@ -2781,8 +2830,16 @@
         return say([team(club), det((allOut ? 'were ' : '') + verb), fig].concat(foe));
     }
 
+    // An innings' figure: "141/6", or for Pairs the priced total alone ("295") —
+    // and "?" for a pairs score that couldn't be priced, which the PAIRS_SAFE gate
+    // keeps off the band anyway.
+    function figureOf(inn) {
+        if (inn.pairs) return inn.priced ? String(inn.runs || 0) : '?';
+        return (inn.runs || 0) + '/' + (inn.wickets || 0);
+    }
+
     function scoreParts(club, inn) {
-        return [team(club), { cls: 'score', text: (inn.runs || 0) + '/' + (inn.wickets || 0) },
+        return [team(club), { cls: 'score', text: figureOf(inn) },
                 inn.overs != null && inn.overs !== ''
                     ? { cls: 'ov', text: '(' + inn.overs + ' ov)' } : null];
     }
@@ -4013,7 +4070,7 @@
      * does on a score. */
     function sideScoreTail(club, inn) {
         if (!club || !inn) return null;
-        return [team(club), det((inn.runs || 0) + '/' + (inn.wickets || 0))];
+        return [team(club), det(figureOf(inn))];
     }
 
     /* A BATTER'S FIFTY OR HUNDRED — a person, not a row of a scorecard.
@@ -4447,7 +4504,7 @@
             : [{ cls: 'score', text: figuresOf(sp.wickets, sp.runs) },
                det(bits.join(', '), true)];
         return {
-            payload: say([{ cls: 'bat', text: mv.name }, det('finishes his spell')]
+            payload: say([{ cls: 'bat', text: mv.name }, det('finishes a spell')]
                          .concat(clubTag(ctx, sides.other, sides.bat))
                          .concat([SEP]).concat(figs),
                          { who: mv.name }),
@@ -4930,11 +4987,17 @@
         // The batter's milestone on this ball, when the card agrees it is his.
         var mark = met('milestone'), markWho = name('milestone');
         var markOk = mark && MARK_WORDS[mark] && cardRuns(inn, markWho) >= mark;
-        var teamMark = met('team_milestone');
+        // PAIRS: RV's team milestones count the RAW total (no start, no deductions),
+        // and a dismissed pairs batter bats on — so no "100 up", and a wicket is
+        // only who was out and off whom: not "for N", and no stand it ended.
+        var pairs = !!(inn && inn.pairs);
+        var teamMark = pairs ? null : met('team_milestone');
         var who = r.dismissed || r.batter;
         var line;
         if (has('wicket')) {
-            line = replayWicket(r, inn, sides, ctx, met('wicket'));
+            line = pairs ? [{ cls: 'bat', text: who || 'Wicket' }, det('out')]
+                               .concat(r.bowler ? [det('off'), { cls: 'bat', text: r.bowler }] : [])
+                         : replayWicket(r, inn, sides, ctx, met('wicket'));
             if (has('five_for') && name('five_for')) line = line.concat([SEP, det('five wickets for'), bat(name('five_for'))]);
         } else if (has('four') || has('six')) {
             // NO BOWLER: the shot is the batter's. The bowler is named only where the

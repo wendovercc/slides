@@ -908,7 +908,8 @@
        cannot change. */
     function scoreTile(inn) {
         return '<div class="tile stat-tile line gold done">' +
-               '<span class="cval">' + esc((inn.runs || 0) + '/' + (inn.wickets || 0)) +
+               '<span class="cval">' + esc(inn.pairs ? (inn.priced ? String(inn.runs || 0) : '')
+                                             : (inn.runs || 0) + '/' + (inn.wickets || 0)) +
                '</span></div>';
     }
     // A tile carrying a caption and no figure — "TO BAT" under the side still to come.
@@ -919,6 +920,11 @@
     /* Runs per over as the column writes every rate: one decimal always, so a whole
        number doesn't jump the digits ("7" beside "6.8"). Null when no ball has been
        bowled — there is no rate yet, and a 0.0 would assert one. */
+    // An innings' runs figure: a pairs score only once priced (the empty-state dot
+    // otherwise, rather than a raw total that is 200 short of the real one).
+    function runsOf(inn) {
+        return inn.pairs && !inn.priced ? '\u00b7' : (inn.runs || 0);
+    }
     function rateOf(runs, overs) {
         var b = ballsOf(overs);
         return b ? ((runs || 0) / (b / 6)).toFixed(1) : null;
@@ -937,6 +943,7 @@
         var inns = (card && card.innings) || [];
         if (!inns.length) return null;
         if (inns.length < 2 && !inns[0].closed) return null;
+        if (inns[0].pairs && !inns[0].priced) return null;   // no target off an unpriced pairs score
         return (inns[0].runs || 0) + 1;
     }
 
@@ -1371,7 +1378,7 @@
             putTeam(other, tiles[0]);
             putFixed(other, scoreTile(first), LINE_FLEX);
             if (tiles[1]) putTeam(box, tiles[1]);
-            put(box, statTile(cur.runs || 0, 'Runs', { gold: true, done: done, batting: inNow }));
+            put(box, statTile(runsOf(cur), 'Runs', { gold: true, done: done, batting: inNow }));
             put(box, statTile(cur.wickets || 0, 'Wickets', { gold: true, done: done, batting: inNow }));
             put(box, statTile(oversOf(cur), 'Overs', { done: done, batting: inNow }));
             var stats = chaseStats(card);
@@ -1402,10 +1409,11 @@
             if (inns.length) {
                 var f = inns[0];
                 var settled = f.closed || done, inFirst = !settled;
-                put(box, statTile(f.runs || 0, 'Runs', { gold: true, done: settled, batting: inFirst }));
+                put(box, statTile(runsOf(f), 'Runs', { gold: true, done: settled, batting: inFirst }));
                 put(box, statTile(f.wickets || 0, 'Wickets', { gold: true, done: settled, batting: inFirst }));
                 put(box, statTile(oversOf(f), 'Overs', { done: settled, batting: inFirst }));
-                var rr = rateOf(f.runs, f.overs);
+                // Pairs: no run rate — the total starts on 200, so it isn't one.
+                var rr = f.pairs ? null : rateOf(f.runs, f.overs);
                 if (rr != null) put(box, statTile(rr, 'Run rate', { done: settled, batting: inFirst }));
             }
             if (tiles[1]) putTeam(other, tiles[1]);

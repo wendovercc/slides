@@ -457,6 +457,22 @@
       schedule(SLOW);
     }
 
+    /* PAIRS, stamped where the build knows it and the feed may not. The Worker
+       marks a pairs match (`m.pairs`) and each of its innings (`inn.pairs`, with
+       `inn.priced` when the score could be priced); a Worker that predates that
+       still leaves the build's live-config saying so, and every surface downstream
+       keys off these two flags. An innings stamped here is never `priced`, so a
+       formatter prints no score rather than a raw one dressed as the real total. */
+    function markPairs(feed, byId, idKey) {
+      ((feed && feed.matches) || []).forEach(function (m) {
+        var c = byId[String(m[idKey])] || {};
+        if (!m.pairs && !c.pairs) return;
+        if (!m.pairs) m.pairs = { priced: false };
+        (m.innings || []).forEach(function (inn) { inn.pairs = true; });
+      });
+      return feed;
+    }
+
     function poll() {
       if (stopped) return;
       // A supplied transport carries its own authorisation story (there is no Worker
@@ -466,6 +482,7 @@
           .then(function () { return transport('live', url()); })
           .then(function (feed) {
             if (!feed) { onFail('error'); return; }
+            markPairs(feed, cfgById, 'pc_id');
             fails = 0; last = feed; lastStatus = 'ok';
             broadcast(feed, 'ok');
             onState(feed, 'ok');
@@ -487,6 +504,7 @@
           if (r.status === 403) { halt('forbidden'); return; }
           if (!r.ok) { onFail('error'); return; }
           return r.json().then(function (feed) {
+            markPairs(feed, cfgById, 'pc_id');
             fails = 0; last = feed; lastStatus = 'ok';
             broadcast(feed, 'ok');
             onState(feed, 'ok');
@@ -553,7 +571,7 @@
         return Promise.resolve()
           .then(function () { return transport('league', leagueUrl()); })
           .then(function (feed) {
-            if (feed) { leagueLast = feed; leagueBroadcast(); ingest('league', feed); }
+            if (feed) { markPairs(feed, leagueCfgById, 'match_id'); leagueLast = feed; leagueBroadcast(); ingest('league', feed); }
           })
           .catch(function () { /* keep last good; the caller will ask again */ })
           .then(function () { if (!stopped && !manual) leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
@@ -572,7 +590,7 @@
           if (r.status === 403) { halt('forbidden'); return null; }
           return r.ok ? r.json() : null;
         })
-        .then(function (feed) { if (feed) { leagueLast = feed; leagueBroadcast(); ingest('league', feed); } })
+        .then(function (feed) { if (feed) { markPairs(feed, leagueCfgById, 'match_id'); leagueLast = feed; leagueBroadcast(); ingest('league', feed); } })
         .catch(function () { /* keep last good; retry next tick */ })
         .then(function () { if (!stopped) leagueTimer = setTimeout(leaguePoll, LEAGUE_MS); });
     }
